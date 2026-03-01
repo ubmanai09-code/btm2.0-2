@@ -1,0 +1,373 @@
+export interface Tournament {
+  id: number;
+  name: string;
+  date: string;
+  location: string;
+  format: string;
+  match_play_type: 'single_elimination' | 'double_elimination' | 'ladder' | 'playoff';
+  qualified_count: number;
+  playoff_winners_count: number;
+  type: 'individual' | 'team';
+  games_count: number;
+  genders_rule: string;
+  lanes_count: number;
+  players_per_lane: number;
+  players_per_team: number;
+  shifts_count: number;
+  oil_pattern: string;
+  status: 'draft' | 'active' | 'finished';
+  created_at: string;
+}
+
+export interface Participant {
+  id: number;
+  tournament_id: number;
+  first_name: string;
+  last_name: string;
+  gender: string;
+  club: string;
+  average: number;
+  email: string;
+  team_id: number | null;
+  team_order?: number;
+  team_name?: string;
+}
+
+export interface Team {
+  id: number;
+  tournament_id: number;
+  name: string;
+}
+
+export interface LaneAssignment {
+  id: number;
+  tournament_id: number;
+  participant_id: number | null;
+  team_id: number | null;
+  lane_number: number;
+  shift_number: number;
+  participant_name?: string;
+  team_name?: string;
+}
+
+export interface Score {
+  id: number;
+  tournament_id: number;
+  participant_id: number;
+  game_number: number;
+  score: number;
+  participant_name?: string;
+}
+
+export interface Standing {
+  participant_id: number;
+  participant_name: string;
+  team_name: string | null;
+  total_score: number;
+  average_score: number;
+  games_played: number;
+}
+
+export interface SeedItem {
+  seed: number;
+  id: number;
+  name: string;
+  total_score: number;
+  kind: 'team' | 'participant';
+}
+
+const api = {
+  async safeJson(res: Response): Promise<any> {
+    const text = await res.text();
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { error: text };
+    }
+  },
+  async getTournaments(): Promise<Tournament[]> {
+    const res = await fetch('/api/tournaments');
+    return res.json();
+  },
+  async createTournament(data: Partial<Tournament>): Promise<{ id: number }> {
+    const res = await fetch('/api/tournaments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  async getTournament(id: number): Promise<Tournament> {
+    const res = await fetch(`/api/tournaments/${id}`);
+    return res.json();
+  },
+  async updateTournament(id: number, data: Partial<Tournament>): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch(`/api/tournaments/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  async deleteTournament(id: number): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/tournaments/${id}`, {
+      method: 'DELETE',
+    });
+    return res.json();
+  },
+  async getParticipants(tournamentId: number): Promise<Participant[]> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/participants`);
+    return res.json();
+  },
+  async addParticipant(tournamentId: number, data: Partial<Participant>): Promise<{ id: number }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/participants`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to add participant');
+    }
+    return res.json();
+  },
+  async updateParticipant(id: number, data: Partial<Participant>): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/participants/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to update participant');
+    }
+    return res.json();
+  },
+  async updateParticipantTeamOrder(id: number, position: number): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/participants/${id}/team-order`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ position }),
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to update participant team order');
+    }
+    return res.json();
+  },
+  async deleteParticipant(id: number): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/participants/${id}`, {
+      method: 'DELETE',
+    });
+    return res.json();
+  },
+  async clearParticipants(tournamentId: number): Promise<{ success: boolean; deleted: number }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/participants`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to clear participants');
+    }
+    return res.json();
+  },
+  async bulkAddParticipants(
+    tournamentId: number,
+    participants: Partial<Participant>[],
+    options?: { replaceExisting?: boolean }
+  ): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/participants/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        participants,
+        replace_existing: options?.replaceExisting === true,
+      }),
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to bulk add participants');
+    }
+    return res.json();
+  },
+  async getTeams(tournamentId: number): Promise<Team[]> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/teams`);
+    return res.json();
+  },
+  async addTeam(tournamentId: number, data: Partial<Team>): Promise<{ id: number }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/teams`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  async updateTeam(id: number, data: Partial<Team>): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/teams/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  async deleteTeam(id: number): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/teams/${id}`, {
+      method: 'DELETE',
+    });
+    return res.json();
+  },
+  async bulkAddTeams(tournamentId: number, teams: Partial<Team>[]): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/teams/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ teams }),
+    });
+    return res.json();
+  },
+  async getLanes(tournamentId: number): Promise<LaneAssignment[]> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/lanes`);
+    return res.json();
+  },
+  async addLaneAssignment(tournamentId: number, data: Partial<LaneAssignment>): Promise<{ id: number }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/lanes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  async updateLaneAssignment(id: number, data: Partial<LaneAssignment>): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/lanes/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  async deleteLaneAssignment(id: number): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/lanes/${id}`, {
+      method: 'DELETE',
+    });
+    return res.json();
+  },
+  async bulkUpdateLanes(tournamentId: number, assignments: Partial<LaneAssignment>[]): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/lanes/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignments }),
+    });
+    return res.json();
+  },
+  async autoAssignLanes(tournamentId: number): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/lanes/auto`, {
+      method: 'POST',
+    });
+    return res.json();
+  },
+  async getScores(tournamentId: number): Promise<Score[]> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/scores`);
+    return res.json();
+  },
+  async addScore(tournamentId: number, data: Partial<Score>): Promise<{ id: number }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/scores`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  async getStandings(tournamentId: number): Promise<Standing[]> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/standings`);
+    return res.json();
+  },
+  async getBrackets(tournamentId: number): Promise<any[]> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/brackets`);
+    return res.json();
+  },
+  async getSeeds(tournamentId: number, qualifiedCount: number): Promise<{ type: 'team' | 'individual'; qualified_count: number; seeds: SeedItem[] }> {
+    const params = new URLSearchParams();
+    if (qualifiedCount > 0) {
+      params.set('qualified_count', String(qualifiedCount));
+    }
+    const query = params.toString();
+    const res = await fetch(`/api/tournaments/${tournamentId}/seeds${query ? `?${query}` : ''}`);
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to fetch seeds');
+    }
+    return res.json();
+  },
+  async clearBrackets(tournamentId: number): Promise<{ success: boolean; deleted: number }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/brackets`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to clear brackets');
+    }
+    return res.json();
+  },
+  async generateBrackets(
+    tournamentId: number,
+    options?: {
+      match_play_type?: Tournament['match_play_type'];
+      qualified_count?: number;
+      playoff_winners_count?: number;
+      seed_ids?: number[];
+      seed_kind?: 'team' | 'participant';
+    }
+  ): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/brackets/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options || {}),
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to generate brackets');
+    }
+    return res.json();
+  },
+  async generateManualBrackets(
+    tournamentId: number,
+    options: { rounds_count: number; round1_matches: number; winners_mode: '1' | '3' }
+  ): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/brackets/generate-manual`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options),
+    });
+    const data = await api.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to generate manual brackets');
+    }
+    return data;
+  },
+  async assignBracketSeed(
+    tournamentId: number,
+    matchId: number,
+    options: { slot: 'p1' | 'p2'; seed_id: number; seed_kind: 'team' | 'participant'; seed?: number }
+  ): Promise<{ success: boolean; error?: string }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/brackets/${matchId}/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options),
+    });
+    const data = await api.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to assign seed to bracket slot');
+    }
+    return data;
+  },
+  async setBracketWinner(tournamentId: number, matchId: number, winnerId: number): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/brackets/${matchId}/winner`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ winner_id: winnerId }),
+    });
+    return res.json();
+  },
+};
+
+export default api;

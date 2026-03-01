@@ -1,0 +1,5 @@
+{
+  "name": "Bowling Tournament Manager",
+  "description": "A comprehensive bowling tournament management platform featuring participant registration, lane assignment, scoring, and bracket management.",
+  "requestFramePermissions": []
+}
