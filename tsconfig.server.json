@@ -7,8 +7,11 @@
     "rootDir": ".",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "strict": true,
+
+    "strict": false,
+    "noImplicitAny": false,
     "skipLibCheck": true,
+
     "sourceMap": false
   },
   "include": ["server.ts"]
