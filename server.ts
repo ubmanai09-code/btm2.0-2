@@ -825,8 +825,9 @@ async function startServer() {
 
   app.post("/api/tournaments/:id/scores", requirePermission('scores:manage'), (req, res) => {
     const { participant_id, game_number, score } = req.body;
-    const existing = db.prepare("SELECT id FROM scores WHERE tournament_id = ? AND participant_id = ? AND game_number = ?")
-      .get(req.params.id, participant_id, game_number);
+const existing = db
+  .prepare("SELECT id FROM scores WHERE tournament_id = ? AND participant_id = ? AND game_number = ?")
+  .get(req.params.id, participant_id, game_number) as { id: number } | undefined;
     
     if (existing) {
       db.prepare("UPDATE scores SET score = ? WHERE id = ?").run(score, existing.id);
@@ -1303,11 +1304,14 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static(path.join(__dirname, "dist")));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(__dirname, "dist", "index.html"));
-    });
-  }
+  const rootDir = path.resolve(__dirname, "..");
+  const clientDist = path.join(rootDir, "dist");
+
+  app.use(express.static(clientDist));
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(clientDist, "index.html"));
+  });
+}
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
