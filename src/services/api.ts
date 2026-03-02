@@ -76,7 +76,47 @@ export interface SeedItem {
   kind: 'team' | 'participant';
 }
 
+export interface AuthSession {
+  token: string;
+  id: number;
+  username: string;
+  role: 'admin' | 'moderator';
+}
+
+export interface AuthUser {
+  id: number;
+  username: string;
+  role: 'admin' | 'moderator';
+}
+
+export interface UserAccount {
+  id: number;
+  username: string;
+  role: 'admin' | 'moderator';
+  active: number;
+  created_at: string;
+}
+
+export interface TournamentModeratorAccessItem {
+  user_id: number;
+  username: string;
+  active: boolean;
+  expires_at: string | null;
+  granted_at?: string | null;
+}
+
+export interface ModeratorTournamentAccess {
+  can_manage: boolean;
+  assignments: TournamentModeratorAccessItem[];
+  success?: boolean;
+}
+
 const api = {
+  authHeaders(token?: string): HeadersInit {
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return headers;
+  },
   async safeJson(res: Response): Promise<any> {
     const text = await res.text();
     if (!text) return {};
@@ -85,6 +125,106 @@ const api = {
     } catch {
       return { error: text };
     }
+  },
+  async login(username: string, password: string): Promise<AuthSession> {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Login failed');
+    }
+    return data;
+  },
+  async getMe(token?: string): Promise<AuthUser | null> {
+    const res = await fetch('/api/auth/me', {
+      headers: this.authHeaders(token),
+    });
+    if (res.status === 401) return null;
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to read session');
+    }
+    return data;
+  },
+  async logout(token?: string): Promise<{ success: boolean }> {
+    const res = await fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: this.authHeaders(token),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Logout failed');
+    }
+    return data;
+  },
+  async getModeratorAccess(tournamentId: number): Promise<ModeratorTournamentAccess> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/moderator-access`);
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to load moderator access');
+    }
+    return data;
+  },
+  async setModeratorAccess(
+    tournamentId: number,
+    payload: { moderator_user_id: number; enabled: boolean; expires_in_hours?: number | null }
+  ): Promise<ModeratorTournamentAccess> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/moderator-access`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to update moderator access');
+    }
+    return data;
+  },
+  async removeModeratorAccess(tournamentId: number, userId: number): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/moderator-access/${userId}`, {
+      method: 'DELETE',
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to remove moderator access');
+    }
+    return data;
+  },
+  async getUsers(role?: 'admin' | 'moderator'): Promise<UserAccount[]> {
+    const query = role ? `?role=${role}` : '';
+    const res = await fetch(`/api/users${query}`);
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to fetch users');
+    }
+    return data;
+  },
+  async createUser(payload: { username: string; password: string; role: 'admin' | 'moderator' }): Promise<{ id: number; username: string; role: 'admin' | 'moderator' }> {
+    const res = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to create user');
+    }
+    return data;
+  },
+  async changePassword(userId: number, newPassword: string): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/users/${userId}/password`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_password: newPassword }),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to change password');
+    }
+    return data;
   },
   async getTournaments(): Promise<Tournament[]> {
     const res = await fetch('/api/tournaments');

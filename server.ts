@@ -1,6 +1,8 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
+import { randomUUID } from "crypto";
+import { compare, hash } from "bcryptjs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -96,7 +98,56 @@ function initDb() {
       FOREIGN KEY (participant2_id) REFERENCES participants(id) ON DELETE SET NULL,
       FOREIGN KEY (winner_id) REFERENCES participants(id) ON DELETE SET NULL
     );
+
+    CREATE TABLE IF NOT EXISTS moderator_tournament_access (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id INTEGER NOT NULL,
+      moderator_user_id INTEGER NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      expires_at TEXT,
+      granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (tournament_id, moderator_user_id),
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+      FOREIGN KEY (moderator_user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      role TEXT CHECK(role IN ('admin', 'moderator')) NOT NULL,
+      password_hash TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
+
+  const accessTableInfo = db.prepare("PRAGMA table_info(moderator_tournament_access)").all() as any[];
+  const accessColumns = accessTableInfo.map((c: any) => c.name);
+  if (accessColumns.includes('moderator_username') && !accessColumns.includes('moderator_user_id')) {
+    try {
+      db.exec(`
+        CREATE TABLE moderator_tournament_access_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          tournament_id INTEGER NOT NULL,
+          moderator_user_id INTEGER NOT NULL,
+          active INTEGER NOT NULL DEFAULT 1,
+          expires_at TEXT,
+          granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE (tournament_id, moderator_user_id),
+          FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+          FOREIGN KEY (moderator_user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+      `);
+      db.exec(`
+        INSERT INTO moderator_tournament_access_new (tournament_id, moderator_user_id, active, expires_at, granted_at)
+        SELECT old.tournament_id, u.id, old.active, old.expires_at, old.granted_at
+        FROM moderator_tournament_access old
+        JOIN users u ON u.username = old.moderator_username
+      `);
+      db.exec("DROP TABLE moderator_tournament_access");
+      db.exec("ALTER TABLE moderator_tournament_access_new RENAME TO moderator_tournament_access");
+    } catch (e) {}
+  }
 
   // Migration: Add missing columns if they don't exist
   const tableInfo = db.prepare("PRAGMA table_info(tournaments)").all();
@@ -279,14 +330,99 @@ async function startServer() {
   app.use(express.json());
 
   type UserRole = 'admin' | 'moderator' | 'public';
+  type ManageRole = 'admin' | 'moderator';
   type Permission = 'tournaments:manage' | 'participants:manage' | 'scores:manage' | 'brackets:manage' | 'lanes:manage';
+  type AuthSession = { userId: number; role: ManageRole; username: string; createdAt: number };
+
+  const parseRole = (value: unknown): UserRole | null => {
+    if (value === 'admin' || value === 'moderator' || value === 'public') return value;
+    return null;
+  };
+
+  const lockedRole = parseRole(String(process.env.BTM_LOCK_ROLE || '').trim().toLowerCase());
+
+  const adminUsername = (process.env.BTM_ADMIN_USERNAME || 'admin').trim().toLowerCase();
+  const adminPassword = process.env.BTM_ADMIN_PASSWORD || 'admin123';
+  const moderatorUsername = (process.env.BTM_MODERATOR_USERNAME || 'moderator').trim().toLowerCase();
+  const moderatorPassword = process.env.BTM_MODERATOR_PASSWORD || 'moderator123';
+
+  const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+  const authSessions = new Map<string, AuthSession>();
+
+  const participantTournamentStmt = db.prepare("SELECT tournament_id FROM participants WHERE id = ?");
+  const teamTournamentStmt = db.prepare("SELECT tournament_id FROM teams WHERE id = ?");
+  const laneTournamentStmt = db.prepare("SELECT tournament_id FROM lane_assignments WHERE id = ?");
+  const bracketTournamentStmt = db.prepare("SELECT tournament_id FROM brackets WHERE id = ?");
+
+  const moderatorAccessLookupStmt = db.prepare(`
+    SELECT active, expires_at
+    FROM moderator_tournament_access
+    WHERE tournament_id = ? AND moderator_user_id = ?
+    LIMIT 1
+  `);
+  const deactivateExpiredModeratorStmt = db.prepare(`
+    UPDATE moderator_tournament_access
+    SET active = 0
+    WHERE tournament_id = ? AND moderator_user_id = ?
+  `);
+
+  const readBearerToken = (req: express.Request): string | null => {
+    const authHeader = String(req.header('authorization') || '').trim();
+    if (!authHeader.toLowerCase().startsWith('bearer ')) return null;
+    const token = authHeader.slice(7).trim();
+    return token || null;
+  };
+
+  const readSession = (req: express.Request): AuthSession | null => {
+    const token = readBearerToken(req);
+    if (!token) return null;
+    const session = authSessions.get(token);
+    if (!session) return null;
+    if (Date.now() - session.createdAt > SESSION_TTL_MS) {
+      authSessions.delete(token);
+      return null;
+    }
+    return session;
+  };
+
+  const readSessionRole = (req: express.Request): ManageRole | null => {
+    return readSession(req)?.role || null;
+  };
+
+  const readSessionUsername = (req: express.Request): string | null => {
+    return readSession(req)?.username || null;
+  };
+
+  const readSessionUserId = (req: express.Request): number | null => {
+    return readSession(req)?.userId || null;
+  };
+
+  const hasModeratorTournamentAccess = (tournamentId: string, userId: number): boolean => {
+    const row = moderatorAccessLookupStmt.get(tournamentId, userId) as any;
+    if (!row || Number(row.active) !== 1) return false;
+    if (row.expires_at) {
+      const expiryTs = Date.parse(String(row.expires_at));
+      if (Number.isFinite(expiryTs) && Date.now() > expiryTs) {
+        deactivateExpiredModeratorStmt.run(tournamentId, userId);
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const ensureUserStmt = db.prepare("SELECT id FROM users WHERE username = ? LIMIT 1");
+  const insertUserStmt = db.prepare("INSERT INTO users (username, role, password_hash, active) VALUES (?, ?, ?, 1)");
+
+  const ensureSeedUser = async (username: string, role: ManageRole, plainPassword: string) => {
+    const existing = ensureUserStmt.get(username) as any;
+    if (existing?.id) return;
+    const passwordHash = await hash(plainPassword, 10);
+    insertUserStmt.run(username, role, passwordHash);
+  };
 
   const getRequestRole = (req: express.Request): UserRole => {
-    const rawRole = String(req.header('x-user-role') || '').trim().toLowerCase();
-    if (rawRole === 'admin' || rawRole === 'moderator' || rawRole === 'public') {
-      return rawRole;
-    }
-    return 'admin';
+    if (lockedRole) return lockedRole;
+    return readSessionRole(req) || 'public';
   };
 
   const rolePermissions: Record<UserRole, Set<Permission>> = {
@@ -305,18 +441,39 @@ async function startServer() {
     public: new Set<Permission>([]),
   };
 
-  const requirePermission = (permission: Permission) => {
+  const requirePermission = (permission: Permission, tournamentResolver?: (req: express.Request) => string | null) => {
     return (req: express.Request, res: express.Response, next: express.NextFunction) => {
       const role = getRequestRole(req);
-      if (rolePermissions[role].has(permission)) {
-        return next();
+      if (!rolePermissions[role].has(permission)) {
+        return res.status(403).json({
+          error: 'Forbidden: insufficient permissions',
+          role,
+          required: permission,
+        });
       }
-      return res.status(403).json({
-        error: 'Forbidden: insufficient permissions',
-        role,
-        required: permission,
-      });
+
+      if (role === 'moderator') {
+        const userId = readSessionUserId(req);
+        const tournamentId = tournamentResolver ? tournamentResolver(req) : null;
+        if (!userId || !tournamentId || !hasModeratorTournamentAccess(tournamentId, userId)) {
+          return res.status(403).json({
+            error: 'Forbidden: moderator does not have access to this tournament',
+            role,
+            required: permission,
+            tournament_id: tournamentId,
+          });
+        }
+      }
+
+      return next();
     };
+  };
+
+  const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (getRequestRole(req) !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: admin only' });
+    }
+    return next();
   };
 
   const nextPowerOfTwo = (value: number) => {
@@ -427,7 +584,227 @@ async function startServer() {
     }
   };
 
+  await ensureSeedUser(adminUsername, 'admin', adminPassword);
+  await ensureSeedUser(moderatorUsername, 'moderator', moderatorPassword);
+
   // API Routes
+
+  app.post('/api/auth/login', async (req, res) => {
+    if (lockedRole) {
+      if (lockedRole === 'public') {
+        return res.status(403).json({ error: 'Login disabled while BTM_LOCK_ROLE=public' });
+      }
+      return res.json({ token: 'locked-role-session', role: lockedRole });
+    }
+
+    const username = String(req.body?.username || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+
+    const user = db.prepare(`
+      SELECT id, username, role, password_hash, active
+      FROM users
+      WHERE username = ?
+      LIMIT 1
+    `).get(username) as any;
+
+    if (!user || Number(user.active) !== 1) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const validPassword = await compare(password, String(user.password_hash || ''));
+    if (!validPassword) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const role = user.role as ManageRole;
+    const token = randomUUID();
+    authSessions.set(token, { userId: Number(user.id), role, username: String(user.username), createdAt: Date.now() });
+    return res.json({ token, role, id: Number(user.id), username: String(user.username) });
+  });
+
+  app.get('/api/auth/me', (req, res) => {
+    const session = readSession(req);
+    if (!session) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    return res.json({ id: session.userId, username: session.username, role: session.role });
+  });
+
+  app.post('/api/auth/logout', (req, res) => {
+    const token = readBearerToken(req);
+    if (token) authSessions.delete(token);
+    return res.json({ success: true });
+  });
+
+  app.get('/api/users', requireAdmin, (req, res) => {
+    const roleFilter = String(req.query.role || '').trim().toLowerCase();
+    if (roleFilter === 'admin' || roleFilter === 'moderator') {
+      const rows = db.prepare(`
+        SELECT id, username, role, active, created_at
+        FROM users
+        WHERE role = ?
+        ORDER BY username ASC
+      `).all(roleFilter);
+      return res.json(rows);
+    }
+    const rows = db.prepare(`
+      SELECT id, username, role, active, created_at
+      FROM users
+      ORDER BY role ASC, username ASC
+    `).all();
+    return res.json(rows);
+  });
+
+  app.post('/api/users', requireAdmin, async (req, res) => {
+    const username = String(req.body?.username || '').trim().toLowerCase();
+    const role = String(req.body?.role || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+    if (!username || (role !== 'admin' && role !== 'moderator') || password.length < 6) {
+      return res.status(400).json({ error: 'Invalid user payload' });
+    }
+
+    const existing = db.prepare('SELECT id FROM users WHERE username = ? LIMIT 1').get(username) as any;
+    if (existing?.id) {
+      return res.status(409).json({ error: 'Username already exists' });
+    }
+
+    const passwordHash = await hash(password, 10);
+    const info = db.prepare(`
+      INSERT INTO users (username, role, password_hash, active)
+      VALUES (?, ?, ?, 1)
+    `).run(username, role, passwordHash);
+
+    return res.json({ id: Number(info.lastInsertRowid), username, role });
+  });
+
+  app.put('/api/users/:id/password', async (req, res) => {
+    const requester = readSession(req);
+    if (!requester) return res.status(401).json({ error: 'Not authenticated' });
+
+    const targetId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(targetId)) return res.status(400).json({ error: 'Invalid user id' });
+
+    if (requester.role !== 'admin' && requester.userId !== targetId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const newPassword = String(req.body?.new_password || '');
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    const passwordHash = await hash(newPassword, 10);
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, targetId);
+    return res.json({ success: true });
+  });
+
+  app.get('/api/tournaments/:id/moderator-access', (req, res) => {
+    const role = getRequestRole(req);
+    if (role === 'public') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    if (role === 'admin') {
+      const rows = db.prepare(`
+        SELECT m.moderator_user_id as user_id, u.username, m.active, m.expires_at, m.granted_at
+        FROM moderator_tournament_access m
+        JOIN users u ON u.id = m.moderator_user_id
+        WHERE m.tournament_id = ?
+        ORDER BY u.username ASC
+      `).all(req.params.id) as any[];
+
+      const assignments = rows.map((row) => {
+        let active = Number(row.active) === 1;
+        if (active && row.expires_at) {
+          const expiryTs = Date.parse(String(row.expires_at));
+          if (Number.isFinite(expiryTs) && Date.now() > expiryTs) {
+            deactivateExpiredModeratorStmt.run(req.params.id, row.user_id);
+            active = false;
+          }
+        }
+        return {
+          user_id: Number(row.user_id),
+          username: String(row.username),
+          active,
+          expires_at: row.expires_at || null,
+          granted_at: row.granted_at || null,
+        };
+      });
+      return res.json({ can_manage: true, assignments });
+    }
+
+    const userId = readSessionUserId(req);
+    const username = readSessionUsername(req);
+    if (!userId || !username) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    const row = moderatorAccessLookupStmt.get(req.params.id, userId) as any;
+    const enabled = hasModeratorTournamentAccess(req.params.id, userId);
+    return res.json({
+      can_manage: enabled,
+      assignments: [{
+        user_id: userId,
+        username,
+        active: enabled,
+        expires_at: row?.expires_at || null,
+      }]
+    });
+  });
+
+  app.put('/api/tournaments/:id/moderator-access', requireAdmin, (req, res) => {
+    const tournamentId = String(req.params.id);
+    const moderatorUserId = Number.parseInt(String(req.body?.moderator_user_id), 10);
+    if (!Number.isFinite(moderatorUserId)) {
+      return res.status(400).json({ error: 'moderator_user_id is required' });
+    }
+
+    const moderatorUser = db.prepare(`
+      SELECT id, role
+      FROM users
+      WHERE id = ?
+      LIMIT 1
+    `).get(moderatorUserId) as any;
+    if (!moderatorUser || moderatorUser.role !== 'moderator') {
+      return res.status(400).json({ error: 'Selected user is not a moderator' });
+    }
+
+    const enabled = req.body?.enabled === true;
+    const parsedHours = Number.parseFloat(String(req.body?.expires_in_hours));
+    const expiresAt = enabled && Number.isFinite(parsedHours) && parsedHours > 0
+      ? new Date(Date.now() + (parsedHours * 60 * 60 * 1000)).toISOString()
+      : null;
+
+    if (!enabled) {
+      db.prepare(`
+        UPDATE moderator_tournament_access
+        SET active = 0, expires_at = NULL
+        WHERE tournament_id = ? AND moderator_user_id = ?
+      `).run(tournamentId, moderatorUserId);
+      return res.json({ success: true, enabled: false, moderator_user_id: moderatorUserId, expires_at: null });
+    }
+
+    db.prepare(`
+      INSERT INTO moderator_tournament_access (tournament_id, moderator_user_id, active, expires_at)
+      VALUES (?, ?, 1, ?)
+      ON CONFLICT(tournament_id, moderator_user_id)
+      DO UPDATE SET active = 1, expires_at = excluded.expires_at, granted_at = CURRENT_TIMESTAMP
+    `).run(tournamentId, moderatorUserId, expiresAt);
+
+    return res.json({ success: true, enabled: true, moderator_user_id: moderatorUserId, expires_at: expiresAt });
+  });
+
+  app.delete('/api/tournaments/:id/moderator-access/:userId', requireAdmin, (req, res) => {
+    const userId = Number.parseInt(req.params.userId, 10);
+    if (!Number.isFinite(userId)) return res.status(400).json({ error: 'Invalid user id' });
+
+    db.prepare(`
+      UPDATE moderator_tournament_access
+      SET active = 0, expires_at = NULL
+      WHERE tournament_id = ? AND moderator_user_id = ?
+    `).run(req.params.id, userId);
+
+    return res.json({ success: true });
+  });
   
   // Tournaments
   app.get("/api/tournaments", (req, res) => {
@@ -506,7 +883,7 @@ async function startServer() {
     res.json(rows);
   });
 
-  app.post("/api/tournaments/:id/participants", requirePermission('participants:manage'), (req, res) => {
+  app.post("/api/tournaments/:id/participants", requirePermission('participants:manage', (req) => req.params.id), (req, res) => {
     try {
       const { first_name, last_name, gender, club, average, email, team_id, team_order } = normalizeParticipant(req.body);
       const assignedTeamOrder = team_id ? (team_order || getNextTeamOrder(req.params.id, team_id)) : 0;
@@ -523,7 +900,10 @@ async function startServer() {
     }
   });
 
-  app.put("/api/participants/:id", requirePermission('participants:manage'), (req, res) => {
+  app.put("/api/participants/:id", requirePermission('participants:manage', (req) => {
+    const row = participantTournamentStmt.get(req.params.id) as any;
+    return row ? String(row.tournament_id) : null;
+  }), (req, res) => {
     const existing = db.prepare("SELECT tournament_id, team_id FROM participants WHERE id = ?").get(req.params.id) as any;
     if (!existing) {
       return res.status(404).json({ error: 'Participant not found' });
@@ -542,7 +922,10 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  app.put("/api/participants/:id/team-order", requirePermission('participants:manage'), (req, res) => {
+  app.put("/api/participants/:id/team-order", requirePermission('participants:manage', (req) => {
+    const row = participantTournamentStmt.get(req.params.id) as any;
+    return row ? String(row.tournament_id) : null;
+  }), (req, res) => {
     try {
       const requested = Number.parseInt(req.body?.position, 10);
       if (!Number.isFinite(requested) || requested < 1) {
@@ -583,12 +966,15 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/participants/:id", requirePermission('participants:manage'), (req, res) => {
+  app.delete("/api/participants/:id", requirePermission('participants:manage', (req) => {
+    const row = participantTournamentStmt.get(req.params.id) as any;
+    return row ? String(row.tournament_id) : null;
+  }), (req, res) => {
     db.prepare("DELETE FROM participants WHERE id = ?").run(req.params.id);
     res.json({ success: true });
   });
 
-  app.delete("/api/tournaments/:id/participants", requirePermission('participants:manage'), (req, res) => {
+  app.delete("/api/tournaments/:id/participants", requirePermission('participants:manage', (req) => req.params.id), (req, res) => {
     try {
       const info = db.prepare("DELETE FROM participants WHERE tournament_id = ?").run(req.params.id);
       res.json({ success: true, deleted: info.changes });
@@ -598,7 +984,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/tournaments/:id/participants/bulk", requirePermission('participants:manage'), (req, res) => {
+  app.post("/api/tournaments/:id/participants/bulk", requirePermission('participants:manage', (req) => req.params.id), (req, res) => {
     try {
       const participants = Array.isArray(req.body?.participants) ? req.body.participants : [];
       const replaceExisting = req.body?.replace_existing === true;
@@ -652,25 +1038,31 @@ async function startServer() {
     res.json(rows);
   });
 
-  app.post("/api/tournaments/:id/teams", requirePermission('participants:manage'), (req, res) => {
+  app.post("/api/tournaments/:id/teams", requirePermission('participants:manage', (req) => req.params.id), (req, res) => {
     const { name } = req.body;
     const info = db.prepare("INSERT INTO teams (tournament_id, name) VALUES (?, ?)")
       .run(req.params.id, name);
     res.json({ id: info.lastInsertRowid });
   });
 
-  app.put("/api/teams/:id", requirePermission('participants:manage'), (req, res) => {
+  app.put("/api/teams/:id", requirePermission('participants:manage', (req) => {
+    const row = teamTournamentStmt.get(req.params.id) as any;
+    return row ? String(row.tournament_id) : null;
+  }), (req, res) => {
     const { name } = req.body;
     db.prepare("UPDATE teams SET name = ? WHERE id = ?").run(name, req.params.id);
     res.json({ success: true });
   });
 
-  app.delete("/api/teams/:id", requirePermission('participants:manage'), (req, res) => {
+  app.delete("/api/teams/:id", requirePermission('participants:manage', (req) => {
+    const row = teamTournamentStmt.get(req.params.id) as any;
+    return row ? String(row.tournament_id) : null;
+  }), (req, res) => {
     db.prepare("DELETE FROM teams WHERE id = ?").run(req.params.id);
     res.json({ success: true });
   });
 
-  app.post("/api/tournaments/:id/teams/bulk", requirePermission('participants:manage'), (req, res) => {
+  app.post("/api/tournaments/:id/teams/bulk", requirePermission('participants:manage', (req) => req.params.id), (req, res) => {
     const { teams } = req.body;
     const tournamentId = req.params.id;
     const insertStmt = db.prepare("INSERT INTO teams (tournament_id, name) VALUES (?, ?)");
@@ -823,7 +1215,7 @@ async function startServer() {
     res.json(rows);
   });
 
-  app.post("/api/tournaments/:id/scores", requirePermission('scores:manage'), (req, res) => {
+  app.post("/api/tournaments/:id/scores", requirePermission('scores:manage', (req) => req.params.id), (req, res) => {
     const { participant_id, game_number, score } = req.body;
 const existing = db
   .prepare("SELECT id FROM scores WHERE tournament_id = ? AND participant_id = ? AND game_number = ?")
@@ -976,12 +1368,12 @@ const existing = db
     });
   });
 
-  app.delete("/api/tournaments/:id/brackets", requirePermission('brackets:manage'), (req, res) => {
+  app.delete("/api/tournaments/:id/brackets", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
     const info = db.prepare("DELETE FROM brackets WHERE tournament_id = ?").run(req.params.id);
     res.json({ success: true, deleted: info.changes || 0 });
   });
 
-  app.post("/api/tournaments/:id/brackets/generate", requirePermission('brackets:manage'), (req, res) => {
+  app.post("/api/tournaments/:id/brackets/generate", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
     const tournamentId = req.params.id;
     const tournament = db.prepare("SELECT type, match_play_type, qualified_count, playoff_winners_count FROM tournaments WHERE id = ?").get(tournamentId) as any;
     if (!tournament) return res.status(404).json({ error: "Tournament not found" });
@@ -1181,7 +1573,7 @@ const existing = db
     });
   });
 
-  app.post("/api/tournaments/:id/brackets/generate-manual", requirePermission('brackets:manage'), (req, res) => {
+  app.post("/api/tournaments/:id/brackets/generate-manual", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
     try {
       const tournamentId = req.params.id;
       const tournament = db.prepare("SELECT id FROM tournaments WHERE id = ?").get(tournamentId) as any;
@@ -1226,7 +1618,7 @@ const existing = db
     }
   });
 
-  app.post("/api/tournaments/:id/brackets/:matchId/assign", requirePermission('brackets:manage'), (req, res) => {
+  app.post("/api/tournaments/:id/brackets/:matchId/assign", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
     try {
       const tournamentId = req.params.id;
       const matchId = Number.parseInt(req.params.matchId, 10);
@@ -1283,7 +1675,7 @@ const existing = db
     }
   });
 
-  app.post("/api/tournaments/:id/brackets/:matchId/winner", requirePermission('brackets:manage'), (req, res) => {
+  app.post("/api/tournaments/:id/brackets/:matchId/winner", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
     const { winner_id } = req.body;
     const numericWinnerId = Number.parseInt(winner_id, 10);
     const numericMatchId = Number.parseInt(req.params.matchId, 10);

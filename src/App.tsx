@@ -8,7 +8,6 @@ import {
   Plus, 
   ChevronRight, 
   Calendar,
-  Settings,
   ArrowLeft,
   Save,
   RefreshCw,
@@ -25,9 +24,14 @@ import {
   Printer
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score } from './services/api';
+import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser } from './services/api';
 
 type UserRole = 'admin' | 'moderator' | 'public';
+
+const parseRole = (value: unknown): UserRole | null => {
+  if (value === 'admin' || value === 'moderator' || value === 'public') return value;
+  return null;
+};
 
 // --- Components ---
 
@@ -109,11 +113,17 @@ const Select = ({ label, options, ...props }: any) => (
 // --- Main App ---
 
 export default function App() {
+  const lockedRole = parseRole((import.meta as any).env?.VITE_LOCK_ROLE);
   const originalFetchRef = useRef<typeof window.fetch | null>(null);
-  const [currentRole, setCurrentRole] = useState<UserRole>(() => {
-    const savedRole = localStorage.getItem('btm_role');
-    return savedRole === 'public' || savedRole === 'moderator' || savedRole === 'admin' ? savedRole : 'admin';
-  });
+  const [authToken, setAuthToken] = useState<string>(() => localStorage.getItem('btm_auth_token') || '');
+  const [currentRole, setCurrentRole] = useState<UserRole>(() => lockedRole || 'public');
+  const [showLogin, setShowLogin] = useState(false);
+  const [authError, setAuthError] = useState('');
+  const [authLoading, setAuthLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
   const [view, setView] = useState<'list' | 'detail' | 'create' | 'edit'>(() => {
     const savedView = localStorage.getItem('btm_view');
     return savedView === 'detail' ? 'detail' : 'list';
@@ -150,8 +160,58 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('btm_role', currentRole);
-  }, [currentRole]);
+    if (authToken) {
+      localStorage.setItem('btm_auth_token', authToken);
+    } else {
+      localStorage.removeItem('btm_auth_token');
+    }
+  }, [authToken]);
+
+  useEffect(() => {
+    if (lockedRole) {
+      setCurrentRole(lockedRole);
+      setCurrentUser(null);
+      setAuthLoading(false);
+      return;
+    }
+
+    if (!authToken) {
+      setCurrentRole('public');
+      setCurrentUser(null);
+      setAuthLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const loadSession = async () => {
+      try {
+        const me = await api.getMe(authToken);
+        if (cancelled) return;
+        if (me?.role === 'admin' || me?.role === 'moderator') {
+          setCurrentUser(me);
+          setCurrentRole(me.role);
+          setAuthLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.error(err);
+      }
+      if (!cancelled) {
+        setAuthToken('');
+        setCurrentRole('public');
+        setCurrentUser(null);
+        localStorage.removeItem('btm_auth_token');
+      }
+    
+      if (!cancelled) setAuthLoading(false);
+    };
+
+    setAuthLoading(true);
+    loadSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, lockedRole]);
 
   useEffect(() => {
     if (!originalFetchRef.current) {
@@ -160,7 +220,9 @@ export default function App() {
     const originalFetch = originalFetchRef.current;
     window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
       const existingHeaders = new Headers(init?.headers || {});
-      existingHeaders.set('x-user-role', currentRole);
+      if (authToken) {
+        existingHeaders.set('Authorization', `Bearer ${authToken}`);
+      }
       return originalFetch(input, {
         ...init,
         headers: existingHeaders,
@@ -171,7 +233,7 @@ export default function App() {
         window.fetch = originalFetchRef.current;
       }
     };
-  }, [currentRole]);
+  }, [authToken]);
 
   useEffect(() => {
     if (!isAdmin && (view === 'create' || view === 'edit')) {
@@ -316,38 +378,126 @@ export default function App() {
     setView('detail');
   };
 
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const username = String(formData.get('username') || '').trim();
+    const password = String(formData.get('password') || '');
+
+    setAuthError('');
+    try {
+      const session = await api.login(username, password);
+      setAuthToken(session.token);
+      setCurrentRole(session.role);
+      setCurrentUser({ id: session.id, username: session.username, role: session.role });
+      setShowLogin(false);
+    } catch (err: any) {
+      setAuthError(err?.message || 'Login failed');
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      if (authToken) {
+        await api.logout(authToken);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAuthToken('');
+      setCurrentRole(lockedRole || 'public');
+      setCurrentUser(null);
+      setShowLogin(false);
+      setShowPasswordModal(false);
+      setView('list');
+      setEditingTournament(null);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!currentUser) {
+      setPasswordError('No authenticated user found. Please login again.');
+      return;
+    }
+
+    const formData = new FormData(e.currentTarget);
+    const newPassword = String(formData.get('new_password') || '');
+    const confirmPassword = String(formData.get('confirm_password') || '');
+
+    if (newPassword.length < 6) {
+      setPasswordError('Password must be at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match.');
+      return;
+    }
+
+    setPasswordSaving(true);
+    setPasswordError('');
+    try {
+      await api.changePassword(currentUser.id, newPassword);
+      setShowPasswordModal(false);
+      alert('Password updated successfully.');
+    } catch (err: any) {
+      setPasswordError(err?.message || 'Failed to change password');
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-black font-sans">
       {/* Sidebar / Nav */}
       <nav className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-black/5 z-50 px-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-md overflow-hidden bg-black/[0.02] border border-black/10 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-md overflow-hidden bg-black/[0.02] border border-black/10 flex items-center justify-center">
             <img
               src="/Logo.png"
               alt="BTM Logo"
-              className="w-full h-full object-contain p-0.5"
+              className="w-full h-full object-cover"
             />
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-bold text-xl tracking-tight uppercase">BTM</span>
-            <span className="text-sm text-black/50 font-medium">Bowling Tournament Manager</span>
+          <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2">
+            <span className="font-bold text-xl tracking-tight uppercase">BTM v2.0</span>
+            <span className="hidden sm:inline text-sm text-black/50 font-medium">The all-in-one Bowling Tournament Manager. Track scores, run brackets, and sync payouts.</span>
+            <span className="sm:hidden text-[11px] text-black/50 font-medium leading-tight">The all-in-one Bowling Tournament Manager. Track scores, run brackets, and sync payouts.</span>
           </div>
         </div>
-        
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Settings size={16} className="text-black/40" />
-            <select
-              value={currentRole}
-              onChange={(e) => setCurrentRole(e.target.value as UserRole)}
-              className="px-2 py-1.5 rounded-md border border-black/10 text-xs font-bold uppercase tracking-wider bg-white"
-              title="Access role"
-            >
-              <option value="admin">Admin</option>
-              <option value="moderator">Moderator</option>
-              <option value="public">Public</option>
-            </select>
-          </div>
+        <div className="flex items-center gap-2">
+          {lockedRole ? (
+            <span className="px-2 py-1.5 rounded-md border border-black/10 text-xs font-bold uppercase tracking-wider bg-black/[0.02]">
+              {lockedRole}
+            </span>
+          ) : authLoading ? (
+            <span className="px-2 py-1.5 rounded-md border border-black/10 text-xs font-bold uppercase tracking-wider bg-black/[0.02] text-black/40">
+              Loading...
+            </span>
+          ) : currentRole === 'public' ? (
+            <Button variant="outline" size="sm" onClick={() => { setAuthError(''); setShowLogin(true); }}>
+              Login
+            </Button>
+          ) : (
+            <>
+              <span className="px-2 py-1.5 rounded-md border border-black/10 text-xs font-bold uppercase tracking-wider bg-black/[0.02]">
+                {currentRole}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setPasswordError('');
+                  setShowPasswordModal(true);
+                }}
+              >
+                Change Password
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleLogout}>
+                Logout
+              </Button>
+            </>
+          )}
         </div>
       </nav>
 
@@ -573,10 +723,50 @@ export default function App() {
         </AnimatePresence>
       </main>
 
+      {showLogin && !lockedRole && (
+        <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md p-6">
+            <h3 className="text-xl font-bold mb-1">Login</h3>
+            <p className="text-sm text-black/50 mb-5">Moderator and Admin access only</p>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <Input label="Username" name="username" autoComplete="username" required />
+              <Input label="Password" name="password" type="password" autoComplete="current-password" required />
+              {authError && <p className="text-xs text-red-600 font-semibold">{authError}</p>}
+              <div className="flex gap-3 pt-2">
+                <Button type="submit" className="flex-1 justify-center">Login</Button>
+                <Button type="button" variant="outline" onClick={() => setShowLogin(false)} className="px-6">Cancel</Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {showPasswordModal && !lockedRole && currentRole !== 'public' && (
+        <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
+          <Card className="w-full max-w-md p-6">
+            <h3 className="text-xl font-bold mb-1">Change Password</h3>
+            <p className="text-sm text-black/50 mb-5">Update password for {currentUser?.username || 'current user'}</p>
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <Input label="New Password" name="new_password" type="password" autoComplete="new-password" required />
+              <Input label="Confirm Password" name="confirm_password" type="password" autoComplete="new-password" required />
+              {passwordError && <p className="text-xs text-red-600 font-semibold">{passwordError}</p>}
+              <div className="flex gap-3 pt-2">
+                <Button type="submit" className="flex-1 justify-center" disabled={passwordSaving}>
+                  {passwordSaving ? 'Saving...' : 'Save'}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setShowPasswordModal(false)} className="px-6" disabled={passwordSaving}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
       <footer className="border-t border-black/5 bg-white/80 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-6 py-4 text-xs text-black/50 flex items-center justify-between">
-          <span className="font-semibold uppercase tracking-wide">BTM — Bowling Tournament Manager</span>
-          <span>© {new Date().getFullYear()} Murat.D</span>
+          <span className="font-semibold uppercase tracking-wide">Total tournament control. From first frame to final payout.</span>
+          <span>Copyright Murat D. 2026</span>
         </div>
       </footer>
     </div>
@@ -585,31 +775,175 @@ export default function App() {
 
 // --- Sub-Views ---
 
-function TournamentDetail({ tournament, onBack, onEdit, activeTab, setActiveTab, role }: { 
-  tournament: Tournament, 
+function TournamentDetail({ tournament, onBack, onEdit, activeTab, setActiveTab, role }: {
+  tournament: Tournament,
   onBack: () => void,
   onEdit: (t: Tournament) => void,
   activeTab: string,
   setActiveTab: (t: any) => void,
   role: UserRole
 }) {
-  const visibleTabs = role === 'public'
+  const [moderatorAccess, setModeratorAccess] = useState<ModeratorTournamentAccess | null>(null);
+  const [moderators, setModerators] = useState<UserAccount[]>([]);
+  const [selectedModeratorId, setSelectedModeratorId] = useState<number | ''>('');
+  const [newModeratorUsername, setNewModeratorUsername] = useState('');
+  const [newModeratorPassword, setNewModeratorPassword] = useState('');
+  const [resetPasswordUserId, setResetPasswordUserId] = useState<number | ''>('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
+  const [resetPasswordError, setResetPasswordError] = useState('');
+  const [resetPasswordSaving, setResetPasswordSaving] = useState(false);
+  const [accessLoading, setAccessLoading] = useState(false);
+  const [accessError, setAccessError] = useState('');
+  const [expiresHours, setExpiresHours] = useState('24');
+  const [showModeratorPanel, setShowModeratorPanel] = useState(false);
+
+  const loadAccessData = async () => {
+    if (role !== 'admin' && role !== 'moderator') {
+      setModeratorAccess(null);
+      return;
+    }
+
+    setAccessLoading(true);
+    try {
+      const accessPromise = api.getModeratorAccess(tournament.id);
+      const moderatorsPromise = role === 'admin' ? api.getUsers('moderator') : Promise.resolve([] as UserAccount[]);
+      const [accessData, moderatorsData] = await Promise.all([accessPromise, moderatorsPromise]);
+      setModeratorAccess(accessData);
+      if (role === 'admin') {
+        setModerators(moderatorsData);
+        if (!selectedModeratorId && moderatorsData.length > 0) {
+          setSelectedModeratorId(moderatorsData[0].id);
+        }
+        if (!resetPasswordUserId && moderatorsData.length > 0) {
+          setResetPasswordUserId(moderatorsData[0].id);
+        }
+      }
+      setAccessError('');
+    } catch (err: any) {
+      setAccessError(err?.message || 'Failed to load moderator access');
+      if (role === 'moderator') {
+        setModeratorAccess({ can_manage: false, assignments: [] });
+      }
+    } finally {
+      setAccessLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAccessData();
+  }, [tournament.id, role]);
+
+  const handleCreateModerator = async () => {
+    const username = newModeratorUsername.trim().toLowerCase();
+    const password = newModeratorPassword;
+    if (!username || password.length < 6) {
+      setAccessError('Moderator username is required and password must be at least 6 characters.');
+      return;
+    }
+    try {
+      setAccessLoading(true);
+      const created = await api.createUser({ username, password, role: 'moderator' });
+      setNewModeratorUsername('');
+      setNewModeratorPassword('');
+      await loadAccessData();
+      setSelectedModeratorId(created.id);
+      setAccessError('');
+    } catch (err: any) {
+      setAccessError(err?.message || 'Failed to create moderator');
+    } finally {
+      setAccessLoading(false);
+    }
+  };
+
+  const handleGrantModerator = async (expires: number | null) => {
+    if (!selectedModeratorId) {
+      setAccessError('Select a moderator first.');
+      return;
+    }
+    try {
+      setAccessLoading(true);
+      await api.setModeratorAccess(tournament.id, {
+        moderator_user_id: Number(selectedModeratorId),
+        enabled: true,
+        expires_in_hours: expires,
+      });
+      await loadAccessData();
+      setAccessError('');
+    } catch (err: any) {
+      setAccessError(err?.message || 'Failed to grant moderator access');
+    } finally {
+      setAccessLoading(false);
+    }
+  };
+
+  const handleRemoveModerator = async (userId: number) => {
+    try {
+      setAccessLoading(true);
+      await api.removeModeratorAccess(tournament.id, userId);
+      await loadAccessData();
+      setAccessError('');
+    } catch (err: any) {
+      setAccessError(err?.message || 'Failed to remove moderator access');
+    } finally {
+      setAccessLoading(false);
+    }
+  };
+
+  const handleResetModeratorPassword = async () => {
+    if (!resetPasswordUserId) {
+      setResetPasswordError('Select a moderator first.');
+      return;
+    }
+    if (resetPassword.length < 6) {
+      setResetPasswordError('Password must be at least 6 characters.');
+      return;
+    }
+    if (resetPassword !== resetPasswordConfirm) {
+      setResetPasswordError('Passwords do not match.');
+      return;
+    }
+
+    setResetPasswordSaving(true);
+    setResetPasswordError('');
+    try {
+      await api.changePassword(Number(resetPasswordUserId), resetPassword);
+      setResetPassword('');
+      setResetPasswordConfirm('');
+      setResetPasswordError('');
+      alert('Moderator password updated successfully.');
+    } catch (err: any) {
+      setResetPasswordError(err?.message || 'Failed to reset moderator password');
+    } finally {
+      setResetPasswordSaving(false);
+    }
+  };
+
+  const effectiveRole: UserRole = role === 'moderator' && !moderatorAccess?.can_manage ? 'public' : role;
+
+  useEffect(() => {
+    if (effectiveRole === 'public' && activeTab === 'participants') {
+      setActiveTab('lanes');
+    }
+  }, [effectiveRole, activeTab, setActiveTab]);
+
+  const visibleTabs = effectiveRole === 'public'
     ? [
-        { id: 'lanes', label: 'Lane Assignments', icon: LayoutGrid },
-        { id: 'scoring', label: 'Scoring', icon: ClipboardList },
-        { id: 'brackets', label: 'Brackets', icon: Target },
-        { id: 'standings', label: 'Tournament Result', icon: BarChart3 },
-      ]
+      { id: 'lanes', label: 'Lane Assignments', icon: LayoutGrid },
+      { id: 'scoring', label: 'Scoring', icon: ClipboardList },
+      { id: 'brackets', label: 'Brackets', icon: Target },
+      { id: 'standings', label: 'Tournament Result', icon: BarChart3 },
+    ]
     : [
-        { id: 'participants', label: 'Participants', icon: Users },
-        { id: 'lanes', label: 'Lane Assignments', icon: LayoutGrid },
-        { id: 'scoring', label: 'Scoring', icon: ClipboardList },
-        { id: 'brackets', label: 'Brackets', icon: Target },
-        { id: 'standings', label: 'Tournament Result', icon: BarChart3 },
-      ];
+      { id: 'participants', label: 'Participants', icon: Users },
+      { id: 'lanes', label: 'Lane Assignments', icon: LayoutGrid },
+      { id: 'scoring', label: 'Scoring', icon: ClipboardList },
+      { id: 'brackets', label: 'Brackets', icon: Target },
+      { id: 'standings', label: 'Tournament Result', icon: BarChart3 },
+    ];
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className="space-y-8"
@@ -666,19 +1000,138 @@ function TournamentDetail({ tournament, onBack, onEdit, activeTab, setActiveTab,
             </div>
           </div>
         </div>
+
+        {role === 'admin' && activeTab === 'participants' && (
+          <Card className="p-4 md:w-[430px]">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold uppercase tracking-wider">Moderator Access</h4>
+                  <p className="text-xs text-black/50 mt-1">Assign one or more moderator accounts to this tournament.</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setShowModeratorPanel(v => !v)}>
+                  {showModeratorPanel ? 'Hide' : 'Show'}
+                </Button>
+              </div>
+
+              {showModeratorPanel && (
+                <>
+
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
+                <Select
+                  label="Select Moderator"
+                  value={selectedModeratorId === '' ? '' : String(selectedModeratorId)}
+                  onChange={(e: any) => setSelectedModeratorId(e.target.value ? Number(e.target.value) : '')}
+                  options={[
+                    { value: '', label: moderators.length > 0 ? 'Choose moderator' : 'No moderators available' },
+                    ...moderators.map((m) => ({ value: String(m.id), label: m.username })),
+                  ]}
+                />
+                <Input
+                  label="Auto remove (hours)"
+                  type="number"
+                  min="1"
+                  value={expiresHours}
+                  onChange={(e: any) => setExpiresHours(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  disabled={accessLoading || !selectedModeratorId}
+                  onClick={() => {
+                    const parsed = Number.parseInt(expiresHours, 10);
+                    handleGrantModerator(Number.isFinite(parsed) && parsed > 0 ? parsed : 24);
+                  }}
+                >
+                  Grant Timed
+                </Button>
+                <Button variant="outline" disabled={accessLoading || !selectedModeratorId} onClick={() => handleGrantModerator(null)}>
+                  Keep No Expiry
+                </Button>
+              </div>
+
+              <div className="border border-black/10 rounded-md p-2 max-h-40 overflow-auto space-y-2">
+                {moderatorAccess?.assignments?.length ? moderatorAccess.assignments.map((assignment) => (
+                  <div key={assignment.user_id} className="flex items-center justify-between text-xs">
+                    <div>
+                      <span className="font-semibold">{assignment.username}</span>
+                      <span className="text-black/50"> — {assignment.active ? 'active' : 'inactive'}</span>
+                      {assignment.active && assignment.expires_at && (
+                        <span className="text-black/50"> (expires {new Date(assignment.expires_at).toLocaleString()})</span>
+                      )}
+                    </div>
+                    <Button variant="ghost" size="sm" disabled={accessLoading} onClick={() => handleRemoveModerator(assignment.user_id)}>
+                      Remove
+                    </Button>
+                  </div>
+                )) : <p className="text-xs text-black/50">No moderator assignments yet.</p>}
+              </div>
+
+              <div className="pt-2 border-t border-black/10">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-black/50 mb-2">Create Moderator Account</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <Input label="Username" value={newModeratorUsername} onChange={(e: any) => setNewModeratorUsername(e.target.value)} />
+                  <Input label="Password" type="password" value={newModeratorPassword} onChange={(e: any) => setNewModeratorPassword(e.target.value)} />
+                </div>
+                <div className="mt-2">
+                  <Button variant="outline" disabled={accessLoading} onClick={handleCreateModerator}>Create Moderator</Button>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-black/10">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-black/50 mb-2">Reset Moderator Password</p>
+                <div className="grid grid-cols-1 gap-2">
+                  <Select
+                    label="Moderator"
+                    value={resetPasswordUserId === '' ? '' : String(resetPasswordUserId)}
+                    onChange={(e: any) => setResetPasswordUserId(e.target.value ? Number(e.target.value) : '')}
+                    options={[
+                      { value: '', label: moderators.length > 0 ? 'Choose moderator' : 'No moderators available' },
+                      ...moderators.map((m) => ({ value: String(m.id), label: m.username })),
+                    ]}
+                  />
+                  <Input label="New Password" type="password" value={resetPassword} onChange={(e: any) => setResetPassword(e.target.value)} />
+                  <Input label="Confirm Password" type="password" value={resetPasswordConfirm} onChange={(e: any) => setResetPasswordConfirm(e.target.value)} />
+                </div>
+                <div className="mt-2">
+                  <Button
+                    variant="outline"
+                    disabled={resetPasswordSaving || !resetPasswordUserId}
+                    onClick={handleResetModeratorPassword}
+                  >
+                    {resetPasswordSaving ? 'Saving...' : 'Reset Password'}
+                  </Button>
+                </div>
+                {resetPasswordError && <p className="text-xs text-red-600 font-semibold mt-2">{resetPasswordError}</p>}
+              </div>
+
+              {accessError && <p className="text-xs text-red-600 font-semibold">{accessError}</p>}
+                </>
+              )}
+            </div>
+          </Card>
+        )}
       </div>
 
-      {/* Tabs */}
+      {role === 'moderator' && !accessLoading && effectiveRole === 'public' && (
+        <Card className="p-4 border border-amber-200 bg-amber-50/50">
+          <p className="text-sm font-semibold text-amber-800">Moderator access is not active for this tournament.</p>
+          <p className="text-xs text-amber-700 mt-1">Ask admin to grant access for this tournament, or wait for a new assignment.</p>
+        </Card>
+      )}
+
       <div className="flex border-b border-black/10 gap-2 overflow-x-auto no-scrollbar">
         {visibleTabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-all whitespace-nowrap text-xs uppercase tracking-widest ${
-              activeTab === tab.id 
-              ? 'border-black text-black font-bold' 
-              : 'border-transparent text-black/40 hover:text-black/60'
-            }`}
+              activeTab === tab.id
+                ? 'border-black text-black font-bold'
+                : 'border-transparent text-black/40 hover:text-black/60'
+              }`}
           >
             <tab.icon size={14} />
             {tab.label}
@@ -687,10 +1140,10 @@ function TournamentDetail({ tournament, onBack, onEdit, activeTab, setActiveTab,
       </div>
 
       <div className="min-h-[400px]">
-        {activeTab === 'participants' && role !== 'public' && <ParticipantView tournament={tournament} role={role} />}
-        {activeTab === 'lanes' && <LaneView tournament={tournament} role={role} />}
-        {activeTab === 'scoring' && <ScoringView tournament={tournament} role={role} />}
-        {activeTab === 'brackets' && <BracketsView tournament={tournament} role={role} />}
+        {activeTab === 'participants' && effectiveRole !== 'public' && <ParticipantView tournament={tournament} role={effectiveRole} />}
+        {activeTab === 'lanes' && <LaneView tournament={tournament} role={effectiveRole} />}
+        {activeTab === 'scoring' && <ScoringView tournament={tournament} role={effectiveRole} />}
+        {activeTab === 'brackets' && <BracketsView tournament={tournament} role={effectiveRole} />}
         {activeTab === 'standings' && <StandingsView tournament={tournament} />}
       </div>
     </motion.div>
@@ -925,9 +1378,9 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <h3 className="text-xl font-bold">Manage Participants</h3>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full md:w-auto">
           <Button variant="outline" onClick={handleExportCSV}>
             <Upload size={18} />
             Export CSV
@@ -1685,6 +2138,12 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     return lane ? `L${lane.lane_number}` : '-';
   };
 
+  const formatScoringName = (participant: Participant) => {
+    const firstName = (participant.first_name || '').trim() || 'Unknown';
+    const lastInitial = (participant.last_name || '').trim().charAt(0).toUpperCase();
+    return lastInitial ? `${firstName} ${lastInitial}.` : firstName;
+  };
+
   const scoringParticipants = participants
     .filter(p => {
       if (tournament.type === 'team') {
@@ -1763,7 +2222,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
       const { total, average } = getParticipantStats(p.id);
       return [
         p.id,
-        `${p.first_name} ${p.last_name}`,
+        formatScoringName(p),
         p.team_name || '',
         getLaneBadge(p),
         ...gameValues,
@@ -1883,7 +2342,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
             Enter game results for each participant{tournament.type === 'team' ? ' (assigned team players only)' : ''} • Shift {currentShift}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           {canManageScores && (
             <Button variant="outline" onClick={handleSaveScores}>
               <Save size={14} />
@@ -1963,7 +2422,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                   )}
                   <tr className="hover:bg-black/[0.01] transition-colors">
                     <td className={`px-6 py-4 font-bold text-base ${p.gender?.toLowerCase() === 'female' ? 'text-rose-600' : 'text-black'}`}>
-                      {p.first_name} {p.last_name}
+                      {formatScoringName(p)}
                     </td>
                     <td className="px-6 py-4">
                       {tournament.type === 'team' ? (
@@ -2813,7 +3272,9 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
   const [standings, setStandings] = useState<Standing[]>([]);
   const [bracketMatches, setBracketMatches] = useState<any[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
+  const [standingsMode, setStandingsMode] = useState<'players' | 'teams'>('players');
   const [loading, setLoading] = useState(true);
   const standingsImportInputRef = useRef<HTMLInputElement | null>(null);
   const standingsTableRef = useRef<HTMLTableElement | null>(null);
@@ -2822,19 +3283,25 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
     loadStandings();
   }, [tournament.id]);
 
+  useEffect(() => {
+    setStandingsMode('players');
+  }, [tournament.id, tournament.type]);
+
   const loadStandings = async () => {
     setLoading(true);
     try {
-      const [standingsData, bracketsData, participantsData, scoresData] = await Promise.all([
+      const [standingsData, bracketsData, participantsData, scoresData, teamsData] = await Promise.all([
         api.getStandings(tournament.id),
         api.getBrackets(tournament.id),
         api.getParticipants(tournament.id),
-        api.getScores(tournament.id)
+        api.getScores(tournament.id),
+        tournament.type === 'team' ? api.getTeams(tournament.id) : Promise.resolve([] as Team[])
       ]);
       setStandings(standingsData);
       setBracketMatches(bracketsData);
       setParticipants(participantsData);
       setScores(scoresData);
+      setTeams(teamsData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -2860,9 +3327,87 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
   };
 
   const participantNameMap = new Map<number, string>();
-  for (const s of standings) {
-    participantNameMap.set(s.participant_id, s.participant_name);
+  for (const p of participants) {
+    participantNameMap.set(p.id, formatStandingsName(p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown'));
   }
+
+  const maxGameFromScores = scores.reduce((max, s) => Math.max(max, Number(s.game_number) || 0), 0);
+  const gameCount = Math.max(1, Number(tournament.games_count) || 0, maxGameFromScores);
+  const gameNumbers = Array.from({ length: gameCount }, (_, i) => i + 1);
+
+  const scoreByParticipantGame = new Map<string, number>();
+  for (const s of scores) {
+    scoreByParticipantGame.set(`${s.participant_id}-${s.game_number}`, Number(s.score) || 0);
+  }
+
+  const playerStandingsRows = participants
+    .map((p) => {
+      const games = gameNumbers.map((gameNumber) => scoreByParticipantGame.get(`${p.id}-${gameNumber}`) ?? 0);
+      const total = games.reduce((sum, value) => sum + value, 0);
+      const gamesPlayed = games.filter((value) => value > 0).length;
+      const average = gamesPlayed > 0 ? Math.round(total / gamesPlayed) : 0;
+      return {
+        participant_id: p.id,
+        participant_name: formatStandingsName(p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown'),
+        team_name: p.team_name || '-',
+        club: p.club || '-',
+        games,
+        total,
+        average,
+      };
+    })
+    .sort((a, b) => (b.total - a.total) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name));
+
+  const formatTeamMemberCompact = (participant: Participant) => {
+    const firstName = (participant.first_name || '').trim().toLowerCase() || 'unknown';
+    const lastInitial = (participant.last_name || '').trim().charAt(0).toLowerCase();
+    return lastInitial ? `${firstName} ${lastInitial}.` : firstName;
+  };
+
+  const teamSizeForCheck = Math.max(1, Number(tournament.players_per_team) || 3);
+
+  const teamMap = new Map<string, { key: string; team_id: number | null; team_name: string; games: number[]; total: number; members: string[] }>();
+  if (isTeamTournament && teams.length > 0) {
+    for (const team of teams) {
+      const key = `team-${team.id}`;
+      teamMap.set(key, {
+        key,
+        team_id: team.id,
+        team_name: team.name,
+        games: gameNumbers.map(() => 0),
+        total: 0,
+        members: [],
+      });
+    }
+  }
+
+  for (const p of participants) {
+    if (isTeamTournament && p.team_id === null) {
+      continue;
+    }
+
+    const key = p.team_id !== null ? `team-${p.team_id}` : `unassigned-${p.id}`;
+    const teamName = p.team_name || (p.team_id !== null ? `Team ${p.team_id}` : 'Unassigned');
+    if (!teamMap.has(key)) {
+      teamMap.set(key, { key, team_id: p.team_id, team_name: teamName, games: gameNumbers.map(() => 0), total: 0, members: [] });
+    }
+    const entry = teamMap.get(key)!;
+    entry.members.push(formatTeamMemberCompact(p));
+    for (let index = 0; index < gameNumbers.length; index++) {
+      const value = scoreByParticipantGame.get(`${p.id}-${gameNumbers[index]}`) ?? 0;
+      entry.games[index] += value;
+      entry.total += value;
+    }
+  }
+
+  const teamStandingsRows = Array.from(teamMap.values())
+    .sort((a, b) => (b.total - a.total) || a.team_name.localeCompare(b.team_name));
+  const registeredPlayersCount = participants.length;
+  const assignedPlayersCount = participants.filter((p) => p.team_id !== null).length;
+  const unassignedPlayersCount = Math.max(0, registeredPlayersCount - assignedPlayersCount);
+  const expectedTeamsFromPlayers = Math.ceil(assignedPlayersCount / teamSizeForCheck);
+  const rankedTeamsCount = teamStandingsRows.length;
+  const teamsCountValid = rankedTeamsCount === expectedTeamsFromPlayers || rankedTeamsCount === teams.length;
 
   const maleLeader = scores
     .filter(score => participantGenderMap.get(score.participant_id) === 'male')
@@ -2919,24 +3464,25 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
   };
 
   const handleExportStandings = () => {
-    const headers = isTeamTournament
-      ? ['rank', 'team', 'games', 'avg', 'total']
-      : ['rank', 'participant', 'team', 'games', 'avg', 'total'];
-    const rows = isTeamTournament
-      ? standings.map((s, idx) => [
+    const gameHeaders = gameNumbers.map((g) => `game_${g}`);
+    const headers = standingsMode === 'teams'
+      ? ['rank', 'team', ...gameHeaders, 'total']
+      : ['rank', 'participant', 'club', 'team', ...gameHeaders, 'total', 'avg'];
+    const rows = standingsMode === 'teams'
+      ? teamStandingsRows.map((s, idx) => [
           idx + 1,
-          s.team_name || s.participant_name,
-          s.games_played || 0,
-          Math.round(s.average_score || 0),
-          s.total_score || 0,
+          s.team_name,
+          ...s.games,
+          s.total,
         ])
-      : standings.map((s, idx) => [
+      : playerStandingsRows.map((s, idx) => [
           idx + 1,
           s.participant_name,
-          s.team_name || '',
-          s.games_played || 0,
-          Math.round(s.average_score || 0),
-          s.total_score || 0,
+          s.club,
+          s.team_name,
+          ...s.games,
+          s.total,
+          s.average,
         ]);
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -3116,9 +3662,33 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
           <div className="p-6 border-b border-black/5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
               <h4 className="font-bold">Tournament Standings</h4>
-              <p className="text-sm text-black/40">Rankings based on total scores</p>
+              <p className="text-sm text-black/40">Rankings sorted from highest to lowest total score</p>
+              {standingsMode === 'teams' && isTeamTournament && (
+                <p className={`text-xs mt-1 ${teamsCountValid ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  Team check: ranked teams = {rankedTeamsCount} (real teams only), assigned players = {assignedPlayersCount}, unassigned players = {unassignedPlayersCount}.
+                  {teamsCountValid ? ' OK.' : ' Mismatch detected. Please review team assignments in Participants page.'}
+                </p>
+              )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              <div className="flex gap-1 p-1 bg-black/5 rounded-lg">
+                <button
+                  onClick={() => setStandingsMode('players')}
+                  className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
+                    standingsMode === 'players' ? 'bg-black text-white shadow-sm' : 'text-black/40 hover:text-black/60'
+                  }`}
+                >
+                  Players
+                </button>
+                <button
+                  onClick={() => setStandingsMode('teams')}
+                  className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
+                    standingsMode === 'teams' ? 'bg-black text-white shadow-sm' : 'text-black/40 hover:text-black/60'
+                  }`}
+                >
+                  Teams
+                </button>
+              </div>
               <Button variant="outline" onClick={handleSaveStandings}>
                 <Save size={14} />
                 Save
@@ -3148,41 +3718,56 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
             <thead>
               <tr className="bg-black/[0.02] border-b border-black/5">
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40 w-16">Rank</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40">{isTeamTournament ? 'Team' : 'Participant'}</th>
-                {!isTeamTournament && (
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40">{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
+                {standingsMode === 'players' && (
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40">Club</th>
                 )}
-                {!isTeamTournament && (
+                {standingsMode === 'players' && (
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40">Team</th>
                 )}
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40 text-center">Games</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40 text-center">Avg</th>
+                {gameNumbers.map((gameNumber) => (
+                  <th key={gameNumber} className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40 text-center">
+                    Game {gameNumber}
+                  </th>
+                ))}
+                {standingsMode === 'players' && (
+                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40 text-center">Avg</th>
+                )}
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40 text-right">Total</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-black/5">
-              {standings.map((s, idx) => (
+              {standingsMode === 'players' && playerStandingsRows.map((s, idx) => (
                 <tr key={s.participant_id} className="hover:bg-black/[0.01] transition-colors">
                   <td className="px-6 py-4 font-bold text-black/60">{idx + 1}</td>
-                  <td className="px-6 py-4 font-bold">
-                    {isTeamTournament
-                      ? (s.team_name || s.participant_name || '-')
-                      : formatStandingsName(s.participant_id, s.participant_name)}
-                  </td>
-                  {!isTeamTournament && (
-                    <td className="px-6 py-4 text-black/40 text-sm">{participantInfoMap.get(s.participant_id)?.club || '-'}</td>
-                  )}
-                  {!isTeamTournament && (
-                    <td className="px-6 py-4 text-black/40 text-sm">{s.team_name || '-'}</td>
-                  )}
-                  <td className="px-6 py-4 text-center font-mono">{s.games_played}</td>
-                  <td className="px-6 py-4 text-center font-mono text-black/60">{Math.round(s.average_score || 0)}</td>
-                  <td className="px-6 py-4 text-right font-bold">{s.total_score || 0}</td>
+                  <td className="px-6 py-4 font-bold">{s.participant_name}</td>
+                  <td className="px-6 py-4 text-black/40 text-sm">{s.club}</td>
+                  <td className="px-6 py-4 text-black/40 text-sm">{s.team_name}</td>
+                  {s.games.map((value, gameIndex) => (
+                    <td key={gameIndex} className="px-6 py-4 text-center font-mono">{value}</td>
+                  ))}
+                  <td className="px-6 py-4 text-center font-mono text-black/60">{s.average}</td>
+                  <td className="px-6 py-4 text-right font-bold">{s.total}</td>
                 </tr>
               ))}
-              {standings.length === 0 && (
+              {standingsMode === 'teams' && teamStandingsRows.map((s, idx) => (
+                <tr key={s.key} className="hover:bg-black/[0.01] transition-colors">
+                  <td className="px-6 py-4 font-bold text-black/60">{idx + 1}</td>
+                  <td className="px-6 py-4">
+                    <div className="font-bold">{s.team_name}</div>
+                    <div className="text-[11px] text-black/50 lowercase">
+                      {s.members.length > 0 ? s.members.join(', ') : 'no members'}
+                    </div>
+                  </td>
+                  {s.games.map((value, gameIndex) => (
+                    <td key={gameIndex} className="px-6 py-4 text-center font-mono">{value}</td>
+                  ))}
+                  <td className="px-6 py-4 text-right font-bold">{s.total}</td>
+                </tr>
+              ))}
+              {((standingsMode === 'players' && playerStandingsRows.length === 0) || (standingsMode === 'teams' && teamStandingsRows.length === 0)) && (
                 <tr>
-                  <td colSpan={isTeamTournament ? 5 : 7} className="px-6 py-12 text-center text-black/40 italic">
+                  <td colSpan={standingsMode === 'players' ? (4 + gameNumbers.length + 2) : (2 + gameNumbers.length + 1)} className="px-6 py-12 text-center text-black/40 italic">
                     No scores recorded yet.
                   </td>
                 </tr>

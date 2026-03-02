@@ -37,6 +37,32 @@ This project serves both API and frontend from one Express process.
 
 - `NODE_ENV=production`
 - `PORT=3000` (or your host-assigned port)
+- Login credentials (set in production):
+   - `BTM_ADMIN_USERNAME`
+   - `BTM_ADMIN_PASSWORD`
+   - `BTM_MODERATOR_USERNAME`
+   - `BTM_MODERATOR_PASSWORD`
+- Optional role lock (bypass login):
+   - `BTM_LOCK_ROLE=admin|moderator|public` (server-enforced)
+   - `VITE_LOCK_ROLE=admin|moderator|public` (frontend display lock)
+
+Default behavior without lock role: app opens in public view, and only logged-in moderators/admins can manage data based on permissions.
+
+## Moderator assignment rules
+
+- Admin has full tournament management rights.
+- Moderator rights are tournament-specific (not global).
+- Admin can create moderator accounts in the tournament detail panel.
+- Admin grants/removes moderator access per moderator account from each tournament detail page.
+- Admin can set auto-removal via expiry hours, or keep access with no expiry.
+- When moderator access expires or is removed, moderator falls back to public view for that tournament.
+
+## Authentication model
+
+- Users are stored in SQLite table `users`.
+- Passwords are stored as bcrypt hashes (not plain text).
+- Login returns a session token and role (`admin` or `moderator`).
+- Public users are not authenticated and get view-only permissions.
 
 ### Build and run
 
