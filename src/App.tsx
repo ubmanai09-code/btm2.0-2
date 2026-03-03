@@ -1584,7 +1584,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   participants.map((p, index) => (
                     <tr key={p.id} className={`${participantIssues.has(p.id) ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-[#AFDDE5]/20'} transition-colors`}>
                       <td className={`px-3 py-2 font-mono text-[10px] ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{index + 1}</td>
-                      <td className={`px-3 py-2 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>{p.first_name || '-'}</td>
+                      <td className={`px-3 py-2 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>
+                        <span className="inline-flex items-center gap-1">
+                          {(p.gender || '').toLowerCase().startsWith('f') && <span className="inline-block h-1 w-1 rounded-full bg-rose-500" />}
+                          <span>{p.first_name || '-'}</span>
+                        </span>
+                      </td>
                       <td className={`px-3 py-2 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>{p.last_name || '-'}</td>
                       <td className={`px-3 py-2 text-[10px] uppercase ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{(p.gender || '').toLowerCase().startsWith('f') ? 'F' : (p.gender || '').toLowerCase().startsWith('m') ? 'M' : '-'}</td>
                       <td className={`px-3 py-2 text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{p.club || '-'}</td>
@@ -1722,21 +1727,6 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
             </Card>
         )}
         
-        <Card className="p-6 bg-emerald-50 border-emerald-100">
-          <h4 className="font-bold text-emerald-900 mb-2">Quick Stats</h4>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold">Total Players</p>
-              <p className="text-2xl font-bold text-emerald-900">{participants.length}</p>
-            </div>
-            {tournament.type === 'team' && (
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold">Total Teams</p>
-                <p className="text-2xl font-bold text-emerald-900">{teams.length}</p>
-              </div>
-            )}
-          </div>
-        </Card>
         </div>
       </div>
 
@@ -1907,15 +1897,73 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     }
   };
 
+  const normalizeGender = (gender: string | null | undefined) => (gender || '').trim().toLowerCase();
+  const isParticipantAllowedByRule = (participant: Participant) => {
+    const rule = (tournament.genders_rule || 'Mixed').trim().toLowerCase();
+    const gender = normalizeGender(participant.gender);
+    if (rule === 'men only') return gender.startsWith('m');
+    if (rule === 'women only') return gender.startsWith('f');
+    return true;
+  };
+
+  const eligibleParticipants = participants.filter(isParticipantAllowedByRule);
+
   const handleAutoAssign = async () => {
     if (!canManageLanes) return;
-    await api.autoAssignLanes(tournament.id);
-    loadData();
+    const items = tournament.type === 'individual' ? eligibleParticipants : teams;
+    if (items.length === 0) {
+      alert(tournament.type === 'individual' ? 'No eligible players available for auto assignment.' : 'No teams available for auto assignment.');
+      return;
+    }
+
+    const totalCapacity = tournament.lanes_count * tournament.players_per_lane * Math.max(1, tournament.shifts_count || 1);
+    if (totalCapacity <= 0) {
+      alert('Tournament lane capacity is invalid. Please check lanes, shifts, and players per lane.');
+      return;
+    }
+
+    const shuffled = [...items];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    const assignable = shuffled.slice(0, totalCapacity);
+    const perShiftCapacity = tournament.lanes_count * tournament.players_per_lane;
+    const assignments: Partial<LaneAssignment>[] = assignable.map((item, index) => {
+      const shiftNumber = Math.floor(index / perShiftCapacity) + 1;
+      const laneSlotIndex = index % perShiftCapacity;
+      const laneNumber = Math.floor(laneSlotIndex / tournament.players_per_lane) + 1;
+      return tournament.type === 'individual'
+        ? { participant_id: (item as Participant).id, lane_number: laneNumber, shift_number: shiftNumber }
+        : { team_id: (item as Team).id, lane_number: laneNumber, shift_number: shiftNumber };
+    });
+
+    try {
+      await api.bulkUpdateLanes(tournament.id, assignments);
+      setSelectedItem(null);
+      await loadData();
+      const overflowCount = Math.max(0, items.length - totalCapacity);
+      if (overflowCount > 0) {
+        alert(`${overflowCount} ${tournament.type === 'individual' ? 'player(s)' : 'team(s)'} remain in waiting queue because lane capacity is full.`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to auto-assign lanes.');
+    }
   };
 
   const handleMoveToLane = async (laneNumber: number) => {
     if (!canManageLanes) return;
     if (!selectedItem) return;
+
+    const currentLaneAssignments = lanes.filter(
+      (lane) => lane.lane_number === laneNumber && lane.shift_number === currentShift
+    );
+    if (currentLaneAssignments.length >= tournament.players_per_lane) {
+      alert('This lane is already full for the selected shift.');
+      return;
+    }
 
     try {
       if (selectedItem.type === 'waiting') {
@@ -1925,6 +1973,15 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
           shift_number: currentShift
         };
         if (tournament.type === 'individual') {
+          const player = participants.find((p) => p.id === selectedItem.id);
+          if (!player) {
+            alert('Selected player not found.');
+            return;
+          }
+          if (!isParticipantAllowedByRule(player)) {
+            alert(`This player cannot be assigned because tournament gender rule is ${tournament.genders_rule}.`);
+            return;
+          }
           payload.participant_id = selectedItem.id;
         } else {
           payload.team_id = selectedItem.id;
@@ -2014,10 +2071,40 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     reader.readAsText(file);
   };
 
+  const handleClearLanes = async () => {
+    if (!canManageLanes) return;
+    if (!confirm('Clear all lane assignments for this tournament?')) return;
+    try {
+      await api.bulkUpdateLanes(tournament.id, []);
+      setSelectedItem(null);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to clear lane assignments.');
+    }
+  };
+
+  const handleSaveLanes = async () => {
+    if (!canManageLanes) return;
+    try {
+      await api.bulkUpdateLanes(tournament.id, lanes.map((lane) => ({
+        participant_id: lane.participant_id,
+        team_id: lane.team_id,
+        lane_number: lane.lane_number,
+        shift_number: lane.shift_number,
+      })));
+      await loadData();
+      alert('Lane assignments saved.');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save lane assignments.');
+    }
+  };
+
   // Calculate waiting queue
   const assignedIds = new Set(lanes.map(l => tournament.type === 'individual' ? l.participant_id : l.team_id));
   const waitingQueue = tournament.type === 'individual' 
-    ? participants.filter(p => !assignedIds.has(p.id))
+    ? eligibleParticipants.filter(p => !assignedIds.has(p.id))
     : teams.filter(t => !assignedIds.has(t.id));
 
   const groupedLanes: Record<number, LaneAssignment[]> = {};
@@ -2027,45 +2114,27 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div>
-          <h3 className="text-xl font-bold uppercase tracking-tight">Lane Assignments</h3>
-          <p className="text-[10px] text-black/40 font-bold uppercase tracking-widest">
+          <h3 className="text-xl font-bold text-emerald-800">Lane Assignments</h3>
+          <p className="text-[10px] text-black/50 font-bold uppercase tracking-widest">
             {tournament.lanes_count} Lanes • {tournament.shifts_count} Shifts • {tournament.players_per_lane} {tournament.type === 'team' ? 'Teams' : 'Players'} / Lane
           </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {canManageLanes && (
-            <div className="relative">
-              <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportLanes} accept=".json" />
-              <Button variant="outline" title="Import" ariaLabel="Import">
-                <Download size={14} />
-              </Button>
-            </div>
-          )}
-          <Button variant="outline" onClick={handleExportLanes} title="Export" ariaLabel="Export">
-            <Upload size={14} />
-          </Button>
-          <Button variant="outline" onClick={loadData} title="Refresh" ariaLabel="Refresh">
-            <RefreshCw size={14} />
-          </Button>
-          {canManageLanes && (
-            <Button onClick={handleAutoAssign} variant="secondary" title="Auto-Assign" ariaLabel="Auto-Assign">
-              <RefreshCw size={14} />
-            </Button>
-          )}
+          <p className="text-[10px] text-black/50 mt-0.5">
+            Auto assigns randomly by tournament rules; Manual assigns from Waiting Queue to a selected lane.
+          </p>
         </div>
       </div>
 
       {/* Shift Selector */}
       {tournament.shifts_count > 1 && (
-        <div className="flex gap-2 p-1 bg-black/5 rounded-lg w-fit">
+        <div className="flex gap-1.5 p-1 bg-[#AFDDE5]/35 rounded-lg w-fit border border-[#AFDDE5]/70">
           {Array.from({ length: tournament.shifts_count }, (_, i) => i + 1).map(s => (
             <button
               key={s}
               onClick={() => setCurrentShift(s)}
-              className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
-                currentShift === s ? 'bg-black text-white shadow-sm' : 'text-black/40 hover:text-black/60'
+              className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
+                currentShift === s ? 'bg-emerald-600 text-white shadow-sm' : 'text-black/50 hover:text-emerald-700'
               }`}
             >
               Shift {s}
@@ -2074,13 +2143,13 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* Waiting Queue */}
         <div className="lg:col-span-1 space-y-4">
-          <Card className="p-4 bg-black/[0.02]">
-            <h4 className="text-[10px] font-bold uppercase tracking-widest text-black/50 mb-4 flex items-center justify-between">
+          <Card className="p-3 border-[#AFDDE5]/60 bg-white">
+            <h4 className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 mb-3 flex items-center justify-between">
               Waiting Queue
-              <span className="bg-black/10 px-1.5 py-0.5 rounded text-black">{waitingQueue.length}</span>
+              <span className="bg-emerald-100 px-1.5 py-0.5 rounded text-emerald-800">{waitingQueue.length}</span>
             </h4>
             <div className="space-y-2 max-h-[600px] overflow-y-auto no-scrollbar">
               {waitingQueue.length === 0 ? (
@@ -2095,22 +2164,23 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                     <div 
                       key={item.id}
                       onClick={() => setSelectedItem({ id: item.id, type: 'waiting' })}
-                      className={`p-3 rounded border transition-all cursor-pointer group ${
+                      className={`p-2 rounded border transition-all cursor-pointer group ${
                         selectedItem?.id === item.id && selectedItem.type === 'waiting'
-                        ? 'bg-black text-white border-black'
-                        : 'bg-white border-black/10 hover:border-black/30'
+                        ? 'bg-emerald-700 text-white border-emerald-700'
+                        : 'bg-white border-black/10 hover:border-emerald-300 hover:bg-emerald-50/30'
                       }`}
                     >
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <div className={`text-sm font-bold uppercase tracking-wide ${
-                            tournament.type === 'individual' && (item as Participant).gender?.toLowerCase() === 'female'
-                            ? (selectedItem?.id === item.id && selectedItem.type === 'waiting' ? 'text-rose-300' : 'text-rose-600')
-                            : ''
-                          }`}>
-                            {tournament.type === 'individual' 
-                              ? `${(item as Participant).first_name} ${(item as Participant).last_name.charAt(0).toUpperCase()}.` 
-                              : (item as Team).name}
+                          <div className="text-xs font-bold uppercase tracking-wide flex items-center gap-1">
+                            {tournament.type === 'individual' && (item as Participant).gender?.toLowerCase() === 'female' && (
+                              <span className={`inline-block h-1 w-1 rounded-full ${selectedItem?.id === item.id && selectedItem.type === 'waiting' ? 'bg-rose-200' : 'bg-rose-500'}`} />
+                            )}
+                            <span>
+                              {tournament.type === 'individual' 
+                                ? `${(item as Participant).first_name} ${(item as Participant).last_name.charAt(0).toUpperCase()}.` 
+                                : (item as Team).name}
+                            </span>
                           </div>
                           {tournament.type === 'team' && teamMembers.length > 0 && (
                             <div className={`text-[10px] mt-1 font-medium ${
@@ -2119,8 +2189,11 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                               : 'text-black/40'
                             }`}>
                               {teamMembers.map((p, idx) => (
-                                <span key={p.id} className={p.gender?.toLowerCase() === 'female' ? 'text-rose-400' : ''}>
-                                  {p.first_name} {p.last_name.charAt(0).toUpperCase()}.{idx < teamMembers.length - 1 ? ', ' : ''}
+                                <span key={p.id} className="inline-flex items-center gap-1">
+                                  {p.gender?.toLowerCase() === 'female' && (
+                                    <span className={`inline-block h-1 w-1 rounded-full ${selectedItem?.id === item.id && selectedItem.type === 'waiting' ? 'bg-rose-200' : 'bg-rose-500'}`} />
+                                  )}
+                                  <span>{p.first_name} {p.last_name.charAt(0).toUpperCase()}.{idx < teamMembers.length - 1 ? ', ' : ''}</span>
                                 </span>
                               ))}
                             </div>
@@ -2146,31 +2219,62 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
         {/* Lanes Grid */}
         <div className="lg:col-span-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="flex flex-wrap justify-end gap-1.5 mb-2">
+            {canManageLanes && (
+              <Button size="sm" variant="outline" onClick={handleSaveLanes} title="Save" ariaLabel="Save" className="px-2">
+                <Save size={14} />
+              </Button>
+            )}
+            {canManageLanes && (
+              <div className="relative">
+                <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportLanes} accept=".json" />
+                <Button size="sm" variant="outline" title="Import" ariaLabel="Import" className="px-2">
+                  <Download size={14} />
+                </Button>
+              </div>
+            )}
+            <Button size="sm" variant="outline" onClick={handleExportLanes} title="Export" ariaLabel="Export" className="px-2">
+              <Upload size={14} />
+            </Button>
+            <Button size="sm" variant="outline" onClick={loadData} title="Refresh" ariaLabel="Refresh" className="px-2">
+              <RefreshCw size={14} />
+            </Button>
+            {canManageLanes && (
+              <Button size="sm" variant="outline" onClick={handleClearLanes} title="Clear Assignments" ariaLabel="Clear Assignments" className="px-2">
+                <X size={14} />
+              </Button>
+            )}
+            {canManageLanes && (
+              <Button size="sm" onClick={handleAutoAssign} variant="secondary" title="Auto-Assign" ariaLabel="Auto-Assign" className="px-2">
+                <RefreshCw size={14} />
+              </Button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {Object.entries(groupedLanes).map(([laneNum, assignments]) => (
               <Card 
                 key={laneNum} 
-                className={`flex flex-col h-full min-h-[180px] transition-all border-2 ${
-                  selectedItem ? 'border-emerald-500/30 bg-emerald-50/10 cursor-pointer hover:border-emerald-500' : 'border-black/10'
+                className={`flex flex-col h-full min-h-[160px] transition-all border-2 ${
+                  selectedItem ? 'border-emerald-300 bg-emerald-50/20 cursor-pointer hover:border-emerald-500' : 'border-[#AFDDE5]/70 bg-white'
                 }`}
                 onClick={() => selectedItem && handleMoveToLane(parseInt(laneNum))}
               >
-                <div className="bg-black text-white px-3 py-2 flex justify-between items-center group/header">
+                <div className="bg-[#AFDDE5]/45 text-emerald-900 px-2.5 py-1.5 flex justify-between items-center group/header border-b border-[#AFDDE5]/70">
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-[10px] uppercase tracking-widest">Lane {laneNum}</span>
                     <button 
                       onClick={(e) => { e.stopPropagation(); handleMoveLane(parseInt(laneNum), currentShift); }}
-                      className="opacity-0 group-hover/header:opacity-100 p-1 hover:text-emerald-400 transition-all"
+                      className="opacity-0 group-hover/header:opacity-100 p-1 hover:text-emerald-700 transition-all"
                       title="Move entire lane"
                     >
                       <ArrowRightLeft size={10} />
                     </button>
                   </div>
-                  <span className="text-[10px] opacity-50">{assignments.length} / {tournament.players_per_lane}</span>
+                  <span className="text-[10px] text-black/50">{assignments.length} / {tournament.players_per_lane}</span>
                 </div>
-                <div className="p-3 flex-1 flex flex-col gap-2">
+                <div className="p-2 flex-1 flex flex-col gap-1.5">
                   {assignments.length === 0 ? (
-                    <div className="flex-1 flex items-center justify-center text-black/5">
+                    <div className="flex-1 flex items-center justify-center text-emerald-200/60">
                       <Plus size={32} />
                     </div>
                   ) : (
@@ -2191,19 +2295,18 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                         <div 
                           key={a.id} 
                           onClick={(e) => { e.stopPropagation(); setSelectedItem({ id: a.id, type: 'assignment' }); }}
-                          className={`text-[10px] p-2 rounded border font-bold uppercase tracking-wide flex justify-between items-start group cursor-pointer transition-all ${
+                          className={`text-[10px] p-1.5 rounded border font-bold uppercase tracking-wide flex justify-between items-start group cursor-pointer transition-all ${
                             selectedItem?.id === a.id && selectedItem.type === 'assignment'
-                            ? 'bg-black text-white border-black'
-                            : 'bg-black/5 border-transparent hover:border-black/20'
+                            ? 'bg-emerald-700 text-white border-emerald-700'
+                            : 'bg-[#AFDDE5]/20 border-transparent hover:border-emerald-200'
                           }`}
                         >
                           <div className="flex-1">
-                            <div className={`text-xs font-bold ${
-                              tournament.type === 'individual' && participant?.gender?.toLowerCase() === 'female'
-                              ? (selectedItem?.id === a.id && selectedItem.type === 'assignment' ? 'text-rose-300' : 'text-rose-600')
-                              : ''
-                            }`}>
-                              {displayName}
+                            <div className="text-xs font-bold flex items-center gap-1">
+                              {tournament.type === 'individual' && participant?.gender?.toLowerCase() === 'female' && (
+                                <span className={`inline-block h-1 w-1 rounded-full ${selectedItem?.id === a.id && selectedItem.type === 'assignment' ? 'bg-rose-200' : 'bg-rose-500'}`} />
+                              )}
+                              <span>{displayName}</span>
                             </div>
                             {tournament.type === 'team' && teamMembers.length > 0 && (
                               <div className={`text-[9px] mt-0.5 font-medium ${
@@ -2212,8 +2315,11 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                                 : 'text-black/40'
                               }`}>
                                 {teamMembers.map((p, idx) => (
-                                  <span key={p.id} className={p.gender?.toLowerCase() === 'female' ? 'text-rose-400' : ''}>
-                                    {p.first_name} {p.last_name.charAt(0).toUpperCase()}.{idx < teamMembers.length - 1 ? ', ' : ''}
+                                  <span key={p.id} className="inline-flex items-center gap-1">
+                                    {p.gender?.toLowerCase() === 'female' && (
+                                      <span className={`inline-block h-1 w-1 rounded-full ${selectedItem?.id === a.id && selectedItem.type === 'assignment' ? 'bg-rose-200' : 'bg-rose-500'}`} />
+                                    )}
+                                    <span>{p.first_name} {p.last_name.charAt(0).toUpperCase()}.{idx < teamMembers.length - 1 ? ', ' : ''}</span>
                                   </span>
                                 ))}
                               </div>
@@ -2628,8 +2734,11 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                     </tr>
                   )}
                   <tr className="hover:bg-[#AFDDE5]/20 transition-colors">
-                    <td className={`px-6 py-4 font-bold text-base ${p.gender?.toLowerCase() === 'female' ? 'text-rose-600' : 'text-black'}`}>
-                      {formatScoringName(p)}
+                    <td className="px-6 py-4 font-bold text-base text-black">
+                      <span className="inline-flex items-center gap-1">
+                        {p.gender?.toLowerCase() === 'female' && <span className="inline-block h-1 w-1 rounded-full bg-rose-500" />}
+                        <span>{formatScoringName(p)}</span>
+                      </span>
                     </td>
                     <td className="px-6 py-4">
                       {tournament.type === 'team' ? (
