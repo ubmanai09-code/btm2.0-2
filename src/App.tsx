@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Trophy, 
   Users, 
+  User,
   LayoutGrid, 
   ClipboardList, 
   BarChart3, 
@@ -28,7 +29,8 @@ import {
   LogOut,
   KeyRound,
   Eye,
-  EyeOff
+  EyeOff,
+  Shield
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser } from './services/api';
@@ -1183,6 +1185,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const [showAddTeam, setShowAddTeam] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [editingPlayer, setEditingPlayer] = useState<Participant | null>(null);
+  const [selectedTeamMemberIds, setSelectedTeamMemberIds] = useState<number[]>([]);
 
   useEffect(() => {
     loadData();
@@ -1207,12 +1210,16 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const handleAddPlayer = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
+    const genderInput = (formData.get('gender') as string || '').trim().toLowerCase();
+    const normalizedGender = genderInput === 'f' ? 'female' : genderInput === 'm' ? 'male' : '';
+    const averageRaw = (formData.get('average') as string || '').trim();
+    const parsedAverage = averageRaw === '' ? 0 : (parseInt(averageRaw, 10) || 0);
     const data = {
       first_name: formData.get('first_name') as string,
       last_name: formData.get('last_name') as string,
-      gender: formData.get('gender') as string,
+      gender: normalizedGender,
       club: formData.get('club') as string,
-      average: parseInt(formData.get('average') as string) || 0,
+      average: parsedAverage,
       email: formData.get('email') as string,
       team_id: formData.get('team_id') ? parseInt(formData.get('team_id') as string) : null
     };
@@ -1333,6 +1340,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     reader.readAsText(file);
   };
 
+  const handleSaveParticipants = async () => {
+    await loadData();
+    alert('Players saved.');
+  };
+
   const handleClearParticipants = async () => {
     if (!confirm('Clear all participants from this tournament?')) return;
     try {
@@ -1349,16 +1361,56 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const name = formData.get('name') as string;
-    
+
+    const persistParticipantTeam = async (participant: Participant, teamId: number | null) => {
+      await api.updateParticipant(participant.id, {
+        first_name: participant.first_name,
+        last_name: participant.last_name,
+        gender: participant.gender || '',
+        club: participant.club || '',
+        average: participant.average || 0,
+        email: participant.email || '',
+        team_id: teamId,
+      });
+    };
+
+    let teamId: number;
     if (editingTeam) {
       await api.updateTeam(editingTeam.id, { name });
+      teamId = editingTeam.id;
     } else {
-      await api.addTeam(tournament.id, { name });
+      const created = await api.addTeam(tournament.id, { name });
+      teamId = created.id;
+    }
+
+    const selectedSet = new Set(selectedTeamMemberIds);
+    for (const participant of participants) {
+      const shouldBelongToTeam = selectedSet.has(participant.id);
+      const currentlyInTeam = participant.team_id === teamId;
+
+      if (shouldBelongToTeam && !currentlyInTeam) {
+        await persistParticipantTeam(participant, teamId);
+      } else if (!shouldBelongToTeam && currentlyInTeam) {
+        await persistParticipantTeam(participant, null);
+      }
     }
     
     setShowAddTeam(false);
     setEditingTeam(null);
+    setSelectedTeamMemberIds([]);
     loadData();
+  };
+
+  const openCreateTeamModal = () => {
+    setEditingTeam(null);
+    setSelectedTeamMemberIds([]);
+    setShowAddTeam(true);
+  };
+
+  const openEditTeamModal = (team: Team) => {
+    setEditingTeam(team);
+    setSelectedTeamMemberIds(participants.filter(p => p.team_id === team.id).map(p => p.id));
+    setShowAddTeam(true);
   };
 
   const handleDeleteTeam = async (id: number) => {
@@ -1383,6 +1435,28 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     document.body.removeChild(link);
   };
 
+  const handleSaveTeams = async () => {
+    await loadData();
+    alert('Teams saved.');
+  };
+
+  const handleClearTeams = async () => {
+    if (!confirm('Clear all teams from this tournament? Players will be unassigned.')) return;
+    try {
+      const teamIds = teams.map((team) => team.id);
+      if (teamIds.length === 0) {
+        alert('No teams to clear.');
+        return;
+      }
+      await Promise.all(teamIds.map((id) => api.deleteTeam(id)));
+      await loadData();
+      alert(`Cleared ${teamIds.length} team(s).`);
+    } catch (err) {
+      console.error('Failed to clear teams:', err);
+      alert('Failed to clear teams. Please check server logs.');
+    }
+  };
+
   const handleImportTeams = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1400,105 +1474,141 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     reader.readAsText(file);
   };
 
+  const maleCount = participants.filter(p => (p.gender || '').toLowerCase().startsWith('m')).length;
+  const femaleCount = participants.filter(p => (p.gender || '').toLowerCase().startsWith('f')).length;
+  const playerKeyToRows = new Map<string, Participant[]>();
+  participants.forEach((p) => {
+    const key = `${(p.first_name || '').trim().toLowerCase()}::${(p.last_name || '').trim().toLowerCase()}`;
+    const list = playerKeyToRows.get(key) || [];
+    list.push(p);
+    playerKeyToRows.set(key, list);
+  });
+
+  const participantIssues = new Map<number, string[]>();
+  playerKeyToRows.forEach((rows) => {
+    if (rows.length <= 1) return;
+    const clubs = new Set(rows.map(r => (r.club || '').trim().toLowerCase()).filter(Boolean));
+    const teams = new Set(rows.map(r => String(r.team_id ?? 'null')));
+    rows.forEach((r) => {
+      const issues = participantIssues.get(r.id) || [];
+      issues.push('Duplicate first + family name');
+      if (clubs.size > 1) issues.push('Same player appears in multiple clubs');
+      if (teams.size > 1) issues.push('Same player appears in multiple teams');
+      participantIssues.set(r.id, issues);
+    });
+  });
+
+  participants.forEach((p) => {
+    if ((p.average ?? 0) > 300) {
+      const issues = participantIssues.get(p.id) || [];
+      issues.push('Average score above 300');
+      participantIssues.set(p.id, issues);
+    }
+  });
+  const issueCount = Array.from(participantIssues.keys()).length;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-        <h3 className="text-xl font-bold">Manage Participants</h3>
-        <div className="flex flex-wrap gap-2 w-full md:w-auto">
-          <Button variant="outline" onClick={handleExportCSV} title="Export" ariaLabel="Export">
-            <Upload size={18} />
-          </Button>
-          {canManageParticipants && (
-            <>
-              <div className="relative">
-                <input 
-                  type="file" 
-                  accept=".csv" 
-                  className="absolute inset-0 opacity-0 cursor-pointer" 
-                  onChange={handleImportCSV}
-                />
-                <Button variant="outline" title="Import" ariaLabel="Import">
-                  <Download size={18} />
-                </Button>
-              </div>
-              <Button variant="outline" onClick={handleClearParticipants} title="Clear Participants" ariaLabel="Clear Participants">
-                <Trash2 size={18} />
-              </Button>
-              {tournament.type === 'team' && (
-                <Button variant="outline" onClick={() => setShowAddTeam(true)} title="Add Team" ariaLabel="Add Team">
-                  <Plus size={18} />
-                </Button>
-              )}
-              <Button onClick={() => { setEditingPlayer(null); setShowAddPlayer(true); }} title="Add Player" ariaLabel="Add Player">
-                <UserPlus size={18} />
-              </Button>
-            </>
-          )}
+        <div>
+          <h3 className="text-xl font-bold text-emerald-800">Manage Participants</h3>
+          <p className="text-xs text-black/50 mt-0.5">Roster, team assignment, and participant import/export</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2">
-          <Card>
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-black/[0.03] border-b border-black/10">
-                <tr className="text-left">
-                  <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/50">Name</th>
-                  <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/50">Gender</th>
-                  <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/50">Club</th>
-                  <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/50">Avg</th>
-                  {tournament.type === 'team' && (
-                    <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/50">Team</th>
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+        <div className="lg:col-span-3">
+          <Card className="border-[#AFDDE5]/60 overflow-hidden">
+            <div className="p-3 border-b border-[#AFDDE5]/70 bg-white">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <h4 className="font-bold text-black/80 flex items-center gap-2"><User size={16} className="text-emerald-700" />Players ({participants.length}) • M ({maleCount}) • F ({femaleCount})</h4>
+                  <p className="text-[11px] text-black/50">Participant roster table and player actions</p>
+                  {issueCount > 0 && (
+                    <p className="text-[11px] text-red-600 mt-1 font-semibold">{issueCount} record(s) need review (highlighted in red).</p>
                   )}
-                  <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/50 text-right">Actions</th>
+                </div>
+                <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                  {canManageParticipants && (
+                    <Button size="sm" variant="outline" onClick={handleSaveParticipants} title="Save Players" ariaLabel="Save Players" className="px-2">
+                      <Save size={14} />
+                    </Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={handleExportCSV} title="Export Players" ariaLabel="Export Players" className="px-2">
+                    <Upload size={14} />
+                  </Button>
+                  {canManageParticipants && (
+                    <>
+                      <div className="relative">
+                        <input 
+                          type="file" 
+                          accept=".csv" 
+                          className="absolute inset-0 opacity-0 cursor-pointer" 
+                          onChange={handleImportCSV}
+                        />
+                        <Button size="sm" variant="outline" title="Import Players" ariaLabel="Import Players" className="px-2">
+                          <Download size={14} />
+                        </Button>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={handleClearParticipants} title="Clear Players" ariaLabel="Clear Players" className="px-2">
+                        <RefreshCw size={14} />
+                      </Button>
+                      <Button size="sm" onClick={() => { setEditingPlayer(null); setShowAddPlayer(true); }} title="Add Player" ariaLabel="Add Player" className="px-2">
+                        <UserPlus size={14} />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
+                <tr className="text-left">
+                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 w-12">#</th>
+                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">First Name</th>
+                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">Family Name</th>
+                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">Gender</th>
+                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">Club</th>
+                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">Average score</th>
+                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/10">
                 {participants.length === 0 ? (
                   <tr>
-                    <td colSpan={tournament.type === 'team' ? 6 : 5} className="px-4 py-8 text-center text-black/40 italic text-sm">
+                    <td colSpan={7} className="px-4 py-8 text-center text-black/40 italic text-sm">
                       No participants registered yet.
                     </td>
                   </tr>
                 ) : (
-                  participants.map(p => (
-                    <tr key={p.id} className="hover:bg-black/[0.01] transition-colors">
-                      <td className="px-4 py-3">
-                        <div className={`font-bold text-base ${p.gender?.toLowerCase() === 'female' ? 'text-rose-600' : 'text-black'}`}>
-                          {p.first_name} {p.last_name}
-                        </div>
-                        <div className="text-[10px] text-black/40 font-mono tracking-tight">{p.email}</div>
-                      </td>
-                      <td className="px-4 py-3 text-black/60 capitalize text-sm">{p.gender || '-'}</td>
-                      <td className="px-4 py-3 text-black/60 text-sm">{p.club || '-'}</td>
-                      <td className="px-4 py-3 font-mono text-sm">{p.average || 0}</td>
-                      {tournament.type === 'team' && (
-                        <td className="px-4 py-3">
-                          {p.team_name ? (
-                            <span className="px-1.5 py-0.5 bg-black/5 border border-black/5 rounded text-[10px] font-bold uppercase tracking-wider">{p.team_name}</span>
-                          ) : (
-                            <span className="text-black/20 italic text-[10px]">Unassigned</span>
-                          )}
-                        </td>
-                      )}
-                      <td className="px-4 py-3 text-right">
+                  participants.map((p, index) => (
+                    <tr key={p.id} className={`${participantIssues.has(p.id) ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-[#AFDDE5]/20'} transition-colors`}>
+                      <td className={`px-3 py-2 font-mono text-[10px] ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{index + 1}</td>
+                      <td className={`px-3 py-2 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>{p.first_name || '-'}</td>
+                      <td className={`px-3 py-2 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>{p.last_name || '-'}</td>
+                      <td className={`px-3 py-2 text-[10px] uppercase ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{(p.gender || '').toLowerCase().startsWith('f') ? 'F' : (p.gender || '').toLowerCase().startsWith('m') ? 'M' : '-'}</td>
+                      <td className={`px-3 py-2 text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{p.club || '-'}</td>
+                      <td className={`px-3 py-2 font-mono text-xs ${(p.average ?? 0) > 300 ? 'text-red-700 font-semibold' : ''}`}>{p.average && p.average > 0 ? p.average : ''}</td>
+                      <td className="px-3 py-2 text-right">
                         {canManageParticipants ? (
-                          <div className="flex justify-end gap-1.5">
+                          <div className="flex justify-end gap-1.5" title={participantIssues.has(p.id) ? participantIssues.get(p.id)?.join(' • ') : undefined}>
                             <button 
                               onClick={() => { setEditingPlayer(p); setShowAddPlayer(true); }}
-                              className="p-1 rounded hover:bg-black/5 text-black/40 hover:text-black transition-all"
+                              className="p-1 rounded hover:bg-emerald-50 text-black/40 hover:text-emerald-700 transition-all"
+                              title="Edit Player"
                             >
-                              <Edit size={14} />
+                              <Edit size={12} />
                             </button>
                             <button 
                               onClick={() => handleDeletePlayer(p.id)}
                               className="p-1 rounded hover:bg-red-50 text-black/40 hover:text-red-500 transition-all"
+                              title="Delete Player"
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={12} />
                             </button>
                           </div>
                         ) : (
-                          <span className="text-xs text-black/30">View only</span>
+                          <span className="text-xs text-black/30">-</span>
                         )}
                       </td>
                     </tr>
@@ -1509,75 +1619,124 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
           </Card>
         </div>
 
-        <div className="space-y-6">
-          {tournament.type === 'team' && (
-            <Card className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h4 className="font-bold flex items-center gap-2">
-                  <Users size={18} />
-                  Teams ({teams.length})
-                </h4>
-                <div className="flex gap-1">
-                  <Button variant="outline" size="sm" onClick={handleExportTeams} title="Export Teams">
-                    <Upload size={14} />
-                  </Button>
-                  <div className="relative">
-                    <input type="file" accept=".csv" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportTeams} />
-                    <Button variant="outline" size="sm" title="Import Teams">
-                      <Download size={14} />
-                    </Button>
+        <div className="lg:col-span-2 space-y-6">
+        {tournament.type === 'team' && (
+            <Card className="border-[#AFDDE5]/60 overflow-hidden">
+              <div className="p-3 border-b border-[#AFDDE5]/70 bg-white">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                  <div>
+                    <h4 className="font-bold text-black/80 flex items-center gap-2"><Users size={16} className="text-emerald-700" />Teams ({teams.length})</h4>
+                    <p className="text-[11px] text-black/50">Numbered teams, assign members from Players</p>
                   </div>
-                </div>
-              </div>
-              <div className="space-y-1">
-                {teams.map(t => (
-                  <div key={t.id} className="flex items-center justify-between p-2 bg-black/[0.02] rounded border border-black/10 group">
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-sm uppercase tracking-wide">{t.name}</span>
-                      <span className="text-[10px] font-bold text-black/40 uppercase tracking-widest">
-                        {participants.filter(p => p.team_id === t.id).length} PLR
-                      </span>
+                  <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto md:justify-end pr-1">
+                    {canManageParticipants && (
+                      <Button size="sm" variant="outline" onClick={handleSaveTeams} title="Save Teams" ariaLabel="Save Teams" className="px-2">
+                        <Save size={14} />
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" onClick={handleExportTeams} title="Export Teams" className="px-2">
+                      <Upload size={14} />
+                    </Button>
+                    <div className="relative">
+                      <input type="file" accept=".csv" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportTeams} />
+                      <Button size="sm" variant="outline" title="Import Teams" className="px-2">
+                        <Download size={14} />
+                      </Button>
                     </div>
                     {canManageParticipants && (
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                        <button 
-                          onClick={() => { setEditingTeam(t); setShowAddTeam(true); }}
-                          className="p-1 rounded hover:bg-black/5 text-black/40 hover:text-black transition-all"
-                        >
-                          <Edit size={12} />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteTeam(t.id)}
-                          className="p-1 rounded hover:bg-red-50 text-black/40 hover:text-red-500 transition-all"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
+                      <Button size="sm" variant="outline" onClick={handleClearTeams} title="Clear Teams" ariaLabel="Clear Teams" className="px-2">
+                        <RefreshCw size={14} />
+                      </Button>
+                    )}
+                    {canManageParticipants && (
+                      <Button size="sm" onClick={openCreateTeamModal} title="Add Team" ariaLabel="Add Team" className="px-2">
+                        <UserPlus size={14} />
+                      </Button>
                     )}
                   </div>
-                ))}
-                {teams.length === 0 && (
-                  <p className="text-sm text-black/40 italic">No teams created.</p>
-                )}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
+                  <tr>
+                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 w-12">#</th>
+                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">Team Name</th>
+                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">Team Members</th>
+                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right whitespace-nowrap w-16">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-black/10">
+                  {teams.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-black/40 italic text-sm">No teams created.</td>
+                    </tr>
+                  ) : (
+                    teams.map((team, index) => {
+                      const teamMembers = participants.filter(p => p.team_id === team.id);
+                      return (
+                        <tr key={team.id} className="hover:bg-[#AFDDE5]/20 transition-colors align-top">
+                          <td className="px-3 py-2 font-mono text-[10px] text-black/60">{index + 1}</td>
+                          <td className="px-3 py-2 uppercase text-xs text-black">{team.name}</td>
+                          <td className="px-3 py-2">
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap gap-1.5">
+                                {teamMembers.length > 0 ? teamMembers.map(member => (
+                                  <span key={member.id} className="px-2 py-0.5 rounded bg-black/5 text-[10px] uppercase tracking-wider text-black/70">
+                                    {(member.first_name || '').toUpperCase()} {(member.last_name || '').toUpperCase()}
+                                  </span>
+                                )) : <span className="text-xs text-black/40 italic">No members</span>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-right whitespace-nowrap w-16">
+                            {canManageParticipants ? (
+                              <div className="flex justify-end gap-1">
+                                <button 
+                                  onClick={() => openEditTeamModal(team)}
+                                  className="p-1 rounded hover:bg-emerald-50 text-black/40 hover:text-emerald-700 transition-all"
+                                  title="Edit Team"
+                                >
+                                  <Edit size={12} />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteTeam(team.id)}
+                                  className="p-1 rounded hover:bg-red-50 text-black/40 hover:text-red-500 transition-all"
+                                  title="Delete Team"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-black/30">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
               </div>
             </Card>
-          )}
-          
-          <Card className="p-6 bg-emerald-50 border-emerald-100">
-            <h4 className="font-bold text-emerald-900 mb-2">Quick Stats</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold">Total Players</p>
-                <p className="text-2xl font-bold text-emerald-900">{participants.length}</p>
-              </div>
-              {tournament.type === 'team' && (
-                <div>
-                  <p className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold">Total Teams</p>
-                  <p className="text-2xl font-bold text-emerald-900">{teams.length}</p>
-                </div>
-              )}
+        )}
+        
+        <Card className="p-6 bg-emerald-50 border-emerald-100">
+          <h4 className="font-bold text-emerald-900 mb-2">Quick Stats</h4>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold">Total Players</p>
+              <p className="text-2xl font-bold text-emerald-900">{participants.length}</p>
             </div>
-          </Card>
+            {tournament.type === 'team' && (
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-emerald-600 font-bold">Total Teams</p>
+                <p className="text-2xl font-bold text-emerald-900">{teams.length}</p>
+              </div>
+            )}
+          </div>
+        </Card>
         </div>
       </div>
 
@@ -1589,7 +1748,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              className="absolute inset-0 bg-emerald-950/35 backdrop-blur-sm"
               onClick={() => { setShowAddPlayer(false); setEditingPlayer(null); }}
             />
             <motion.div 
@@ -1598,8 +1757,9 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="relative w-full max-w-lg"
             >
-              <Card className="p-8">
-                <h3 className="text-2xl font-bold mb-6">{editingPlayer ? 'Edit Player' : 'Add New Player'}</h3>
+              <Card className="p-8 border-emerald-200 bg-gradient-to-b from-white to-emerald-50/40 shadow-md">
+                <h3 className="text-2xl font-bold text-emerald-800 mb-2">{editingPlayer ? 'Edit Player' : 'Add New Player'}</h3>
+                <p className="text-xs text-black/50 mb-5">Enter participant details and assign a team if needed.</p>
                 <form onSubmit={handleAddPlayer} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <Input label="First Name" name="first_name" defaultValue={editingPlayer?.first_name} placeholder="John" required />
@@ -1608,16 +1768,16 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   
                   <div className="grid grid-cols-2 gap-4">
                     <Select 
-                      label="Gender" 
+                      label="Gender (F/M)" 
                       name="gender" 
-                      defaultValue={editingPlayer?.gender}
+                      defaultValue={(editingPlayer?.gender || '').toLowerCase().startsWith('f') ? 'f' : (editingPlayer?.gender || '').toLowerCase().startsWith('m') ? 'm' : ''}
                       options={[
-                        { value: 'male', label: 'Male' },
-                        { value: 'female', label: 'Female' },
-                        { value: 'other', label: 'Other' }
+                        { value: '', label: '-' },
+                        { value: 'f', label: 'F' },
+                        { value: 'm', label: 'M' }
                       ]} 
                     />
-                    <Input label="Average" name="average" type="number" defaultValue={editingPlayer?.average || "0"} min="0" max="300" />
+                    <Input label="Average score (optional)" name="average" type="number" defaultValue={editingPlayer?.average && editingPlayer.average > 0 ? String(editingPlayer.average) : ""} min="0" />
                   </div>
 
                   <Input label="Team/Club" name="club" defaultValue={editingPlayer?.club} placeholder="e.g. City Bowlers" />
@@ -1634,7 +1794,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       ]} 
                     />
                   )}
-                  <div className="pt-4 flex gap-3">
+                  <div className="pt-4 flex gap-3 border-t border-emerald-100/80">
                     <Button type="submit" className="flex-1 justify-center" title={editingPlayer ? 'Save Changes' : 'Add Player'} ariaLabel={editingPlayer ? 'Save Changes' : 'Add Player'}>
                       {editingPlayer ? <Save size={16} /> : <Plus size={16} />}
                     </Button>
@@ -1654,7 +1814,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              className="absolute inset-0 bg-emerald-950/35 backdrop-blur-sm"
               onClick={() => { setShowAddTeam(false); setEditingTeam(null); }}
             />
             <motion.div 
@@ -1663,15 +1823,46 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="relative w-full max-w-md"
             >
-              <Card className="p-8">
-                <h3 className="text-2xl font-bold mb-6">{editingTeam ? 'Edit Team' : 'Create New Team'}</h3>
+              <Card className="p-8 border-emerald-200 bg-gradient-to-b from-white to-emerald-50/40 shadow-md">
+                <h3 className="text-2xl font-bold text-emerald-800 mb-2">{editingTeam ? 'Edit Team' : 'Create New Team'}</h3>
+                <p className="text-xs text-black/50 mb-5">Create a team or rename an existing one.</p>
                 <form onSubmit={handleAddTeam} className="space-y-4">
                   <Input label="Team Name" name="name" defaultValue={editingTeam?.name} placeholder="e.g. The Strikers" required />
-                  <div className="pt-4 flex gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 px-1">Team Members (from players)</label>
+                    <div className="max-h-48 overflow-auto rounded-md border border-black/10 bg-white p-2 space-y-1">
+                      {participants.length === 0 ? (
+                        <p className="text-xs text-black/40 italic px-1 py-1">No players available.</p>
+                      ) : (
+                        participants.map((player) => {
+                          const checked = selectedTeamMemberIds.includes(player.id);
+                          return (
+                            <label key={player.id} className="flex items-center justify-between gap-2 px-1 py-1 text-xs hover:bg-black/[0.02] rounded">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) => {
+                                    setSelectedTeamMemberIds((prev) => {
+                                      if (e.target.checked) return Array.from(new Set([...prev, player.id]));
+                                      return prev.filter((id) => id !== player.id);
+                                    });
+                                  }}
+                                />
+                                <span className="uppercase">{player.first_name} {player.last_name}</span>
+                              </div>
+                              <span className="text-[10px] text-black/40">{player.team_name || 'Unassigned'}</span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                  <div className="pt-4 flex gap-3 border-t border-emerald-100/80">
                     <Button type="submit" className="flex-1 justify-center" title={editingTeam ? 'Save Changes' : 'Create Team'} ariaLabel={editingTeam ? 'Save Changes' : 'Create Team'}>
                       {editingTeam ? <Save size={16} /> : <Plus size={16} />}
                     </Button>
-                    <Button type="button" variant="outline" onClick={() => { setShowAddTeam(false); setEditingTeam(null); }} title="Close" ariaLabel="Close">
+                    <Button type="button" variant="outline" onClick={() => { setShowAddTeam(false); setEditingTeam(null); setSelectedTeamMemberIds([]); }} title="Close" ariaLabel="Close">
                       <X size={16} />
                     </Button>
                   </div>
@@ -2405,19 +2596,19 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
         ))}
       </div>
 
-      <Card className="overflow-x-auto">
+      <Card className="overflow-x-auto border-[#AFDDE5]/60">
         <table ref={scoringTableRef} className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-black/[0.02] border-b border-black/5">
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40">Participant</th>
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40">Lane</th>
+            <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
+              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Participant</th>
+              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Lane</th>
               {gameNumbers.map(gameNumber => (
-                <th key={gameNumber} className="px-4 py-4 text-xs font-bold uppercase tracking-widest text-black/40 text-center min-w-[120px]">
+                <th key={gameNumber} className="px-4 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center min-w-[120px]">
                   Game {gameNumber}
                 </th>
               ))}
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40 text-right">Total</th>
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40 text-right">Avg</th>
+              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Total</th>
+              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Avg</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-black/5">
@@ -2430,13 +2621,13 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
               return (
                 <React.Fragment key={p.id}>
                   {showTeamHeader && (
-                    <tr className="bg-black/[0.03]">
-                      <td className="px-6 py-2 text-[10px] font-bold uppercase tracking-widest text-black/50" colSpan={gameNumbers.length + 4}>
+                    <tr className="bg-[#AFDDE5]/20">
+                      <td className="px-6 py-2 text-[10px] font-bold uppercase tracking-widest text-black/60" colSpan={gameNumbers.length + 4}>
                         Team: {teamLabel}
                       </td>
                     </tr>
                   )}
-                  <tr className="hover:bg-black/[0.01] transition-colors">
+                  <tr className="hover:bg-[#AFDDE5]/20 transition-colors">
                     <td className={`px-6 py-4 font-bold text-base ${p.gender?.toLowerCase() === 'female' ? 'text-rose-600' : 'text-black'}`}>
                       {formatScoringName(p)}
                     </td>
@@ -3041,7 +3232,7 @@ function BracketsView({ tournament, role }: { tournament: Tournament; role: User
           </Button>
           {canManageBrackets && (
             <Button variant="outline" onClick={handleClearBrackets} title="Clear Brackets" ariaLabel="Clear Brackets">
-              <Trash2 size={16} />
+              <RefreshCw size={16} />
             </Button>
           )}
           {!showQualified ? (
@@ -3092,8 +3283,8 @@ function BracketsView({ tournament, role }: { tournament: Tournament; role: User
       )}
 
       {showQualified && (
-      <Card>
-        <div className="p-6 border-b border-black/5 flex items-center justify-between">
+      <Card className="border-[#AFDDE5]/60">
+        <div className="p-6 border-b border-[#AFDDE5]/70 flex items-center justify-between">
           <div>
             <h4 className="font-bold">Seeds List</h4>
             <p className="text-sm text-black/40">
@@ -3111,15 +3302,15 @@ function BracketsView({ tournament, role }: { tournament: Tournament; role: User
         </div>
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-black/[0.02] border-b border-black/5">
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40 w-20">Seed</th>
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40">{tournament.type === 'team' ? 'Team' : 'Player'}</th>
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40 text-right">Total</th>
+            <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
+              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 w-20">Seed</th>
+              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">{tournament.type === 'team' ? 'Team' : 'Player'}</th>
+              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Total</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-black/5">
             {seeds.map((seed) => (
-              <tr key={seed.id} className="transition-colors hover:bg-black/[0.01]">
+              <tr key={seed.id} className="transition-colors hover:bg-[#AFDDE5]/20">
                 <td className="px-6 py-4 font-bold">#{seed.seed}</td>
                 <td className="px-6 py-4">{seed.name}</td>
                 <td className="px-6 py-4 text-right font-mono">{seed.total_score || 0}</td>
@@ -3720,29 +3911,29 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
           </div>
           <table ref={standingsTableRef} className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-black/[0.02] border-b border-black/5">
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40 w-16">Rank</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40">{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
+              <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 w-16">Rank</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
                 {standingsMode === 'players' && (
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40">Club</th>
+                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Club</th>
                 )}
                 {standingsMode === 'players' && (
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40">Team</th>
+                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Team</th>
                 )}
                 {gameNumbers.map((gameNumber) => (
-                  <th key={gameNumber} className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40 text-center">
+                  <th key={gameNumber} className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">
                     Game {gameNumber}
                   </th>
                 ))}
                 {standingsMode === 'players' && (
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40 text-center">Avg</th>
+                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">Avg</th>
                 )}
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/40 text-right">Total</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Total</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-black/5">
               {standingsMode === 'players' && playerStandingsRows.map((s, idx) => (
-                <tr key={s.participant_id} className="hover:bg-black/[0.01] transition-colors">
+                <tr key={s.participant_id} className="hover:bg-[#AFDDE5]/20 transition-colors">
                   <td className="px-6 py-4 font-bold text-black/60">{idx + 1}</td>
                   <td className="px-6 py-4 font-bold">{s.participant_name}</td>
                   <td className="px-6 py-4 text-black/40 text-sm">{s.club}</td>
@@ -3755,7 +3946,7 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                 </tr>
               ))}
               {standingsMode === 'teams' && teamStandingsRows.map((s, idx) => (
-                <tr key={s.key} className="hover:bg-black/[0.01] transition-colors">
+                <tr key={s.key} className="hover:bg-[#AFDDE5]/20 transition-colors">
                   <td className="px-6 py-4 font-bold text-black/60">{idx + 1}</td>
                   <td className="px-6 py-4">
                     <div className="font-bold">{s.team_name}</div>

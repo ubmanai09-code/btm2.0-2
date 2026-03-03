@@ -990,41 +990,42 @@ async function startServer() {
       const replaceExisting = req.body?.replace_existing === true;
       const tournamentId = req.params.id;
 
+      const normalizedPlayers = participants.map((p) => normalizeParticipant(p));
+
       const clearExisting = db.prepare("DELETE FROM participants WHERE tournament_id = ?");
       const insert = db.prepare(`
         INSERT INTO participants (tournament_id, first_name, last_name, gender, club, average, email, team_id, team_order) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
-      const transaction = db.transaction((players: any[]) => {
+      const transaction = db.transaction((players: ReturnType<typeof normalizeParticipant>[]) => {
         const affectedTeams = new Set<number>();
         if (replaceExisting) {
           clearExisting.run(tournamentId);
         }
         for (const p of players) {
-          const normalized = normalizeParticipant(p);
-          const assignedTeamOrder = normalized.team_id
-            ? (normalized.team_order || getNextTeamOrder(tournamentId, normalized.team_id))
+          const assignedTeamOrder = p.team_id
+            ? (p.team_order || getNextTeamOrder(tournamentId, p.team_id))
             : 0;
           insert.run(
             tournamentId,
-            normalized.first_name,
-            normalized.last_name,
-            normalized.gender,
-            normalized.club,
-            normalized.average,
-            normalized.email,
-            normalized.team_id,
+            p.first_name,
+            p.last_name,
+            p.gender,
+            p.club,
+            p.average,
+            p.email,
+            p.team_id,
             assignedTeamOrder
           );
-          if (normalized.team_id) affectedTeams.add(normalized.team_id);
+          if (p.team_id) affectedTeams.add(p.team_id);
         }
         for (const teamId of affectedTeams) {
           resequenceTeamMembers(teamId);
         }
       });
 
-      transaction(participants);
+      transaction(normalizedPlayers);
       res.json({ success: true });
     } catch (err: any) {
       console.error('Error bulk importing participants:', err);
