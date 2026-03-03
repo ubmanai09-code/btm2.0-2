@@ -6,3 +6,10 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Runtime SQLite artifacts
+*.db-wal
+*.db-shm
+
+# Server build artifacts
+dist-server/
