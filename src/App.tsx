@@ -21,7 +21,14 @@ import {
   Upload,
   MoveHorizontal,
   MoreVertical,
-  Printer
+  Printer,
+  X,
+  FolderOpen,
+  LogIn,
+  LogOut,
+  KeyRound,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser } from './services/api';
@@ -49,7 +56,8 @@ const Button = ({
   className = "",
   disabled = false,
   type = 'button',
-  title
+  title,
+  ariaLabel
 }: { 
   children: React.ReactNode, 
   onClick?: () => void, 
@@ -58,13 +66,14 @@ const Button = ({
   className?: string,
   disabled?: boolean,
   type?: 'button' | 'submit' | 'reset',
-  title?: string
+  title?: string,
+  ariaLabel?: string
 }) => {
   const variants = {
-    primary: 'bg-black text-white hover:bg-black/90',
-    secondary: 'bg-emerald-600 text-white hover:bg-emerald-700',
-    outline: 'border border-black/10 hover:bg-black/5',
-    ghost: 'hover:bg-black/5'
+    primary: 'bg-emerald-600 text-white hover:bg-emerald-700',
+    secondary: 'bg-[#E64833] text-white hover:bg-[#cf3f2c]',
+    outline: 'border border-black/10 hover:bg-emerald-50 hover:border-emerald-200',
+    ghost: 'hover:bg-emerald-50/70'
   };
 
   const sizes = {
@@ -79,6 +88,7 @@ const Button = ({
       onClick={onClick}
       disabled={disabled}
       title={title}
+      aria-label={ariaLabel}
       className={`rounded-md font-semibold uppercase tracking-wide transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2 ${variants[variant]} ${sizes[size]} ${className}`}
     >
       {children}
@@ -91,7 +101,7 @@ const Input = ({ label, ...props }: any) => (
     {label && <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 px-1">{label}</label>}
     <input 
       {...props}
-      className="w-full px-3 py-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-black/5 transition-all bg-white text-sm"
+      className="w-full px-3 py-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 transition-all bg-white text-sm"
     />
   </div>
 );
@@ -101,7 +111,7 @@ const Select = ({ label, options, ...props }: any) => (
     {label && <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 px-1">{label}</label>}
     <select 
       {...props}
-      className="w-full px-3 py-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-black/5 transition-all bg-white appearance-none text-sm"
+      className="w-full px-3 py-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 transition-all bg-white appearance-none text-sm"
     >
       {options.map((opt: any) => (
         <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -448,21 +458,21 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-black font-sans">
+    <div className="min-h-screen bg-gradient-to-b from-white to-emerald-50/30 text-black font-sans">
       {/* Sidebar / Nav */}
-      <nav className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-black/5 z-50 px-6 flex items-center justify-between">
+      <nav className="fixed top-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-sm border-b border-emerald-100 z-50 px-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-md overflow-hidden bg-black/[0.02] border border-black/10 flex items-center justify-center">
+          <div className="w-16 h-12 rounded-md overflow-hidden bg-black/[0.02] border border-black/10 flex items-center justify-center">
             <img
-              src="/Logo.png"
+              src="/logo.png"
               alt="BTM Logo"
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain"
             />
           </div>
           <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2">
-            <span className="font-bold text-xl tracking-tight uppercase">BTM v2.0</span>
-            <span className="hidden sm:inline text-sm text-black/50 font-medium">The all-in-one Bowling Tournament Manager. Track scores, run brackets, and sync payouts.</span>
-            <span className="sm:hidden text-[11px] text-black/50 font-medium leading-tight">The all-in-one Bowling Tournament Manager. Track scores, run brackets, and sync payouts.</span>
+            <span className="font-bold text-xl tracking-tight uppercase text-emerald-700">BTM</span>
+            <span className="hidden sm:inline text-sm text-black/50 font-medium">BOWLING TOURNAMENT MANAGER | <span className="text-[#E64833]">All In One</span></span>
+            <span className="sm:hidden text-[11px] text-black/50 font-medium leading-tight">BOWLING TOURNAMENT MANAGER | <span className="text-[#E64833]">All In One</span></span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -475,8 +485,8 @@ export default function App() {
               Loading...
             </span>
           ) : currentRole === 'public' ? (
-            <Button variant="outline" size="sm" onClick={() => { setAuthError(''); setShowLogin(true); }}>
-              Login
+            <Button variant="outline" size="sm" onClick={() => { setAuthError(''); setShowLogin(true); }} title="Login" ariaLabel="Login">
+              <LogIn size={14} />
             </Button>
           ) : (
             <>
@@ -490,11 +500,13 @@ export default function App() {
                   setPasswordError('');
                   setShowPasswordModal(true);
                 }}
+                title="Change Password"
+                ariaLabel="Change Password"
               >
-                Change Password
+                <KeyRound size={14} />
               </Button>
-              <Button variant="outline" size="sm" onClick={handleLogout}>
-                Logout
+              <Button variant="outline" size="sm" onClick={handleLogout} title="Logout" ariaLabel="Logout">
+                <LogOut size={14} />
               </Button>
             </>
           )}
@@ -517,14 +529,12 @@ export default function App() {
                   <p className="text-black/40 mt-1">Manage and track your bowling events</p>
                 </div>
                 <div className="flex gap-3">
-                  <Button variant="outline" onClick={handleExport}>
+                  <Button variant="outline" onClick={handleExport} title="Export" ariaLabel="Export">
                     <Upload size={18} />
-                    Export
                   </Button>
                   {isAdmin && (
-                    <Button onClick={() => { setFormType('individual'); setView('create'); }}>
+                    <Button onClick={() => { setFormType('individual'); setView('create'); }} title="New Tournament" ariaLabel="New Tournament">
                       <Plus size={18} />
-                      New Tournament
                     </Button>
                   )}
                 </div>
@@ -541,8 +551,8 @@ export default function App() {
                     <h3 className="text-xl font-semibold uppercase tracking-wide">No tournaments yet</h3>
                     <p className="text-black/40 mb-6 text-sm">Create your first tournament to get started</p>
                     {isAdmin && (
-                      <Button onClick={() => setView('create')} variant="outline" className="mx-auto">
-                        Create Tournament
+                      <Button onClick={() => setView('create')} variant="outline" className="mx-auto" title="Create Tournament" ariaLabel="Create Tournament">
+                        <Plus size={18} />
                       </Button>
                     )}
                   </div>
@@ -581,7 +591,9 @@ export default function App() {
                         </div>
                       </div>
                       <div className="px-6 py-4 bg-black/[0.02] border-t border-black/5 flex items-center justify-between">
-                        <span className="text-xs font-semibold text-black/40 uppercase tracking-widest">View Details</span>
+                        <span className="text-xs font-semibold text-black/40 uppercase tracking-widest" title="Open Tournament">
+                          <FolderOpen size={14} />
+                        </span>
                         <ChevronRight size={16} className="text-black/20 group-hover:translate-x-1 transition-transform" />
                       </div>
                     </Card>
@@ -599,9 +611,8 @@ export default function App() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="max-w-2xl mx-auto"
             >
-              <Button variant="ghost" onClick={() => { setView('list'); setEditingTournament(null); }} className="mb-6 -ml-2">
+              <Button variant="ghost" onClick={() => { setView('list'); setEditingTournament(null); }} className="mb-6 -ml-2" title="Back to List" ariaLabel="Back to List">
                 <ArrowLeft size={18} />
-                Back to List
               </Button>
               
               <Card className="p-8">
@@ -698,11 +709,11 @@ export default function App() {
                   )}
                   
                   <div className="pt-4 flex gap-3">
-                    <Button type="submit" className="flex-1 justify-center py-3">
-                      {view === 'edit' ? 'Save Changes' : 'Create Tournament'}
+                    <Button type="submit" className="flex-1 justify-center py-3" title={view === 'edit' ? 'Save Changes' : 'Create Tournament'} ariaLabel={view === 'edit' ? 'Save Changes' : 'Create Tournament'}>
+                      {view === 'edit' ? <Save size={16} /> : <Plus size={16} />}
                     </Button>
-                    <Button type="button" variant="outline" onClick={() => { setView('list'); setEditingTournament(null); }} className="px-8">
-                      Cancel
+                    <Button type="button" variant="outline" onClick={() => { setView('list'); setEditingTournament(null); }} className="px-8" title="Close" ariaLabel="Close">
+                      <X size={16} />
                     </Button>
                   </div>
                 </form>
@@ -733,8 +744,12 @@ export default function App() {
               <Input label="Password" name="password" type="password" autoComplete="current-password" required />
               {authError && <p className="text-xs text-red-600 font-semibold">{authError}</p>}
               <div className="flex gap-3 pt-2">
-                <Button type="submit" className="flex-1 justify-center">Login</Button>
-                <Button type="button" variant="outline" onClick={() => setShowLogin(false)} className="px-6">Cancel</Button>
+                <Button type="submit" className="flex-1 justify-center" title="Login" ariaLabel="Login">
+                  <LogIn size={16} />
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setShowLogin(false)} className="px-6" title="Close" ariaLabel="Close">
+                  <X size={16} />
+                </Button>
               </div>
             </form>
           </Card>
@@ -751,11 +766,11 @@ export default function App() {
               <Input label="Confirm Password" name="confirm_password" type="password" autoComplete="new-password" required />
               {passwordError && <p className="text-xs text-red-600 font-semibold">{passwordError}</p>}
               <div className="flex gap-3 pt-2">
-                <Button type="submit" className="flex-1 justify-center" disabled={passwordSaving}>
-                  {passwordSaving ? 'Saving...' : 'Save'}
+                <Button type="submit" className="flex-1 justify-center" disabled={passwordSaving} title="Save" ariaLabel="Save">
+                  {passwordSaving ? 'Saving...' : <Save size={16} />}
                 </Button>
-                <Button type="button" variant="outline" onClick={() => setShowPasswordModal(false)} className="px-6" disabled={passwordSaving}>
-                  Cancel
+                <Button type="button" variant="outline" onClick={() => setShowPasswordModal(false)} className="px-6" disabled={passwordSaving} title="Close" ariaLabel="Close">
+                  <X size={16} />
                 </Button>
               </div>
             </form>
@@ -763,10 +778,16 @@ export default function App() {
         </div>
       )}
 
-      <footer className="border-t border-black/5 bg-white/80 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4 text-xs text-black/50 flex items-center justify-between">
-          <span className="font-semibold uppercase tracking-wide">Total tournament control. From first frame to final payout.</span>
-          <span>Copyright Murat D. 2026</span>
+      <footer className="border-t border-emerald-100 bg-gradient-to-r from-emerald-50/60 via-white to-[#E64833]/10 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-6 py-5 text-xs text-black/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <span className="font-semibold uppercase tracking-wide text-emerald-800">Total tournament control. From first frame to final payout.</span>
+          <div className="flex items-center gap-2 font-medium">
+            <Trophy size={12} className="text-emerald-700" />
+            <span className="text-black/40">|</span>
+            <span>BTM <span className="text-[#E64833]">v2.0</span></span>
+            <span className="text-black/40">|</span>
+            <span>Copyright Murat D. 2026</span>
+          </div>
         </div>
       </footer>
     </div>
@@ -950,9 +971,8 @@ function TournamentDetail({ tournament, onBack, onEdit, activeTab, setActiveTab,
     >
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <Button variant="ghost" onClick={onBack} className="mb-4 -ml-2 text-black/40">
+          <Button variant="ghost" onClick={onBack} className="mb-4 -ml-2 text-black/40" title="Back to Dashboard" ariaLabel="Back to Dashboard">
             <ArrowLeft size={18} />
-            Back to Dashboard
           </Button>
           <div className="flex items-center gap-3 mb-2">
             <h1
@@ -1009,8 +1029,8 @@ function TournamentDetail({ tournament, onBack, onEdit, activeTab, setActiveTab,
                   <h4 className="text-sm font-bold uppercase tracking-wider">Moderator Access</h4>
                   <p className="text-xs text-black/50 mt-1">Assign one or more moderator accounts to this tournament.</p>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => setShowModeratorPanel(v => !v)}>
-                  {showModeratorPanel ? 'Hide' : 'Show'}
+                <Button variant="outline" size="sm" onClick={() => setShowModeratorPanel(v => !v)} title={showModeratorPanel ? 'Hide' : 'Show'} ariaLabel={showModeratorPanel ? 'Hide' : 'Show'}>
+                  {showModeratorPanel ? <EyeOff size={14} /> : <Eye size={14} />}
                 </Button>
               </div>
 
@@ -1044,11 +1064,13 @@ function TournamentDetail({ tournament, onBack, onEdit, activeTab, setActiveTab,
                     const parsed = Number.parseInt(expiresHours, 10);
                     handleGrantModerator(Number.isFinite(parsed) && parsed > 0 ? parsed : 24);
                   }}
+                  title="Grant Timed Access"
+                  ariaLabel="Grant Timed Access"
                 >
-                  Grant Timed
+                  <UserPlus size={14} />
                 </Button>
-                <Button variant="outline" disabled={accessLoading || !selectedModeratorId} onClick={() => handleGrantModerator(null)}>
-                  Keep No Expiry
+                <Button variant="outline" disabled={accessLoading || !selectedModeratorId} onClick={() => handleGrantModerator(null)} title="Grant No Expiry Access" ariaLabel="Grant No Expiry Access">
+                  <Users size={14} />
                 </Button>
               </div>
 
@@ -1062,8 +1084,8 @@ function TournamentDetail({ tournament, onBack, onEdit, activeTab, setActiveTab,
                         <span className="text-black/50"> (expires {new Date(assignment.expires_at).toLocaleString()})</span>
                       )}
                     </div>
-                    <Button variant="ghost" size="sm" disabled={accessLoading} onClick={() => handleRemoveModerator(assignment.user_id)}>
-                      Remove
+                    <Button variant="ghost" size="sm" disabled={accessLoading} onClick={() => handleRemoveModerator(assignment.user_id)} title="Remove Moderator Access" ariaLabel="Remove Moderator Access">
+                      <UserMinus size={14} />
                     </Button>
                   </div>
                 )) : <p className="text-xs text-black/50">No moderator assignments yet.</p>}
@@ -1076,7 +1098,7 @@ function TournamentDetail({ tournament, onBack, onEdit, activeTab, setActiveTab,
                   <Input label="Password" type="password" value={newModeratorPassword} onChange={(e: any) => setNewModeratorPassword(e.target.value)} />
                 </div>
                 <div className="mt-2">
-                  <Button variant="outline" disabled={accessLoading} onClick={handleCreateModerator}>Create Moderator</Button>
+                  <Button variant="outline" disabled={accessLoading} onClick={handleCreateModerator} title="Create Moderator" ariaLabel="Create Moderator"><UserPlus size={14} /></Button>
                 </div>
               </div>
 
@@ -1100,8 +1122,10 @@ function TournamentDetail({ tournament, onBack, onEdit, activeTab, setActiveTab,
                     variant="outline"
                     disabled={resetPasswordSaving || !resetPasswordUserId}
                     onClick={handleResetModeratorPassword}
+                    title={resetPasswordSaving ? 'Saving' : 'Reset Password'}
+                    ariaLabel={resetPasswordSaving ? 'Saving' : 'Reset Password'}
                   >
-                    {resetPasswordSaving ? 'Saving...' : 'Reset Password'}
+                    {resetPasswordSaving ? 'Saving...' : <KeyRound size={14} />}
                   </Button>
                 </div>
                 {resetPasswordError && <p className="text-xs text-red-600 font-semibold mt-2">{resetPasswordError}</p>}
@@ -1129,7 +1153,7 @@ function TournamentDetail({ tournament, onBack, onEdit, activeTab, setActiveTab,
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-all whitespace-nowrap text-xs uppercase tracking-widest ${
               activeTab === tab.id
-                ? 'border-black text-black font-bold'
+                ? 'border-emerald-600 text-emerald-700 font-bold'
                 : 'border-transparent text-black/40 hover:text-black/60'
               }`}
           >
@@ -1381,9 +1405,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <h3 className="text-xl font-bold">Manage Participants</h3>
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
-          <Button variant="outline" onClick={handleExportCSV}>
+          <Button variant="outline" onClick={handleExportCSV} title="Export" ariaLabel="Export">
             <Upload size={18} />
-            Export CSV
           </Button>
           {canManageParticipants && (
             <>
@@ -1394,24 +1417,20 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   className="absolute inset-0 opacity-0 cursor-pointer" 
                   onChange={handleImportCSV}
                 />
-                <Button variant="outline">
+                <Button variant="outline" title="Import" ariaLabel="Import">
                   <Download size={18} />
-                  Import CSV
                 </Button>
               </div>
-              <Button variant="outline" onClick={handleClearParticipants}>
+              <Button variant="outline" onClick={handleClearParticipants} title="Clear Participants" ariaLabel="Clear Participants">
                 <Trash2 size={18} />
-                Clear
               </Button>
               {tournament.type === 'team' && (
-                <Button variant="outline" onClick={() => setShowAddTeam(true)}>
+                <Button variant="outline" onClick={() => setShowAddTeam(true)} title="Add Team" ariaLabel="Add Team">
                   <Plus size={18} />
-                  Add Team
                 </Button>
               )}
-              <Button onClick={() => { setEditingPlayer(null); setShowAddPlayer(true); }}>
+              <Button onClick={() => { setEditingPlayer(null); setShowAddPlayer(true); }} title="Add Player" ariaLabel="Add Player">
                 <UserPlus size={18} />
-                Add Player
               </Button>
             </>
           )}
@@ -1616,10 +1635,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     />
                   )}
                   <div className="pt-4 flex gap-3">
-                    <Button type="submit" className="flex-1 justify-center">
-                      {editingPlayer ? 'Save Changes' : 'Add Player'}
+                    <Button type="submit" className="flex-1 justify-center" title={editingPlayer ? 'Save Changes' : 'Add Player'} ariaLabel={editingPlayer ? 'Save Changes' : 'Add Player'}>
+                      {editingPlayer ? <Save size={16} /> : <Plus size={16} />}
                     </Button>
-                    <Button type="button" variant="outline" onClick={() => { setShowAddPlayer(false); setEditingPlayer(null); }}>Cancel</Button>
+                    <Button type="button" variant="outline" onClick={() => { setShowAddPlayer(false); setEditingPlayer(null); }} title="Close" ariaLabel="Close">
+                      <X size={16} />
+                    </Button>
                   </div>
                 </form>
               </Card>
@@ -1647,10 +1668,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 <form onSubmit={handleAddTeam} className="space-y-4">
                   <Input label="Team Name" name="name" defaultValue={editingTeam?.name} placeholder="e.g. The Strikers" required />
                   <div className="pt-4 flex gap-3">
-                    <Button type="submit" className="flex-1 justify-center">
-                      {editingTeam ? 'Save Changes' : 'Create Team'}
+                    <Button type="submit" className="flex-1 justify-center" title={editingTeam ? 'Save Changes' : 'Create Team'} ariaLabel={editingTeam ? 'Save Changes' : 'Create Team'}>
+                      {editingTeam ? <Save size={16} /> : <Plus size={16} />}
                     </Button>
-                    <Button type="button" variant="outline" onClick={() => { setShowAddTeam(false); setEditingTeam(null); }}>Cancel</Button>
+                    <Button type="button" variant="outline" onClick={() => { setShowAddTeam(false); setEditingTeam(null); }} title="Close" ariaLabel="Close">
+                      <X size={16} />
+                    </Button>
                   </div>
                 </form>
               </Card>
@@ -1824,23 +1847,20 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
           {canManageLanes && (
             <div className="relative">
               <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportLanes} accept=".json" />
-              <Button variant="outline">
+              <Button variant="outline" title="Import" ariaLabel="Import">
                 <Download size={14} />
-                Import
               </Button>
             </div>
           )}
-          <Button variant="outline" onClick={handleExportLanes}>
+          <Button variant="outline" onClick={handleExportLanes} title="Export" ariaLabel="Export">
             <Upload size={14} />
-            Export
           </Button>
-          <Button variant="outline" onClick={loadData}>
+          <Button variant="outline" onClick={loadData} title="Refresh" ariaLabel="Refresh">
             <RefreshCw size={14} />
           </Button>
           {canManageLanes && (
-            <Button onClick={handleAutoAssign} variant="secondary">
+            <Button onClick={handleAutoAssign} variant="secondary" title="Auto-Assign" ariaLabel="Auto-Assign">
               <RefreshCw size={14} />
-              Auto-Assign
             </Button>
           )}
         </div>
@@ -2344,14 +2364,12 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           {canManageScores && (
-            <Button variant="outline" onClick={handleSaveScores}>
+            <Button variant="outline" onClick={handleSaveScores} title="Save" ariaLabel="Save">
               <Save size={14} />
-              Save
             </Button>
           )}
-          <Button variant="outline" onClick={handleExportScores}>
+          <Button variant="outline" onClick={handleExportScores} title="Export" ariaLabel="Export">
             <Upload size={14} />
-            Export
           </Button>
           {canManageScores && (
             <>
@@ -2362,15 +2380,13 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                 className="hidden"
                 onChange={handleImportScores}
               />
-              <Button variant="outline" onClick={() => importScoresInputRef.current?.click()}>
+              <Button variant="outline" onClick={() => importScoresInputRef.current?.click()} title="Import" ariaLabel="Import">
                 <Download size={14} />
-                Import
               </Button>
             </>
           )}
-          <Button variant="outline" onClick={handlePrintScores}>
+          <Button variant="outline" onClick={handlePrintScores} title="Print" ariaLabel="Print">
             <Printer size={14} />
-            Print
           </Button>
         </div>
       </div>
@@ -3006,41 +3022,35 @@ function BracketsView({ tournament, role }: { tournament: Tournament; role: User
 
         <div className="flex flex-wrap items-center gap-2">
           {canManageBrackets && (
-            <Button onClick={handleGenerate}>
+            <Button onClick={handleGenerate} title="Auto Generate" ariaLabel="Auto Generate">
               <RefreshCw size={18} />
-              Auto Generate
             </Button>
           )}
           {canManageBrackets && (
-            <Button variant="outline" onClick={handleGenerateManual}>
+            <Button variant="outline" onClick={handleGenerateManual} title="Generate Manual" ariaLabel="Generate Manual">
               <RefreshCw size={16} />
-              Generate Manual
             </Button>
           )}
           {canManageBrackets && (
-            <Button variant="outline" onClick={handleSaveBrackets}>
+            <Button variant="outline" onClick={handleSaveBrackets} title="Save" ariaLabel="Save">
               <Save size={16} />
-              Save
             </Button>
           )}
-          <Button variant="outline" onClick={handlePrintBrackets}>
+          <Button variant="outline" onClick={handlePrintBrackets} title="Print" ariaLabel="Print">
             <Printer size={16} />
-            Print
           </Button>
           {canManageBrackets && (
-            <Button variant="outline" onClick={handleClearBrackets}>
+            <Button variant="outline" onClick={handleClearBrackets} title="Clear Brackets" ariaLabel="Clear Brackets">
               <Trash2 size={16} />
-              Clear
             </Button>
           )}
           {!showQualified ? (
-            <Button variant="outline" onClick={handleShowQualified}>
+            <Button variant="outline" onClick={handleShowQualified} title={`Show Qualified ${tournament.type === 'team' ? 'Teams' : 'Participants'}`} ariaLabel={`Show Qualified ${tournament.type === 'team' ? 'Teams' : 'Participants'}`}>
               <Users size={16} />
-              Show Qualified {tournament.type === 'team' ? 'Teams' : 'Participants'}
             </Button>
           ) : (
-            <Button variant="outline" onClick={() => setShowQualified(false)}>
-              Hide Qualified
+            <Button variant="outline" onClick={() => setShowQualified(false)} title="Hide Qualified" ariaLabel="Hide Qualified">
+              <EyeOff size={16} />
             </Button>
           )}
         </div>
@@ -3073,8 +3083,8 @@ function BracketsView({ tournament, role }: { tournament: Tournament; role: User
             ]}
           />
           <div className="flex items-end">
-            <Button className="w-full justify-center" onClick={handleGenerateManual}>
-              Create Structure
+            <Button className="w-full justify-center" onClick={handleGenerateManual} title="Create Structure" ariaLabel="Create Structure">
+              <Plus size={16} />
             </Button>
           </div>
         </div>
@@ -3095,9 +3105,8 @@ function BracketsView({ tournament, role }: { tournament: Tournament; role: User
               </p>
             )}
           </div>
-          <Button variant="outline" onClick={loadSeeds}>
+          <Button variant="outline" onClick={loadSeeds} title="Refresh Seeds" ariaLabel="Refresh Seeds">
             <RefreshCw size={14} />
-            Refresh
           </Button>
         </div>
         <table className="w-full text-left border-collapse">
@@ -3204,8 +3213,8 @@ function BracketsView({ tournament, role }: { tournament: Tournament; role: User
           <h3 className="text-xl font-semibold">No brackets generated</h3>
           <p className="text-black/40 mb-6">Generate brackets to start the elimination round</p>
           {canManageBrackets && (
-            <Button onClick={handleGenerate} variant="outline" className="mx-auto">
-              Generate Now
+            <Button onClick={handleGenerate} variant="outline" className="mx-auto" title="Generate Now" ariaLabel="Generate Now">
+              <RefreshCw size={16} />
             </Button>
           )}
         </div>
@@ -3581,9 +3590,8 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
           <h3 className="text-xl font-bold">Tournament Result</h3>
           <p className="text-sm text-black/40">Standings, bracket winners, and tournament highlights</p>
         </div>
-        <Button variant="outline" onClick={loadStandings}>
+        <Button variant="outline" onClick={loadStandings} title="Refresh" ariaLabel="Refresh">
           <RefreshCw size={18} />
-          Refresh
         </Button>
       </div>
 
@@ -3689,13 +3697,11 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                   Teams
                 </button>
               </div>
-              <Button variant="outline" onClick={handleSaveStandings}>
+              <Button variant="outline" onClick={handleSaveStandings} title="Save" ariaLabel="Save">
                 <Save size={14} />
-                Save
               </Button>
-              <Button variant="outline" onClick={handleExportStandings}>
+              <Button variant="outline" onClick={handleExportStandings} title="Export" ariaLabel="Export">
                 <Upload size={14} />
-                Export
               </Button>
               <input
                 ref={standingsImportInputRef}
@@ -3704,13 +3710,11 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                 className="hidden"
                 onChange={handleImportStandings}
               />
-              <Button variant="outline" onClick={() => standingsImportInputRef.current?.click()}>
+              <Button variant="outline" onClick={() => standingsImportInputRef.current?.click()} title="Import" ariaLabel="Import">
                 <Download size={14} />
-                Import
               </Button>
-              <Button variant="outline" onClick={handlePrintStandings}>
+              <Button variant="outline" onClick={handlePrintStandings} title="Print" ariaLabel="Print">
                 <Printer size={14} />
-                Print
               </Button>
             </div>
           </div>
