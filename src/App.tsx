@@ -1281,8 +1281,13 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   };
 
   const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const inputEl = e.target;
+    const file = inputEl.files?.[0];
     if (!file) return;
+    if (!confirm('Importing Players will replace all existing Players data for this tournament. Continue?')) {
+      inputEl.value = '';
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = async (event) => {
@@ -1336,6 +1341,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
       await api.bulkAddParticipants(tournament.id, newParticipants, { replaceExisting: true });
       loadData();
+      inputEl.value = '';
     };
     reader.readAsText(file);
   };
@@ -1458,18 +1464,22 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   };
 
   const handleImportTeams = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const inputEl = e.target;
+    const file = inputEl.files?.[0];
     if (!file) return;
+    if (!confirm('Importing Teams will replace all existing Teams and team lane assignments for this tournament. Continue?')) {
+      inputEl.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = async (event) => {
       const text = event.target?.result as string;
       const lines = text.split('\n');
       const dataLines = lines.slice(1);
       const newTeams = dataLines.filter(line => line.trim()).map(line => ({ name: line.trim() }));
-      if (newTeams.length > 0) {
-        await api.bulkAddTeams(tournament.id, newTeams);
-        loadData();
-      }
+      await api.bulkAddTeams(tournament.id, newTeams, { replaceExisting: true });
+      loadData();
+      inputEl.value = '';
     };
     reader.readAsText(file);
   };
@@ -2055,8 +2065,13 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
   const handleImportLanes = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!canManageLanes) return;
-    const file = e.target.files?.[0];
+    const inputEl = e.target;
+    const file = inputEl.files?.[0];
     if (!file) return;
+    if (!confirm('Importing Lane Assignments will replace all existing lane assignments for this tournament. Continue?')) {
+      inputEl.value = '';
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = async (event) => {
@@ -2064,8 +2079,10 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         const importedLanes = JSON.parse(event.target?.result as string);
         await api.bulkUpdateLanes(tournament.id, importedLanes);
         loadData();
+        inputEl.value = '';
       } catch (err) {
         alert("Invalid file format");
+        inputEl.value = '';
       }
     };
     reader.readAsText(file);
@@ -2358,6 +2375,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
   const [lanes, setLanes] = useState<LaneAssignment[]>([]);
+  const [draftScores, setDraftScores] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [currentShift, setCurrentShift] = useState(1);
   const importScoresInputRef = useRef<HTMLInputElement | null>(null);
@@ -2370,6 +2388,10 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
   useEffect(() => {
     setCurrentShift(1);
   }, [tournament.id]);
+
+  useEffect(() => {
+    setDraftScores({});
+  }, [tournament.id, currentShift]);
 
   const loadData = async () => {
     setLoading(true);
@@ -2394,6 +2416,12 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
   const scoreMap = new Map<string, number>();
   for (const s of scores) {
     scoreMap.set(`${s.participant_id}-${s.game_number}`, s.score);
+  }
+  for (const [key, rawValue] of Object.entries(draftScores)) {
+    const parsed = Number.parseInt(rawValue, 10);
+    if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 300) {
+      scoreMap.set(key, parsed);
+    }
   }
 
   const getParticipantStats = (participantId: number) => {
@@ -2505,21 +2533,91 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     }
   };
 
-  const handleScoreChange = async (participantId: number, gameNumber: number, score: string) => {
-    const val = parseInt(score);
-    if (isNaN(val) || val < 0 || val > 300) return;
-    
-    await api.addScore(tournament.id, {
+  const persistScore = async (participantId: number, gameNumber: number, rawValue: string) => {
+    const key = `${participantId}-${gameNumber}`;
+    const trimmed = rawValue.trim();
+
+    if (trimmed === '') {
+      setDraftScores((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+
+    const value = Number.parseInt(trimmed, 10);
+    if (!Number.isFinite(value) || value < 0 || value > 300) return;
+
+    const result = await api.addScore(tournament.id, {
       participant_id: participantId,
       game_number: gameNumber,
-      score: val
+      score: value,
     });
-    loadData();
+
+    setScores((prev) => {
+      const existingIndex = prev.findIndex(
+        (item) => item.participant_id === participantId && item.game_number === gameNumber
+      );
+      if (existingIndex >= 0) {
+        const next = [...prev];
+        next[existingIndex] = { ...next[existingIndex], score: value };
+        return next;
+      }
+      return [
+        ...prev,
+        {
+          id: result.id,
+          tournament_id: tournament.id,
+          participant_id: participantId,
+          game_number: gameNumber,
+          score: value,
+        } as Score,
+      ];
+    });
+
+    setDraftScores((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const handleScoreChange = (participantId: number, gameNumber: number, rawValue: string) => {
+    if (!canManageScores) return;
+    if (rawValue === '') {
+      setDraftScores((prev) => ({ ...prev, [`${participantId}-${gameNumber}`]: '' }));
+      return;
+    }
+    if (!/^\d{0,3}$/.test(rawValue)) return;
+    const value = Number.parseInt(rawValue, 10);
+    if (!Number.isFinite(value) || value < 0 || value > 300) return;
+    setDraftScores((prev) => ({ ...prev, [`${participantId}-${gameNumber}`]: rawValue }));
+  };
+
+  const handleScoreBlur = async (participantId: number, gameNumber: number, rawValue: string) => {
+    try {
+      await persistScore(participantId, gameNumber, rawValue);
+    } catch (err) {
+      console.error('Failed to save score:', err);
+      alert('Failed to save score. Please try again.');
+    }
   };
 
   const handleSaveScores = async () => {
-    await loadData();
-    alert('Scores saved.');
+    try {
+      const pending = Object.entries(draftScores);
+      for (const [key, rawValue] of pending) {
+        const [participantId, gameNumber] = key.split('-').map((part) => Number.parseInt(part, 10));
+        if (!Number.isFinite(participantId) || !Number.isFinite(gameNumber)) continue;
+        await persistScore(participantId, gameNumber, rawValue);
+      }
+      await loadData();
+      alert('Scores saved.');
+    } catch (err) {
+      console.error('Failed to save scores:', err);
+      alert('Failed to save scores. Please try again.');
+    }
   };
 
   const handleExportScores = () => {
@@ -2561,8 +2659,13 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
   };
 
   const handleImportScores = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const inputEl = e.target;
+    const file = inputEl.files?.[0];
     if (!file) return;
+    if (!confirm('Importing Scores will replace all existing scores for this tournament. Continue?')) {
+      inputEl.value = '';
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = async (event) => {
@@ -2577,6 +2680,8 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
           alert('Invalid scores file: missing participant_id column.');
           return;
         }
+
+        await api.clearScores(tournament.id);
 
         const tasks: Promise<any>[] = [];
         for (const line of lines.slice(1)) {
@@ -2652,20 +2757,37 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row justify-between md:items-center gap-3">
         <div>
-          <h3 className="text-xl font-bold">Score Entry</h3>
-          <p className="text-sm text-black/40">
+          <h3 className="text-xl font-bold text-emerald-800">Score Entry</h3>
+          <p className="text-xs text-black/50 mt-0.5">
             Enter game results for each participant{tournament.type === 'team' ? ' (assigned team players only)' : ''} • Shift {currentShift}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+      </div>
+
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div className="flex gap-1.5 p-1 bg-[#AFDDE5]/35 rounded-lg w-fit border border-[#AFDDE5]/70">
+          {Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1).map(shift => (
+            <button
+              key={shift}
+              onClick={() => setCurrentShift(shift)}
+              className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
+                currentShift === shift ? 'bg-emerald-600 text-white shadow-sm' : 'text-black/50 hover:text-emerald-700'
+              }`}
+            >
+              Shift {shift}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto md:justify-end">
           {canManageScores && (
-            <Button variant="outline" onClick={handleSaveScores} title="Save" ariaLabel="Save">
+            <Button size="sm" variant="outline" onClick={handleSaveScores} title="Save" ariaLabel="Save" className="px-2">
               <Save size={14} />
             </Button>
           )}
-          <Button variant="outline" onClick={handleExportScores} title="Export" ariaLabel="Export">
+          <Button size="sm" variant="outline" onClick={handleExportScores} title="Export" ariaLabel="Export" className="px-2">
             <Upload size={14} />
           </Button>
           {canManageScores && (
@@ -2677,44 +2799,30 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                 className="hidden"
                 onChange={handleImportScores}
               />
-              <Button variant="outline" onClick={() => importScoresInputRef.current?.click()} title="Import" ariaLabel="Import">
+              <Button size="sm" variant="outline" onClick={() => importScoresInputRef.current?.click()} title="Import" ariaLabel="Import" className="px-2">
                 <Download size={14} />
               </Button>
             </>
           )}
-          <Button variant="outline" onClick={handlePrintScores} title="Print" ariaLabel="Print">
+          <Button size="sm" variant="outline" onClick={handlePrintScores} title="Print" ariaLabel="Print" className="px-2">
             <Printer size={14} />
           </Button>
         </div>
-      </div>
-
-      <div className="flex gap-2 p-1 bg-black/5 rounded-lg w-fit">
-        {Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1).map(shift => (
-          <button
-            key={shift}
-            onClick={() => setCurrentShift(shift)}
-            className={`px-4 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
-              currentShift === shift ? 'bg-black text-white shadow-sm' : 'text-black/40 hover:text-black/60'
-            }`}
-          >
-            Shift {shift}
-          </button>
-        ))}
       </div>
 
       <Card className="overflow-x-auto border-[#AFDDE5]/60">
         <table ref={scoringTableRef} className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Participant</th>
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Lane</th>
+              <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70">Participant</th>
+              <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70">Lane</th>
               {gameNumbers.map(gameNumber => (
-                <th key={gameNumber} className="px-4 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center min-w-[120px]">
+                <th key={gameNumber} className="px-3 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70 text-center min-w-[110px]">
                   Game {gameNumber}
                 </th>
               ))}
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Total</th>
-              <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Avg</th>
+              <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70 text-right">Total</th>
+              <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70 text-right">Avg</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-black/5">
@@ -2728,29 +2836,29 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                 <React.Fragment key={p.id}>
                   {showTeamHeader && (
                     <tr className="bg-[#AFDDE5]/20">
-                      <td className="px-6 py-2 text-[10px] font-bold uppercase tracking-widest text-black/60" colSpan={gameNumbers.length + 4}>
+                      <td className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-emerald-700" colSpan={gameNumbers.length + 4}>
                         Team: {teamLabel}
                       </td>
                     </tr>
                   )}
                   <tr className="hover:bg-[#AFDDE5]/20 transition-colors">
-                    <td className="px-6 py-4 font-bold text-base text-black">
+                    <td className="px-4 py-3 font-bold text-sm text-black">
                       <span className="inline-flex items-center gap-1">
                         {p.gender?.toLowerCase() === 'female' && <span className="inline-block h-1 w-1 rounded-full bg-rose-500" />}
                         <span>{formatScoringName(p)}</span>
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3">
                       {tournament.type === 'team' ? (
                         <div className="flex items-center gap-1.5">
-                          <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest bg-black/5 text-black/60 border border-black/10">
+                          <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest bg-[#AFDDE5]/35 text-emerald-800 border border-[#AFDDE5]/70">
                             {getLaneBadge(p)}
                           </span>
                           <button
                             type="button"
                             onClick={() => handleSwapTeamPosition(p, 'up')}
                             disabled={!canManageScores || (teamMemberPositionMap.get(p.id) || 1) <= 1}
-                            className="w-6 h-6 rounded border border-black/10 text-black/50 hover:text-black hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Swap with previous player"
                           >
                             ↑
@@ -2759,44 +2867,53 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                             type="button"
                             onClick={() => handleSwapTeamPosition(p, 'down')}
                             disabled={!canManageScores || (teamMemberPositionMap.get(p.id) || 1) >= (teamMemberCountMap.get(p.team_id || 0) || 1)}
-                            className="w-6 h-6 rounded border border-black/10 text-black/50 hover:text-black hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Swap with next player"
                           >
                             ↓
                           </button>
                         </div>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest bg-black/5 text-black/60 border border-black/10">
+                        <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest bg-[#AFDDE5]/35 text-emerald-800 border border-[#AFDDE5]/70">
                           {getLaneBadge(p)}
                         </span>
                       )}
                     </td>
                     {gameNumbers.map(gameNumber => {
-                      const currentScore = scoreMap.get(`${p.id}-${gameNumber}`) ?? '';
+                      const scoreKey = `${p.id}-${gameNumber}`;
+                      const currentScore = draftScores[scoreKey] !== undefined
+                        ? draftScores[scoreKey]
+                        : (scoreMap.get(scoreKey) ?? '');
                       return (
-                        <td key={gameNumber} className="px-4 py-4 text-center">
+                        <td key={gameNumber} className="px-3 py-3 text-center">
                           <input 
                             type="number"
                             min="0"
                             max="300"
                             value={currentScore}
-                            onChange={(e) => canManageScores && handleScoreChange(p.id, gameNumber, e.target.value)}
+                            onChange={(e) => handleScoreChange(p.id, gameNumber, e.target.value)}
+                            onBlur={(e) => handleScoreBlur(p.id, gameNumber, e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                (e.currentTarget as HTMLInputElement).blur();
+                              }
+                            }}
                             disabled={!canManageScores}
-                            className="w-20 px-2 py-1.5 rounded-lg border border-black/10 focus:outline-none focus:ring-2 focus:ring-black/5 font-mono font-bold text-center"
+                            className="w-20 px-2 py-1.5 rounded-lg border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 font-mono font-bold text-center"
                             placeholder="0"
                           />
                         </td>
                       );
                     })}
-                    <td className="px-6 py-4 text-right font-bold text-lg">{total}</td>
-                    <td className="px-6 py-4 text-right font-bold text-lg text-emerald-600">{average}</td>
+                    <td className="px-4 py-3 text-right font-bold text-base text-black/80">{total}</td>
+                    <td className="px-4 py-3 text-right font-bold text-base text-emerald-700">{average}</td>
                   </tr>
                 </React.Fragment>
               );
             })}
             {scoringParticipants.length === 0 && (
               <tr>
-                <td className="px-6 py-8 text-center text-black/40" colSpan={gameNumbers.length + 4}>
+                <td className="px-4 py-8 text-center text-black/40" colSpan={gameNumbers.length + 4}>
                   {tournament.type === 'team'
                     ? `No team participants assigned to Shift ${currentShift}.`
                     : `No participants assigned to Shift ${currentShift}.`}

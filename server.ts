@@ -1064,15 +1064,23 @@ async function startServer() {
   });
 
   app.post("/api/tournaments/:id/teams/bulk", requirePermission('participants:manage', (req) => req.params.id), (req, res) => {
-    const { teams } = req.body;
+    const { teams, replace_existing } = req.body;
     const tournamentId = req.params.id;
     const insertStmt = db.prepare("INSERT INTO teams (tournament_id, name) VALUES (?, ?)");
+    const clearParticipantTeamRefs = db.prepare("UPDATE participants SET team_id = NULL, team_order = 0 WHERE tournament_id = ?");
+    const clearTeamLaneAssignments = db.prepare("DELETE FROM lane_assignments WHERE tournament_id = ?");
+    const clearTeams = db.prepare("DELETE FROM teams WHERE tournament_id = ?");
     const transaction = db.transaction((data) => {
+      if (replace_existing === true) {
+        clearParticipantTeamRefs.run(tournamentId);
+        clearTeamLaneAssignments.run(tournamentId);
+        clearTeams.run(tournamentId);
+      }
       for (const t of data) {
         insertStmt.run(tournamentId, t.name);
       }
     });
-    transaction(teams);
+    transaction(Array.isArray(teams) ? teams : []);
     res.json({ success: true });
   });
 
@@ -1230,6 +1238,11 @@ const existing = db
         .run(req.params.id, participant_id, game_number, score);
       res.json({ id: info.lastInsertRowid });
     }
+  });
+
+  app.delete("/api/tournaments/:id/scores", requirePermission('scores:manage', (req) => req.params.id), (req, res) => {
+    const info = db.prepare("DELETE FROM scores WHERE tournament_id = ?").run(req.params.id);
+    res.json({ success: true, deleted: info.changes || 0 });
   });
 
   // Standings

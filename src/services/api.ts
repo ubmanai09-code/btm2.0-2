@@ -357,11 +357,18 @@ const api = {
     });
     return res.json();
   },
-  async bulkAddTeams(tournamentId: number, teams: Partial<Team>[]): Promise<{ success: boolean }> {
+  async bulkAddTeams(
+    tournamentId: number,
+    teams: Partial<Team>[],
+    options?: { replaceExisting?: boolean }
+  ): Promise<{ success: boolean }> {
     const res = await fetch(`/api/tournaments/${tournamentId}/teams/bulk`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ teams }),
+      body: JSON.stringify({
+        teams,
+        replace_existing: options?.replaceExisting === true,
+      }),
     });
     return res.json();
   },
@@ -415,6 +422,16 @@ const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
+    return res.json();
+  },
+  async clearScores(tournamentId: number): Promise<{ success: boolean; deleted: number }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/scores`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to clear scores');
+    }
     return res.json();
   },
   async getStandings(tournamentId: number): Promise<Standing[]> {
