@@ -112,6 +112,29 @@ const buildPrintDocument = ({
   `;
 };
 
+const writeAndPrintDocument = (printWindow: Window, html: string) => {
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+
+  const triggerPrint = () => {
+    printWindow.focus();
+    printWindow.print();
+  };
+
+  const closeWindow = () => {
+    try {
+      printWindow.close();
+    } catch {
+      // Ignore close failures from browser policies.
+    }
+  };
+
+  printWindow.addEventListener('load', () => setTimeout(triggerPrint, 50), { once: true });
+  printWindow.addEventListener('afterprint', closeWindow, { once: true });
+  setTimeout(closeWindow, 120000);
+};
+
 // --- Components ---
 
 const Card = ({ children, className = "", ...props }: { children: React.ReactNode, className?: string, [key: string]: any }) => (
@@ -2640,17 +2663,12 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       </table>
     `;
 
-    printWindow.document.write(buildPrintDocument({
+    writeAndPrintDocument(printWindow, buildPrintDocument({
       tournament,
       pageTitle: `${tournament.name} - Lane Assignments`,
       pageSubtitle: `Lane Assignments • Shift ${currentShift}`,
       contentHtml: lanesContentHtml,
     }));
-
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    printWindow.close();
   };
 
   // Calculate waiting queue
@@ -3291,17 +3309,13 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
       return;
     }
 
-    printWindow.document.write(buildPrintDocument({
+    writeAndPrintDocument(printWindow, buildPrintDocument({
       tournament,
       pageTitle: `${tournament.name} - Shift ${currentShift} Scores`,
       pageSubtitle: `Scoring Table • Shift ${currentShift}`,
       contentHtml: `<h2>Scores</h2>${table.outerHTML}`,
       extraStyles: `button { display: none !important; } input { border: none; width: 100%; text-align: center; font: inherit; background: transparent; }`,
     }));
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    printWindow.close();
   };
 
   return (
@@ -3853,16 +3867,12 @@ function BracketsView({ tournament, role }: { tournament: Tournament; role: User
       </table>
     `;
 
-    printWindow.document.write(buildPrintDocument({
+    writeAndPrintDocument(printWindow, buildPrintDocument({
       tournament,
       pageTitle: `${tournament.name} - Brackets`,
       pageSubtitle: 'Tournament Brackets Report',
       contentHtml: bracketsContentHtml,
     }));
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    printWindow.close();
   };
 
   const effectiveQualified = qualifiedCount > 0 ? qualifiedCount : 0;
@@ -4504,16 +4514,12 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
       return;
     }
 
-    printWindow.document.write(buildPrintDocument({
+    writeAndPrintDocument(printWindow, buildPrintDocument({
       tournament,
       pageTitle: `${tournament.name} - Tournament Standings`,
       pageSubtitle: 'Tournament Standings',
       contentHtml: `<h2>${standingsMode === 'teams' ? 'Team Standings' : 'Player Standings'}</h2>${table.outerHTML}`,
     }));
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    printWindow.close();
   };
 
   return (
