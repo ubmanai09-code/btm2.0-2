@@ -42,6 +42,73 @@ const parseRole = (value: unknown): UserRole | null => {
   return null;
 };
 
+const escapePrintHtml = (value: unknown) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
+const getTournamentShortInfo = (tournament: Tournament) => {
+  const typeLabel = tournament.type === 'team' ? 'Team' : 'Individual';
+  const laneUnit = tournament.type === 'team' ? 'Teams/Lane' : 'Players/Lane';
+  return `${typeLabel} • ${tournament.lanes_count} Lanes • ${tournament.shifts_count} Shifts • ${tournament.players_per_lane} ${laneUnit} • ${tournament.games_count} Games`;
+};
+
+const buildPrintDocument = ({
+  tournament,
+  pageTitle,
+  pageSubtitle,
+  contentHtml,
+  extraStyles = '',
+}: {
+  tournament: Tournament;
+  pageTitle: string;
+  pageSubtitle: string;
+  contentHtml: string;
+  extraStyles?: string;
+}) => {
+  const printedAt = new Date().toLocaleString();
+  return `
+    <html>
+      <head>
+        <title>${escapePrintHtml(pageTitle)}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; color: #111827; }
+          .app-header { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; padding-bottom: 10px; border-bottom: 1px solid #d1d5db; }
+          .app-logo { width: 28px; height: 28px; object-fit: contain; }
+          .app-title-wrap { display: flex; flex-direction: column; line-height: 1.1; }
+          .app-title { font-size: 15px; font-weight: 800; color: #065f46; letter-spacing: .02em; }
+          .app-subtitle { font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: .08em; }
+          h1 { margin: 0 0 4px; font-size: 20px; }
+          .tournament-info { margin: 0 0 6px; color: #4b5563; font-size: 12px; }
+          .page-sub { margin: 0 0 18px; color: #374151; font-size: 12px; font-weight: 600; }
+          h2 { margin: 18px 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: .08em; color: #065f46; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 12px; }
+          th, td { border: 1px solid #d1d5db; padding: 7px 8px; text-align: left; vertical-align: top; }
+          th { background: #e6f3f6; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: 10px; }
+          .footer { margin-top: 18px; border-top: 1px solid #d1d5db; padding-top: 8px; color: #6b7280; font-size: 11px; }
+          ${extraStyles}
+        </style>
+      </head>
+      <body>
+        <div class="app-header">
+          <img class="app-logo" src="/logo.png" alt="BTM Logo" />
+          <div class="app-title-wrap">
+            <div class="app-title">BTM 2.0</div>
+            <div class="app-subtitle">BOWLING TOURNAMENT MANAGER</div>
+          </div>
+        </div>
+        <h1>${escapePrintHtml(tournament.name)}</h1>
+        <p class="tournament-info">${escapePrintHtml(getTournamentShortInfo(tournament))}</p>
+        <p class="page-sub">${escapePrintHtml(pageSubtitle)}</p>
+        ${contentHtml}
+        <div class="footer">Bowling Tournament Manager • Printed on: ${escapePrintHtml(printedAt)}</div>
+      </body>
+    </html>
+  `;
+};
+
 // --- Components ---
 
 const Card = ({ children, className = "", ...props }: { children: React.ReactNode, className?: string, [key: string]: any }) => (
@@ -2517,7 +2584,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       alert('Unable to open print window. Please allow popups and try again.');
       return;
     }
-    const printedAt = new Date().toLocaleString();
+
     const formatPrintMemberName = (participant: Participant) => {
       const firstName = (participant.first_name || '').trim();
       const lastInitial = ((participant.last_name || '').trim().charAt(0) || '').toUpperCase();
@@ -2554,43 +2621,28 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       `;
     }).join('');
 
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Lane Assignments - ${tournament.name} (Shift ${currentShift})</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 20px; color: #111827; }
-            h1 { margin: 0 0 4px; font-size: 20px; }
-            .sub { margin: 0 0 18px; color: #4b5563; font-size: 12px; }
-            h2 { margin: 18px 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: .08em; color: #065f46; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
-            th, td { border: 1px solid #d1d5db; padding: 7px 8px; text-align: left; font-size: 12px; vertical-align: top; }
-            th { background: #e6f3f6; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: 10px; }
-            .footer { margin-top: 18px; border-top: 1px solid #d1d5db; padding-top: 8px; color: #6b7280; font-size: 11px; }
-          </style>
-        </head>
-        <body>
-          <h1>${tournament.name}</h1>
-          <p class="sub">Lane Assignments • Shift ${currentShift}</p>
+    const lanesContentHtml = `
+      <h2>Lanes</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Lane</th>
+            <th>${tournament.type === 'individual' ? 'Players' : 'Teams'}</th>
+            ${tournament.type === 'team' ? '<th>Team Members</th>' : ''}
+          </tr>
+        </thead>
+        <tbody>
+          ${laneRowsHtml}
+        </tbody>
+      </table>
+    `;
 
-          <h2>Lanes</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Lane</th>
-                <th>${tournament.type === 'individual' ? 'Players' : 'Teams'}</th>
-                ${tournament.type === 'team' ? '<th>Team Members</th>' : ''}
-              </tr>
-            </thead>
-            <tbody>
-              ${laneRowsHtml}
-            </tbody>
-          </table>
-
-          <div class="footer">Bowling Tournament Manager • Printed on: ${printedAt}</div>
-        </body>
-      </html>
-    `);
+    printWindow.document.write(buildPrintDocument({
+      tournament,
+      pageTitle: `${tournament.name} - Lane Assignments`,
+      pageSubtitle: `Lane Assignments • Shift ${currentShift}`,
+      contentHtml: lanesContentHtml,
+    }));
 
     printWindow.document.close();
     printWindow.focus();
@@ -3236,28 +3288,13 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
       return;
     }
 
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>${tournament.name} - Shift ${currentShift} Scores</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 24px; color: #111; }
-            h1 { margin: 0 0 4px 0; font-size: 18px; }
-            p { margin: 0 0 16px 0; color: #555; font-size: 12px; }
-            table { width: 100%; border-collapse: collapse; font-size: 12px; }
-            th, td { border: 1px solid #ddd; padding: 6px 8px; }
-            th { background: #f5f5f5; text-transform: uppercase; font-size: 10px; letter-spacing: .04em; }
-            button { display: none !important; }
-            input { border: none; width: 100%; text-align: center; font: inherit; background: transparent; }
-          </style>
-        </head>
-        <body>
-          <h1>${tournament.name}</h1>
-          <p>Scoring Table - Shift ${currentShift}</p>
-          ${table.outerHTML}
-        </body>
-      </html>
-    `);
+    printWindow.document.write(buildPrintDocument({
+      tournament,
+      pageTitle: `${tournament.name} - Shift ${currentShift} Scores`,
+      pageSubtitle: `Scoring Table • Shift ${currentShift}`,
+      contentHtml: `<h2>Scores</h2>${table.outerHTML}`,
+      extraStyles: `button { display: none !important; } input { border: none; width: 100%; text-align: center; font: inherit; background: transparent; }`,
+    }));
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
@@ -3763,81 +3800,62 @@ function BracketsView({ tournament, role }: { tournament: Tournament; role: User
       return;
     }
 
-    const escapeHtml = (value: any) => String(value ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-
     const seedRowsHtml = (printSeeds || []).map((seed: any) => `
       <tr>
-        <td>#${escapeHtml(seed.seed)}</td>
-        <td>${escapeHtml(seed.name)}</td>
-        <td style="text-align:right;">${escapeHtml(seed.total_score || 0)}</td>
+        <td>#${escapePrintHtml(seed.seed)}</td>
+        <td>${escapePrintHtml(seed.name)}</td>
+        <td style="text-align:right;">${escapePrintHtml(seed.total_score || 0)}</td>
       </tr>
     `).join('');
 
     const matchRowsHtml = printMatches.map((m: any) => `
       <tr>
-        <td>${escapeHtml(m.round)}</td>
-        <td>${escapeHtml((Number(m.match_index) || 0) + 1)}</td>
-        <td>${escapeHtml(m.participant1_seed ? `#${m.participant1_seed} ` : '')}${escapeHtml(getDisplayName('p1', m))}</td>
-        <td>${escapeHtml(m.participant2_seed ? `#${m.participant2_seed} ` : '')}${escapeHtml(getDisplayName('p2', m))}</td>
-        <td>${escapeHtml(getDisplayName('winner', m))}</td>
+        <td>${escapePrintHtml(m.round)}</td>
+        <td>${escapePrintHtml((Number(m.match_index) || 0) + 1)}</td>
+        <td>${escapePrintHtml(m.participant1_seed ? `#${m.participant1_seed} ` : '')}${escapePrintHtml(getDisplayName('p1', m))}</td>
+        <td>${escapePrintHtml(m.participant2_seed ? `#${m.participant2_seed} ` : '')}${escapePrintHtml(getDisplayName('p2', m))}</td>
+        <td>${escapePrintHtml(getDisplayName('winner', m))}</td>
       </tr>
     `).join('');
 
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>${escapeHtml(tournament.name)} - Brackets</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 24px; color: #111; }
-            h1 { margin: 0 0 4px 0; font-size: 18px; }
-            h2 { margin: 24px 0 8px 0; font-size: 14px; }
-            p { margin: 0 0 12px 0; color: #555; font-size: 12px; }
-            table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 16px; }
-            th, td { border: 1px solid #ddd; padding: 6px 8px; }
-            th { background: #f5f5f5; text-transform: uppercase; font-size: 10px; letter-spacing: .04em; text-align: left; }
-          </style>
-        </head>
-        <body>
-          <h1>${escapeHtml(tournament.name)}</h1>
-          <p>Tournament Brackets Report</p>
+    const bracketsContentHtml = `
+      <h2>Seeds List</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Seed</th>
+            <th>${tournament.type === 'team' ? 'Team' : 'Player'}</th>
+            <th style="text-align:right;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${seedRowsHtml || '<tr><td colspan="3" style="text-align:center;color:#777;">No seeds available.</td></tr>'}
+        </tbody>
+      </table>
 
-          <h2>Seeds List</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Seed</th>
-                <th>${tournament.type === 'team' ? 'Team' : 'Player'}</th>
-                <th style="text-align:right;">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${seedRowsHtml || '<tr><td colspan="3" style="text-align:center;color:#777;">No seeds available.</td></tr>'}
-            </tbody>
-          </table>
+      <h2>Bracket Results</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Round</th>
+            <th>Match</th>
+            <th>Participant 1</th>
+            <th>Participant 2</th>
+            <th>Winner</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${matchRowsHtml || '<tr><td colspan="5" style="text-align:center;color:#777;">No bracket matches available.</td></tr>'}
+        </tbody>
+      </table>
+    `;
 
-          <h2>Bracket Results</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Round</th>
-                <th>Match</th>
-                <th>Participant 1</th>
-                <th>Participant 2</th>
-                <th>Winner</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${matchRowsHtml || '<tr><td colspan="5" style="text-align:center;color:#777;">No bracket matches available.</td></tr>'}
-            </tbody>
-          </table>
-        </body>
-      </html>
-    `);
+    printWindow.document.write(buildPrintDocument({
+      tournament,
+      pageTitle: `${tournament.name} - Brackets`,
+      pageSubtitle: 'Tournament Brackets Report',
+      contentHtml: bracketsContentHtml,
+    }));
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
@@ -4483,26 +4501,12 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
       return;
     }
 
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>${tournament.name} - Tournament Standings</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 24px; color: #111; }
-            h1 { margin: 0 0 4px 0; font-size: 18px; }
-            p { margin: 0 0 16px 0; color: #555; font-size: 12px; }
-            table { width: 100%; border-collapse: collapse; font-size: 12px; }
-            th, td { border: 1px solid #ddd; padding: 6px 8px; }
-            th { background: #f5f5f5; text-transform: uppercase; font-size: 10px; letter-spacing: .04em; }
-          </style>
-        </head>
-        <body>
-          <h1>${tournament.name}</h1>
-          <p>Tournament Standings</p>
-          ${table.outerHTML}
-        </body>
-      </html>
-    `);
+    printWindow.document.write(buildPrintDocument({
+      tournament,
+      pageTitle: `${tournament.name} - Tournament Standings`,
+      pageSubtitle: 'Tournament Standings',
+      contentHtml: `<h2>${standingsMode === 'teams' ? 'Team Standings' : 'Player Standings'}</h2>${table.outerHTML}`,
+    }));
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
