@@ -2116,8 +2116,10 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   const [loading, setLoading] = useState(true);
   const [currentShift, setCurrentShift] = useState(1);
   const [selectedItem, setSelectedItem] = useState<{ id: number, type: 'assignment' | 'waiting' } | null>(null);
+  const [outOfOperationLanes, setOutOfOperationLanes] = useState<number[]>([]);
 
   useEffect(() => {
+    setOutOfOperationLanes([]);
     loadData();
   }, [tournament.id]);
 
@@ -2149,6 +2151,17 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   };
 
   const eligibleParticipants = participants.filter(isParticipantAllowedByRule);
+  const operationalLaneNumbers = Array.from({ length: tournament.lanes_count }, (_, i) => i + 1)
+    .filter((laneNumber) => !outOfOperationLanes.includes(laneNumber));
+
+  const toggleLaneOperationStatus = (laneNumber: number) => {
+    if (!canManageLanes) return;
+    setOutOfOperationLanes((prev) => (
+      prev.includes(laneNumber)
+        ? prev.filter((value) => value !== laneNumber)
+        : [...prev, laneNumber]
+    ));
+  };
 
   const handleAutoAssign = async () => {
     if (!canManageLanes) return;
@@ -2158,7 +2171,13 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       return;
     }
 
-    const totalCapacity = tournament.lanes_count * tournament.players_per_lane * Math.max(1, tournament.shifts_count || 1);
+    const activeLaneCount = operationalLaneNumbers.length;
+    if (activeLaneCount === 0) {
+      alert('All lanes are set to out of operation. Mark at least one lane as operational to auto-assign.');
+      return;
+    }
+
+    const totalCapacity = activeLaneCount * tournament.players_per_lane * Math.max(1, tournament.shifts_count || 1);
     if (totalCapacity <= 0) {
       alert('Tournament lane capacity is invalid. Please check lanes, shifts, and players per lane.');
       return;
@@ -2171,11 +2190,11 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     }
 
     const assignable = shuffled.slice(0, totalCapacity);
-    const perShiftCapacity = tournament.lanes_count * tournament.players_per_lane;
+    const perShiftCapacity = activeLaneCount * tournament.players_per_lane;
     const assignments: Partial<LaneAssignment>[] = assignable.map((item, index) => {
       const shiftNumber = Math.floor(index / perShiftCapacity) + 1;
       const laneSlotIndex = index % perShiftCapacity;
-      const laneNumber = Math.floor(laneSlotIndex / tournament.players_per_lane) + 1;
+      const laneNumber = operationalLaneNumbers[Math.floor(laneSlotIndex / tournament.players_per_lane)];
       return tournament.type === 'individual'
         ? { participant_id: (item as Participant).id, lane_number: laneNumber, shift_number: shiftNumber }
         : { team_id: (item as Team).id, lane_number: laneNumber, shift_number: shiftNumber };
@@ -2286,10 +2305,34 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   };
 
   const handleExportLanes = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(lanes, null, 2));
+    const headers = ['lane_number', 'shift_number', 'participant_name', 'team_name', 'team_members'];
+    const rows = lanes.map((lane) => [
+      lane.lane_number,
+      lane.shift_number,
+      lane.participant_name || '',
+      lane.team_name || '',
+      lane.team_id
+        ? participants
+            .filter((participant) => participant.team_id === lane.team_id)
+            .map((participant) => `${participant.first_name || ''} ${participant.last_name || ''}`.trim())
+            .filter(Boolean)
+            .join(' | ')
+        : '',
+    ]);
+
+    const csvEscape = (value: unknown) => {
+      const str = String(value ?? '');
+      if (/[",\n]/.test(str)) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const csvContent = [headers, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n');
+    const dataStr = "data:text/csv;charset=utf-8," + encodeURIComponent(csvContent);
     const downloadAnchorNode = document.createElement('a');
     downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", `tournament_${tournament.id}_lanes.json`);
+    downloadAnchorNode.setAttribute("download", `tournament_${tournament.id}_lanes.csv`);
     document.body.appendChild(downloadAnchorNode);
     downloadAnchorNode.click();
     downloadAnchorNode.remove();
@@ -2305,10 +2348,128 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       return;
     }
 
+    const parseCsv = (text: string): string[][] => {
+      const rows: string[][] = [];
+      let row: string[] = [];
+      let cell = '';
+      let inQuotes = false;
+
+      for (let index = 0; index < text.length; index += 1) {
+        const char = text[index];
+        const nextChar = text[index + 1];
+
+        if (char === '"') {
+          if (inQuotes && nextChar === '"') {
+            cell += '"';
+            index += 1;
+          } else {
+            inQuotes = !inQuotes;
+          }
+          continue;
+        }
+
+        if (char === ',' && !inQuotes) {
+          row.push(cell.trim());
+          cell = '';
+          continue;
+        }
+
+        if ((char === '\n' || char === '\r') && !inQuotes) {
+          if (char === '\r' && nextChar === '\n') {
+            index += 1;
+          }
+          row.push(cell.trim());
+          cell = '';
+          if (row.some((value) => value !== '')) rows.push(row);
+          row = [];
+          continue;
+        }
+
+        cell += char;
+      }
+
+      row.push(cell.trim());
+      if (row.some((value) => value !== '')) rows.push(row);
+      return rows;
+    };
+
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
-        const importedLanes = JSON.parse(event.target?.result as string);
+        const text = event.target?.result as string;
+        const rows = parseCsv(text);
+        if (rows.length < 2) {
+          alert('Invalid file format');
+          inputEl.value = '';
+          return;
+        }
+
+        const headers = rows[0].map((header) => header.toLowerCase());
+        const laneNumberIndex = headers.indexOf('lane_number');
+        const shiftNumberIndex = headers.indexOf('shift_number');
+        const participantIdIndex = headers.indexOf('participant_id');
+        const teamIdIndex = headers.indexOf('team_id');
+        const participantNameIndex = headers.indexOf('participant_name');
+        const teamNameIndex = headers.indexOf('team_name');
+
+        if (laneNumberIndex === -1 || shiftNumberIndex === -1) {
+          alert('Invalid file format: missing lane_number or shift_number columns.');
+          inputEl.value = '';
+          return;
+        }
+
+        const participantsByName = new Map<string, Participant>();
+        participants.forEach((participant) => {
+          const key = `${(participant.first_name || '').trim()} ${(participant.last_name || '').trim()}`.trim().toLowerCase();
+          if (!key) return;
+          if (!participantsByName.has(key)) participantsByName.set(key, participant);
+        });
+
+        const teamsByName = new Map<string, Team>();
+        teams.forEach((team) => {
+          const key = (team.name || '').trim().toLowerCase();
+          if (!key) return;
+          if (!teamsByName.has(key)) teamsByName.set(key, team);
+        });
+
+        const importedLanes: Partial<LaneAssignment>[] = rows
+          .slice(1)
+          .map((row) => {
+            const laneNumber = Number.parseInt(row[laneNumberIndex] || '', 10);
+            const shiftNumber = Number.parseInt(row[shiftNumberIndex] || '', 10);
+            if (!Number.isFinite(laneNumber) || !Number.isFinite(shiftNumber)) return null;
+
+            const participantId = participantIdIndex >= 0 ? Number.parseInt(row[participantIdIndex] || '', 10) : NaN;
+            const teamId = teamIdIndex >= 0 ? Number.parseInt(row[teamIdIndex] || '', 10) : NaN;
+
+            let resolvedParticipantId: number | null = Number.isFinite(participantId) ? participantId : null;
+            let resolvedTeamId: number | null = Number.isFinite(teamId) ? teamId : null;
+
+            if (resolvedParticipantId === null && participantNameIndex >= 0) {
+              const participantName = (row[participantNameIndex] || '').trim().toLowerCase();
+              if (participantName) {
+                const participant = participantsByName.get(participantName);
+                if (participant) resolvedParticipantId = participant.id;
+              }
+            }
+
+            if (resolvedTeamId === null && teamNameIndex >= 0) {
+              const teamName = (row[teamNameIndex] || '').trim().toLowerCase();
+              if (teamName) {
+                const team = teamsByName.get(teamName);
+                if (team) resolvedTeamId = team.id;
+              }
+            }
+
+            return {
+              lane_number: laneNumber,
+              shift_number: shiftNumber,
+              participant_id: resolvedParticipantId,
+              team_id: resolvedTeamId,
+            } as Partial<LaneAssignment>;
+          })
+          .filter((lane): lane is Partial<LaneAssignment> => lane !== null);
+
         await api.bulkUpdateLanes(tournament.id, importedLanes);
         loadData();
         inputEl.value = '';
@@ -2348,6 +2509,93 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       console.error(err);
       alert('Failed to save lane assignments.');
     }
+  };
+
+  const handlePrintLanes = () => {
+    const printWindow = window.open('', '_blank', 'width=1100,height=800');
+    if (!printWindow) {
+      alert('Unable to open print window. Please allow popups and try again.');
+      return;
+    }
+    const printedAt = new Date().toLocaleString();
+    const formatPrintMemberName = (participant: Participant) => {
+      const firstName = (participant.first_name || '').trim();
+      const lastInitial = ((participant.last_name || '').trim().charAt(0) || '').toUpperCase();
+      return `${firstName}${lastInitial ? ` ${lastInitial}.` : ''}`.trim() || '-';
+    };
+
+    const laneRowsHtml = Object.entries(groupedLanes).map(([laneNum, assignments]) => {
+      const names = assignments.map((assignment) => {
+        if (tournament.type === 'individual') {
+          const participant = participants.find((p) => p.id === assignment.participant_id);
+          return participant ? `${participant.first_name || ''} ${participant.last_name || ''}`.trim() : '';
+        }
+        return assignment.team_name || '';
+      }).filter(Boolean).join(', ') || '-';
+
+      const laneTeamMembers = tournament.type === 'team'
+        ? assignments.map((assignment) => {
+            if (!assignment.team_id) return '';
+            const members = participants
+              .filter((participant) => participant.team_id === assignment.team_id)
+              .map((participant) => formatPrintMemberName(participant))
+              .filter(Boolean)
+              .join(', ');
+            return members || '';
+          }).filter(Boolean).join(' | ') || '-'
+        : '';
+
+      return `
+        <tr>
+          <td>${laneNum}</td>
+          <td>${names}</td>
+          ${tournament.type === 'team' ? `<td>${laneTeamMembers}</td>` : ''}
+        </tr>
+      `;
+    }).join('');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Lane Assignments - ${tournament.name} (Shift ${currentShift})</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; color: #111827; }
+            h1 { margin: 0 0 4px; font-size: 20px; }
+            .sub { margin: 0 0 18px; color: #4b5563; font-size: 12px; }
+            h2 { margin: 18px 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: .08em; color: #065f46; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+            th, td { border: 1px solid #d1d5db; padding: 7px 8px; text-align: left; font-size: 12px; vertical-align: top; }
+            th { background: #e6f3f6; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; font-size: 10px; }
+            .footer { margin-top: 18px; border-top: 1px solid #d1d5db; padding-top: 8px; color: #6b7280; font-size: 11px; }
+          </style>
+        </head>
+        <body>
+          <h1>${tournament.name}</h1>
+          <p class="sub">Lane Assignments • Shift ${currentShift}</p>
+
+          <h2>Lanes</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Lane</th>
+                <th>${tournament.type === 'individual' ? 'Players' : 'Teams'}</th>
+                ${tournament.type === 'team' ? '<th>Team Members</th>' : ''}
+              </tr>
+            </thead>
+            <tbody>
+              ${laneRowsHtml}
+            </tbody>
+          </table>
+
+          <div class="footer">Bowling Tournament Manager • Printed on: ${printedAt}</div>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    printWindow.close();
   };
 
   // Calculate waiting queue
@@ -2421,7 +2669,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                     >
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <div className="text-xs font-bold uppercase tracking-wide flex items-center gap-1">
+                          <div className="text-sm font-bold uppercase tracking-wide flex items-center gap-1">
                             {tournament.type === 'individual' && (item as Participant).gender?.toLowerCase() === 'female' && (
                               <span className={`inline-block h-1 w-1 rounded-full ${selectedItem?.id === item.id && selectedItem.type === 'waiting' ? 'bg-rose-200' : 'bg-rose-500'}`} />
                             )}
@@ -2468,51 +2716,80 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
         {/* Lanes Grid */}
         <div className="lg:col-span-3">
-          <div className="flex flex-wrap justify-end gap-1.5 mb-2">
-            {canManageLanes && (
-              <Button size="sm" variant="outline" onClick={handleSaveLanes} title="Save" ariaLabel="Save" className="px-2">
-                <Save size={14} />
-              </Button>
-            )}
-            {canManageLanes && (
-              <div className="relative">
-                <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportLanes} accept=".json" />
-                <Button size="sm" variant="outline" title="Import" ariaLabel="Import" className="px-2">
-                  <Download size={14} />
-                </Button>
-              </div>
-            )}
-            <Button size="sm" variant="outline" onClick={handleExportLanes} title="Export" ariaLabel="Export" className="px-2">
-              <Upload size={14} />
-            </Button>
-            <Button size="sm" variant="outline" onClick={loadData} title="Refresh" ariaLabel="Refresh" className="px-2">
-              <RefreshCw size={14} />
-            </Button>
-            {canManageLanes && (
-              <Button size="sm" variant="outline" onClick={handleClearLanes} title="Clear Assignments" ariaLabel="Clear Assignments" className="px-2">
-                <X size={14} />
-              </Button>
-            )}
-            {canManageLanes && (
-              <Button size="sm" onClick={handleAutoAssign} variant="secondary" title="Auto-Assign" ariaLabel="Auto-Assign" className="px-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button size="sm" variant="outline" onClick={loadData} title="Refresh" ariaLabel="Refresh" className="px-2">
                 <RefreshCw size={14} />
               </Button>
-            )}
+              {canManageLanes && (
+                <Button size="sm" variant="outline" onClick={handleClearLanes} title="Clear Assignments" ariaLabel="Clear Assignments" className="px-2">
+                  <X size={14} />
+                </Button>
+              )}
+              {canManageLanes && (
+                <Button size="sm" onClick={handleAutoAssign} variant="secondary" title="Auto-Assign" ariaLabel="Auto-Assign" className="px-3">
+                  Auto Assign
+                </Button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 ml-auto">
+              {canManageLanes && (
+                <Button size="sm" variant="outline" onClick={handleSaveLanes} title="Save" ariaLabel="Save" className="px-2">
+                  <Save size={14} />
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={handleExportLanes} title="Export" ariaLabel="Export" className="px-2">
+                <Upload size={14} />
+              </Button>
+              {canManageLanes && (
+                <div className="relative">
+                  <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportLanes} accept=".csv" />
+                  <Button size="sm" variant="outline" title="Import" ariaLabel="Import" className="px-2">
+                    <Download size={14} />
+                  </Button>
+                </div>
+              )}
+              <Button size="sm" variant="outline" onClick={handlePrintLanes} title="Print" ariaLabel="Print" className="px-2">
+                <Printer size={14} />
+              </Button>
+            </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {Object.entries(groupedLanes).map(([laneNum, assignments]) => (
+            {Object.entries(groupedLanes).map(([laneNum, assignments]) => {
+              const laneNumber = parseInt(laneNum);
+              const isLaneOutOfOperation = outOfOperationLanes.includes(laneNumber);
+              return (
               <Card 
                 key={laneNum} 
                 className={`flex flex-col h-full min-h-[160px] transition-all border-2 ${
                   selectedItem ? 'border-emerald-300 bg-emerald-50/20 cursor-pointer hover:border-emerald-500' : 'border-[#AFDDE5]/70 bg-white'
                 }`}
-                onClick={() => selectedItem && handleMoveToLane(parseInt(laneNum))}
+                onClick={() => selectedItem && handleMoveToLane(laneNumber)}
               >
                 <div className="bg-[#AFDDE5]/45 text-emerald-900 px-2.5 py-1.5 flex justify-between items-center group/header border-b border-[#AFDDE5]/70">
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-[10px] uppercase tracking-widest">Lane {laneNum}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        toggleLaneOperationStatus(laneNumber);
+                      }}
+                      className={`h-3.5 min-w-3.5 rounded-full text-[9px] leading-none font-bold inline-flex items-center justify-center border transition-all ${
+                        isLaneOutOfOperation
+                          ? 'bg-red-500 border-red-500 text-white'
+                          : 'bg-emerald-500 border-emerald-500 text-white'
+                      }`}
+                      title={isLaneOutOfOperation
+                        ? 'Out of operation (double-click to set operational)'
+                        : 'Operational (double-click to set out of operation)'}
+                      aria-label={isLaneOutOfOperation ? 'Lane out of operation' : 'Lane operational'}
+                    >
+                      {isLaneOutOfOperation ? '−' : ''}
+                    </button>
                     <button 
-                      onClick={(e) => { e.stopPropagation(); handleMoveLane(parseInt(laneNum), currentShift); }}
+                      onClick={(e) => { e.stopPropagation(); handleMoveLane(laneNumber, currentShift); }}
                       className="opacity-0 group-hover/header:opacity-100 p-1 hover:text-emerald-700 transition-all"
                       title="Move entire lane"
                     >
@@ -2551,14 +2828,14 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                           }`}
                         >
                           <div className="flex-1">
-                            <div className="text-xs font-bold flex items-center gap-1">
+                            <div className="text-sm font-bold flex items-center gap-1">
                               {tournament.type === 'individual' && participant?.gender?.toLowerCase() === 'female' && (
                                 <span className={`inline-block h-1 w-1 rounded-full ${selectedItem?.id === a.id && selectedItem.type === 'assignment' ? 'bg-rose-200' : 'bg-rose-500'}`} />
                               )}
                               <span>{displayName}</span>
                             </div>
                             {tournament.type === 'team' && teamMembers.length > 0 && (
-                              <div className={`text-[9px] mt-0.5 font-medium ${
+                              <div className={`text-[10px] mt-0.5 font-medium ${
                                 selectedItem?.id === a.id && selectedItem.type === 'assignment'
                                 ? 'text-white/60'
                                 : 'text-black/40'
@@ -2594,7 +2871,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                   )}
                 </div>
               </Card>
-            ))}
+            )})}
           </div>
         </div>
       </div>
