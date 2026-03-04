@@ -1186,6 +1186,10 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [editingPlayer, setEditingPlayer] = useState<Participant | null>(null);
   const [selectedTeamMemberIds, setSelectedTeamMemberIds] = useState<number[]>([]);
+  const [playerSort, setPlayerSort] = useState<{ key: 'none' | 'club' | 'average'; direction: 'asc' | 'desc' }>({
+    key: 'none',
+    direction: 'asc',
+  });
 
   useEffect(() => {
     loadData();
@@ -1427,9 +1431,25 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   };
 
   const handleExportTeams = () => {
-    const headers = ['Team Name'];
-    const rows = teams.map(t => [t.name]);
-    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const headers = ['#', 'Team Name', 'Team Members'];
+    const rows = teams.map((team, index) => {
+      const members = participants
+        .filter((participant) => participant.team_id === team.id)
+        .map((member) => `${member.first_name || ''} ${member.last_name || ''}`.trim())
+        .filter(Boolean)
+        .join(' | ');
+      return [index + 1, team.name, members];
+    });
+
+    const csvEscape = (value: unknown) => {
+      const str = String(value ?? '');
+      if (/[",\n]/.test(str)) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const csvContent = [headers, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -1447,7 +1467,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   };
 
   const handleClearTeams = async () => {
-    if (!confirm('Clear all teams from this tournament? Players will be unassigned.')) return;
+    if (!confirm('Clear all teams from this tournament? Players table will not be changed.')) return;
     try {
       const teamIds = teams.map((team) => team.id);
       if (teamIds.length === 0) {
@@ -1455,6 +1475,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         return;
       }
       await Promise.all(teamIds.map((id) => api.deleteTeam(id)));
+      setPlayerSort({ key: 'none', direction: 'asc' });
       await loadData();
       alert(`Cleared ${teamIds.length} team(s).`);
     } catch (err) {
@@ -1467,19 +1488,162 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     const inputEl = e.target;
     const file = inputEl.files?.[0];
     if (!file) return;
-    if (!confirm('Importing Teams will replace all existing Teams and team lane assignments for this tournament. Continue?')) {
+    if (!confirm('Importing Teams will replace Teams table data only. Players table will not be changed. Continue?')) {
       inputEl.value = '';
       return;
     }
+
+    const parseCsv = (text: string): string[][] => {
+      const rows: string[][] = [];
+      let row: string[] = [];
+      let cell = '';
+      let inQuotes = false;
+
+      for (let index = 0; index < text.length; index += 1) {
+        const char = text[index];
+        const nextChar = text[index + 1];
+
+        if (char === '"') {
+          if (inQuotes && nextChar === '"') {
+            cell += '"';
+            index += 1;
+          } else {
+            inQuotes = !inQuotes;
+          }
+          continue;
+        }
+
+        if (char === ',' && !inQuotes) {
+          row.push(cell.trim());
+          cell = '';
+          continue;
+        }
+
+        if ((char === '\n' || char === '\r') && !inQuotes) {
+          if (char === '\r' && nextChar === '\n') {
+            index += 1;
+          }
+          row.push(cell.trim());
+          cell = '';
+          if (row.some((value) => value !== '')) {
+            rows.push(row);
+          }
+          row = [];
+          continue;
+        }
+
+        cell += char;
+      }
+
+      row.push(cell.trim());
+      if (row.some((value) => value !== '')) {
+        rows.push(row);
+      }
+
+      return rows;
+    };
+
     const reader = new FileReader();
     reader.onload = async (event) => {
-      const text = event.target?.result as string;
-      const lines = text.split('\n');
-      const dataLines = lines.slice(1);
-      const newTeams = dataLines.filter(line => line.trim()).map(line => ({ name: line.trim() }));
-      await api.bulkAddTeams(tournament.id, newTeams, { replaceExisting: true });
-      loadData();
-      inputEl.value = '';
+      try {
+        setPlayerSort({ key: 'none', direction: 'asc' });
+        const text = event.target?.result as string;
+        const rows = parseCsv(text);
+        if (rows.length === 0) {
+          inputEl.value = '';
+          return;
+        }
+
+        const headers = rows[0].map((header) => header.toLowerCase());
+        const teamNameIndex = headers.indexOf('team name');
+        const teamMembersIndex = headers.indexOf('team members');
+        if (teamNameIndex === -1) {
+          alert('Invalid teams file: missing Team Name column.');
+          inputEl.value = '';
+          return;
+        }
+
+        const dataRows = rows.slice(1);
+        const teamNames = Array.from(new Set(
+          dataRows
+            .map((row) => (row[teamNameIndex] || '').trim())
+            .filter(Boolean)
+        ));
+
+        await api.bulkAddTeams(tournament.id, teamNames.map((name) => ({ name })), { replaceExisting: true });
+
+        if (teamMembersIndex !== -1) {
+          const importedTeams = await api.getTeams(tournament.id);
+          const teamIdByName = new Map(importedTeams.map((team) => [team.name.trim().toLowerCase(), team.id]));
+
+          const playersByName = new Map<string, Participant>();
+          participants.forEach((participant) => {
+            const key = `${(participant.first_name || '').trim().toLowerCase()}::${(participant.last_name || '').trim().toLowerCase()}`;
+            if (!key || key === '::') return;
+            if (!playersByName.has(key)) playersByName.set(key, participant);
+          });
+
+          const splitMembers = (value: string) => {
+            if (value.includes('|')) return value.split('|');
+            if (value.includes(';')) return value.split(';');
+            if (value.includes(',')) return value.split(',');
+            return [value];
+          };
+
+          let assignedCount = 0;
+          let missingCount = 0;
+
+          for (const row of dataRows) {
+            const teamName = (row[teamNameIndex] || '').trim();
+            const membersRaw = (row[teamMembersIndex] || '').trim();
+            if (!teamName || !membersRaw) continue;
+
+            const teamId = teamIdByName.get(teamName.toLowerCase()) || null;
+            if (!teamId) continue;
+
+            const memberNames = Array.from(new Set(
+              splitMembers(membersRaw)
+                .map((name) => name.trim())
+                .filter(Boolean)
+            ));
+
+            for (const memberName of memberNames) {
+              const parts = memberName.split(/\s+/).filter(Boolean);
+              if (parts.length === 0) continue;
+              const firstName = parts[0];
+              const lastName = parts.slice(1).join(' ') || 'Player';
+              const key = `${firstName.toLowerCase()}::${lastName.toLowerCase()}`;
+              const existing = playersByName.get(key);
+              if (!existing) {
+                missingCount += 1;
+                continue;
+              }
+
+              await api.updateParticipant(existing.id, {
+                first_name: existing.first_name,
+                last_name: existing.last_name,
+                gender: existing.gender || '',
+                club: existing.club || '',
+                average: existing.average || 0,
+                email: existing.email || '',
+                team_id: teamId,
+              });
+              assignedCount += 1;
+            }
+          }
+
+          if (missingCount > 0) {
+            alert(`Imported teams with ${assignedCount} member assignment(s). ${missingCount} member name(s) were not found in Players table.`);
+          }
+        }
+
+        await loadData();
+      } catch (error) {
+        console.error('Failed to import teams:', error);
+        alert('Failed to import teams. Please check file format.');
+      } finally {
+        inputEl.value = '';
+      }
     };
     reader.readAsText(file);
   };
@@ -1516,6 +1680,35 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     }
   });
   const issueCount = Array.from(participantIssues.keys()).length;
+
+  const sortedParticipants = playerSort.key === 'none'
+    ? [...participants].sort((left, right) => left.id - right.id)
+    : [...participants].sort((left, right) => {
+
+    if (playerSort.key === 'average') {
+      const leftAverage = Number.isFinite(Number(left.average)) ? Number(left.average) : 0;
+      const rightAverage = Number.isFinite(Number(right.average)) ? Number(right.average) : 0;
+      const comparison = leftAverage - rightAverage;
+      return playerSort.direction === 'asc' ? comparison : -comparison;
+    }
+
+    const leftClub = (left.club || '').trim().toLowerCase();
+    const rightClub = (right.club || '').trim().toLowerCase();
+    const comparison = leftClub.localeCompare(rightClub);
+    return playerSort.direction === 'asc' ? comparison : -comparison;
+  });
+
+  const togglePlayerSort = (key: 'club' | 'average') => {
+    setPlayerSort((previous) => {
+      if (previous.key === key) {
+        return {
+          key,
+          direction: previous.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -1578,8 +1771,28 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">First Name</th>
                   <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">Family Name</th>
                   <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">Gender</th>
-                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">Club</th>
-                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">Average score</th>
+                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">
+                    <button
+                      type="button"
+                      onClick={() => togglePlayerSort('club')}
+                      className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-black/70 hover:text-emerald-700 transition-colors"
+                      title="Sort by club"
+                    >
+                      Club
+                      <span>{playerSort.key === 'club' ? (playerSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">
+                    <button
+                      type="button"
+                      onClick={() => togglePlayerSort('average')}
+                      className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-black/70 hover:text-emerald-700 transition-colors"
+                      title="Sort by average score"
+                    >
+                      Average score
+                      <span>{playerSort.key === 'average' ? (playerSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
+                    </button>
+                  </th>
                   <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right">Actions</th>
                 </tr>
               </thead>
@@ -1591,7 +1804,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     </td>
                   </tr>
                 ) : (
-                  participants.map((p, index) => (
+                  sortedParticipants.map((p, index) => (
                     <tr key={p.id} className={`${participantIssues.has(p.id) ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-[#AFDDE5]/20'} transition-colors`}>
                       <td className={`px-3 py-2 font-mono text-[10px] ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{index + 1}</td>
                       <td className={`px-3 py-2 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>
@@ -1699,7 +1912,10 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                               <div className="flex flex-wrap gap-1.5">
                                 {teamMembers.length > 0 ? teamMembers.map(member => (
                                   <span key={member.id} className="px-2 py-0.5 rounded bg-black/5 text-[10px] uppercase tracking-wider text-black/70">
-                                    {(member.first_name || '').toUpperCase()} {(member.last_name || '').toUpperCase()}
+                                    <span className="inline-flex items-center gap-1">
+                                      {(member.gender || '').toLowerCase().startsWith('f') && <span className="inline-block h-1 w-1 rounded-full bg-rose-500" />}
+                                      <span>{(member.first_name || '').toUpperCase()} {(member.last_name || '').toUpperCase()}</span>
+                                    </span>
                                   </span>
                                 )) : <span className="text-xs text-black/40 italic">No members</span>}
                               </div>
@@ -1836,12 +2052,23 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       ) : (
                         participants.map((player) => {
                           const checked = selectedTeamMemberIds.includes(player.id);
+                          const assignedToOtherTeam = player.team_id !== null && player.team_id !== (editingTeam?.id ?? null);
                           return (
-                            <label key={player.id} className="flex items-center justify-between gap-2 px-1 py-1 text-xs hover:bg-black/[0.02] rounded">
+                            <label
+                              key={player.id}
+                              className={`flex items-center justify-between gap-2 px-1 py-1 text-xs rounded ${
+                                checked
+                                  ? 'bg-emerald-50 border border-emerald-200'
+                                  : assignedToOtherTeam
+                                    ? 'bg-amber-50/60 border border-amber-200/70'
+                                    : 'hover:bg-black/[0.02]'
+                              }`}
+                            >
                               <div className="flex items-center gap-2">
                                 <input
                                   type="checkbox"
                                   checked={checked}
+                                  disabled={assignedToOtherTeam}
                                   onChange={(e) => {
                                     setSelectedTeamMemberIds((prev) => {
                                       if (e.target.checked) return Array.from(new Set([...prev, player.id]));
@@ -1849,9 +2076,14 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                                     });
                                   }}
                                 />
-                                <span className="uppercase">{player.first_name} {player.last_name}</span>
+                                <span className="uppercase inline-flex items-center gap-1">
+                                  {(player.gender || '').toLowerCase().startsWith('f') && <span className="inline-block h-1 w-1 rounded-full bg-rose-500" />}
+                                  <span>{player.first_name} {player.last_name}</span>
+                                </span>
                               </div>
-                              <span className="text-[10px] text-black/40">{player.team_name || 'Unassigned'}</span>
+                              <span className={`text-[10px] ${assignedToOtherTeam ? 'text-amber-700 font-semibold' : 'text-black/40'}`}>
+                                {assignedToOtherTeam ? `Assigned: ${player.team_name || `Team ${player.team_id}`}` : (player.team_name || 'Unassigned')}
+                              </span>
                             </label>
                           );
                         })

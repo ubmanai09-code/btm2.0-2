@@ -43,6 +43,7 @@ function initDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tournament_id INTEGER NOT NULL,
       name TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
       FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
     );
 
@@ -181,6 +182,14 @@ function initDb() {
   if (!lColumns.includes('shift_number')) {
     try {
       db.exec(`ALTER TABLE lane_assignments ADD COLUMN shift_number INTEGER NOT NULL DEFAULT 1`);
+    } catch (e) {}
+  }
+
+  const tTableInfo = db.prepare("PRAGMA table_info(teams)").all();
+  const tColumns = tTableInfo.map((c: any) => c.name);
+  if (!tColumns.includes('active')) {
+    try {
+      db.exec(`ALTER TABLE teams ADD COLUMN active INTEGER NOT NULL DEFAULT 1`);
     } catch (e) {}
   }
 
@@ -878,7 +887,7 @@ async function startServer() {
       FROM participants p 
       LEFT JOIN teams t ON p.team_id = t.id 
       WHERE p.tournament_id = ?
-      ORDER BY CASE WHEN p.team_id IS NULL THEN 1 ELSE 0 END, t.name ASC, CASE WHEN p.team_order IS NULL OR p.team_order <= 0 THEN 999999 ELSE p.team_order END, p.id ASC
+      ORDER BY p.id ASC
     `).all(req.params.id);
     res.json(rows);
   });
@@ -1035,13 +1044,13 @@ async function startServer() {
 
   // Teams
   app.get("/api/tournaments/:id/teams", (req, res) => {
-    const rows = db.prepare("SELECT * FROM teams WHERE tournament_id = ?").all(req.params.id);
+    const rows = db.prepare("SELECT * FROM teams WHERE tournament_id = ? AND active = 1").all(req.params.id);
     res.json(rows);
   });
 
   app.post("/api/tournaments/:id/teams", requirePermission('participants:manage', (req) => req.params.id), (req, res) => {
     const { name } = req.body;
-    const info = db.prepare("INSERT INTO teams (tournament_id, name) VALUES (?, ?)")
+    const info = db.prepare("INSERT INTO teams (tournament_id, name, active) VALUES (?, ?, 1)")
       .run(req.params.id, name);
     res.json({ id: info.lastInsertRowid });
   });
@@ -1051,7 +1060,7 @@ async function startServer() {
     return row ? String(row.tournament_id) : null;
   }), (req, res) => {
     const { name } = req.body;
-    db.prepare("UPDATE teams SET name = ? WHERE id = ?").run(name, req.params.id);
+    db.prepare("UPDATE teams SET name = ?, active = 1 WHERE id = ?").run(name, req.params.id);
     res.json({ success: true });
   });
 
@@ -1059,22 +1068,24 @@ async function startServer() {
     const row = teamTournamentStmt.get(req.params.id) as any;
     return row ? String(row.tournament_id) : null;
   }), (req, res) => {
-    db.prepare("DELETE FROM teams WHERE id = ?").run(req.params.id);
+    const transaction = db.transaction(() => {
+      db.prepare("UPDATE teams SET active = 0 WHERE id = ?").run(req.params.id);
+      db.prepare("DELETE FROM lane_assignments WHERE team_id = ?").run(req.params.id);
+    });
+    transaction();
     res.json({ success: true });
   });
 
   app.post("/api/tournaments/:id/teams/bulk", requirePermission('participants:manage', (req) => req.params.id), (req, res) => {
     const { teams, replace_existing } = req.body;
     const tournamentId = req.params.id;
-    const insertStmt = db.prepare("INSERT INTO teams (tournament_id, name) VALUES (?, ?)");
-    const clearParticipantTeamRefs = db.prepare("UPDATE participants SET team_id = NULL, team_order = 0 WHERE tournament_id = ?");
+    const insertStmt = db.prepare("INSERT INTO teams (tournament_id, name, active) VALUES (?, ?, 1)");
     const clearTeamLaneAssignments = db.prepare("DELETE FROM lane_assignments WHERE tournament_id = ?");
-    const clearTeams = db.prepare("DELETE FROM teams WHERE tournament_id = ?");
+    const deactivateTeams = db.prepare("UPDATE teams SET active = 0 WHERE tournament_id = ?");
     const transaction = db.transaction((data) => {
       if (replace_existing === true) {
-        clearParticipantTeamRefs.run(tournamentId);
         clearTeamLaneAssignments.run(tournamentId);
-        clearTeams.run(tournamentId);
+        deactivateTeams.run(tournamentId);
       }
       for (const t of data) {
         insertStmt.run(tournamentId, t.name);
