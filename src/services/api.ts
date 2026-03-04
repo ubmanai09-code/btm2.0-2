@@ -465,6 +465,25 @@ const api = {
     }
     return res.json();
   },
+  async updateBracketSettings(
+    tournamentId: number,
+    settings: {
+      match_play_type: Tournament['match_play_type'];
+      qualified_count: number;
+      playoff_winners_count: number;
+    }
+  ): Promise<{ success: boolean; settings?: { match_play_type: Tournament['match_play_type']; qualified_count: number; playoff_winners_count: number } }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/bracket-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    });
+    const data = await api.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to update bracket settings');
+    }
+    return data;
+  },
   async generateBrackets(
     tournamentId: number,
     options?: {

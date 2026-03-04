@@ -1393,6 +1393,33 @@ const existing = db
     });
   });
 
+  app.put("/api/tournaments/:id/bracket-settings", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
+    const tournamentId = req.params.id;
+    const tournament = db.prepare("SELECT id, match_play_type, qualified_count, playoff_winners_count FROM tournaments WHERE id = ?").get(tournamentId) as any;
+    if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
+
+    const requestedMatchPlayType = String(req.body?.match_play_type || tournament.match_play_type || 'single_elimination');
+    const parsedQualifiedCount = Number.parseInt(String(req.body?.qualified_count ?? tournament.qualified_count ?? 0), 10);
+    const parsedWinnersCount = Number.parseInt(String(req.body?.playoff_winners_count ?? tournament.playoff_winners_count ?? 1), 10);
+
+    const effectiveQualifiedCount = Number.isFinite(parsedQualifiedCount) ? Math.max(0, parsedQualifiedCount) : 0;
+    const effectiveWinnersCount = Number.isFinite(parsedWinnersCount)
+      ? Math.min(3, Math.max(1, parsedWinnersCount))
+      : 1;
+
+    db.prepare("UPDATE tournaments SET match_play_type = ?, qualified_count = ?, playoff_winners_count = ? WHERE id = ?")
+      .run(requestedMatchPlayType, effectiveQualifiedCount, effectiveWinnersCount, tournamentId);
+
+    res.json({
+      success: true,
+      settings: {
+        match_play_type: requestedMatchPlayType,
+        qualified_count: effectiveQualifiedCount,
+        playoff_winners_count: effectiveWinnersCount,
+      },
+    });
+  });
+
   app.delete("/api/tournaments/:id/brackets", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
     const info = db.prepare("DELETE FROM brackets WHERE tournament_id = ?").run(req.params.id);
     res.json({ success: true, deleted: info.changes || 0 });
@@ -1438,10 +1465,29 @@ const existing = db
           ORDER BY CASE WHEN team_order IS NULL OR team_order <= 0 THEN 999999 ELSE team_order END, id ASC
           LIMIT 1
         `);
+        const teamById = db.prepare(`
+          SELECT id, name
+          FROM teams
+          WHERE tournament_id = ? AND id = ?
+          LIMIT 1
+        `);
+        const createPlaceholderParticipant = db.prepare(`
+          INSERT INTO participants (tournament_id, first_name, last_name, team_id, team_order)
+          VALUES (?, ?, '', ?, 999999)
+        `);
 
         qualifiedEntries = effectiveSeedIds
           .map((teamId: number) => {
-            const rep = representativeForTeam.get(tournamentId, teamId) as any;
+            const team = teamById.get(tournamentId, teamId) as any;
+            if (!team?.id) return null;
+
+            let rep = representativeForTeam.get(tournamentId, teamId) as any;
+            if (!rep?.participant_id) {
+              const participantLabel = String(team.name || `Team ${teamId}`).trim() || `Team ${teamId}`;
+              const insertInfo = createPlaceholderParticipant.run(tournamentId, participantLabel, teamId) as any;
+              rep = { participant_id: Number(insertInfo?.lastInsertRowid) };
+            }
+
             if (!rep?.participant_id) return null;
             return { participant_id: rep.participant_id, team_id: teamId };
           })
