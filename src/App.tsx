@@ -69,6 +69,9 @@ const buildPrintDocument = ({
   extraStyles?: string;
 }) => {
   const printedAt = new Date().toLocaleString();
+  const logoSrc = typeof window !== 'undefined'
+    ? `${window.location.origin}/logo.png`
+    : '/logo.png';
   return `
     <html>
       <head>
@@ -93,7 +96,7 @@ const buildPrintDocument = ({
       </head>
       <body>
         <div class="app-header">
-          <img class="app-logo" src="/logo.png" alt="BTM Logo" />
+          <img class="app-logo" src="${escapePrintHtml(logoSrc)}" alt="BTM Logo" />
           <div class="app-title-wrap">
             <div class="app-title">BTM 2.0</div>
             <div class="app-subtitle">BOWLING TOURNAMENT MANAGER</div>
