@@ -23,6 +23,7 @@ import {
   MoveHorizontal,
   MoreVertical,
   Printer,
+  BrushCleaning,
   X,
   FolderOpen,
   LogIn,
@@ -156,7 +157,7 @@ const Button = ({
 }: { 
   children: React.ReactNode, 
   onClick?: () => void, 
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost',
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'manage',
   size?: 'sm' | 'md' | 'lg',
   className?: string,
   disabled?: boolean,
@@ -168,7 +169,8 @@ const Button = ({
     primary: 'bg-emerald-600 text-white hover:bg-emerald-700',
     secondary: 'bg-[#E64833] text-white hover:bg-[#cf3f2c]',
     outline: 'border border-black/10 hover:bg-emerald-50 hover:border-emerald-200',
-    ghost: 'hover:bg-emerald-50/70'
+    ghost: 'hover:bg-emerald-50/70',
+    manage: 'bg-[#E64833] text-white hover:bg-[#cf3f2c] border border-[#E64833]'
   };
 
   const sizes = {
@@ -1283,6 +1285,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     key: 'none',
     direction: 'asc',
   });
+  const playersTableRef = useRef<HTMLTableElement | null>(null);
+  const teamsTableRef = useRef<HTMLTableElement | null>(null);
 
   useEffect(() => {
     loadData();
@@ -1460,6 +1464,55 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     }
   };
 
+  const handlePrintParticipants = () => {
+    const printWindow = window.open('', '_blank', 'width=1000,height=700');
+    if (!printWindow) {
+      alert('Unable to open print window. Please allow popups and try again.');
+      return;
+    }
+
+    const playerRowsHtml = sortedParticipants.map((participant, index) => {
+      const genderValue = (participant.gender || '').toLowerCase();
+      const gender = genderValue.startsWith('f') ? 'F' : genderValue.startsWith('m') ? 'M' : '-';
+      return `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${escapePrintHtml(participant.first_name || '-')}</td>
+          <td>${escapePrintHtml(participant.last_name || '-')}</td>
+          <td>${escapePrintHtml(gender)}</td>
+          <td>${escapePrintHtml(participant.club || '-')}</td>
+          <td>${escapePrintHtml(participant.average && participant.average > 0 ? participant.average : '')}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const playersContentHtml = `
+      <h2>Players</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>First Name</th>
+            <th>Family Name</th>
+            <th>Gender</th>
+            <th>Club</th>
+            <th>Average</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${playerRowsHtml || '<tr><td colspan="6" style="text-align:center;color:#777;">No participants registered yet.</td></tr>'}
+        </tbody>
+      </table>
+    `;
+
+    writeAndPrintDocument(printWindow, buildPrintDocument({
+      tournament,
+      pageTitle: `${tournament.name} - Players`,
+      pageSubtitle: 'Players Table',
+      contentHtml: playersContentHtml,
+    }));
+  };
+
   const handleAddTeam = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -1575,6 +1628,59 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       console.error('Failed to clear teams:', err);
       alert('Failed to clear teams. Please check server logs.');
     }
+  };
+
+  const handlePrintTeams = () => {
+    const printWindow = window.open('', '_blank', 'width=1000,height=700');
+    if (!printWindow) {
+      alert('Unable to open print window. Please allow popups and try again.');
+      return;
+    }
+
+    const formatTeamMemberPrintName = (participant: Participant) => {
+      const firstName = (participant.first_name || '').trim();
+      const lastInitial = ((participant.last_name || '').trim().charAt(0) || '').toUpperCase();
+      return `${firstName}${lastInitial ? ` ${lastInitial}.` : ''}`.trim();
+    };
+
+    const teamRowsHtml = teams.map((team, index) => {
+      const teamMembers = participants
+        .filter((participant) => participant.team_id === team.id)
+        .map((participant) => formatTeamMemberPrintName(participant))
+        .filter(Boolean)
+        .join(', ');
+
+      return `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${escapePrintHtml(team.name || '-')}</td>
+          <td>${escapePrintHtml(teamMembers || 'No members')}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const teamsContentHtml = `
+      <h2>Teams</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Team Name</th>
+            <th>Team Members</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${teamRowsHtml || '<tr><td colspan="3" style="text-align:center;color:#777;">No teams created.</td></tr>'}
+        </tbody>
+      </table>
+    `;
+
+    writeAndPrintDocument(printWindow, buildPrintDocument({
+      tournament,
+      pageTitle: `${tournament.name} - Teams`,
+      pageSubtitle: 'Teams Table',
+      contentHtml: teamsContentHtml,
+    }));
   };
 
   const handleImportTeams = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1819,22 +1925,33 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div>
                   <h4 className="font-bold text-black/80 flex items-center gap-2"><User size={16} className="text-emerald-700" />Players ({participants.length}) • M ({maleCount}) • F ({femaleCount})</h4>
-                  <p className="text-[11px] text-black/50">Participant roster table and player actions</p>
                   {issueCount > 0 && (
                     <p className="text-[11px] text-red-600 mt-1 font-semibold">{issueCount} record(s) need review (highlighted in red).</p>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                  {canManageParticipants && (
-                    <Button size="sm" variant="outline" onClick={handleSaveParticipants} title="Save Players" ariaLabel="Save Players" className="px-2">
-                      <Save size={14} />
+                <div className="flex flex-wrap items-center justify-between gap-2 w-full md:w-auto md:min-w-[360px]">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {canManageParticipants && (
+                      <Button size="sm" variant="manage" onClick={handleClearParticipants} title="Clear Players" ariaLabel="Clear Players" className="px-2">
+                        <BrushCleaning size={14} />
+                      </Button>
+                    )}
+                    {canManageParticipants && (
+                      <Button size="sm" variant="manage" onClick={() => { setEditingPlayer(null); setShowAddPlayer(true); }} title="Add Player" ariaLabel="Add Player" className="px-2">
+                        <UserPlus size={14} />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 md:ml-auto">
+                    {canManageParticipants && (
+                      <Button size="sm" variant="outline" onClick={handleSaveParticipants} title="Save Players" ariaLabel="Save Players" className="px-2">
+                        <Save size={14} />
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" onClick={handleExportCSV} title="Export Players" ariaLabel="Export Players" className="px-2">
+                      <Upload size={14} />
                     </Button>
-                  )}
-                  <Button size="sm" variant="outline" onClick={handleExportCSV} title="Export Players" ariaLabel="Export Players" className="px-2">
-                    <Upload size={14} />
-                  </Button>
-                  {canManageParticipants && (
-                    <>
+                    {canManageParticipants && (
                       <div className="relative">
                         <input 
                           type="file" 
@@ -1846,18 +1963,15 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                           <Download size={14} />
                         </Button>
                       </div>
-                      <Button size="sm" variant="outline" onClick={handleClearParticipants} title="Clear Players" ariaLabel="Clear Players" className="px-2">
-                        <RefreshCw size={14} />
-                      </Button>
-                      <Button size="sm" onClick={() => { setEditingPlayer(null); setShowAddPlayer(true); }} title="Add Player" ariaLabel="Add Player" className="px-2">
-                        <UserPlus size={14} />
-                      </Button>
-                    </>
-                  )}
+                    )}
+                    <Button size="sm" variant="outline" onClick={handlePrintParticipants} title="Print Players" ariaLabel="Print Players" className="px-2">
+                      <Printer size={14} />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
-            <table className="w-full text-left border-collapse">
+            <table ref={playersTableRef} className="w-full text-left border-collapse">
               <thead className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
                 <tr className="text-left">
                   <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 w-12">#</th>
@@ -1947,39 +2061,45 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                   <div>
                     <h4 className="font-bold text-black/80 flex items-center gap-2"><Users size={16} className="text-emerald-700" />Teams ({teams.length})</h4>
-                    <p className="text-[11px] text-black/50">Numbered teams, assign members from Players</p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto md:justify-end pr-1">
-                    {canManageParticipants && (
-                      <Button size="sm" variant="outline" onClick={handleSaveTeams} title="Save Teams" ariaLabel="Save Teams" className="px-2">
-                        <Save size={14} />
+                  <div className="flex flex-wrap items-center justify-between gap-2 w-full md:w-auto md:min-w-[320px]">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {canManageParticipants && (
+                        <Button size="sm" variant="manage" onClick={handleClearTeams} title="Clear Teams" ariaLabel="Clear Teams" className="px-2">
+                          <BrushCleaning size={14} />
+                        </Button>
+                      )}
+                      {canManageParticipants && (
+                        <Button size="sm" variant="manage" onClick={openCreateTeamModal} title="Add Team" ariaLabel="Add Team" className="px-2">
+                          <UserPlus size={14} />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 md:ml-auto pr-1">
+                      {canManageParticipants && (
+                        <Button size="sm" variant="outline" onClick={handleSaveTeams} title="Save Teams" ariaLabel="Save Teams" className="px-2">
+                          <Save size={14} />
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" onClick={handleExportTeams} title="Export Teams" className="px-2">
+                        <Upload size={14} />
                       </Button>
-                    )}
-                    <Button size="sm" variant="outline" onClick={handleExportTeams} title="Export Teams" className="px-2">
-                      <Upload size={14} />
-                    </Button>
-                    <div className="relative">
-                      <input type="file" accept=".csv" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportTeams} />
-                      <Button size="sm" variant="outline" title="Import Teams" className="px-2">
-                        <Download size={14} />
+                      <div className="relative">
+                        <input type="file" accept=".csv" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportTeams} />
+                        <Button size="sm" variant="outline" title="Import Teams" className="px-2">
+                          <Download size={14} />
+                        </Button>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={handlePrintTeams} title="Print Teams" ariaLabel="Print Teams" className="px-2">
+                        <Printer size={14} />
                       </Button>
                     </div>
-                    {canManageParticipants && (
-                      <Button size="sm" variant="outline" onClick={handleClearTeams} title="Clear Teams" ariaLabel="Clear Teams" className="px-2">
-                        <RefreshCw size={14} />
-                      </Button>
-                    )}
-                    {canManageParticipants && (
-                      <Button size="sm" onClick={openCreateTeamModal} title="Add Team" ariaLabel="Add Team" className="px-2">
-                        <UserPlus size={14} />
-                      </Button>
-                    )}
                   </div>
                 </div>
               </div>
 
               <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table ref={teamsTableRef} className="w-full text-left border-collapse">
                 <thead className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
                   <tr>
                     <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 w-12">#</th>
@@ -2791,16 +2911,16 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         <div className="lg:col-span-3">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <div className="flex flex-wrap items-center gap-1.5">
-              <Button size="sm" variant="outline" onClick={loadData} title="Refresh" ariaLabel="Refresh" className="px-2">
+              <Button size="sm" variant="manage" onClick={loadData} title="Refresh" ariaLabel="Refresh" className="px-2">
                 <RefreshCw size={14} />
               </Button>
               {canManageLanes && (
-                <Button size="sm" variant="outline" onClick={handleClearLanes} title="Clear Assignments" ariaLabel="Clear Assignments" className="px-2">
-                  <X size={14} />
+                <Button size="sm" variant="manage" onClick={handleClearLanes} title="Clear Assignments" ariaLabel="Clear Assignments" className="px-2">
+                  <BrushCleaning size={14} />
                 </Button>
               )}
               {canManageLanes && (
-                <Button size="sm" onClick={handleAutoAssign} variant="secondary" title="Auto-Assign" ariaLabel="Auto-Assign" className="px-3">
+                <Button size="sm" onClick={handleAutoAssign} variant="manage" title="Auto-Assign" ariaLabel="Auto-Assign" className="px-3">
                   Auto Assign
                 </Button>
               )}
@@ -3071,6 +3191,12 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     return lastInitial ? `${firstName} ${lastInitial}.` : firstName;
   };
 
+  const formatParticipantFullName = (participant: Participant) => {
+    const firstName = (participant.first_name || '').trim();
+    const lastName = (participant.last_name || '').trim();
+    return `${firstName} ${lastName}`.trim();
+  };
+
   const scoringParticipants = participants
     .filter(p => {
       if (tournament.type === 'team') {
@@ -3202,9 +3328,33 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     }
   };
 
+  const handleClearScores = async () => {
+    if (!canManageScores) return;
+    if (!confirm('Clear all scores for this tournament?')) return;
+    try {
+      setScores([]);
+      setDraftScores({});
+      await api.clearScores(tournament.id);
+      await loadData();
+      alert('Scores cleared.');
+    } catch (err) {
+      console.error('Failed to clear scores:', err);
+      alert('Failed to clear scores. Please try again.');
+    }
+  };
+
+  const handleRefreshScores = async () => {
+    try {
+      await loadData();
+      alert('Scores refreshed.');
+    } catch (err) {
+      console.error('Failed to refresh scores:', err);
+      alert('Failed to refresh scores. Please try again.');
+    }
+  };
+
   const handleExportScores = () => {
     const headers = [
-      'participant_id',
       'participant_name',
       'team_name',
       'lane_badge',
@@ -3218,8 +3368,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
       const gameValues = gameNumbers.map(gameNumber => scoreMap.get(`${p.id}-${gameNumber}`) ?? '');
       const { total, average } = getParticipantStats(p.id);
       return [
-        p.id,
-        formatScoringName(p),
+        formatParticipantFullName(p),
         p.team_name || '',
         getLaneBadge(p),
         ...gameValues,
@@ -3258,17 +3407,42 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
 
         const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
         const participantIdIndex = headers.indexOf('participant_id');
-        if (participantIdIndex === -1) {
-          alert('Invalid scores file: missing participant_id column.');
+        const participantNameIndex = headers.indexOf('participant_name');
+        if (participantIdIndex === -1 && participantNameIndex === -1) {
+          alert('Invalid scores file: missing participant_id or participant_name column.');
           return;
         }
+
+        const participantsByFullName = new Map<string, Participant>();
+        const participantsByShortName = new Map<string, Participant>();
+        participants.forEach((participant) => {
+          const fullNameKey = formatParticipantFullName(participant).toLowerCase();
+          const shortNameKey = formatScoringName(participant).toLowerCase();
+          if (fullNameKey && !participantsByFullName.has(fullNameKey)) {
+            participantsByFullName.set(fullNameKey, participant);
+          }
+          if (shortNameKey && !participantsByShortName.has(shortNameKey)) {
+            participantsByShortName.set(shortNameKey, participant);
+          }
+        });
 
         await api.clearScores(tournament.id);
 
         const tasks: Promise<any>[] = [];
         for (const line of lines.slice(1)) {
           const columns = line.split(',').map(c => c.trim());
-          const participantId = Number.parseInt(columns[participantIdIndex], 10);
+
+          let participantId = NaN;
+          if (participantIdIndex !== -1) {
+            participantId = Number.parseInt(columns[participantIdIndex], 10);
+          }
+
+          if (!Number.isFinite(participantId) && participantNameIndex !== -1) {
+            const participantName = (columns[participantNameIndex] || '').trim().toLowerCase();
+            const participant = participantsByFullName.get(participantName) || participantsByShortName.get(participantName);
+            if (participant) participantId = participant.id;
+          }
+
           if (!Number.isFinite(participantId)) continue;
 
           for (const gameNumber of gameNumbers) {
@@ -3330,18 +3504,30 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
       </div>
 
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-        <div className="flex gap-1.5 p-1 bg-[#AFDDE5]/35 rounded-lg w-fit border border-[#AFDDE5]/70">
-          {Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1).map(shift => (
-            <button
-              key={shift}
-              onClick={() => setCurrentShift(shift)}
-              className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
-                currentShift === shift ? 'bg-emerald-600 text-white shadow-sm' : 'text-black/50 hover:text-emerald-700'
-              }`}
-            >
-              Shift {shift}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1.5 p-1 bg-[#AFDDE5]/35 rounded-lg w-fit border border-[#AFDDE5]/70">
+            {Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1).map(shift => (
+              <button
+                key={shift}
+                onClick={() => setCurrentShift(shift)}
+                className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
+                  currentShift === shift ? 'bg-emerald-600 text-white shadow-sm' : 'text-black/50 hover:text-emerald-700'
+                }`}
+              >
+                Shift {shift}
+              </button>
+            ))}
+          </div>
+          {canManageScores && (
+            <Button size="sm" variant="manage" onClick={handleRefreshScores} title="Refresh" ariaLabel="Refresh" className="px-2">
+              <RefreshCw size={14} />
+            </Button>
+          )}
+          {canManageScores && (
+            <Button size="sm" variant="manage" onClick={handleClearScores} title="Clear" ariaLabel="Clear" className="px-2">
+              <BrushCleaning size={14} />
+            </Button>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto md:justify-end">
@@ -3998,7 +4184,7 @@ function BracketsView({ tournament, role }: { tournament: Tournament; role: User
           </Button>
           {canManageBrackets && (
             <Button variant="outline" onClick={handleClearBrackets} title="Clear Brackets" ariaLabel="Clear Brackets">
-              <RefreshCw size={16} />
+              <BrushCleaning size={16} />
             </Button>
           )}
           {!showQualified ? (
@@ -4529,7 +4715,7 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
           <h3 className="text-xl font-bold">Tournament Result</h3>
           <p className="text-sm text-black/40">Standings, bracket winners, and tournament highlights</p>
         </div>
-        <Button variant="outline" onClick={loadStandings} title="Refresh" ariaLabel="Refresh">
+        <Button variant="manage" onClick={loadStandings} title="Refresh" ariaLabel="Refresh">
           <RefreshCw size={18} />
         </Button>
       </div>
