@@ -1,0 +1,58 @@
+{
+  "global": [
+    {
+      "id": "sponsor-1",
+      "name": "General Sponsor",
+      "logo": "/logo.png",
+      "description": "Primary supporter for tournament operations and event logistics.",
+      "contacts": "info@generalsponsor.com | +1 000 000 0000",
+      "url": "https://example.com"
+    },
+    {
+      "id": "partner-1",
+      "name": "Official Partner",
+      "logo": "/logo.png",
+      "description": "Technology and media partner supporting tournament coverage.",
+      "contacts": "support@officialpartner.com | +1 000 000 0001",
+      "url": "https://example.org"
+    }
+  ],
+  "tournaments": {
+    "1": [
+      {
+        "id": "t1-main",
+        "name": "T1 Main Sponsor",
+        "logo": "/logo.png",
+        "description": "Main sponsor for Tournament #1.",
+        "contacts": "t1-main@example.com",
+        "url": "https://example.com/t1-main"
+      },
+      {
+        "id": "t1-partner",
+        "name": "T1 Official Partner",
+        "logo": "/logo.png",
+        "description": "Official partner for Tournament #1.",
+        "contacts": "t1-partner@example.com",
+        "url": "https://example.com/t1-partner"
+      }
+    ],
+    "2": [
+      {
+        "id": "t2-main",
+        "name": "T2 Main Sponsor",
+        "logo": "/logo.png",
+        "description": "Main sponsor for Tournament #2.",
+        "contacts": "t2-main@example.com",
+        "url": "https://example.com/t2-main"
+      },
+      {
+        "id": "t2-partner",
+        "name": "T2 Official Partner",
+        "logo": "/logo.png",
+        "description": "Official partner for Tournament #2.",
+        "contacts": "t2-partner@example.com",
+        "url": "https://example.com/t2-partner"
+      }
+    ]
+  }
+}

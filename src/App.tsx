@@ -44,6 +44,77 @@ const parseRole = (value: unknown): UserRole | null => {
   return null;
 };
 
+type SponsorInfo = {
+  id: string;
+  name: string;
+  logo: string;
+  description: string;
+  contacts: string;
+  url: string;
+};
+
+type SponsorsConfig = {
+  global: SponsorInfo[];
+  tournaments: Record<string, SponsorInfo[]>;
+};
+
+const GLOBAL_SPONSORS: SponsorInfo[] = [
+  {
+    id: 'sponsor-1',
+    name: 'General Sponsor',
+    logo: '/logo.png',
+    description: 'Primary supporter for tournament operations and event logistics.',
+    contacts: 'info@generalsponsor.com | +1 000 000 0000',
+    url: 'https://example.com',
+  },
+  {
+    id: 'partner-1',
+    name: 'Official Partner',
+    logo: '/logo.png',
+    description: 'Technology and media partner supporting tournament coverage.',
+    contacts: 'support@officialpartner.com | +1 000 000 0001',
+    url: 'https://example.org',
+  },
+];
+
+const DEFAULT_SPONSORS_CONFIG: SponsorsConfig = {
+  global: GLOBAL_SPONSORS,
+  tournaments: {},
+};
+
+const SPONSORS_CONFIG_OVERRIDE_KEY = 'btm_sponsors_config_override';
+
+const normalizeSponsorInfoList = (value: any): SponsorInfo[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item: any, index: number) => ({
+      id: String(item?.id || `sponsor-${index + 1}`),
+      name: String(item?.name || 'Unnamed Sponsor'),
+      logo: String(item?.logo || '/logo.png'),
+      description: String(item?.description || ''),
+      contacts: String(item?.contacts || ''),
+      url: String(item?.url || ''),
+    }))
+    .filter((item: SponsorInfo) => item.id.length > 0);
+};
+
+const normalizeSponsorsConfig = (value: any): SponsorsConfig => {
+  const global = normalizeSponsorInfoList(value?.global);
+  const rawTournaments = value?.tournaments && typeof value.tournaments === 'object'
+    ? value.tournaments
+    : {};
+
+  const tournaments: Record<string, SponsorInfo[]> = {};
+  for (const [key, list] of Object.entries(rawTournaments)) {
+    tournaments[String(key)] = normalizeSponsorInfoList(list);
+  }
+
+  return {
+    global: global.length > 0 ? global : DEFAULT_SPONSORS_CONFIG.global,
+    tournaments,
+  };
+};
+
 const escapePrintHtml = (value: unknown) => String(value ?? '')
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -232,6 +303,12 @@ export default function App() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
+  const [showSponsorsModal, setShowSponsorsModal] = useState(false);
+  const [selectedSponsor, setSelectedSponsor] = useState<SponsorInfo | null>(null);
+  const [sponsorsConfig, setSponsorsConfig] = useState<SponsorsConfig>(DEFAULT_SPONSORS_CONFIG);
+  const [showSponsorsConfigEditor, setShowSponsorsConfigEditor] = useState(false);
+  const [sponsorsConfigDraft, setSponsorsConfigDraft] = useState('');
+  const [sponsorsConfigError, setSponsorsConfigError] = useState('');
   const [view, setView] = useState<'list' | 'detail' | 'create' | 'edit'>(() => {
     const savedView = localStorage.getItem('btm_view');
     return savedView === 'detail' ? 'detail' : 'list';
@@ -262,6 +339,39 @@ export default function App() {
       localStorage.removeItem('btm_selected_id');
     }
   }, [selectedTournament]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const loadSponsorsConfig = async () => {
+      try {
+        const overrideRaw = localStorage.getItem(SPONSORS_CONFIG_OVERRIDE_KEY);
+        if (overrideRaw) {
+          const overrideParsed = JSON.parse(overrideRaw);
+          const normalizedOverride = normalizeSponsorsConfig(overrideParsed);
+          if (!isCancelled) {
+            setSponsorsConfig(normalizedOverride);
+          }
+          return;
+        }
+
+        const response = await fetch('/sponsors-config.json', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`Failed to load sponsors config: ${response.status}`);
+        const parsed = await response.json();
+        if (isCancelled) return;
+
+        setSponsorsConfig(normalizeSponsorsConfig(parsed));
+      } catch (err) {
+        console.warn('Using default sponsors config due to load failure:', err);
+        if (!isCancelled) {
+          setSponsorsConfig(DEFAULT_SPONSORS_CONFIG);
+        }
+      }
+    };
+
+    loadSponsorsConfig();
+    return () => { isCancelled = true; };
+  }, []);
 
   useEffect(() => {
     loadTournaments();
@@ -555,12 +665,62 @@ export default function App() {
     }
   };
 
+  const openSponsorsList = () => {
+    setSelectedSponsor(null);
+    setShowSponsorsModal(true);
+  };
+
+  const openSponsorDetails = (sponsor: SponsorInfo) => {
+    setSelectedSponsor(sponsor);
+    setShowSponsorsModal(true);
+  };
+
+  const openSponsorsConfigEditor = () => {
+    setSponsorsConfigError('');
+    setSponsorsConfigDraft(JSON.stringify(sponsorsConfig, null, 2));
+    setShowSponsorsConfigEditor(true);
+  };
+
+  const saveSponsorsConfigEditor = () => {
+    try {
+      const parsed = JSON.parse(sponsorsConfigDraft);
+      const normalized = normalizeSponsorsConfig(parsed);
+      setSponsorsConfig(normalized);
+      localStorage.setItem(SPONSORS_CONFIG_OVERRIDE_KEY, JSON.stringify(normalized));
+      setShowSponsorsConfigEditor(false);
+      setSponsorsConfigError('');
+    } catch (err: any) {
+      setSponsorsConfigError(err?.message || 'Invalid JSON format');
+    }
+  };
+
+  const resetSponsorsConfigEditor = async () => {
+    localStorage.removeItem(SPONSORS_CONFIG_OVERRIDE_KEY);
+    try {
+      const response = await fetch('/sponsors-config.json', { cache: 'no-store' });
+      if (!response.ok) throw new Error(`Failed to load sponsors config: ${response.status}`);
+      const parsed = await response.json();
+      const normalized = normalizeSponsorsConfig(parsed);
+      setSponsorsConfig(normalized);
+      setSponsorsConfigDraft(JSON.stringify(normalized, null, 2));
+      setSponsorsConfigError('');
+    } catch {
+      setSponsorsConfig(DEFAULT_SPONSORS_CONFIG);
+      setSponsorsConfigDraft(JSON.stringify(DEFAULT_SPONSORS_CONFIG, null, 2));
+      setSponsorsConfigError('Config reset to built-in defaults.');
+    }
+  };
+
+  const activeSponsors = selectedTournament
+    ? (sponsorsConfig.tournaments[String(selectedTournament.id)] || sponsorsConfig.global)
+    : sponsorsConfig.global;
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-emerald-50/30 text-black font-sans">
       {/* Sidebar / Nav */}
-      <nav className="fixed top-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-sm border-b border-emerald-100 z-50 px-6 flex items-center justify-between">
+      <nav className="fixed top-0 left-0 right-0 h-16 bg-black/95 backdrop-blur-sm border-b border-white/10 z-50 px-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-16 h-12 rounded-md overflow-hidden bg-black/[0.02] border border-black/10 flex items-center justify-center">
+          <div className="w-16 h-12 rounded-md overflow-hidden border-2 border-white/30 flex items-center justify-center bg-white">
             <img
               src="/logo.png"
               alt="BTM Logo"
@@ -568,29 +728,47 @@ export default function App() {
             />
           </div>
           <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2">
-            <span className="font-bold text-xl tracking-tight uppercase text-emerald-700">BTM</span>
-            <span className="hidden sm:inline text-sm text-black/50 font-medium">BOWLING TOURNAMENT MANAGER | <span className="text-[#E64833]">All In One</span></span>
-            <span className="sm:hidden text-[11px] text-black/50 font-medium leading-tight">BOWLING TOURNAMENT MANAGER | <span className="text-[#E64833]">All In One</span></span>
+            <span className="hidden sm:inline text-sm text-white font-semibold">BOWLING TOURNAMENT MANAGER | <span className="text-[#E64833]">All In One</span></span>
+            <span className="sm:hidden text-[11px] text-white font-semibold leading-tight">BOWLING TOURNAMENT MANAGER | <span className="text-[#E64833]">All In One</span></span>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {lockedRole ? (
-            <span className="px-2 py-1.5 rounded-md border border-black/10 text-xs font-bold uppercase tracking-wider bg-black/[0.02]">
+            <span className="px-2 py-1.5 rounded-md border border-white/20 text-xs font-bold uppercase tracking-wider bg-white/10 text-white">
               {lockedRole}
             </span>
           ) : authLoading ? (
-            <span className="px-2 py-1.5 rounded-md border border-black/10 text-xs font-bold uppercase tracking-wider bg-black/[0.02] text-black/40">
+            <span className="px-2 py-1.5 rounded-md border border-white/20 text-xs font-bold uppercase tracking-wider bg-white/10 text-white/60">
               Loading...
             </span>
           ) : currentRole === 'public' ? (
-            <Button variant="outline" size="sm" onClick={() => { setAuthError(''); setShowLogin(true); }} title="Login" ariaLabel="Login">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setAuthError(''); setShowLogin(true); }}
+              title="Login"
+              ariaLabel="Login"
+              className="text-white border-white/25 hover:bg-white/10 hover:border-white/40"
+            >
               <LogIn size={14} />
             </Button>
           ) : (
             <>
-              <span className="px-2 py-1.5 rounded-md border border-black/10 text-xs font-bold uppercase tracking-wider bg-black/[0.02]">
+              <span className="px-2 py-1.5 rounded-md border border-white/20 text-xs font-bold uppercase tracking-wider bg-white/10 text-white">
                 {currentRole}
               </span>
+              {currentRole === 'admin' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={openSponsorsConfigEditor}
+                  title="Sponsor Config"
+                  ariaLabel="Sponsor Config"
+                  className="text-white border-white/25 hover:bg-white/10 hover:border-white/40"
+                >
+                  <Edit size={14} />
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -600,10 +778,18 @@ export default function App() {
                 }}
                 title="Change Password"
                 ariaLabel="Change Password"
+                className="text-white border-white/25 hover:bg-white/10 hover:border-white/40"
               >
                 <KeyRound size={14} />
               </Button>
-              <Button variant="outline" size="sm" onClick={handleLogout} title="Logout" ariaLabel="Logout">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogout}
+                title="Logout"
+                ariaLabel="Logout"
+                className="text-white border-white/25 hover:bg-white/10 hover:border-white/40"
+              >
                 <LogOut size={14} />
               </Button>
             </>
@@ -828,6 +1014,10 @@ export default function App() {
               activeTab={activeTab}
               setActiveTab={setActiveTab}
               role={currentRole}
+              onOpenSponsors={() => {
+                setSelectedSponsor(null);
+                setShowSponsorsModal(true);
+              }}
             />
           )}
         </AnimatePresence>
@@ -877,14 +1067,121 @@ export default function App() {
         </div>
       )}
 
-      <footer className="border-t border-emerald-100 bg-gradient-to-r from-emerald-50/60 via-white to-[#E64833]/10 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-6 py-5 text-xs text-black/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <span className="font-semibold uppercase tracking-wide text-emerald-800">Total tournament control. From first frame to final payout.</span>
-          <div className="flex items-center gap-2 font-medium">
-            <Trophy size={12} className="text-emerald-700" />
-            <span className="text-black/40">|</span>
+      {showSponsorsModal && (
+        <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4" onClick={() => setShowSponsorsModal(false)}>
+          <Card className="w-full max-w-2xl p-4" onClick={(e: any) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="text-lg font-bold">{selectedSponsor ? selectedSponsor.name : 'Sponsors & Partners'}</h3>
+              <Button size="sm" variant="outline" onClick={() => setShowSponsorsModal(false)} title="Close" ariaLabel="Close">
+                <X size={14} />
+              </Button>
+            </div>
+
+            {selectedSponsor ? (
+              <div className="space-y-3">
+                <div className="w-full h-44 rounded-md border border-black/10 bg-white p-3 flex items-center justify-center">
+                  <img src={selectedSponsor.logo} alt={selectedSponsor.name} className="w-full h-full object-contain" />
+                </div>
+                <div className="space-y-2 text-sm text-black/75">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">Description</p>
+                    <p>{selectedSponsor.description || 'No description provided.'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">Contacts</p>
+                    <p>{selectedSponsor.contacts || 'No contact details provided.'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">Website</p>
+                    {selectedSponsor.url ? (
+                      <a href={selectedSponsor.url} target="_blank" rel="noreferrer" className="text-emerald-700 underline break-all">{selectedSponsor.url}</a>
+                    ) : (
+                      <p>No URL provided.</p>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <Button size="sm" variant="outline" onClick={() => setSelectedSponsor(null)} className="normal-case tracking-normal" title="Back to list" ariaLabel="Back to list">
+                    Back to List
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {activeSponsors.map((sponsor) => (
+                  <button
+                    key={sponsor.id}
+                    type="button"
+                    onClick={() => setSelectedSponsor(sponsor)}
+                    className="p-2 rounded-md border border-black/10 bg-white hover:border-emerald-300 text-left flex items-center gap-2"
+                  >
+                    <div className="w-12 h-12 rounded border border-black/10 bg-white p-1 flex items-center justify-center">
+                      <img src={sponsor.logo} alt={sponsor.name} className="w-full h-full object-contain" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm text-black/80">{sponsor.name}</p>
+                      <p className="text-xs text-black/45">View details</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {showSponsorsConfigEditor && (
+        <div className="fixed inset-0 z-[60] bg-black/45 flex items-center justify-center p-4" onClick={() => setShowSponsorsConfigEditor(false)}>
+          <Card className="w-full max-w-3xl p-4" onClick={(e: any) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="text-lg font-bold">Sponsor Config JSON</h3>
+              <Button size="sm" variant="outline" onClick={() => setShowSponsorsConfigEditor(false)} title="Close" ariaLabel="Close">
+                <X size={14} />
+              </Button>
+            </div>
+
+            <p className="text-xs text-black/50 mb-2">Edit `global` and `tournaments` mappings. `tournaments` keys must be string tournament IDs.</p>
+            <textarea
+              value={sponsorsConfigDraft}
+              onChange={(e) => setSponsorsConfigDraft(e.target.value)}
+              className="w-full h-[360px] rounded-md border border-black/15 p-3 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-emerald-100"
+              spellCheck={false}
+            />
+            {sponsorsConfigError && <p className="text-xs text-red-600 font-semibold mt-2">{sponsorsConfigError}</p>}
+
+            <div className="flex flex-wrap gap-2 pt-3">
+              <Button size="sm" variant="outline" onClick={saveSponsorsConfigEditor} className="px-3" title="Save Config" ariaLabel="Save Config">
+                <Save size={14} />
+              </Button>
+              <Button size="sm" variant="outline" onClick={resetSponsorsConfigEditor} className="px-3 normal-case tracking-normal" title="Reset to File" ariaLabel="Reset to File">
+                Reset to File
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      <footer className="border-t border-white/10 bg-black">
+        <div className="max-w-7xl mx-auto px-6 py-5 text-xs text-white/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <span className="font-semibold uppercase tracking-wide text-emerald-400">Total tournament control. From first frame to final payout.</span>
+          <div className="flex items-center gap-2 font-medium flex-wrap justify-end">
+            <span className="text-white/60">Powered by</span>
+            {activeSponsors.map((sponsor) => (
+              <button
+                key={sponsor.id}
+                type="button"
+                onClick={() => openSponsorDetails(sponsor)}
+                className="w-8 h-8 rounded border border-white/20 bg-white p-0.5 hover:border-emerald-300"
+                title={sponsor.name}
+                aria-label={sponsor.name}
+              >
+                <img src={sponsor.logo} alt={sponsor.name} className="w-full h-full object-contain" />
+              </button>
+            ))}
+            <Trophy size={12} className="text-emerald-400" />
+            <span className="text-white/40">|</span>
             <span>BTM <span className="text-[#E64833]">v2.0</span></span>
-            <span className="text-black/40">|</span>
+            <span className="text-white/40">|</span>
             <span>Copyright Murat D. 2026</span>
           </div>
         </div>
@@ -895,14 +1192,15 @@ export default function App() {
 
 // --- Sub-Views ---
 
-function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, activeTab, setActiveTab, role }: {
+function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, activeTab, setActiveTab, role, onOpenSponsors }: {
   tournament: Tournament,
   onBack: () => void,
   onEdit: (t: Tournament) => void,
   onTournamentUpdated: (t: Tournament) => void,
   activeTab: string,
   setActiveTab: (t: any) => void,
-  role: UserRole
+  role: UserRole,
+  onOpenSponsors: () => void,
 }) {
   const [moderatorAccess, setModeratorAccess] = useState<ModeratorTournamentAccess | null>(null);
   const [moderators, setModerators] = useState<UserAccount[]>([]);
@@ -1121,21 +1419,35 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
           </div>
         </div>
 
-        {role === 'admin' && activeTab === 'participants' && (
-          <Card className="p-4 md:w-[430px]">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-bold uppercase tracking-wider">Moderator Access</h4>
-                  <p className="text-xs text-black/50 mt-1">Assign one or more moderator accounts to this tournament.</p>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => setShowModeratorPanel(v => !v)} title={showModeratorPanel ? 'Hide' : 'Show'} ariaLabel={showModeratorPanel ? 'Hide' : 'Show'}>
-                  {showModeratorPanel ? <EyeOff size={14} /> : <Eye size={14} />}
-                </Button>
-              </div>
+        <div className="w-full md:w-[430px] space-y-3">
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onOpenSponsors}
+              className="px-3 normal-case tracking-normal"
+              title="Sponsors"
+              ariaLabel="Sponsors"
+            >
+              Sponsors
+            </Button>
+          </div>
 
-              {showModeratorPanel && (
-                <>
+          {role === 'admin' && activeTab === 'participants' && (
+            <Card className="p-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-bold uppercase tracking-wider">Moderator Access</h4>
+                    <p className="text-xs text-black/50 mt-1">Assign one or more moderator accounts to this tournament.</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setShowModeratorPanel(v => !v)} title={showModeratorPanel ? 'Hide' : 'Show'} ariaLabel={showModeratorPanel ? 'Hide' : 'Show'}>
+                    {showModeratorPanel ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </Button>
+                </div>
+
+                {showModeratorPanel && (
+                  <>
 
               <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
                 <Select
@@ -1232,11 +1544,12 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
               </div>
 
               {accessError && <p className="text-xs text-red-600 font-semibold">{accessError}</p>}
-                </>
-              )}
-            </div>
-          </Card>
-        )}
+                  </>
+                )}
+              </div>
+            </Card>
+          )}
+        </div>
       </div>
 
       {role === 'moderator' && !accessLoading && effectiveRole === 'public' && (
