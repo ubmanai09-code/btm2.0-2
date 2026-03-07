@@ -3,6 +3,7 @@ import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
 import { randomUUID } from "crypto";
 import { compare, hash } from "bcryptjs";
+import net from "net";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -273,6 +274,27 @@ function initDb() {
     });
   }
   console.timeEnd('Database Init');
+}
+
+async function findAvailablePort(startPort: number, maxAttempts = 30): Promise<number> {
+  const base = Number.isFinite(startPort) && startPort > 0 ? Math.floor(startPort) : 24678;
+
+  const canUsePort = (port: number) => new Promise<boolean>((resolve) => {
+    const tester = net.createServer();
+    tester.once("error", () => resolve(false));
+    tester.once("listening", () => {
+      tester.close(() => resolve(true));
+    });
+    tester.listen(port, "0.0.0.0");
+  });
+
+  for (let offset = 0; offset < maxAttempts; offset += 1) {
+    const candidate = base + offset;
+    // eslint-disable-next-line no-await-in-loop
+    if (await canUsePort(candidate)) return candidate;
+  }
+
+  return base;
 }
 
 initDb();
@@ -1765,8 +1787,19 @@ const existing = db
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    const preferredHmrPortRaw = Number.parseInt(String(process.env.HMR_PORT || "24678"), 10);
+    const preferredHmrPort = Number.isFinite(preferredHmrPortRaw) && preferredHmrPortRaw > 0 ? preferredHmrPortRaw : 24678;
+    const hmrEnabled = process.env.DISABLE_HMR !== "true";
+    const resolvedHmrPort = hmrEnabled ? await findAvailablePort(preferredHmrPort) : preferredHmrPort;
+    if (hmrEnabled && resolvedHmrPort !== preferredHmrPort) {
+      console.warn(`HMR port ${preferredHmrPort} busy, using ${resolvedHmrPort} instead.`);
+    }
+
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: hmrEnabled ? { port: resolvedHmrPort } : false,
+      },
       appType: "spa",
     });
     app.use(vite.middlewares);

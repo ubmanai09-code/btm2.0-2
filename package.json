@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
+    "dev:stop": "powershell -NoProfile -Command \"$listeners = Get-NetTCPConnection -LocalPort 3000,24678 -State Listen -ErrorAction SilentlyContinue; if ($listeners) { $listeners.OwningProcess | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } }; Write-Output 'Stopped listeners on 3000/24678 (if any).'\"",
+    "dev:restart": "npm run dev:stop && npm run dev",
     "build": "vite build && npx tsc -p tsconfig.server.json",
     "start": "node dist-server/server.js",
     "start:prod": "node dist-server/server.js",
