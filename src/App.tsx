@@ -431,6 +431,8 @@ export default function App() {
         setCurrentRole('public');
         setCurrentUser(null);
         localStorage.removeItem('btm_auth_token');
+        setAuthError('Session expired. Please login again.');
+        setShowLogin(true);
       }
     
       if (!cancelled) setAuthLoading(false);
@@ -514,6 +516,8 @@ export default function App() {
       date: formData.get('date') as string,
       location: formData.get('location') as string,
       format: formData.get('format') as string,
+      organizer: formData.get('organizer') as string,
+      logo: formData.get('logo') as string,
       type: formType,
       games_count: parseNum(formData.get('games_count'), 3),
       genders_rule: formData.get('genders_rule') as string,
@@ -548,7 +552,8 @@ export default function App() {
       setEditingTournament(null);
     } catch (err) {
       console.error('Save error:', err);
-      alert('An error occurred while saving the tournament. Please check the console for details.');
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      alert(`Failed to save tournament: ${message}`);
     }
   };
 
@@ -1079,7 +1084,19 @@ export default function App() {
                             </div>
                           )}
                         </div>
-                        <h3 className="text-xl font-bold mb-2 group-hover:text-emerald-600 transition-colors">{t.name}</h3>
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <h3 className="text-xl font-bold group-hover:text-emerald-600 transition-colors">{t.name}</h3>
+                          <div className="w-12 h-12 rounded-md border border-black/10 bg-white p-1.5 flex items-center justify-center shrink-0">
+                            <img
+                              src={t.logo || '/logo.png'}
+                              alt={t.name}
+                              className="w-full h-full object-contain"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                              }}
+                            />
+                          </div>
+                        </div>
                         <div className="space-y-2 mb-3 text-xs text-black/65">
                           <div className="flex items-center gap-1.5">
                             <Calendar size={13} className="text-black/45" />
@@ -1092,6 +1109,10 @@ export default function App() {
                           <div className="flex items-center gap-1.5">
                             <ClipboardList size={13} className="text-black/45" />
                             <span className="truncate">{t.format || 'Standard format'}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <User size={13} className="text-black/45" />
+                            <span className="truncate">{t.organizer || 'Organizer TBA'}</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-4 text-sm text-black/60">
@@ -1162,6 +1183,11 @@ export default function App() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Input label="Date" name="date" type="date" defaultValue={editingTournament?.date} required />
                     <Input label="Location" name="location" placeholder="e.g. Bowl-O-Rama Center" defaultValue={editingTournament?.location} />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input label="Organizer" name="organizer" placeholder="e.g. City Bowling Club" defaultValue={editingTournament?.organizer} />
+                    <Input label="Tournament Logo URL" name="logo" placeholder="e.g. /logo.png" defaultValue={editingTournament?.logo} />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

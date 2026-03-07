@@ -24,6 +24,8 @@ function initDb() {
       date TEXT NOT NULL,
       location TEXT,
       format TEXT,
+      organizer TEXT,
+      logo TEXT,
       match_play_type TEXT DEFAULT 'single_elimination',
       qualified_count INTEGER DEFAULT 0,
       playoff_winners_count INTEGER DEFAULT 1,
@@ -157,6 +159,8 @@ function initDb() {
   const migrations = [
     { name: 'location', type: 'TEXT' },
     { name: 'format', type: 'TEXT' },
+    { name: 'organizer', type: 'TEXT' },
+    { name: 'logo', type: 'TEXT' },
     { name: 'match_play_type', type: "TEXT DEFAULT 'single_elimination'" },
     { name: 'qualified_count', type: 'INTEGER DEFAULT 0' },
     { name: 'playoff_winners_count', type: 'INTEGER DEFAULT 1' },
@@ -823,19 +827,19 @@ async function startServer() {
 
   app.post("/api/tournaments", requirePermission('tournaments:manage'), (req, res) => {
     const { 
-      name, date, location, format, match_play_type, qualified_count, playoff_winners_count, type, 
+      name, date, location, format, organizer, logo, match_play_type, qualified_count, playoff_winners_count, type, 
       games_count, genders_rule, lanes_count, 
       players_per_lane, players_per_team, shifts_count, oil_pattern 
     } = req.body;
     
     const info = db.prepare(`
       INSERT INTO tournaments (
-        name, date, location, format, match_play_type, qualified_count, playoff_winners_count, type, 
+        name, date, location, format, organizer, logo, match_play_type, qualified_count, playoff_winners_count, type, 
         games_count, genders_rule, lanes_count, 
         players_per_lane, players_per_team, shifts_count, oil_pattern
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      name, date, location, format, match_play_type || 'single_elimination', Number.isFinite(Number.parseInt(qualified_count, 10)) ? Number.parseInt(qualified_count, 10) : 0, Number.isFinite(Number.parseInt(playoff_winners_count, 10)) ? Number.parseInt(playoff_winners_count, 10) : 1, type, 
+      name, date, location, format, organizer, logo, match_play_type || 'single_elimination', Number.isFinite(Number.parseInt(qualified_count, 10)) ? Number.parseInt(qualified_count, 10) : 0, Number.isFinite(Number.parseInt(playoff_winners_count, 10)) ? Number.parseInt(playoff_winners_count, 10) : 1, type, 
       games_count || 3, genders_rule, lanes_count || 10, 
       players_per_lane || 2, players_per_team || 1, shifts_count || 1, oil_pattern
     );
@@ -851,19 +855,19 @@ async function startServer() {
   app.put("/api/tournaments/:id", requirePermission('tournaments:manage'), (req, res) => {
     try {
       const { 
-        name, date, location, format, match_play_type, qualified_count, playoff_winners_count, type, 
+        name, date, location, format, organizer, logo, match_play_type, qualified_count, playoff_winners_count, type, 
         games_count, genders_rule, lanes_count, 
         players_per_lane, players_per_team, shifts_count, oil_pattern, status
       } = req.body;
       
       const result = db.prepare(`
         UPDATE tournaments SET 
-          name = ?, date = ?, location = ?, format = ?, match_play_type = ?, qualified_count = ?, playoff_winners_count = ?, type = ?, 
+          name = ?, date = ?, location = ?, format = ?, organizer = ?, logo = ?, match_play_type = ?, qualified_count = ?, playoff_winners_count = ?, type = ?, 
           games_count = ?, genders_rule = ?, lanes_count = ?, 
           players_per_lane = ?, players_per_team = ?, shifts_count = ?, oil_pattern = ?, status = ?
         WHERE id = ?
       `).run(
-        name, date, location, format, match_play_type || 'single_elimination', Number.isFinite(Number.parseInt(qualified_count, 10)) ? Number.parseInt(qualified_count, 10) : 0, Number.isFinite(Number.parseInt(playoff_winners_count, 10)) ? Number.parseInt(playoff_winners_count, 10) : 1, type, 
+        name, date, location, format, organizer, logo, match_play_type || 'single_elimination', Number.isFinite(Number.parseInt(qualified_count, 10)) ? Number.parseInt(qualified_count, 10) : 0, Number.isFinite(Number.parseInt(playoff_winners_count, 10)) ? Number.parseInt(playoff_winners_count, 10) : 1, type, 
         games_count || 3, genders_rule, lanes_count || 10, 
         players_per_lane || 2, players_per_team || 1, shifts_count || 1, oil_pattern, status || 'draft', req.params.id
       );

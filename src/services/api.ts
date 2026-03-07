@@ -4,6 +4,8 @@ export interface Tournament {
   date: string;
   location: string;
   format: string;
+  organizer: string;
+  logo: string;
   match_play_type: 'single_elimination' | 'double_elimination' | 'ladder' | 'playoff';
   qualified_count: number;
   playoff_winners_count: number;
@@ -228,7 +230,11 @@ const api = {
   },
   async getTournaments(): Promise<Tournament[]> {
     const res = await fetch('/api/tournaments');
-    return res.json();
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to load tournaments');
+    }
+    return data;
   },
   async createTournament(data: Partial<Tournament>): Promise<{ id: number }> {
     const res = await fetch('/api/tournaments', {
@@ -236,11 +242,19 @@ const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    return res.json();
+    const body = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(body?.error || 'Failed to create tournament');
+    }
+    return body;
   },
   async getTournament(id: number): Promise<Tournament> {
     const res = await fetch(`/api/tournaments/${id}`);
-    return res.json();
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to load tournament');
+    }
+    return data;
   },
   async updateTournament(id: number, data: Partial<Tournament>): Promise<{ success: boolean; error?: string }> {
     const res = await fetch(`/api/tournaments/${id}`, {
@@ -248,7 +262,11 @@ const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    return res.json();
+    const body = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(body?.error || 'Failed to update tournament');
+    }
+    return body;
   },
   async deleteTournament(id: number): Promise<{ success: boolean }> {
     const res = await fetch(`/api/tournaments/${id}`, {
