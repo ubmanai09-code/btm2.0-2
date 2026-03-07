@@ -7,7 +7,6 @@ import {
   ClipboardList, 
   BarChart3, 
   Plus, 
-  ChevronRight, 
   Calendar,
   ArrowLeft,
   Save,
@@ -26,7 +25,6 @@ import {
   Printer,
   BrushCleaning,
   X,
-  FolderOpen,
   LogIn,
   LogOut,
   KeyRound,
@@ -46,6 +44,7 @@ const parseRole = (value: unknown): UserRole | null => {
 
 type SponsorInfo = {
   id: string;
+  kind: 'sponsor' | 'partner';
   name: string;
   logo: string;
   description: string;
@@ -56,11 +55,14 @@ type SponsorInfo = {
 type SponsorsConfig = {
   global: SponsorInfo[];
   tournaments: Record<string, SponsorInfo[]>;
+  globalSponsorEnabled: boolean;
+  globalSponsor: SponsorInfo | null;
 };
 
 const GLOBAL_SPONSORS: SponsorInfo[] = [
   {
     id: 'sponsor-1',
+    kind: 'sponsor',
     name: 'General Sponsor',
     logo: '/logo.png',
     description: 'Primary supporter for tournament operations and event logistics.',
@@ -69,6 +71,7 @@ const GLOBAL_SPONSORS: SponsorInfo[] = [
   },
   {
     id: 'partner-1',
+    kind: 'partner',
     name: 'Official Partner',
     logo: '/logo.png',
     description: 'Technology and media partner supporting tournament coverage.',
@@ -80,6 +83,8 @@ const GLOBAL_SPONSORS: SponsorInfo[] = [
 const DEFAULT_SPONSORS_CONFIG: SponsorsConfig = {
   global: GLOBAL_SPONSORS,
   tournaments: {},
+  globalSponsorEnabled: false,
+  globalSponsor: null,
 };
 
 const SPONSORS_CONFIG_OVERRIDE_KEY = 'btm_sponsors_config_override';
@@ -89,6 +94,7 @@ const normalizeSponsorInfoList = (value: any): SponsorInfo[] => {
   return value
     .map((item: any, index: number) => ({
       id: String(item?.id || `sponsor-${index + 1}`),
+      kind: item?.kind === 'partner' ? 'partner' : 'sponsor',
       name: String(item?.name || 'Unnamed Sponsor'),
       logo: String(item?.logo || '/logo.png'),
       description: String(item?.description || ''),
@@ -103,6 +109,7 @@ const normalizeSponsorsConfig = (value: any): SponsorsConfig => {
   const rawTournaments = value?.tournaments && typeof value.tournaments === 'object'
     ? value.tournaments
     : {};
+  const globalSponsorList = normalizeSponsorInfoList(value?.globalSponsor ? [value.globalSponsor] : []);
 
   const tournaments: Record<string, SponsorInfo[]> = {};
   for (const [key, list] of Object.entries(rawTournaments)) {
@@ -112,6 +119,8 @@ const normalizeSponsorsConfig = (value: any): SponsorsConfig => {
   return {
     global: global.length > 0 ? global : DEFAULT_SPONSORS_CONFIG.global,
     tournaments,
+    globalSponsorEnabled: Boolean(value?.globalSponsorEnabled),
+    globalSponsor: globalSponsorList[0] || null,
   };
 };
 
@@ -294,6 +303,7 @@ const Select = ({ label, options, ...props }: any) => (
 export default function App() {
   const lockedRole = parseRole((import.meta as any).env?.VITE_LOCK_ROLE);
   const originalFetchRef = useRef<typeof window.fetch | null>(null);
+  const sponsorsImportInputRef = useRef<HTMLInputElement | null>(null);
   const [authToken, setAuthToken] = useState<string>(() => localStorage.getItem('btm_auth_token') || '');
   const [currentRole, setCurrentRole] = useState<UserRole>(() => lockedRole || 'public');
   const [showLogin, setShowLogin] = useState(false);
@@ -304,10 +314,12 @@ export default function App() {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [showSponsorsModal, setShowSponsorsModal] = useState(false);
+  const [showGlobalSponsorModal, setShowGlobalSponsorModal] = useState(false);
   const [selectedSponsor, setSelectedSponsor] = useState<SponsorInfo | null>(null);
   const [sponsorsConfig, setSponsorsConfig] = useState<SponsorsConfig>(DEFAULT_SPONSORS_CONFIG);
   const [showSponsorsConfigEditor, setShowSponsorsConfigEditor] = useState(false);
-  const [sponsorsConfigDraft, setSponsorsConfigDraft] = useState('');
+  const [sponsorsConfigDraft, setSponsorsConfigDraft] = useState<SponsorsConfig>(DEFAULT_SPONSORS_CONFIG);
+  const [sponsorsConfigScope, setSponsorsConfigScope] = useState<string>('global');
   const [sponsorsConfigError, setSponsorsConfigError] = useState('');
   const [view, setView] = useState<'list' | 'detail' | 'create' | 'edit'>(() => {
     const savedView = localStorage.getItem('btm_view');
@@ -675,23 +687,170 @@ export default function App() {
     setShowSponsorsModal(true);
   };
 
+  const makeDraftSponsor = (scope: string, index: number): SponsorInfo => ({
+    id: `${scope}-${Date.now()}-${index}`,
+    kind: 'sponsor',
+    name: '',
+    logo: '/logo.png',
+    description: '',
+    contacts: '',
+    url: '',
+  });
+
+  const setDraftSponsorsForScope = (scope: string, nextSponsors: SponsorInfo[]) => {
+    setSponsorsConfigDraft((prev) => {
+      if (scope === 'global') {
+        return {
+          ...prev,
+          global: nextSponsors,
+        };
+      }
+
+      const nextTournaments = { ...prev.tournaments };
+      if (nextSponsors.length === 0) {
+        delete nextTournaments[scope];
+      } else {
+        nextTournaments[scope] = nextSponsors;
+      }
+
+      return {
+        ...prev,
+        tournaments: nextTournaments,
+      };
+    });
+  };
+
+  const updateDraftSponsorField = (
+    scope: string,
+    sponsorId: string,
+    field: keyof SponsorInfo,
+    value: string,
+  ) => {
+    const currentSponsors = scope === 'global'
+      ? sponsorsConfigDraft.global
+      : (sponsorsConfigDraft.tournaments[scope] || []);
+
+    const nextSponsors = currentSponsors.map((item) => {
+      if (item.id !== sponsorId) return item;
+      if (field === 'kind') {
+        return {
+          ...item,
+          kind: value === 'partner' ? 'partner' : 'sponsor',
+        };
+      }
+      return {
+        ...item,
+        [field]: value,
+      };
+    });
+
+    setDraftSponsorsForScope(scope, nextSponsors);
+  };
+
+  const addDraftSponsorForScope = (scope: string) => {
+    const currentSponsors = scope === 'global'
+      ? sponsorsConfigDraft.global
+      : (sponsorsConfigDraft.tournaments[scope] || []);
+    const nextSponsors = [...currentSponsors, makeDraftSponsor(scope, currentSponsors.length)];
+    setDraftSponsorsForScope(scope, nextSponsors);
+  };
+
+  const removeDraftSponsorForScope = (scope: string, sponsorId: string) => {
+    const currentSponsors = scope === 'global'
+      ? sponsorsConfigDraft.global
+      : (sponsorsConfigDraft.tournaments[scope] || []);
+    const nextSponsors = currentSponsors.filter((item) => item.id !== sponsorId);
+    setDraftSponsorsForScope(scope, nextSponsors);
+  };
+
+  const setDraftSponsorCountForScope = (scope: string, rawCount: number) => {
+    const nextCount = Math.max(0, Math.min(20, Number.isFinite(rawCount) ? Math.floor(rawCount) : 0));
+    const currentSponsors = scope === 'global'
+      ? sponsorsConfigDraft.global
+      : (sponsorsConfigDraft.tournaments[scope] || []);
+    const nextSponsors = [...currentSponsors];
+
+    while (nextSponsors.length < nextCount) {
+      nextSponsors.push(makeDraftSponsor(scope, nextSponsors.length));
+    }
+    while (nextSponsors.length > nextCount) {
+      nextSponsors.pop();
+    }
+
+    setDraftSponsorsForScope(scope, nextSponsors);
+  };
+
+  const setDraftGlobalSponsorEnabled = (enabled: boolean) => {
+    setSponsorsConfigDraft((prev) => {
+      const nextGlobalSponsor = enabled
+        ? (prev.globalSponsor || makeDraftSponsor('global-app', 0))
+        : prev.globalSponsor;
+      return {
+        ...prev,
+        globalSponsorEnabled: enabled,
+        globalSponsor: nextGlobalSponsor,
+      };
+    });
+  };
+
+  const updateDraftGlobalSponsorField = (field: keyof SponsorInfo, value: string) => {
+    setSponsorsConfigDraft((prev) => {
+      const current = prev.globalSponsor || makeDraftSponsor('global-app', 0);
+      const next = field === 'kind'
+        ? { ...current, kind: value === 'partner' ? 'partner' : 'sponsor' }
+        : { ...current, [field]: value };
+      return {
+        ...prev,
+        globalSponsor: next,
+      };
+    });
+  };
+
   const openSponsorsConfigEditor = () => {
     setSponsorsConfigError('');
-    setSponsorsConfigDraft(JSON.stringify(sponsorsConfig, null, 2));
+    setSponsorsConfigDraft(normalizeSponsorsConfig(sponsorsConfig));
+    setSponsorsConfigScope(selectedTournament ? String(selectedTournament.id) : 'global');
     setShowSponsorsConfigEditor(true);
   };
 
   const saveSponsorsConfigEditor = () => {
-    try {
-      const parsed = JSON.parse(sponsorsConfigDraft);
-      const normalized = normalizeSponsorsConfig(parsed);
-      setSponsorsConfig(normalized);
-      localStorage.setItem(SPONSORS_CONFIG_OVERRIDE_KEY, JSON.stringify(normalized));
-      setShowSponsorsConfigEditor(false);
-      setSponsorsConfigError('');
-    } catch (err: any) {
-      setSponsorsConfigError(err?.message || 'Invalid JSON format');
-    }
+    const normalized = normalizeSponsorsConfig(sponsorsConfigDraft);
+    setSponsorsConfig(normalized);
+    localStorage.setItem(SPONSORS_CONFIG_OVERRIDE_KEY, JSON.stringify(normalized));
+    setShowSponsorsConfigEditor(false);
+    setSponsorsConfigError('');
+  };
+
+  const exportSponsorsConfigEditor = () => {
+    const normalized = normalizeSponsorsConfig(sponsorsConfigDraft);
+    const dataStr = `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(normalized, null, 2))}`;
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute('href', dataStr);
+    downloadAnchorNode.setAttribute('download', 'sponsors-config.export.json');
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
+  const importSponsorsConfigEditor = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = String(event.target?.result || '');
+        const parsed = JSON.parse(text);
+        const normalized = normalizeSponsorsConfig(parsed);
+        setSponsorsConfigDraft(normalized);
+        setSponsorsConfigError('Imported config loaded. Click Save to apply it.');
+      } catch (err: any) {
+        setSponsorsConfigError(err?.message || 'Invalid JSON file format');
+      } finally {
+        if (sponsorsImportInputRef.current) sponsorsImportInputRef.current.value = '';
+      }
+    };
+    reader.readAsText(file);
   };
 
   const resetSponsorsConfigEditor = async () => {
@@ -702,18 +861,38 @@ export default function App() {
       const parsed = await response.json();
       const normalized = normalizeSponsorsConfig(parsed);
       setSponsorsConfig(normalized);
-      setSponsorsConfigDraft(JSON.stringify(normalized, null, 2));
+      setSponsorsConfigDraft(normalized);
       setSponsorsConfigError('');
     } catch {
       setSponsorsConfig(DEFAULT_SPONSORS_CONFIG);
-      setSponsorsConfigDraft(JSON.stringify(DEFAULT_SPONSORS_CONFIG, null, 2));
+      setSponsorsConfigDraft(DEFAULT_SPONSORS_CONFIG);
       setSponsorsConfigError('Config reset to built-in defaults.');
     }
   };
 
+  const sponsorScopeOptions = [
+    { value: 'global', label: 'Global (all tournaments)' },
+    ...tournaments.map((t) => ({ value: String(t.id), label: `${t.name} (#${t.id})` })),
+  ];
+  const scopedDraftSponsors = sponsorsConfigScope === 'global'
+    ? sponsorsConfigDraft.global
+    : (sponsorsConfigDraft.tournaments[sponsorsConfigScope] || []);
+  const appGlobalSponsor = sponsorsConfig.globalSponsorEnabled ? sponsorsConfig.globalSponsor : null;
+
   const activeSponsors = selectedTournament
     ? (sponsorsConfig.tournaments[String(selectedTournament.id)] || sponsorsConfig.global)
     : sponsorsConfig.global;
+
+  const formatTournamentDate = (value: string) => {
+    if (!value) return 'TBD';
+    const parsed = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-emerald-50/30 text-black font-sans">
@@ -824,6 +1003,40 @@ export default function App() {
                 </div>
               </div>
 
+              {appGlobalSponsor && (
+                <Card className="p-4 border border-emerald-200 bg-gradient-to-r from-white to-emerald-50/60">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-16 h-16 rounded-md border border-black/10 bg-white p-2 flex items-center justify-center">
+                        <img
+                          src={appGlobalSponsor.logo || '/logo.png'}
+                          alt={appGlobalSponsor.name}
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-widest font-bold text-emerald-700">BTM Powered by</p>
+                        <p className="text-sm font-semibold text-black/85">{appGlobalSponsor.name || 'Unnamed sponsor'}</p>
+                        <p className="text-xs text-black/55">Visible across the app footer</p>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowGlobalSponsorModal(true)}
+                      className="px-3"
+                      title="Open Powered by"
+                      ariaLabel="Open Powered by"
+                    >
+                      <Eye size={14} />
+                    </Button>
+                  </div>
+                </Card>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {loading ? (
                   Array(3).fill(0).map((_, i) => (
@@ -841,7 +1054,11 @@ export default function App() {
                     )}
                   </div>
                 ) : (
-                  tournaments.map(t => (
+                  tournaments.map(t => {
+                    const cardSponsors = sponsorsConfig.tournaments[String(t.id)] || sponsorsConfig.global;
+                    const displaySponsors = cardSponsors.slice(0, 3);
+
+                    return (
                     <Card key={t.id} className="group cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200" onClick={() => openTournament(t)}>
                       <div className="p-6">
                         <div className="flex justify-between items-start mb-4">
@@ -863,6 +1080,20 @@ export default function App() {
                           )}
                         </div>
                         <h3 className="text-xl font-bold mb-2 group-hover:text-emerald-600 transition-colors">{t.name}</h3>
+                        <div className="space-y-2 mb-3 text-xs text-black/65">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar size={13} className="text-black/45" />
+                            <span>{formatTournamentDate(t.date)}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Target size={13} className="text-black/45" />
+                            <span className="truncate">{t.location || 'Location TBA'}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <ClipboardList size={13} className="text-black/45" />
+                            <span className="truncate">{t.format || 'Standard format'}</span>
+                          </div>
+                        </div>
                         <div className="flex items-center gap-4 text-sm text-black/60">
                           <div className="flex items-center gap-1.5">
                             <Users size={14} />
@@ -873,15 +1104,39 @@ export default function App() {
                             <span>{t.players_per_lane} {t.type === 'team' ? 'Teams' : 'Players'} / Lane</span>
                           </div>
                         </div>
-                      </div>
-                      <div className="px-6 py-4 bg-black/[0.02] border-t border-black/5 flex items-center justify-between">
-                        <span className="text-xs font-semibold text-black/40 uppercase tracking-widest" title="Open Tournament">
-                          <FolderOpen size={14} />
-                        </span>
-                        <ChevronRight size={16} className="text-black/20 group-hover:translate-x-1 transition-transform" />
+                        {displaySponsors.length > 0 && (
+                          <div className="mt-4 pt-3 border-t border-black/5 flex items-center justify-between gap-3">
+                            <span className="text-[10px] font-semibold uppercase tracking-widest text-black/40">Powered by</span>
+                            <div className="flex items-center gap-2">
+                              {displaySponsors.map((sponsor) => (
+                                <button
+                                  key={sponsor.id}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openSponsorDetails(sponsor);
+                                  }}
+                                  className="w-10 h-10 rounded-md border border-black/10 bg-white p-1.5 hover:border-emerald-300 transition-colors"
+                                  title={sponsor.name}
+                                  aria-label={`Open sponsor details: ${sponsor.name}`}
+                                >
+                                  <img
+                                    src={sponsor.logo || '/logo.png'}
+                                    alt={sponsor.name}
+                                    className="w-full h-full object-contain"
+                                    onError={(e) => {
+                                      (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                                    }}
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </Card>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </motion.div>
@@ -1130,27 +1385,202 @@ export default function App() {
         </div>
       )}
 
-      {showSponsorsConfigEditor && (
-        <div className="fixed inset-0 z-[60] bg-black/45 flex items-center justify-center p-4" onClick={() => setShowSponsorsConfigEditor(false)}>
-          <Card className="w-full max-w-3xl p-4" onClick={(e: any) => e.stopPropagation()}>
+      {showGlobalSponsorModal && appGlobalSponsor && (
+        <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4" onClick={() => setShowGlobalSponsorModal(false)}>
+          <Card className="w-full max-w-xl p-4" onClick={(e: any) => e.stopPropagation()}>
             <div className="flex items-center justify-between gap-3 mb-3">
-              <h3 className="text-lg font-bold">Sponsor Config JSON</h3>
+              <h3 className="text-lg font-bold">BTM Powered by</h3>
+              <Button size="sm" variant="outline" onClick={() => setShowGlobalSponsorModal(false)} title="Close" ariaLabel="Close">
+                <X size={14} />
+              </Button>
+            </div>
+            <div className="space-y-3">
+              <div className="w-full h-40 rounded-md border border-black/10 bg-white p-3 flex items-center justify-center">
+                <img
+                  src={appGlobalSponsor.logo || '/logo.png'}
+                  alt={appGlobalSponsor.name}
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                  }}
+                />
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">Name</p>
+                <p className="text-sm text-black/80">{appGlobalSponsor.name || 'Unnamed sponsor'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">Description</p>
+                <p className="text-sm text-black/75">{appGlobalSponsor.description || 'No description provided.'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">Contacts</p>
+                <p className="text-sm text-black/75">{appGlobalSponsor.contacts || 'No contact details provided.'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">Website</p>
+                {appGlobalSponsor.url ? (
+                  <a href={appGlobalSponsor.url} target="_blank" rel="noreferrer" className="text-emerald-700 underline break-all text-sm">{appGlobalSponsor.url}</a>
+                ) : (
+                  <p className="text-sm text-black/75">No URL provided.</p>
+                )}
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {showSponsorsConfigEditor && (
+        <div className="fixed inset-0 z-[60] bg-black/45 flex items-center justify-center p-4">
+          <Card className="w-full max-w-5xl p-4" onClick={(e: any) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="text-lg font-bold">Sponsors and Partners Manager</h3>
               <Button size="sm" variant="outline" onClick={() => setShowSponsorsConfigEditor(false)} title="Close" ariaLabel="Close">
                 <X size={14} />
               </Button>
             </div>
 
-            <p className="text-xs text-black/50 mb-2">Edit `global` and `tournaments` mappings. `tournaments` keys must be string tournament IDs.</p>
-            <textarea
-              value={sponsorsConfigDraft}
-              onChange={(e) => setSponsorsConfigDraft(e.target.value)}
-              className="w-full h-[360px] rounded-md border border-black/15 p-3 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-emerald-100"
-              spellCheck={false}
-            />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+              <Card className="p-3 border border-black/10">
+                <h4 className="text-xs font-bold uppercase tracking-widest text-black/60 mb-2">BTM Powered by Slot</h4>
+                <label className="flex items-center gap-2 text-sm font-semibold mb-3">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(sponsorsConfigDraft.globalSponsorEnabled)}
+                    onChange={(e) => setDraftGlobalSponsorEnabled(e.target.checked)}
+                  />
+                  Activate Powered by in Footer
+                </label>
+                {sponsorsConfigDraft.globalSponsorEnabled && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <Input
+                      label="Name"
+                      value={sponsorsConfigDraft.globalSponsor?.name || ''}
+                      onChange={(e: any) => updateDraftGlobalSponsorField('name', e.target.value)}
+                    />
+                    <Select
+                      label="Type"
+                      value={sponsorsConfigDraft.globalSponsor?.kind || 'sponsor'}
+                      onChange={(e: any) => updateDraftGlobalSponsorField('kind', e.target.value)}
+                      options={[
+                        { value: 'sponsor', label: 'Sponsor' },
+                        { value: 'partner', label: 'Partner' },
+                      ]}
+                    />
+                    <Input
+                      label="Logo URL"
+                      value={sponsorsConfigDraft.globalSponsor?.logo || '/logo.png'}
+                      onChange={(e: any) => updateDraftGlobalSponsorField('logo', e.target.value)}
+                    />
+                    <Input
+                      label="Website URL"
+                      value={sponsorsConfigDraft.globalSponsor?.url || ''}
+                      onChange={(e: any) => updateDraftGlobalSponsorField('url', e.target.value)}
+                    />
+                    <Input
+                      label="Contacts"
+                      value={sponsorsConfigDraft.globalSponsor?.contacts || ''}
+                      onChange={(e: any) => updateDraftGlobalSponsorField('contacts', e.target.value)}
+                    />
+                    <Input
+                      label="Description"
+                      value={sponsorsConfigDraft.globalSponsor?.description || ''}
+                      onChange={(e: any) => updateDraftGlobalSponsorField('description', e.target.value)}
+                    />
+                  </div>
+                )}
+              </Card>
+
+              <Card className="p-3 border border-black/10">
+                <h4 className="text-xs font-bold uppercase tracking-widest text-black/60 mb-2">Scope and Actions</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                  <Select
+                    label="Manage For"
+                    value={sponsorsConfigScope}
+                    onChange={(e: any) => setSponsorsConfigScope(e.target.value)}
+                    options={sponsorScopeOptions.map((opt) => ({ value: opt.value, label: opt.label }))}
+                  />
+                  <Input
+                    label="Number of Entries"
+                    type="number"
+                    min="0"
+                    max="20"
+                    value={scopedDraftSponsors.length}
+                    onChange={(e: any) => setDraftSponsorCountForScope(sponsorsConfigScope, Number(e.target.value))}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => addDraftSponsorForScope(sponsorsConfigScope)}
+                    className="px-3"
+                    title="Add Entry"
+                    ariaLabel="Add Entry"
+                  >
+                    <Plus size={14} />
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={exportSponsorsConfigEditor} className="px-3" title="Export Config" ariaLabel="Export Config">
+                    <Upload size={14} />
+                  </Button>
+                  <div className="relative">
+                    <input
+                      ref={sponsorsImportInputRef}
+                      type="file"
+                      accept=".json"
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                      onChange={importSponsorsConfigEditor}
+                    />
+                    <Button size="sm" variant="outline" className="px-3" title="Import Config" ariaLabel="Import Config">
+                      <Download size={14} />
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            <div className="space-y-3 max-h-[360px] overflow-auto pr-1">
+              {scopedDraftSponsors.length === 0 ? (
+                <Card className="p-4 border border-dashed border-black/20 text-sm text-black/50">No entries in this scope yet. Add one to begin.</Card>
+              ) : scopedDraftSponsors.map((item, index) => (
+                <Card key={item.id} className="p-3 border border-black/10">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-bold uppercase tracking-widest text-black/60">Entry {index + 1}</p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => removeDraftSponsorForScope(sponsorsConfigScope, item.id)}
+                      className="px-2"
+                      title="Remove Entry"
+                      ariaLabel="Remove Entry"
+                    >
+                      <Trash2 size={12} />
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <Input label="Name" value={item.name} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'name', e.target.value)} />
+                    <Select
+                      label="Type"
+                      value={item.kind}
+                      onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'kind', e.target.value)}
+                      options={[
+                        { value: 'sponsor', label: 'Sponsor' },
+                        { value: 'partner', label: 'Partner' },
+                      ]}
+                    />
+                    <Input label="Logo URL" value={item.logo} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'logo', e.target.value)} />
+                    <Input label="Website URL" value={item.url} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'url', e.target.value)} />
+                    <Input label="Contacts" value={item.contacts} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'contacts', e.target.value)} />
+                    <Input label="Description" value={item.description} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'description', e.target.value)} />
+                  </div>
+                </Card>
+              ))}
+            </div>
+
             {sponsorsConfigError && <p className="text-xs text-red-600 font-semibold mt-2">{sponsorsConfigError}</p>}
 
             <div className="flex flex-wrap gap-2 pt-3">
-              <Button size="sm" variant="outline" onClick={saveSponsorsConfigEditor} className="px-3" title="Save Config" ariaLabel="Save Config">
+              <Button size="sm" variant="outline" onClick={saveSponsorsConfigEditor} className="px-3" title="Save" ariaLabel="Save">
                 <Save size={14} />
               </Button>
               <Button size="sm" variant="outline" onClick={resetSponsorsConfigEditor} className="px-3 normal-case tracking-normal" title="Reset to File" ariaLabel="Reset to File">
@@ -1163,26 +1593,36 @@ export default function App() {
 
       <footer className="border-t border-white/10 bg-black">
         <div className="max-w-7xl mx-auto px-6 py-5 text-xs text-white/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <span className="font-semibold uppercase tracking-wide text-emerald-400">Total tournament control. From first frame to final payout.</span>
-          <div className="flex items-center gap-2 font-medium flex-wrap justify-end">
-            <span className="text-white/60">Powered by</span>
-            {activeSponsors.map((sponsor) => (
-              <button
-                key={sponsor.id}
-                type="button"
-                onClick={() => openSponsorDetails(sponsor)}
-                className="w-8 h-8 rounded border border-white/20 bg-white p-0.5 hover:border-emerald-300"
-                title={sponsor.name}
-                aria-label={sponsor.name}
-              >
-                <img src={sponsor.logo} alt={sponsor.name} className="w-full h-full object-contain" />
-              </button>
-            ))}
-            <Trophy size={12} className="text-emerald-400" />
+          <div className="flex items-center gap-2 font-medium flex-wrap">
+            <span className="font-semibold uppercase tracking-wide text-emerald-400">Total tournament control. From first frame to final payout.</span>
             <span className="text-white/40">|</span>
             <span>BTM <span className="text-[#E64833]">v2.0</span></span>
             <span className="text-white/40">|</span>
             <span>Copyright Murat D. 2026</span>
+          </div>
+          <div className="flex items-center gap-2 font-medium flex-wrap justify-end">
+            {appGlobalSponsor && (
+              <button
+                type="button"
+                onClick={() => setShowGlobalSponsorModal(true)}
+                className="inline-flex items-center gap-2 px-2 py-1 rounded border border-white/20 bg-white/5 hover:border-emerald-300 transition-colors"
+                title="Open Powered by"
+                aria-label="Open Powered by"
+              >
+                <span className="text-[10px] uppercase tracking-wider text-white/65">Powered by</span>
+                <span className="w-8 h-8 rounded bg-white p-1 border border-white/20 flex items-center justify-center">
+                  <img
+                    src={appGlobalSponsor.logo || '/logo.png'}
+                    alt={appGlobalSponsor.name}
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                    }}
+                  />
+                </span>
+              </button>
+            )}
+            {!appGlobalSponsor && <Trophy size={12} className="text-emerald-400" />}
           </div>
         </div>
       </footer>
@@ -1670,15 +2110,14 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   };
 
   const handleExportCSV = () => {
-    const headers = ['First Name', 'Last Name', 'Gender', 'Club', 'Average', 'Email', 'Team'];
+    const headers = ['First Name', 'Last Name', 'Gender', 'Club', 'Average', 'Email'];
     const rows = participants.map(p => [
       p.first_name,
       p.last_name,
       p.gender,
       p.club,
       p.average,
-      p.email,
-      p.team_name || ''
+      p.email
     ]);
     
     const csvContent = [
@@ -2230,7 +2669,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div>
           <h3 className="text-xl font-bold text-emerald-800">Manage Participants</h3>
-          <p className="text-xs text-black/50 mt-0.5">Roster, team assignment, and participant import/export</p>
+          <p className="text-xs text-black/50 mt-0.5">Roster and participant import/export</p>
         </div>
       </div>
 
@@ -2528,17 +2967,6 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   <Input label="Team/Club" name="club" defaultValue={editingPlayer?.club} placeholder="e.g. City Bowlers" />
                   <Input label="Email Address" name="email" type="email" defaultValue={editingPlayer?.email} placeholder="john@example.com" />
                   
-                  {tournament.type === 'team' && (
-                    <Select 
-                      label="Assign to Tournament Team" 
-                      name="team_id" 
-                      defaultValue={editingPlayer?.team_id || ""}
-                      options={[
-                        { value: '', label: 'None' },
-                        ...teams.map(t => ({ value: t.id, label: t.name }))
-                      ]} 
-                    />
-                  )}
                   <div className="pt-4 flex gap-3 border-t border-emerald-100/80">
                     <Button type="submit" className="flex-1 justify-center" title={editingPlayer ? 'Save Changes' : 'Add Player'} ariaLabel={editingPlayer ? 'Save Changes' : 'Add Player'}>
                       {editingPlayer ? <Save size={16} /> : <Plus size={16} />}
