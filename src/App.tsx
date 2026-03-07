@@ -142,6 +142,51 @@ const getTournamentFormatLabel = (value: string) => {
   return value === 'Pre-Qualification' ? 'Total Pinfall' : value;
 };
 
+type PublicLanguage = 'en' | 'mn';
+type BilingualTerm = { en: string; mn: string };
+const PUBLIC_LANGUAGE_STORAGE_KEY = 'btm_public_language';
+
+const parseCsvLine = (line: string): string[] => {
+  const fields: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === '"') {
+      const next = line[i + 1];
+      if (inQuotes && next === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (ch === ',' && !inQuotes) {
+      fields.push(current);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+
+  fields.push(current);
+  return fields.map((field) => field.trim());
+};
+
+const parseBilingualCsv = (csvText: string): Map<string, BilingualTerm> => {
+  const dictionary = new Map<string, BilingualTerm>();
+  const lines = String(csvText || '').split(/\r?\n/).filter((line) => line.trim().length > 0);
+  for (const line of lines) {
+    const [keyRaw, englishRaw = '', mongolianRaw = ''] = parseCsvLine(line);
+    const key = String(keyRaw || '').trim();
+    if (!key || key.toLowerCase() === 'key' || key.toLowerCase() === 'note') continue;
+    dictionary.set(key, { en: String(englishRaw || ''), mn: String(mongolianRaw || '') });
+  }
+  return dictionary;
+};
+
 const buildPrintDocument = ({
   tournament,
   pageTitle,
@@ -281,7 +326,7 @@ const Button = ({
 
 const FemaleSpot = ({ muted = false, className = '' }: { muted?: boolean; className?: string }) => (
   <span
-    className={`inline-block h-2 w-2 rounded-full ring-1 ring-rose-300 ${muted ? 'bg-rose-200' : 'bg-rose-500'} ${className}`}
+    className={`inline-block h-1.5 w-1.5 rounded-full ring-1 ring-rose-200/70 ${muted ? 'bg-rose-200/80' : 'bg-rose-400/75'} ${className}`}
     title="Female"
     aria-label="Female"
   />
@@ -346,7 +391,37 @@ export default function App() {
   });
   const [loading, setLoading] = useState(true);
   const [formType, setFormType] = useState<'individual' | 'team'>('individual');
+  const [publicLanguage, setPublicLanguage] = useState<PublicLanguage>(() => {
+    const stored = localStorage.getItem(PUBLIC_LANGUAGE_STORAGE_KEY);
+    return stored === 'mn' ? 'mn' : 'en';
+  });
+  const [publicDictionary, setPublicDictionary] = useState<Map<string, BilingualTerm>>(new Map());
   const isAdmin = currentRole === 'admin';
+
+  useEffect(() => {
+    fetch('/i18n-en-mn.csv')
+      .then((res) => res.text())
+      .then((text) => {
+        setPublicDictionary(parseBilingualCsv(text));
+      })
+      .catch(() => {
+        setPublicDictionary(new Map());
+      });
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(PUBLIC_LANGUAGE_STORAGE_KEY, publicLanguage);
+  }, [publicLanguage]);
+
+  const tPublic = (key: string, fallback: string) => {
+    const row = publicDictionary.get(key);
+    if (!row) return fallback;
+    if (publicLanguage === 'mn') {
+      const translated = String(row.mn || '').trim();
+      if (translated.length > 0) return translated;
+    }
+    return String(row.en || '').trim() || fallback;
+  };
 
   // Persistence effects
   useEffect(() => {
@@ -935,6 +1010,18 @@ export default function App() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {currentRole === 'public' && (
+            <select
+              value={publicLanguage}
+              onChange={(e: any) => setPublicLanguage(e.target.value === 'mn' ? 'mn' : 'en')}
+              className="h-8 px-2 rounded-md border border-white/25 bg-white/10 text-xs font-bold uppercase tracking-wider text-white"
+              title="Language"
+              aria-label="Language"
+            >
+              <option value="en">ENG</option>
+              <option value="mn">MON</option>
+            </select>
+          )}
           {lockedRole ? (
             <span className="px-2 py-1.5 rounded-md border border-white/20 text-xs font-bold uppercase tracking-wider bg-white/10 text-white">
               {lockedRole}
@@ -1314,6 +1401,7 @@ export default function App() {
               activeTab={activeTab}
               setActiveTab={setActiveTab}
               role={currentRole}
+              tPublic={tPublic}
               onOpenSponsors={() => {
                 setSelectedSponsor(null);
                 setShowSponsorsModal(true);
@@ -1677,7 +1765,7 @@ export default function App() {
 
 // --- Sub-Views ---
 
-function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, activeTab, setActiveTab, role, onOpenSponsors }: {
+function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, activeTab, setActiveTab, role, onOpenSponsors, tPublic }: {
   tournament: Tournament,
   onBack: () => void,
   onEdit: (t: Tournament) => void,
@@ -1686,6 +1774,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
   setActiveTab: (t: any) => void,
   role: UserRole,
   onOpenSponsors: () => void,
+  tPublic: (key: string, fallback: string) => string,
 }) {
   const [moderatorAccess, setModeratorAccess] = useState<ModeratorTournamentAccess | null>(null);
   const [moderators, setModerators] = useState<UserAccount[]>([]);
@@ -1825,18 +1914,13 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
 
   const effectiveRole: UserRole = role === 'moderator' && !moderatorAccess?.can_manage ? 'public' : role;
 
-  useEffect(() => {
-    if (effectiveRole === 'public' && activeTab === 'participants') {
-      setActiveTab('lanes');
-    }
-  }, [effectiveRole, activeTab, setActiveTab]);
-
   const visibleTabs = effectiveRole === 'public'
     ? [
-      { id: 'lanes', label: 'Lane Assignments', icon: LayoutGrid },
-      { id: 'scoring', label: 'Scoring', icon: ClipboardList },
-      { id: 'brackets', label: 'Brackets', icon: GitBranch },
-      { id: 'standings', label: 'Tournament Result', icon: BarChart3 },
+      { id: 'participants', label: 'Participants', icon: Users },
+      { id: 'lanes', label: tPublic('public.tab.lane_assignments', 'Lane Assignments'), icon: LayoutGrid },
+      { id: 'scoring', label: tPublic('public.tab.scoring', 'Scoring'), icon: ClipboardList },
+      { id: 'brackets', label: tPublic('public.tab.brackets', 'Brackets'), icon: GitBranch },
+      { id: 'standings', label: tPublic('public.tab.tournament_result', 'Tournament Result'), icon: BarChart3 },
     ]
     : [
       { id: 'participants', label: 'Participants', icon: Users },
@@ -1854,7 +1938,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
     >
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <Button variant="ghost" onClick={onBack} className="mb-4 -ml-2 text-black/40" title="Back to Dashboard" ariaLabel="Back to Dashboard">
+          <Button variant="ghost" onClick={onBack} className="mb-4 -ml-2 text-black/40" title={tPublic('common.back_to_dashboard', 'Back to Dashboard')} ariaLabel={tPublic('common.back_to_dashboard', 'Back to Dashboard')}>
             <ArrowLeft size={18} />
           </Button>
           <div className="flex items-center gap-3 mb-2">
@@ -1878,7 +1962,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
             </div>
             <div className="flex items-center gap-1.5">
               <Users size={14} />
-              <span className="capitalize">{tournament.type}</span>
+              <span className="capitalize">{tournament.type === 'team' ? tPublic('public.tournament.type.team', 'team') : tPublic('public.tournament.type.individual', 'individual')}</span>
               {tournament.type === 'team' && (
                 <span className="text-black/40">({tournament.players_per_team} per team)</span>
               )}
@@ -1895,26 +1979,26 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
             </div>
             <div className="flex items-center gap-1.5">
               <Target size={14} />
-              <span>{tournament.games_count} Games</span>
+              <span>{tournament.games_count} {tPublic('public.tournament.games', 'Games')}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <LayoutGrid size={14} />
-              <span>{tournament.players_per_lane} {tournament.type === 'team' ? 'Teams' : 'Players'} / Lane</span>
+              <span>{tournament.players_per_lane} {tournament.type === 'team' ? tPublic('public.tournament.teams_per_lane', 'Teams') : tPublic('public.tournament.players_per_lane', 'Players')} / {tPublic('lanes.lane', 'Lane')}</span>
             </div>
           </div>
         </div>
 
         <div className="w-full md:w-[430px] space-y-3">
-          <div className="flex justify-end">
+          <div className="flex justify-end items-center gap-2">
             <Button
               size="sm"
               variant="outline"
               onClick={onOpenSponsors}
               className="px-3 normal-case tracking-normal"
-              title="Sponsors"
-              ariaLabel="Sponsors"
+              title={tPublic('common.sponsors', 'Sponsors')}
+              ariaLabel={tPublic('common.sponsors', 'Sponsors')}
             >
-              Sponsors
+              {tPublic('common.sponsors', 'Sponsors')}
             </Button>
           </div>
 
@@ -2062,7 +2146,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       </div>
 
       <div className="min-h-[400px]">
-        {activeTab === 'participants' && effectiveRole !== 'public' && <ParticipantView tournament={tournament} role={effectiveRole} />}
+        {activeTab === 'participants' && <ParticipantView tournament={tournament} role={effectiveRole} />}
         {activeTab === 'lanes' && <LaneView tournament={tournament} role={effectiveRole} />}
         {activeTab === 'scoring' && <ScoringView tournament={tournament} role={effectiveRole} />}
         {activeTab === 'brackets' && <BracketsView tournament={tournament} role={effectiveRole} onTournamentUpdated={onTournamentUpdated} />}
@@ -2713,8 +2797,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div>
-          <h3 className="text-xl font-bold text-emerald-800">Manage Participants</h3>
-          <p className="text-xs text-black/50 mt-0.5">Roster and participant import/export</p>
+          <h3 className="text-xl font-bold text-emerald-800">{canManageParticipants ? 'Manage Participants' : 'Participants'}</h3>
+          <p className="text-xs text-black/50 mt-0.5">{canManageParticipants ? 'Roster and participant import/export' : 'Roster view'}</p>
         </div>
       </div>
 
@@ -2800,13 +2884,15 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       <span>{playerSort.key === 'average' ? (playerSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right">Actions</th>
+                  {canManageParticipants && (
+                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/10">
                 {participants.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-black/40 italic text-sm">
+                    <td colSpan={canManageParticipants ? 7 : 6} className="px-4 py-8 text-center text-black/40 italic text-sm">
                       No participants registered yet.
                     </td>
                   </tr>
@@ -2824,8 +2910,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       <td className={`px-3 py-2 text-[10px] uppercase ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{(p.gender || '').toLowerCase().startsWith('f') ? 'F' : (p.gender || '').toLowerCase().startsWith('m') ? 'M' : '-'}</td>
                       <td className={`px-3 py-2 text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{p.club || '-'}</td>
                       <td className={`px-3 py-2 font-mono text-xs ${(p.average ?? 0) > 300 ? 'text-red-700 font-semibold' : ''}`}>{p.average && p.average > 0 ? p.average : ''}</td>
-                      <td className="px-3 py-2 text-right">
-                        {canManageParticipants ? (
+                      {canManageParticipants && (
+                        <td className="px-3 py-2 text-right">
                           <div className="flex justify-end gap-1.5" title={participantIssues.has(p.id) ? participantIssues.get(p.id)?.join(' • ') : undefined}>
                             <button 
                               onClick={() => { setEditingPlayer(p); setShowAddPlayer(true); }}
@@ -2842,10 +2928,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                               <Trash2 size={12} />
                             </button>
                           </div>
-                        ) : (
-                          <span className="text-xs text-black/30">-</span>
-                        )}
-                      </td>
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}
@@ -2884,12 +2968,14 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       <Button size="sm" variant="outline" onClick={handleExportTeams} title="Export Teams" className="px-2">
                         <Upload size={14} />
                       </Button>
-                      <div className="relative">
-                        <input type="file" accept=".csv" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportTeams} />
-                        <Button size="sm" variant="outline" title="Import Teams" className="px-2">
-                          <Download size={14} />
-                        </Button>
-                      </div>
+                      {canManageParticipants && (
+                        <div className="relative">
+                          <input type="file" accept=".csv" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportTeams} />
+                          <Button size="sm" variant="outline" title="Import Teams" className="px-2">
+                            <Download size={14} />
+                          </Button>
+                        </div>
+                      )}
                       <Button size="sm" variant="outline" onClick={handlePrintTeams} title="Print Teams" ariaLabel="Print Teams" className="px-2">
                         <Printer size={14} />
                       </Button>
@@ -2905,13 +2991,15 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 w-12">#</th>
                     <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">Team Name</th>
                     <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">Team Members</th>
-                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right whitespace-nowrap w-16">Actions</th>
+                    {canManageParticipants && (
+                      <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right whitespace-nowrap w-16">Actions</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-black/10">
                   {teams.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-black/40 italic text-sm">No teams created.</td>
+                      <td colSpan={canManageParticipants ? 4 : 3} className="px-4 py-8 text-center text-black/40 italic text-sm">No teams created.</td>
                     </tr>
                   ) : (
                     teams.map((team, index) => {
@@ -2934,8 +3022,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                               </div>
                             </div>
                           </td>
-                          <td className="px-3 py-2 text-right whitespace-nowrap w-16">
-                            {canManageParticipants ? (
+                          {canManageParticipants && (
+                            <td className="px-3 py-2 text-right whitespace-nowrap w-16">
                               <div className="flex justify-end gap-1">
                                 <button 
                                   onClick={() => openEditTeamModal(team)}
@@ -2952,10 +3040,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                                   <Trash2 size={12} />
                                 </button>
                               </div>
-                            ) : (
-                              <span className="text-xs text-black/30">-</span>
-                            )}
-                          </td>
+                            </td>
+                          )}
                         </tr>
                       );
                     })

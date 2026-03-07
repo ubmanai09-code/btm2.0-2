@@ -1,0 +1,83 @@
+key,english,mongolian
+note,Edit the mongolian column manually. Keep key unchanged.,
+common.back_to_dashboard,Back to Dashboard,
+common.sponsors,Sponsors,Спонсорууд
+common.show,Show,
+common.hide,Hide,
+common.refresh,Refresh,
+common.save,Save,Хадгалах
+common.export,Export,Экспорт хийх
+common.import,Import,Татаж авах
+common.print,Print,Хэвлэх
+common.clear,Clear,Цэвэрлэх
+common.generate,Generate,Үүсгэх
+common.required,Required,Шаардлагатай 
+common.ready,Ready,
+common.active,Active,
+common.inactive,Inactive,
+common.no_data,No data,
+common.no_results,No results yet,
+public.tab.lane_assignments,Lane Assignments,Зам хуваарилалт
+public.tab.scoring,Scoring,Оноо
+public.tab.brackets,Brackets,Бракетууд
+public.tab.tournament_result,Tournament Result,Тэмцээний дүн
+public.status.draft,draft,Ноорог 
+public.status.active,active,Идэвхтэй
+public.status.finished,finished,Дууссан 
+public.tournament.games,Games,Тоглолт
+public.tournament.players_per_lane,Players / Lane,Тамирчид / Зам
+public.tournament.teams_per_lane,Teams / Lane,Баг / Зам
+public.tournament.type.individual,individual,
+public.tournament.type.team,team,баг
+lanes.waiting_queue,Waiting Queue,Хүлээгдэж байгаа
+lanes.all_assigned,All assigned,Бүгд хуваарилагдсан 
+lanes.shift,Shift,Ээлж
+lanes.lane,Lane,Зам
+lanes.unassigned,Unassigned,Хуваарилагдаагүй
+lanes.no_assignments,No assignments,
+scoring.team,Team,Баг
+scoring.total,Total,Бүгд
+scoring.avg,Avg,Дундаж 
+scoring.game,Game,Тоглолт
+scoring.no_participants_shift,No participants assigned to this shift.,
+brackets.setup.title,Bracket Setup,
+brackets.setup.subtitle,1) Choose rules 2) Review top seeds 3) Generate.,1) Дүрмийг сонго 2) Оноолтой танилц 3) Үүсгэ.
+brackets.setup.section,Setup,Тохиргоо
+brackets.setup.bracket_type,Bracket Type,Бракетын төрөл
+brackets.setup.seeds,Seeds,Оноолт 
+brackets.setup.winners,Winners,Ялагч 
+brackets.top_seeds.title,Top Seeds,ТОП оноолт
+brackets.top_seeds.subtitle,Top by total pinfall,
+brackets.rules.title,8-Seed Play-Off Rules,
+brackets.rules.subtitle,Based on tournament rules,
+brackets.rules.quarter_finals,Quarter-Finals,1/4 финал
+brackets.rules.semi_finals,Semi-Finals,Хагас финал
+brackets.rules.finals,Finals & Placement,Финал / Байр
+brackets.results.view,Bracket Results View,
+brackets.results.cards_table,Cards / Table,
+brackets.results.visual,Visual,
+brackets.results.none_title,No brackets generated,
+brackets.results.none_subtitle,Generate brackets to start the elimination round,
+brackets.results.congratulation,Congratulation!,Баяр хүргэе!
+brackets.results.first_place,1st place,
+brackets.results.second_place,2nd place,
+brackets.results.third_place,3rd place,
+standings.title,Tournament Standings,Тэмцээний дараах жагсаалт 
+standings.player_standings,Player Standings,Тамирчид
+standings.team_standings,Team Standings,Багууд
+standings.place,Place,Байр
+standings.participant,Participant,
+standings.team,Team,Баг
+standings.club,Club,Клуб
+standings.total,Total,Бүгд
+standings.avg,Avg,Дундаж
+standings.no_scores,No scores recorded yet,
+highlights.title,Tournament Highlights,Тэмцээний онцлогтой 
+highlights.subtitle,Highest single game score by category,
+highlights.male,Highest Score Male,
+highlights.female,Highest Score Female,
+moderator.access.title,Moderator Access,
+moderator.access.subtitle,Assign one or more moderator accounts to this tournament.,
+moderator.not_active,Moderator access is not active for this tournament.,
+moderator.ask_admin,Ask admin to grant access for this tournament or wait for a new assignment.,
+,,
