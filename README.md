@@ -37,6 +37,7 @@ This project serves both API and frontend from one Express process.
 
 - `NODE_ENV=production`
 - `PORT=3000` (or your host-assigned port)
+- `BTM_DB_PATH=/absolute/path/to/persistent/bowling.db`
 - Login credentials (set in production):
    - `BTM_ADMIN_USERNAME`
    - `BTM_ADMIN_PASSWORD`
@@ -47,6 +48,8 @@ This project serves both API and frontend from one Express process.
    - `VITE_LOCK_ROLE=admin|moderator|public` (frontend display lock)
 
 Default behavior without lock role: app opens in public view, and only logged-in moderators/admins can manage data based on permissions.
+
+Important for deployment: `BTM_DB_PATH` must point to persistent storage outside build output folders (for example, not inside `dist-server/`).
 
 ## Moderator assignment rules
 

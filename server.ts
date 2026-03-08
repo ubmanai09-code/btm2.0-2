@@ -4,13 +4,18 @@ import Database from "better-sqlite3";
 import { randomUUID } from "crypto";
 import { compare, hash } from "bcryptjs";
 import net from "net";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const dbPath = path.resolve(__dirname, "bowling.db");
+const configuredDbPath = (process.env.BTM_DB_PATH || '').trim();
+const dbPath = configuredDbPath
+  ? path.resolve(configuredDbPath)
+  : path.resolve(process.cwd(), "data", "bowling.db");
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');

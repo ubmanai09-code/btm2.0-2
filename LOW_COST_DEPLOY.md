@@ -66,6 +66,7 @@ For your current app and workload, the target path is:
 2. Configure environment variables:
    - `NODE_ENV=production`
    - `PORT` (if required by Hostinger)
+   - `BTM_DB_PATH` (absolute path to persistent storage, outside `dist-server/`)
    - `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
 3. Upload/deploy code.
 4. Install dependencies and build:
@@ -100,3 +101,7 @@ For all hosts, persist these files on durable storage:
 - `bowling.db-shm`
 
 If host does not provide persistent disk, do not use SQLite there for production.
+
+Recommended app env for SQLite deployments:
+
+- `BTM_DB_PATH=/absolute/persistent/path/bowling.db`
