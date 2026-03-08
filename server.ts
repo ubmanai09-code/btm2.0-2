@@ -96,6 +96,10 @@ function initDb() {
       participant2_id INTEGER,
       participant1_seed INTEGER,
       participant2_seed INTEGER,
+      participant1_source_match_id INTEGER,
+      participant1_source_outcome TEXT,
+      participant2_source_match_id INTEGER,
+      participant2_source_outcome TEXT,
       winner_id INTEGER,
       FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
       FOREIGN KEY (participant1_id) REFERENCES participants(id) ON DELETE SET NULL,
@@ -203,6 +207,10 @@ function initDb() {
   const bracketMigrations = [
     { name: 'participant1_seed', type: 'INTEGER' },
     { name: 'participant2_seed', type: 'INTEGER' },
+    { name: 'participant1_source_match_id', type: 'INTEGER' },
+    { name: 'participant1_source_outcome', type: 'TEXT' },
+    { name: 'participant2_source_match_id', type: 'INTEGER' },
+    { name: 'participant2_source_outcome', type: 'TEXT' },
   ];
   bracketMigrations.forEach(m => {
     if (!bColumns.includes(m.name)) {
@@ -584,6 +592,77 @@ async function startServer() {
     `).get(matchId, tournamentId) as any;
 
     if (!match) return;
+
+    const loserId = winnerId === match.participant1_id
+      ? match.participant2_id
+      : (winnerId === match.participant2_id ? match.participant1_id : null);
+
+    const linkedMatches = db.prepare(`
+      SELECT
+        id,
+        participant1_id,
+        participant2_id,
+        winner_id,
+        participant1_source_match_id,
+        participant1_source_outcome,
+        participant2_source_match_id,
+        participant2_source_outcome
+      FROM brackets
+      WHERE tournament_id = ?
+        AND (
+          participant1_source_match_id = ?
+          OR participant2_source_match_id = ?
+        )
+    `).all(tournamentId, matchId, matchId) as any[];
+
+    if (linkedMatches.length > 0) {
+      for (const linked of linkedMatches) {
+        const updates: string[] = [];
+        const values: any[] = [];
+
+        if (Number(linked.participant1_source_match_id) === matchId) {
+          const outcome = String(linked.participant1_source_outcome || 'winner').toLowerCase() === 'loser' ? 'loser' : 'winner';
+          const participantForSlot = outcome === 'loser' ? (loserId || null) : winnerId;
+          updates.push('participant1_id = ?');
+          values.push(participantForSlot);
+        }
+
+        if (Number(linked.participant2_source_match_id) === matchId) {
+          const outcome = String(linked.participant2_source_outcome || 'winner').toLowerCase() === 'loser' ? 'loser' : 'winner';
+          const participantForSlot = outcome === 'loser' ? (loserId || null) : winnerId;
+          updates.push('participant2_id = ?');
+          values.push(participantForSlot);
+        }
+
+        if (updates.length > 0) {
+          db.prepare(`UPDATE brackets SET ${updates.join(', ')} WHERE id = ?`).run(...values, linked.id);
+        }
+
+        const refreshedLinked = db.prepare(`
+          SELECT id, participant1_id, participant2_id, winner_id
+          FROM brackets
+          WHERE id = ?
+        `).get(linked.id) as any;
+
+        if (!refreshedLinked) continue;
+
+        if (refreshedLinked.winner_id && refreshedLinked.winner_id !== refreshedLinked.participant1_id && refreshedLinked.winner_id !== refreshedLinked.participant2_id) {
+          db.prepare('UPDATE brackets SET winner_id = NULL WHERE id = ?').run(refreshedLinked.id);
+          refreshedLinked.winner_id = null;
+        }
+
+        if (!refreshedLinked.winner_id) {
+          if (refreshedLinked.participant1_id && !refreshedLinked.participant2_id) {
+            db.prepare('UPDATE brackets SET winner_id = ? WHERE id = ?').run(refreshedLinked.participant1_id, refreshedLinked.id);
+            advanceWinnerToNextRound(tournamentId, refreshedLinked.id, refreshedLinked.participant1_id);
+          } else if (!refreshedLinked.participant1_id && refreshedLinked.participant2_id) {
+            db.prepare('UPDATE brackets SET winner_id = ? WHERE id = ?').run(refreshedLinked.participant2_id, refreshedLinked.id);
+            advanceWinnerToNextRound(tournamentId, refreshedLinked.id, refreshedLinked.participant2_id);
+          }
+        }
+      }
+      return;
+    }
 
     syncPlayoffBronzeSlot(tournamentId, match, winnerId);
 
@@ -1679,6 +1758,7 @@ const existing = db
       const parsedRounds = Number.parseInt(req.body?.rounds_count, 10);
       const parsedRound1Matches = Number.parseInt(req.body?.round1_matches, 10);
       const winnersMode = req.body?.winners_mode === '3' ? '3' : '1';
+      const rawLinks = Array.isArray(req.body?.links) ? req.body.links : [];
 
       const roundsCount = Number.isFinite(parsedRounds) ? Math.max(1, parsedRounds) : 3;
       const round1Matches = Number.isFinite(parsedRound1Matches) ? Math.max(1, parsedRound1Matches) : 4;
@@ -1691,9 +1771,22 @@ const existing = db
       while (round <= roundsCount && matchesInRound >= 1) {
         for (let i = 0; i < matchesInRound; i++) {
           db.prepare(`
-            INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(tournamentId, round, i, null, null, null, null, null);
+            INSERT INTO brackets (
+              tournament_id,
+              round,
+              match_index,
+              participant1_id,
+              participant2_id,
+              participant1_seed,
+              participant2_seed,
+              participant1_source_match_id,
+              participant1_source_outcome,
+              participant2_source_match_id,
+              participant2_source_outcome,
+              winner_id
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(tournamentId, round, i, null, null, null, null, null, null, null, null, null);
         }
         round += 1;
         matchesInRound = Math.floor(matchesInRound / 2);
@@ -1702,9 +1795,57 @@ const existing = db
 
       if (winnersMode === '3' && roundsCount >= 2) {
         db.prepare(`
-          INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(tournamentId, roundsCount, 1, null, null, null, null, null);
+          INSERT INTO brackets (
+            tournament_id,
+            round,
+            match_index,
+            participant1_id,
+            participant2_id,
+            participant1_seed,
+            participant2_seed,
+            participant1_source_match_id,
+            participant1_source_outcome,
+            participant2_source_match_id,
+            participant2_source_outcome,
+            winner_id
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(tournamentId, roundsCount, 1, null, null, null, null, null, null, null, null, null);
+      }
+
+      if (rawLinks.length > 0) {
+        const rows = db.prepare(`
+          SELECT id, round, match_index
+          FROM brackets
+          WHERE tournament_id = ?
+        `).all(tournamentId) as any[];
+
+        const idByRoundMatch = new Map<string, number>();
+        for (const row of rows) {
+          idByRoundMatch.set(`${Number(row.round)}-${Number(row.match_index)}`, Number(row.id));
+        }
+
+        for (const link of rawLinks) {
+          const fromRound = Number.parseInt(String(link?.from_round), 10);
+          const fromMatchIndex = Number.parseInt(String(link?.from_match_index), 10);
+          const toRound = Number.parseInt(String(link?.to_round), 10);
+          const toMatchIndex = Number.parseInt(String(link?.to_match_index), 10);
+          const toSlot = link?.to_slot === 'p2' ? 'p2' : 'p1';
+          const outcome = link?.outcome === 'loser' ? 'loser' : 'winner';
+
+          if (!Number.isFinite(fromRound) || !Number.isFinite(fromMatchIndex) || !Number.isFinite(toRound) || !Number.isFinite(toMatchIndex)) {
+            continue;
+          }
+
+          const sourceMatchId = idByRoundMatch.get(`${fromRound}-${fromMatchIndex}`);
+          const targetMatchId = idByRoundMatch.get(`${toRound}-${toMatchIndex}`);
+          if (!sourceMatchId || !targetMatchId) continue;
+
+          const sourceField = toSlot === 'p1' ? 'participant1_source_match_id' : 'participant2_source_match_id';
+          const outcomeField = toSlot === 'p1' ? 'participant1_source_outcome' : 'participant2_source_outcome';
+
+          db.prepare(`UPDATE brackets SET ${sourceField} = ?, ${outcomeField} = ? WHERE id = ?`).run(sourceMatchId, outcome, targetMatchId);
+        }
       }
 
       const generated = db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ?").get(tournamentId) as any;

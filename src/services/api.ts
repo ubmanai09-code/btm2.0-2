@@ -525,7 +525,19 @@ const api = {
   },
   async generateManualBrackets(
     tournamentId: number,
-    options: { rounds_count: number; round1_matches: number; winners_mode: '1' | '3' }
+    options: {
+      rounds_count: number;
+      round1_matches: number;
+      winners_mode: '1' | '3';
+      links?: Array<{
+        from_round: number;
+        from_match_index: number;
+        outcome: 'winner' | 'loser';
+        to_round: number;
+        to_match_index: number;
+        to_slot: 'p1' | 'p2';
+      }>;
+    }
   ): Promise<{ success: boolean; error?: string }> {
     const res = await fetch(`/api/tournaments/${tournamentId}/brackets/generate-manual`, {
       method: 'POST',

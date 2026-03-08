@@ -4559,6 +4559,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const latestPersistedSettingsRef = useRef<{ match_play_type: Tournament['match_play_type']; qualified_count: number; playoff_winners_count: number } | null>(null);
   const bracketSettingsStorageKey = `btm_bracket_settings_${tournament.id}`;
   const bracketViewStorageKey = `btm_bracket_view_mode_${tournament.id}`;
+  const bracketScoreDraftsStorageKey = `btm_bracket_score_drafts_${tournament.id}`;
   const [matches, setMatches] = useState<any[]>([]);
   const [seeds, setSeeds] = useState<any[]>([]);
   const [bracketParticipants, setBracketParticipants] = useState<Participant[]>([]);
@@ -4580,6 +4581,10 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       ? Number.parseInt(String(tournament.playoff_winners_count), 10)
       : 1
   );
+  const [useManualSeedMatchups, setUseManualSeedMatchups] = useState(false);
+  const [customSeedMatchups, setCustomSeedMatchups] = useState<Array<{ p1: number | null; p2: number | null }>>([]);
+  const [customRoundLinkSelections, setCustomRoundLinkSelections] = useState<Record<number, Array<{ p1: string; p2: string }>>>({});
+  const [customRuleTableLocked, setCustomRuleTableLocked] = useState(false);
   const [bracketViewMode, setBracketViewMode] = useState<'cards' | 'visual'>(() => {
     const stored = localStorage.getItem(`btm_bracket_view_mode_${tournament.id}`);
     return stored === 'visual' ? 'visual' : 'cards';
@@ -4612,6 +4617,35 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const persistBracketSettingsToStorage = (settings: { match_play_type: Tournament['match_play_type']; qualified_count: number; playoff_winners_count: number }) => {
     try {
       localStorage.setItem(bracketSettingsStorageKey, JSON.stringify(settings));
+    } catch {
+      // Ignore localStorage errors.
+    }
+  };
+
+  const readStoredMatchScoreDrafts = () => {
+    try {
+      const raw = localStorage.getItem(bracketScoreDraftsStorageKey);
+      if (!raw) return {} as Record<number, { p1: string; p2: string }>;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return {} as Record<number, { p1: string; p2: string }>;
+
+      const normalized: Record<number, { p1: string; p2: string }> = {};
+      for (const [key, value] of Object.entries(parsed as Record<string, any>)) {
+        const matchId = Number.parseInt(String(key), 10);
+        if (!Number.isFinite(matchId) || matchId <= 0) continue;
+        const p1 = String((value as any)?.p1 ?? '');
+        const p2 = String((value as any)?.p2 ?? '');
+        normalized[matchId] = { p1, p2 };
+      }
+      return normalized;
+    } catch {
+      return {} as Record<number, { p1: string; p2: string }>;
+    }
+  };
+
+  const persistMatchScoreDraftsToStorage = (drafts: Record<number, { p1: string; p2: string }>) => {
+    try {
+      localStorage.setItem(bracketScoreDraftsStorageKey, JSON.stringify(drafts || {}));
     } catch {
       // Ignore localStorage errors.
     }
@@ -4696,9 +4730,14 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     persistBracketSettingsToStorage(preferredSettings);
     setSeeds([]);
     setSelectedSeed(null);
-    setMatchScoreDrafts({});
+    setMatchScoreDrafts(readStoredMatchScoreDrafts());
+    setCustomRuleTableLocked(false);
     setSettingsHydrated(true);
   }, [tournament.id]);
+
+  useEffect(() => {
+    persistMatchScoreDraftsToStorage(matchScoreDrafts);
+  }, [matchScoreDrafts, bracketScoreDraftsStorageKey]);
 
   useEffect(() => {
     if (!settingsHydrated) return;
@@ -4923,6 +4962,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     try {
       let orderedSeedIds: number[] = [];
       let seedKind: 'team' | 'participant' = tournament.type === 'team' ? 'team' : 'participant';
+      const seedParticipantIdBySeedNumber = new Map<number, number>();
 
       if (tournament.type === 'team') {
         const [scoresData, participantsData, teamsData] = await Promise.all([
@@ -4999,6 +5039,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         }
 
         const resolvedParticipantIds: number[] = [];
+        const usedSeedNumbers: number[] = [];
         for (const seedNumber of orderedSeedNumbers) {
           const teamId = teamIdBySeedNumber.get(seedNumber);
           if (!teamId) continue;
@@ -5023,10 +5064,18 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 
           if (representativeId && Number.isFinite(representativeId) && representativeId > 0) {
             resolvedParticipantIds.push(representativeId);
+            usedSeedNumbers.push(seedNumber);
           }
         }
 
         orderedSeedIds = resolvedParticipantIds;
+        for (let i = 0; i < usedSeedNumbers.length; i += 1) {
+          const seedNo = usedSeedNumbers[i];
+          const participantId = resolvedParticipantIds[i];
+          if (Number.isFinite(seedNo) && Number.isFinite(participantId) && participantId > 0) {
+            seedParticipantIdBySeedNumber.set(seedNo, participantId);
+          }
+        }
         seedKind = 'participant';
       } else {
         const sourceSeeds = await loadSeeds();
@@ -5045,6 +5094,12 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         orderedSeedIds = orderedSeedNumbers
           .map((seedNumber) => seedIdBySeedNumber.get(seedNumber))
           .filter((id): id is number => Number.isFinite(Number(id)) && Number(id) > 0);
+        for (const seedNumber of orderedSeedNumbers) {
+          const participantId = seedIdBySeedNumber.get(seedNumber);
+          if (participantId && Number.isFinite(participantId) && participantId > 0) {
+            seedParticipantIdBySeedNumber.set(seedNumber, participantId);
+          }
+        }
         seedKind = 'participant';
       }
 
@@ -5055,14 +5110,152 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 
       await api.clearBrackets(tournament.id);
       setMatches([]);
+      setMatchScoreDrafts({});
+      persistMatchScoreDraftsToStorage({});
 
-      await api.generateBrackets(tournament.id, {
-        match_play_type: matchPlayType,
-        qualified_count: orderedSeedIds.length,
-        playoff_winners_count: Math.min(3, Math.max(1, Number(playoffWinnersCount) || 1)),
-        seed_ids: orderedSeedIds,
-        seed_kind: seedKind,
-      });
+      if (useManualSeedMatchups) {
+        const roundsToFinal = Math.max(1, Math.ceil(Math.log2(Math.max(2, orderedSeedIds.length))));
+        const round1Matches = Math.max(1, Math.ceil(Math.pow(2, roundsToFinal) / 2));
+        const matchupRows = customSeedMatchups.slice(0, round1Matches);
+
+        if (matchupRows.length < round1Matches) {
+          alert('Complete all custom rule rows before generating brackets.');
+          return;
+        }
+
+        const pickedSeeds: number[] = [];
+        for (const row of matchupRows) {
+          const p1 = Number(row.p1);
+          const p2 = Number(row.p2);
+          if (!Number.isFinite(p1) || p1 <= 0 || !Number.isFinite(p2) || p2 <= 0 || p1 === p2) {
+            alert('Each custom match row must contain two different seeds.');
+            return;
+          }
+          if (!seedParticipantIdBySeedNumber.has(p1) || !seedParticipantIdBySeedNumber.has(p2)) {
+            alert('Custom rule table includes a seed that is not in current Top Seeds.');
+            return;
+          }
+          pickedSeeds.push(p1, p2);
+        }
+
+        const duplicateSeed = pickedSeeds.find((seedNo, idx) => pickedSeeds.indexOf(seedNo) !== idx);
+        if (duplicateSeed) {
+          alert(`Seed #${duplicateSeed} is used more than once. Each seed can only appear once.`);
+          return;
+        }
+
+        const customLinks: Array<{
+          from_round: number;
+          from_match_index: number;
+          outcome: 'winner' | 'loser';
+          to_round: number;
+          to_match_index: number;
+          to_slot: 'p1' | 'p2';
+        }> = [];
+
+        for (let round = 2; round <= roundsToFinal; round += 1) {
+          const previousCount = customRoundCounts[round - 1] || 0;
+          const championshipMatches = Math.max(1, Math.floor(previousCount / 2));
+          const placementExtra = (round === roundsToFinal && Math.min(3, Math.max(1, Number(playoffWinnersCount) || 1)) > 1) ? 1 : 0;
+          const expectedRows = championshipMatches + placementExtra;
+          const rows = customRoundLinkSelections[round] || [];
+
+          if (rows.length < expectedRows) {
+            alert(`Complete all link rows for Round ${round}.`);
+            return;
+          }
+
+          for (let matchIndex = 0; matchIndex < expectedRows; matchIndex += 1) {
+            const row = rows[matchIndex] || { p1: '', p2: '' };
+            const isPlacementRow = placementExtra === 1 && matchIndex === expectedRows - 1;
+
+            if (isPlacementRow) {
+              const [p1OutcomeRaw, p1IndexRaw] = String(row.p1 || '').split(':');
+              const [p2OutcomeRaw, p2IndexRaw] = String(row.p2 || '').split(':');
+              const p1Outcome = p1OutcomeRaw === 'loser' ? 'loser' : (p1OutcomeRaw === 'winner' ? 'winner' : '');
+              const p2Outcome = p2OutcomeRaw === 'loser' ? 'loser' : (p2OutcomeRaw === 'winner' ? 'winner' : '');
+              const p1Index = Number.parseInt(String(p1IndexRaw || ''), 10);
+              const p2Index = Number.parseInt(String(p2IndexRaw || ''), 10);
+
+              if (p1Outcome !== 'loser' || p2Outcome !== 'loser') {
+                alert('3rd Place Match must be between two losers (Loser vs Loser).');
+                return;
+              }
+              if (!Number.isFinite(p1Index) || !Number.isFinite(p2Index) || p1Index < 0 || p2Index < 0 || p1Index >= previousCount || p2Index >= previousCount || p1Index === p2Index) {
+                alert('3rd Place Match must use two different semi-final losers.');
+                return;
+              }
+            }
+
+            for (const slot of ['p1', 'p2'] as const) {
+              const raw = String(slot === 'p1' ? row.p1 : row.p2 || '');
+              const [outcomeRaw, indexRaw] = raw.split(':');
+              const sourceOutcome = outcomeRaw === 'loser' ? 'loser' : (outcomeRaw === 'winner' ? 'winner' : '');
+              const sourceIndex = Number.parseInt(String(indexRaw || ''), 10);
+              if (!sourceOutcome || !Number.isFinite(sourceIndex) || sourceIndex < 0 || sourceIndex >= previousCount) {
+                alert(`Invalid source in Round ${round} Match ${matchIndex + 1}.`);
+                return;
+              }
+              customLinks.push({
+                from_round: round - 1,
+                from_match_index: sourceIndex,
+                outcome: sourceOutcome,
+                to_round: round,
+                to_match_index: matchIndex,
+                to_slot: slot,
+              });
+            }
+          }
+        }
+
+        await api.generateManualBrackets(tournament.id, {
+          rounds_count: roundsToFinal,
+          round1_matches: round1Matches,
+          winners_mode: Math.min(3, Math.max(1, Number(playoffWinnersCount) || 1)) > 1 ? '3' : '1',
+          links: customLinks,
+        });
+
+        const freshMatches = await api.getBrackets(tournament.id);
+        const roundOneMatches = freshMatches
+          .filter((m: any) => Number(m.round) === 1)
+          .sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
+
+        for (let i = 0; i < round1Matches; i += 1) {
+          const match = roundOneMatches[i];
+          const row = matchupRows[i];
+          if (!match || !row) continue;
+
+          const p1 = Number(row.p1);
+          const p2 = Number(row.p2);
+          const p1ParticipantId = seedParticipantIdBySeedNumber.get(p1);
+          const p2ParticipantId = seedParticipantIdBySeedNumber.get(p2);
+          if (!p1ParticipantId || !p2ParticipantId) continue;
+
+          await api.assignBracketSeed(tournament.id, match.id, {
+            slot: 'p1',
+            seed_id: p1ParticipantId,
+            seed_kind: 'participant',
+            seed: p1,
+          });
+
+          await api.assignBracketSeed(tournament.id, match.id, {
+            slot: 'p2',
+            seed_id: p2ParticipantId,
+            seed_kind: 'participant',
+            seed: p2,
+          });
+        }
+        setCustomRuleTableLocked(true);
+      } else {
+        await api.generateBrackets(tournament.id, {
+          match_play_type: matchPlayType,
+          qualified_count: orderedSeedIds.length,
+          playoff_winners_count: Math.min(3, Math.max(1, Number(playoffWinnersCount) || 1)),
+          seed_ids: orderedSeedIds,
+          seed_kind: seedKind,
+        });
+        setCustomRuleTableLocked(false);
+      }
       setSelectedSeed(null);
       await loadSeeds();
       await loadBrackets();
@@ -5223,6 +5416,9 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     if (!confirm('Clear all generated brackets for this tournament?')) return;
     try {
       await api.clearBrackets(tournament.id);
+      setCustomRuleTableLocked(false);
+      setMatchScoreDrafts({});
+      persistMatchScoreDraftsToStorage({});
       await loadBrackets();
     } catch (err: any) {
       alert(err?.message || 'Failed to clear brackets');
@@ -5230,6 +5426,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   };
 
   const handleAssignSeedToSlot = async (matchId: number, slot: 'p1' | 'p2') => {
+    if (useManualSeedMatchups && matches.length > 0) return;
     if (!selectedSeed) return;
     try {
       await api.assignBracketSeed(tournament.id, matchId, {
@@ -5247,6 +5444,10 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 
   const handleAssignByName = async (match: any, slot: 'p1' | 'p2', rawValue: string) => {
     try {
+      if (useManualSeedMatchups && matches.length > 0) {
+        setEditingNameSlot(null);
+        return;
+      }
       const parsedValue = Number.parseInt(String(rawValue), 10);
       if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
         setEditingNameSlot(null);
@@ -5386,7 +5587,147 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const visibleSeeds = (qualifiedCount > 0 ? seeds.slice(0, qualifiedCount) : seeds)
     .slice()
     .sort((a: any, b: any) => (Number(a.seed) || 0) - (Number(b.seed) || 0));
+  const availableSeedNumbersForCustom = visibleSeeds
+    .map((seed: any) => Number(seed.seed))
+    .filter((seedNo: number) => Number.isFinite(seedNo) && seedNo > 0);
   const isEightSeedPlayoffMode = matchPlayType === 'playoff' && seedsCount === 8;
+  const lockCustomSeedEditing = useManualSeedMatchups && customRuleTableLocked;
+  const customRoundCounts: number[] = [];
+  customRoundCounts[1] = Math.max(1, roundOneMatchesPreview);
+  for (let round = 2; round <= roundsCountPreview; round += 1) {
+    const previousCount = customRoundCounts[round - 1] || 1;
+    const championshipMatches = Math.max(1, Math.floor(previousCount / 2));
+    const placementExtra = (round === roundsCountPreview && winnersCountPreview > 1) ? 1 : 0;
+    customRoundCounts[round] = championshipMatches + placementExtra;
+  }
+
+  const roundStartMatchNumber: Record<number, number> = {};
+  let runningMatchNumber = 1;
+  for (let round = 1; round <= roundsCountPreview; round += 1) {
+    roundStartMatchNumber[round] = runningMatchNumber;
+    runningMatchNumber += customRoundCounts[round] || 0;
+  }
+
+  const toMatchLabel = (round: number, matchIndex: number) => `M${(roundStartMatchNumber[round] || 1) + matchIndex}`;
+
+  const customQuarterRuleRows = customSeedMatchups.slice(0, roundOneMatchesPreview).map((row, index) => ({
+    index,
+    leftSeed: row.p1,
+    rightSeed: row.p2,
+    label: toMatchLabel(1, index),
+  }));
+  const customRoundTwoTitle = isEightSeedPlayoffMode ? 'Semi-Finals' : 'Round 2';
+  const customFinalRoundTitle = 'Finals & Placement';
+  const customFinalRoundIndex = roundsCountPreview;
+  const customRoundOneTitle = isEightSeedPlayoffMode ? 'Quarter-Finals' : 'Round 1';
+
+  useEffect(() => {
+    setCustomSeedMatchups((prev) => {
+      const next: Array<{ p1: number | null; p2: number | null }> = [];
+      for (let i = 0; i < roundOneMatchesPreview; i += 1) {
+        next.push(prev[i] || { p1: null, p2: null });
+      }
+      return next;
+    });
+  }, [roundOneMatchesPreview, tournament.id]);
+
+  useEffect(() => {
+    setCustomRoundLinkSelections((prev) => {
+      const next: Record<number, Array<{ p1: string; p2: string }>> = {};
+      for (let round = 2; round <= roundsCountPreview; round += 1) {
+        const previousCount = customRoundCounts[round - 1] || 1;
+        const championshipMatches = Math.max(1, Math.floor(previousCount / 2));
+        const placementExtra = (round === roundsCountPreview && winnersCountPreview > 1) ? 1 : 0;
+        const totalMatches = championshipMatches + placementExtra;
+
+        next[round] = [];
+        for (let matchIndex = 0; matchIndex < totalMatches; matchIndex += 1) {
+          const existing = prev[round]?.[matchIndex];
+          if (existing) {
+            next[round].push(existing);
+            continue;
+          }
+
+          if (placementExtra === 1 && matchIndex === totalMatches - 1) {
+            const loserLeft = previousCount > 0 ? 0 : -1;
+            const loserRight = previousCount > 1 ? 1 : 0;
+            next[round].push({
+              p1: loserLeft >= 0 ? `loser:${loserLeft}` : '',
+              p2: loserRight >= 0 ? `loser:${loserRight}` : '',
+            });
+            continue;
+          }
+
+          const leftIndex = matchIndex * 2;
+          const rightIndex = Math.min((matchIndex * 2) + 1, Math.max(0, previousCount - 1));
+          next[round].push({
+            p1: leftIndex < previousCount ? `winner:${leftIndex}` : '',
+            p2: rightIndex < previousCount ? `winner:${rightIndex}` : '',
+          });
+        }
+      }
+      return next;
+    });
+  }, [roundsCountPreview, roundOneMatchesPreview, winnersCountPreview, tournament.id]);
+
+  const updateCustomSeedMatchup = (index: number, slot: 'p1' | 'p2', value: string) => {
+    const numeric = Number.parseInt(String(value || ''), 10);
+    setCustomSeedMatchups((prev) => prev.map((entry, i) => {
+      if (i !== index) return entry;
+      return {
+        ...entry,
+        [slot]: Number.isFinite(numeric) && numeric > 0 ? numeric : null,
+      };
+    }));
+  };
+
+  const updateCustomRoundLink = (round: number, matchIndex: number, slot: 'p1' | 'p2', value: string) => {
+    setCustomRoundLinkSelections((prev) => {
+      const roundRows = [...(prev[round] || [])];
+      const current = roundRows[matchIndex] || { p1: '', p2: '' };
+      roundRows[matchIndex] = { ...current, [slot]: value || '' };
+      return { ...prev, [round]: roundRows };
+    });
+  };
+
+  const getRoundSourceOptions = (round: number, includeLosers: boolean) => {
+    const previousRound = round - 1;
+    const previousCount = customRoundCounts[previousRound] || 0;
+    const options: Array<{ value: string; label: string }> = [];
+    for (let idx = 0; idx < previousCount; idx += 1) {
+      const matchLabel = toMatchLabel(previousRound, idx);
+      options.push({ value: `winner:${idx}`, label: `Winner ${matchLabel}` });
+      if (includeLosers) {
+        options.push({ value: `loser:${idx}`, label: `Loser ${matchLabel}` });
+      }
+    }
+    return options;
+  };
+
+  const formatSourceToken = (round: number, token: string) => {
+    const [outcomeRaw, indexRaw] = String(token || '').split(':');
+    const outcome = outcomeRaw === 'loser' ? 'Loser' : (outcomeRaw === 'winner' ? 'Winner' : '');
+    const sourceIndex = Number.parseInt(String(indexRaw || ''), 10);
+    if (!outcome || !Number.isFinite(sourceIndex) || sourceIndex < 0) return 'Source ?';
+    const previousRound = round - 1;
+    const maxCount = customRoundCounts[previousRound] || 0;
+    if (sourceIndex >= maxCount) return 'Source ?';
+    return `${outcome} ${toMatchLabel(previousRound, sourceIndex)}`;
+  };
+
+  const roundTwoRows = (customRoundLinkSelections[2] || []).map((row, index) => ({
+    index,
+    label: toMatchLabel(2, index),
+    p1: row.p1 || '',
+    p2: row.p2 || '',
+  }));
+
+  const finalRoundRows = (customRoundLinkSelections[customFinalRoundIndex] || []).map((row, index) => ({
+    index,
+    label: toMatchLabel(customFinalRoundIndex, index),
+    p1: row.p1 || '',
+    p2: row.p2 || '',
+  }));
 
   const getRuleDrivenMatchMeta = (match: any) => {
     const round = Number(match.round) || 0;
@@ -5438,7 +5779,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       return {
         stage: 'Consolation',
         matchCode: '3rd Place',
-        pairingHint: 'Higher pinfall between semi-final losers',
+        pairingHint: 'Loser M5 vs Loser M6',
       };
     }
 
@@ -5564,9 +5905,9 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 ? 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500/20'
                 : 'bg-black/[0.02] border-black/5 hover:border-black/10'
             }`}
-            onClick={() => selectedSeed ? handleAssignSeedToSlot(m.id, 'p1') : undefined}
+            onClick={() => !lockCustomSeedEditing && selectedSeed ? handleAssignSeedToSlot(m.id, 'p1') : undefined}
             onDoubleClick={() => canManageBrackets && !selectedSeed && m.participant1_id && handleSetWinner(m.id, m.participant1_id)}
-            title={selectedSeed ? 'Click to place selected seed' : 'Double-click to set winner'}
+            title={lockCustomSeedEditing ? 'Seed editing is locked in Custom Matchups after generate' : (selectedSeed ? 'Click to place selected seed' : 'Double-click to set winner')}
           >
             {isEditingP1 ? (
               <select
@@ -5588,7 +5929,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (canManageBrackets && !selectedSeed) {
+                  if (canManageBrackets && !selectedSeed && !lockCustomSeedEditing) {
                     setEditingNameSlot({ matchId: m.id, slot: 'p1' });
                   }
                 }}
@@ -5630,9 +5971,9 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 ? 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500/20'
                 : 'bg-black/[0.02] border-black/5 hover:border-black/10'
             }`}
-            onClick={() => selectedSeed ? handleAssignSeedToSlot(m.id, 'p2') : undefined}
+            onClick={() => !lockCustomSeedEditing && selectedSeed ? handleAssignSeedToSlot(m.id, 'p2') : undefined}
             onDoubleClick={() => canManageBrackets && !selectedSeed && m.participant2_id && handleSetWinner(m.id, m.participant2_id)}
-            title={selectedSeed ? 'Click to place selected seed' : 'Double-click to set winner'}
+            title={lockCustomSeedEditing ? 'Seed editing is locked in Custom Matchups after generate' : (selectedSeed ? 'Click to place selected seed' : 'Double-click to set winner')}
           >
             {isEditingP2 ? (
               <select
@@ -5654,7 +5995,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (canManageBrackets && !selectedSeed) {
+                  if (canManageBrackets && !selectedSeed && !lockCustomSeedEditing) {
                     setEditingNameSlot({ matchId: m.id, slot: 'p2' });
                   }
                 }}
@@ -5800,6 +6141,33 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 <RefreshCw size={14} />
               </Button>
             </div>
+
+            {canManageBrackets && (
+              <div className="pt-1 border-t border-black/10 space-y-1.5">
+                <label className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-black/55">
+                  <input
+                    type="checkbox"
+                    checked={useManualSeedMatchups}
+                    onChange={(e: any) => {
+                      const enabled = Boolean(e.target.checked);
+                      setUseManualSeedMatchups(enabled);
+                      if (enabled) {
+                        setCustomRuleTableLocked(false);
+                      }
+                    }}
+                    className="rounded border-black/20"
+                  />
+                  Custom Matchups
+                </label>
+                {useManualSeedMatchups && (
+                  <div className="rounded-md border border-black/10 bg-black/[0.02] px-2 py-1.5">
+                    <p className="text-[11px] text-black/55">
+                      Complete pairings in the Custom Matchup Rules table below before Generate. Seed slots are locked after Generate.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </Card>
 
@@ -5822,10 +6190,10 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                   <button
                     key={seed.id}
                     type="button"
-                    onClick={() => canManageBrackets && setSelectedSeed(seed)}
-                    disabled={!canManageBrackets}
+                    onClick={() => canManageBrackets && !lockCustomSeedEditing && setSelectedSeed(seed)}
+                    disabled={!canManageBrackets || lockCustomSeedEditing}
                     className={`rounded-md border px-2 py-1 text-xs text-left ${selectedSeed?.id === seed.id ? 'border-emerald-400 bg-emerald-50' : 'border-[#AFDDE5]/70 bg-[#AFDDE5]/12'}`}
-                    title="Optional: select seed for manual slot replacement"
+                    title={lockCustomSeedEditing ? 'Seed editing is locked after generate in Custom Matchups mode' : 'Optional: select seed for manual slot replacement'}
                   >
                     {(() => {
                       const seedDisplayName = seed.kind === 'participant' ? toShortestName(seed.name || '') : (seed.name || '');
@@ -5862,69 +6230,238 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         </Card>
       </div>
 
-      {isEightSeedPlayoffMode && (
+      {useManualSeedMatchups ? (
         <Card className="p-4 border border-emerald-200 bg-gradient-to-br from-white to-emerald-50/50">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
-              <h4 className="text-sm font-bold text-emerald-800 uppercase tracking-widest">8-Seed Play-Off Rules</h4>
-              <p className="text-xs text-black/60 mt-1">Based on tournament rules</p>
+              <h4 className="text-sm font-bold text-emerald-800 uppercase tracking-widest">Custom Matchup Rules</h4>
+              <p className="text-xs text-black/60 mt-1">Editable before generate. Seed slots are locked after generate.</p>
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded bg-emerald-100 text-emerald-800">Rule-driven view</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded bg-emerald-100 text-emerald-800">Customized rule view</span>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-3 text-xs">
             <div className="rounded-md border border-black/10 bg-white p-3">
-              <p className="font-bold text-black/80 mb-1">Quarter-Finals</p>
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-black/60">
-                <span className="whitespace-nowrap">M1: 1 vs 8</span>
-                <span className="whitespace-nowrap">M2: 4 vs 5</span>
-                <span className="whitespace-nowrap">M3: 3 vs 6</span>
-                <span className="whitespace-nowrap">M4: 2 vs 7</span>
+              <p className="font-bold text-black/80 mb-1">{customRoundOneTitle}</p>
+              <div className="space-y-1 text-black/60">
+                {customQuarterRuleRows.length > 0 ? customQuarterRuleRows.map((row) => (
+                  <div key={`custom-qf-${row.index}`} className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-1.5 text-[11px]">
+                    <span className="font-semibold text-black/65">{row.label}:</span>
+                    <select
+                      value={row.leftSeed ?? ''}
+                      disabled={lockCustomSeedEditing}
+                      onChange={(e: any) => updateCustomSeedMatchup(row.index, 'p1', e.target.value)}
+                      className="h-7 px-1.5 rounded border border-black/15 bg-white disabled:bg-black/5 disabled:text-black/40"
+                    >
+                      <option value="">Seed</option>
+                      {availableSeedNumbersForCustom.map((seedNo) => (
+                        <option key={`custom-r1-${row.index}-p1-${seedNo}`} value={seedNo}>#{seedNo}</option>
+                      ))}
+                    </select>
+                    <span className="text-black/40 font-bold uppercase">vs</span>
+                    <select
+                      value={row.rightSeed ?? ''}
+                      disabled={lockCustomSeedEditing}
+                      onChange={(e: any) => updateCustomSeedMatchup(row.index, 'p2', e.target.value)}
+                      className="h-7 px-1.5 rounded border border-black/15 bg-white disabled:bg-black/5 disabled:text-black/40"
+                    >
+                      <option value="">Seed</option>
+                      {availableSeedNumbersForCustom.map((seedNo) => (
+                        <option key={`custom-r1-${row.index}-p2-${seedNo}`} value={seedNo}>#{seedNo}</option>
+                      ))}
+                    </select>
+                  </div>
+                )) : <p>M1: Seed ? vs Seed ?</p>}
               </div>
             </div>
             <div className="rounded-md border border-black/10 bg-white p-3">
-              <p className="font-bold text-black/80 mb-1">Semi-Finals</p>
-              <p className="text-black/60">M5: Winner M1 vs Winner M2</p>
-              <p className="text-black/60">M6: Winner M3 vs Winner M4</p>
+              <p className="font-bold text-black/80 mb-1">{customRoundTwoTitle}</p>
+              <div className="space-y-1 text-black/60">
+                {roundTwoRows.length > 0 ? roundTwoRows.map((row) => (
+                  <div key={`custom-r2-${row.index}`} className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-1.5 text-[11px]">
+                    <span className="font-semibold text-black/65">{row.label}:</span>
+                    <select
+                      value={row.p1}
+                      disabled={lockCustomSeedEditing}
+                      onChange={(e: any) => updateCustomRoundLink(2, row.index, 'p1', e.target.value)}
+                      className="h-7 px-1.5 rounded border border-black/15 bg-white disabled:bg-black/5 disabled:text-black/40"
+                    >
+                      <option value="">Source</option>
+                      {getRoundSourceOptions(2, false).map((option) => (
+                        <option key={`custom-r2-${row.index}-p1-${option.value}`} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                    <span className="text-black/40 font-bold uppercase">vs</span>
+                    <select
+                      value={row.p2}
+                      disabled={lockCustomSeedEditing}
+                      onChange={(e: any) => updateCustomRoundLink(2, row.index, 'p2', e.target.value)}
+                      className="h-7 px-1.5 rounded border border-black/15 bg-white disabled:bg-black/5 disabled:text-black/40"
+                    >
+                      <option value="">Source</option>
+                      {getRoundSourceOptions(2, false).map((option) => (
+                        <option key={`custom-r2-${row.index}-p2-${option.value}`} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )) : <p>Round 2 links will appear after Round 1 setup.</p>}
+              </div>
             </div>
             <div className="rounded-md border border-black/10 bg-white p-3">
-              <p className="font-bold text-black/80 mb-1">Finals & Placement</p>
-              <p className="text-black/60">Championship: Winner M5 vs Winner M6</p>
-              <p className="text-black/60">3rd place: higher pinfall between Loser M5 and Loser M6</p>
+              <p className="font-bold text-black/80 mb-1">{customFinalRoundTitle}</p>
+              <div className="space-y-1 text-black/60">
+                {finalRoundRows.length > 0 ? finalRoundRows.map((row) => {
+                  const includeLosers = winnersCountPreview > 1;
+                  const isLastPlacementRow = includeLosers && row.index === finalRoundRows.length - 1;
+                  const options = isLastPlacementRow
+                    ? getRoundSourceOptions(customFinalRoundIndex, true).filter((option) => option.value.startsWith('loser:'))
+                    : getRoundSourceOptions(customFinalRoundIndex, includeLosers);
+                  return (
+                    <div key={`custom-rf-${row.index}`} className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-1.5 text-[11px]">
+                      <span className="font-semibold text-black/65">{isLastPlacementRow ? '3rd Place Match:' : `${row.label}:`}</span>
+                      <select
+                        value={row.p1}
+                        disabled={lockCustomSeedEditing}
+                        onChange={(e: any) => updateCustomRoundLink(customFinalRoundIndex, row.index, 'p1', e.target.value)}
+                        className="h-7 px-1.5 rounded border border-black/15 bg-white disabled:bg-black/5 disabled:text-black/40"
+                      >
+                        <option value="">Source</option>
+                        {options.map((option) => (
+                          <option key={`custom-rf-${row.index}-p1-${option.value}`} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                      <span className="text-black/40 font-bold uppercase">vs</span>
+                      <select
+                        value={row.p2}
+                        disabled={lockCustomSeedEditing}
+                        onChange={(e: any) => updateCustomRoundLink(customFinalRoundIndex, row.index, 'p2', e.target.value)}
+                        className="h-7 px-1.5 rounded border border-black/15 bg-white disabled:bg-black/5 disabled:text-black/40"
+                      >
+                        <option value="">Source</option>
+                        {options.map((option) => (
+                          <option key={`custom-rf-${row.index}-p2-${option.value}`} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                      {isLastPlacementRow ? (
+                        <span className="col-span-4 text-[10px] text-black/45 mt-0.5">3rd place matchup: {formatSourceToken(customFinalRoundIndex, row.p1)} vs {formatSourceToken(customFinalRoundIndex, row.p2)}</span>
+                      ) : (
+                        <span className="col-span-4 text-[10px] text-black/45 mt-0.5">{formatSourceToken(customFinalRoundIndex, row.p1)} vs {formatSourceToken(customFinalRoundIndex, row.p2)}</span>
+                      )}
+                    </div>
+                  );
+                }) : <p>Final links will appear after Round 2 setup.</p>}
+              </div>
             </div>
           </div>
+          <div className="mt-3 text-center border-t border-black/10 pt-3">
+            <p className="text-xs text-black/50">Complete this table first, then click Generate. You can still update winners/scores after generation.</p>
+          </div>
         </Card>
+      ) : (
+        isEightSeedPlayoffMode && (
+          <Card className="p-4 border border-emerald-200 bg-gradient-to-br from-white to-emerald-50/50">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h4 className="text-sm font-bold text-emerald-800 uppercase tracking-widest">8-Seed Play-Off Rules</h4>
+                <p className="text-xs text-black/60 mt-1">Based on tournament rules</p>
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded bg-emerald-100 text-emerald-800">Rule-driven view</span>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-3 text-xs">
+              <div className="rounded-md border border-black/10 bg-white p-3">
+                <p className="font-bold text-black/80 mb-1">Quarter-Finals</p>
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-black/60">
+                  <span className="whitespace-nowrap">M1: 1 vs 8</span>
+                  <span className="whitespace-nowrap">M2: 4 vs 5</span>
+                  <span className="whitespace-nowrap">M3: 3 vs 6</span>
+                  <span className="whitespace-nowrap">M4: 2 vs 7</span>
+                </div>
+              </div>
+              <div className="rounded-md border border-black/10 bg-white p-3">
+                <p className="font-bold text-black/80 mb-1">Semi-Finals</p>
+                <p className="text-black/60">M5: Winner M1 vs Winner M2</p>
+                <p className="text-black/60">M6: Winner M3 vs Winner M4</p>
+              </div>
+              <div className="rounded-md border border-black/10 bg-white p-3">
+                <p className="font-bold text-black/80 mb-1">Finals & Placement</p>
+                <p className="text-black/60">Championship: Winner M5 vs Winner M6</p>
+                <p className="text-black/60">3rd place match: Loser M5 vs Loser M6</p>
+              </div>
+            </div>
+          </Card>
+        )
       )}
 
       {showBracketPodium && (
-        <Card className="p-4">
-          <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-            <p className="text-sm font-bold text-emerald-800">Congratulation!</p>
-            <p className="text-sm text-black/75 mt-1">
-              1st place: <span className="font-bold text-emerald-800 inline-flex items-center gap-1">{isFirstPlaceFemale ? <FemaleSpot /> : null}<span>{bracketFirstPlace}</span></span>
-              {firstPlaceMembers.short ? <span className="text-black/60" title={firstPlaceMembers.full}> ({firstPlaceMembers.short})</span> : null}
-            </p>
-            <p className="text-sm text-black/75">
-              2nd place: <span className="font-bold text-slate-700 inline-flex items-center gap-1">{isSecondPlaceFemale ? <FemaleSpot /> : null}<span>{bracketSecondPlace}</span></span>
-              {secondPlaceMembers.short ? <span className="text-black/60" title={secondPlaceMembers.full}> ({secondPlaceMembers.short})</span> : null}
-            </p>
-            <p className="text-sm text-black/75">
-              3rd place: <span className="font-bold text-amber-800 inline-flex items-center gap-1">{isThirdPlaceFemale ? <FemaleSpot /> : null}<span>{bracketThirdPlace}</span></span>
-              {thirdPlaceMembers.short ? <span className="text-black/60" title={thirdPlaceMembers.full}> ({thirdPlaceMembers.short})</span> : null}
-            </p>
+        <Card className="p-4 border border-[#AFDDE5]/80 bg-[#AFDDE5]/18">
+          <div className="mb-2.5 pb-2 border-b border-black/10">
+            <h4 className="text-sm font-bold uppercase tracking-widest text-black/75">Podium Results</h4>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-            <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3">
-              <div className="text-2xl leading-none" role="img" aria-label="Gold medal">🥇</div>
-              <p className="font-bold text-emerald-800">{bracketFirstPlace}</p>
-            </div>
-            <div className="rounded-lg bg-slate-100 border border-slate-200 px-4 py-3">
-              <div className="text-2xl leading-none" role="img" aria-label="Silver medal">🥈</div>
-              <p className="font-bold text-slate-700">{bracketSecondPlace}</p>
-            </div>
-            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
-              <div className="text-2xl leading-none" role="img" aria-label="Bronze medal">🥉</div>
-              <p className="font-bold text-amber-800">{bracketThirdPlace}</p>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+            {[
+              {
+                place: 'Place 1',
+                medal: '🥇',
+                team: bracketFirstPlace,
+                members: firstPlaceMembers.short,
+                membersFull: firstPlaceMembers.full,
+                isFemale: isFirstPlaceFemale,
+              },
+              {
+                place: 'Place 2',
+                medal: '🥈',
+                team: bracketSecondPlace,
+                members: secondPlaceMembers.short,
+                membersFull: secondPlaceMembers.full,
+                isFemale: isSecondPlaceFemale,
+              },
+              {
+                place: 'Place 3',
+                medal: '🥉',
+                team: bracketThirdPlace,
+                members: thirdPlaceMembers.short,
+                membersFull: thirdPlaceMembers.full,
+                isFemale: isThirdPlaceFemale,
+              },
+            ].map((row) => {
+              const memberLines = row.members
+                ? row.members.split(',').map((name) => name.trim()).filter((name) => name.length > 0)
+                : [];
+
+              return (
+                <div key={row.place} className="rounded-lg border border-black/10 bg-white px-3 py-2.5 min-h-[120px] text-left">
+                  <div className="grid grid-cols-[44px_minmax(0,1fr)] xl:grid-cols-[44px_minmax(0,1fr)_minmax(0,1.1fr)] gap-2 items-start">
+                    <div className="text-3xl leading-none" role="img" aria-label={row.place}>{row.medal}</div>
+                    <div className="min-w-0 text-left">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-black/45">Team</p>
+                      <p className="text-base leading-tight font-bold uppercase text-black/80 mt-0.5 inline-flex items-center gap-1">
+                        {row.isFemale ? <FemaleSpot /> : null}
+                        <span>{row.team}</span>
+                      </p>
+                    </div>
+                    <div className="min-w-0 xl:block hidden text-left">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-black/45">Team members</p>
+                      {memberLines.length > 0 ? (
+                        <div className="mt-0.5" title={row.membersFull}>
+                          {memberLines.map((line, idx) => (
+                            <p key={`${row.place}-member-${idx}`} className="text-[13px] leading-tight text-black/70">{line}</p>
+                          ))}
+                        </div>
+                      ) : <p className="text-[11px] text-black/40 mt-0.5">-</p>}
+                    </div>
+                  </div>
+                  <div className="mt-1.5 xl:hidden text-left">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-black/45">Team members</p>
+                    {memberLines.length > 0 ? (
+                      <div className="mt-0.5" title={row.membersFull}>
+                        {memberLines.map((line, idx) => (
+                          <p key={`${row.place}-mobile-member-${idx}`} className="text-[13px] leading-tight text-black/70">{line}</p>
+                        ))}
+                      </div>
+                    ) : <p className="text-[11px] text-black/40 mt-0.5">-</p>}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </Card>
       )}
