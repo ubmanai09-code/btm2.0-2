@@ -4834,6 +4834,9 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       : 1
   );
   const [useManualSeedMatchups, setUseManualSeedMatchups] = useState(false);
+  const visualBracketBoardRef = useRef<HTMLDivElement | null>(null);
+  const visualMatchCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [visualConnectorPaths, setVisualConnectorPaths] = useState<Array<{ id: string; d: string }>>([]);
   const [customSeedMatchups, setCustomSeedMatchups] = useState<Array<{ p1: number | null; p2: number | null }>>([]);
   const [customRoundLinkSelections, setCustomRoundLinkSelections] = useState<Record<number, Array<{ p1: string; p2: string }>>>({});
   const [customRuleTableLocked, setCustomRuleTableLocked] = useState(false);
@@ -5054,8 +5057,12 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   };
 
   const participantTeamNameMap = new Map<number, string>();
+  const participantTeamIdMap = new Map<number, number>();
   const participantGenderById = new Map<number, string>();
   for (const participant of bracketParticipants) {
+    if (participant.team_id) {
+      participantTeamIdMap.set(participant.id, participant.team_id);
+    }
     if (participant.team_id && participant.team_name) {
       participantTeamNameMap.set(participant.id, participant.team_name);
     }
@@ -5115,6 +5122,15 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         || 'TBD';
     }
     return match[`${slot}_name`] || 'TBD';
+  };
+
+  const getSlotTeamMembersCompact = (slot: 'p1' | 'p2', match: any) => {
+    if (tournament.type !== 'team') return '';
+    const participantId = getSlotParticipantId(slot, match);
+    const teamId = participantTeamIdMap.get(Number(participantId));
+    if (!teamId) return '';
+    const members = teamMembersByTeamId.get(teamId) || [];
+    return members.length > 0 ? members.join(', ') : '';
   };
 
   const loadSeeds = async () => {
@@ -5804,12 +5820,6 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const bracketFinalRoundNumber = matches.reduce((max: number, m: any) => Math.max(max, Number(m.round) || 0), 0);
   const bracketFinalMatch = matches.find((m: any) => Number(m.round) === bracketFinalRoundNumber && Number(m.match_index) === 0);
   const bracketBronzeMatch = matches.find((m: any) => Number(m.round) === bracketFinalRoundNumber && Number(m.match_index) === 1);
-  const participantTeamIdMap = new Map<number, number>();
-  for (const participant of bracketParticipants) {
-    if (participant.team_id) {
-      participantTeamIdMap.set(participant.id, participant.team_id);
-    }
-  }
   const firstPlaceParticipantId = bracketFinalMatch?.winner_id ? Number(bracketFinalMatch.winner_id) : null;
   const secondPlaceParticipantId = bracketFinalMatch?.winner_id
     ? Number(bracketFinalMatch.winner_id === bracketFinalMatch.participant1_id ? bracketFinalMatch.participant2_id : bracketFinalMatch.participant1_id)
@@ -6054,6 +6064,60 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     .filter((r) => Number.isFinite(r) && r > 0)
     .sort((a, b) => a - b);
 
+  const setVisualCardRef = (roundNumber: number, matchIndex: number, node: HTMLDivElement | null) => {
+    visualMatchCardRefs.current[`${roundNumber}-${matchIndex}`] = node;
+  };
+
+  const rebuildVisualConnectorPaths = () => {
+    if (bracketViewMode !== 'visual') {
+      setVisualConnectorPaths([]);
+      return;
+    }
+
+    const board = visualBracketBoardRef.current;
+    if (!board) {
+      setVisualConnectorPaths([]);
+      return;
+    }
+
+    const boardRect = board.getBoundingClientRect();
+    const paths: Array<{ id: string; d: string }> = [];
+
+    for (const roundNumber of orderedRoundNumbers) {
+      const nextRoundNumber = roundNumber + 1;
+      if (!orderedRoundNumbers.includes(nextRoundNumber)) continue;
+
+      const sourceMatches = [...(roundGroups[roundNumber] || [])].sort(
+        (a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0)
+      );
+
+      for (const match of sourceMatches) {
+        const sourceMatchIndex = Number(match.match_index) || 0;
+        const targetMatchIndex = Math.floor(sourceMatchIndex / 2);
+        const sourceNode = visualMatchCardRefs.current[`${roundNumber}-${sourceMatchIndex}`];
+        const targetNode = visualMatchCardRefs.current[`${nextRoundNumber}-${targetMatchIndex}`];
+        if (!sourceNode || !targetNode) continue;
+
+        const sourceRect = sourceNode.getBoundingClientRect();
+        const targetRect = targetNode.getBoundingClientRect();
+
+        const startX = sourceRect.right - boardRect.left;
+        const startY = sourceRect.top - boardRect.top + sourceRect.height / 2;
+        const endX = targetRect.left - boardRect.left;
+        const endY = targetRect.top - boardRect.top + targetRect.height / 2;
+        const horizontalGap = Math.max(24, endX - startX);
+        const elbowX = startX + Math.max(14, Math.min(44, horizontalGap * 0.4));
+
+        paths.push({
+          id: `${roundNumber}-${sourceMatchIndex}-${nextRoundNumber}-${targetMatchIndex}`,
+          d: `M ${startX} ${startY} L ${elbowX} ${startY} L ${elbowX} ${endY} L ${endX} ${endY}`,
+        });
+      }
+    }
+
+    setVisualConnectorPaths(paths);
+  };
+
   useEffect(() => {
     const stored = localStorage.getItem(bracketViewStorageKey);
     setBracketViewMode(stored === 'visual' ? 'visual' : 'cards');
@@ -6062,6 +6126,22 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   useEffect(() => {
     localStorage.setItem(bracketViewStorageKey, bracketViewMode);
   }, [bracketViewMode, bracketViewStorageKey]);
+
+  useEffect(() => {
+    if (bracketViewMode !== 'visual') {
+      setVisualConnectorPaths([]);
+      return;
+    }
+
+    const update = () => rebuildVisualConnectorPaths();
+    const frameId = window.requestAnimationFrame(update);
+    window.addEventListener('resize', update);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener('resize', update);
+    };
+  }, [bracketViewMode, matches, orderedRoundNumbers.join(','), tournament.id]);
 
   useEffect(() => {
     if (seeds.length > 0 || matches.length === 0) return;
@@ -6137,9 +6217,16 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       label: `${participant.first_name || ''} ${participant.last_name || ''}`.trim() || `Player ${participant.id}`,
     }));
     const slotOptions = tournament.type === 'team' ? teamOptions : playerOptions;
+    const p1DraftScore = Number.parseInt(String(matchScoreDrafts[m.id]?.p1 ?? ''), 10);
+    const p2DraftScore = Number.parseInt(String(matchScoreDrafts[m.id]?.p2 ?? ''), 10);
+    const hasEnteredScores = Number.isFinite(p1DraftScore) && Number.isFinite(p2DraftScore);
+    const p1IsHighlightedWinner = hasEnteredScores && m.winner_id === m.participant1_id;
+    const p2IsHighlightedWinner = hasEnteredScores && m.winner_id === m.participant2_id;
+    const p1MembersCompact = getSlotTeamMembersCompact('p1', m);
+    const p2MembersCompact = getSlotTeamMembersCompact('p2', m);
 
     return (
-      <Card key={m.id} className={`${compact ? 'p-2.5' : 'p-3'} ${isFinalCard ? 'bg-emerald-50/60 border-emerald-200' : (isBronzeCard ? 'bg-amber-50/70 border-amber-200' : '')}`}>
+      <Card className={`${compact ? 'p-2.5' : 'p-3'} ${isFinalCard ? 'bg-emerald-50/60 border-emerald-200' : (isBronzeCard ? 'bg-amber-50/70 border-amber-200' : '')}`}>
         <div className="flex justify-between items-center mb-2.5">
           <div className="flex flex-col">
             <span className="text-xs font-bold uppercase tracking-widest text-black/45">{meta.matchCode}</span>
@@ -6153,7 +6240,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         <div className="space-y-2">
           <div
             className={`p-2 rounded-lg border transition-all flex items-center justify-between cursor-pointer ${
-              m.winner_id === m.participant1_id
+              p1IsHighlightedWinner
                 ? 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500/20'
                 : 'bg-black/[0.02] border-black/5 hover:border-black/10'
             }`}
@@ -6185,11 +6272,18 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     setEditingNameSlot({ matchId: m.id, slot: 'p1' });
                   }
                 }}
-                className={`font-medium text-left ${m.winner_id === m.participant1_id ? 'text-emerald-900' : ''}`}
+                className={`font-medium text-left ${p1IsHighlightedWinner ? 'text-emerald-900' : ''}`}
                 title={canManageBrackets ? `Click to change ${tournament.type === 'team' ? 'team' : 'player'}` : undefined}
               >
-                {m.participant1_seed ? `#${m.participant1_seed} ` : ''}
-                {getDisplayName('p1', m)}
+                <span className="block">
+                  {m.participant1_seed ? `#${m.participant1_seed} ` : ''}
+                  {getDisplayName('p1', m)}
+                </span>
+                {tournament.type === 'team' && p1MembersCompact && (
+                  <span className="block text-[10px] font-normal text-black/55 leading-tight mt-0.5">
+                    {p1MembersCompact}
+                  </span>
+                )}
               </button>
             )}
             <div className="flex items-center gap-2">
@@ -6211,7 +6305,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 placeholder="0"
                 title="Participant 1 score"
               />
-              {m.winner_id === m.participant1_id && <Trophy size={14} className="text-emerald-600" />}
+              {p1IsHighlightedWinner && <Trophy size={14} className="text-emerald-600" />}
             </div>
           </div>
 
@@ -6219,7 +6313,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 
           <div
             className={`p-2 rounded-lg border transition-all flex items-center justify-between cursor-pointer ${
-              m.winner_id === m.participant2_id
+              p2IsHighlightedWinner
                 ? 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500/20'
                 : 'bg-black/[0.02] border-black/5 hover:border-black/10'
             }`}
@@ -6251,11 +6345,18 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     setEditingNameSlot({ matchId: m.id, slot: 'p2' });
                   }
                 }}
-                className={`font-medium text-left ${m.winner_id === m.participant2_id ? 'text-emerald-900' : ''}`}
+                className={`font-medium text-left ${p2IsHighlightedWinner ? 'text-emerald-900' : ''}`}
                 title={canManageBrackets ? `Click to change ${tournament.type === 'team' ? 'team' : 'player'}` : undefined}
               >
-                {m.participant2_seed ? `#${m.participant2_seed} ` : ''}
-                {getDisplayName('p2', m)}
+                <span className="block">
+                  {m.participant2_seed ? `#${m.participant2_seed} ` : ''}
+                  {getDisplayName('p2', m)}
+                </span>
+                {tournament.type === 'team' && p2MembersCompact && (
+                  <span className="block text-[10px] font-normal text-black/55 leading-tight mt-0.5">
+                    {p2MembersCompact}
+                  </span>
+                )}
               </button>
             )}
             <div className="flex items-center gap-2">
@@ -6277,7 +6378,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 placeholder="0"
                 title="Participant 2 score"
               />
-              {m.winner_id === m.participant2_id && <Trophy size={14} className="text-emerald-600" />}
+              {p2IsHighlightedWinner && <Trophy size={14} className="text-emerald-600" />}
             </div>
           </div>
         </div>
@@ -6753,7 +6854,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         </div>
       ) : (
         bracketViewMode === 'cards' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {orderedRoundNumbers.map((roundNumber) => {
               const roundMatches = [...(roundGroups[roundNumber] || [])].sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
               const roundTitle = isEightSeedPlayoffMode
@@ -6767,7 +6868,9 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     <p className="text-[11px] text-black/45">{roundMatches.length} match{roundMatches.length === 1 ? '' : 'es'}</p>
                   </div>
                   <div className="space-y-3">
-                    {roundMatches.map((m: any) => renderMatchCard(m))}
+                    {roundMatches.map((m: any) => (
+                      <div key={m.id}>{renderMatchCard(m)}</div>
+                    ))}
                   </div>
                 </Card>
               );
@@ -6775,30 +6878,55 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           </div>
         ) : (
           <div className="overflow-x-auto pb-2">
-            <div className="min-w-[980px] grid grid-flow-col auto-cols-[310px] gap-5 items-start">
-              {orderedRoundNumbers.map((roundNumber, roundIndex) => {
-                const roundMatches = [...(roundGroups[roundNumber] || [])].sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
-                const roundTitle = isEightSeedPlayoffMode
-                  ? (roundNumber === 1 ? 'Quarter-Finals' : roundNumber === 2 ? 'Semi-Finals' : 'Finals')
-                  : `Round ${roundNumber}`;
-                const spacingClass = roundIndex === 0 ? 'space-y-3' : roundIndex === 1 ? 'space-y-8 pt-8' : 'space-y-14 pt-16';
+            <div ref={visualBracketBoardRef} className="relative min-w-[1080px]">
+              <svg className="pointer-events-none absolute inset-0 w-full h-full z-0" preserveAspectRatio="none" aria-hidden="true">
+                {visualConnectorPaths.map((path) => (
+                  <path
+                    key={path.id}
+                    d={path.d}
+                    fill="none"
+                    stroke="rgba(51, 65, 85, 0.22)"
+                    strokeWidth="1"
+                    strokeLinecap="square"
+                    strokeLinejoin="miter"
+                  />
+                ))}
+              </svg>
+              <div className="relative z-10 grid grid-flow-col auto-cols-[320px] gap-8 items-start">
+                {orderedRoundNumbers.map((roundNumber, roundIndex) => {
+                  const roundMatches = [...(roundGroups[roundNumber] || [])].sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
+                  const roundTitle = isEightSeedPlayoffMode
+                    ? (roundNumber === 1 ? 'Quarter-Finals' : roundNumber === 2 ? 'Semi-Finals' : 'Finals')
+                    : `Round ${roundNumber}`;
+                  const spacingClass = roundIndex === 0 ? 'space-y-3' : roundIndex === 1 ? 'space-y-8 pt-8' : 'space-y-14 pt-16';
 
-                return (
-                  <div key={roundNumber} className="relative">
-                    <div className="mb-2">
-                      <h4 className="text-sm font-bold uppercase tracking-widest text-black/70">{roundTitle}</h4>
-                    </div>
-                    <div className={spacingClass}>
-                      {roundMatches.map((m: any) => renderMatchCard(m, true))}
-                    </div>
-                    {roundIndex < orderedRoundNumbers.length - 1 && (
-                      <div className="absolute right-[-18px] top-12 bottom-6 w-[18px] flex items-center justify-center pointer-events-none">
-                        <ArrowRightLeft size={13} className="text-black/20 rotate-90" />
+                  return (
+                    <div key={roundNumber} className="relative">
+                      <div className="mb-2">
+                        <h4 className="text-sm font-bold uppercase tracking-widest text-black/70">{roundTitle}</h4>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                      <div className={spacingClass}>
+                        {roundMatches.map((m: any) => {
+                          const matchIndex = Number(m.match_index) || 0;
+                          return (
+                            <div
+                              key={m.id}
+                              ref={(node) => setVisualCardRef(roundNumber, matchIndex, node)}
+                            >
+                              {renderMatchCard(m, true)}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {roundIndex < orderedRoundNumbers.length - 1 && (
+                        <div className="absolute right-[-18px] top-12 bottom-6 w-[18px] flex items-center justify-center pointer-events-none">
+                          <ArrowRightLeft size={13} className="text-black/20 rotate-90" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )
