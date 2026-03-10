@@ -1676,15 +1676,16 @@ export default function App() {
       )}
 
       {showSponsorsConfigEditor && (
-        <div className="fixed inset-0 z-[60] bg-black/45 flex items-center justify-center p-4">
-          <Card className="w-full max-w-5xl p-4" onClick={(e: any) => e.stopPropagation()}>
-            <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="fixed inset-0 z-[60] bg-black/45 flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <Card className="w-full max-w-5xl max-h-[94vh] sm:max-h-[90vh] p-0 overflow-hidden flex flex-col" onClick={(e: any) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 p-4 border-b border-black/10 bg-white">
               <h3 className="text-lg font-bold">Sponsors and Partners Manager</h3>
               <Button size="sm" variant="outline" onClick={() => setShowSponsorsConfigEditor(false)} title="Close" ariaLabel="Close">
                 <X size={14} />
               </Button>
             </div>
 
+            <div className="flex-1 overflow-y-auto p-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
               <Card className="p-3 border border-black/10">
                 <h4 className="text-xs font-bold uppercase tracking-widest text-black/60 mb-2">BTM Powered by Slot</h4>
@@ -1823,8 +1824,9 @@ export default function App() {
             </div>
 
             {sponsorsConfigError && <p className="text-xs text-red-600 font-semibold mt-2">{sponsorsConfigError}</p>}
+            </div>
 
-            <div className="flex flex-wrap gap-2 pt-3">
+            <div className="flex flex-wrap gap-2 p-4 border-t border-black/10 bg-white sticky bottom-0">
               <Button size="sm" variant="outline" onClick={saveSponsorsConfigEditor} className="px-3" title="Save" ariaLabel="Save">
                 <Save size={14} />
               </Button>
@@ -7079,6 +7081,19 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
   const rankedTeamsCount = teamStandingsRows.length;
   const teamsCountValid = rankedTeamsCount === expectedTeamsFromPlayers || rankedTeamsCount === teams.length;
 
+  const topMaleStanding = playerStandingsRows
+    .filter((row) => (participantGenderMap.get(row.participant_id) || '').startsWith('m'))
+    .sort((a, b) => (b.total - a.total) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name))[0];
+  const topFemaleStanding = playerStandingsRows
+    .filter((row) => (participantGenderMap.get(row.participant_id) || '').startsWith('f'))
+    .sort((a, b) => (b.total - a.total) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name))[0];
+  const highestMaleGameScore = scores
+    .filter((score) => (participantGenderMap.get(score.participant_id) || '').startsWith('m'))
+    .reduce((max, score) => Math.max(max, Number(score.score) || 0), 0);
+  const highestFemaleGameScore = scores
+    .filter((score) => (participantGenderMap.get(score.participant_id) || '').startsWith('f'))
+    .reduce((max, score) => Math.max(max, Number(score.score) || 0), 0);
+
   const maleLeader = scores
     .filter(score => participantGenderMap.get(score.participant_id) === 'male')
     .sort((a, b) => b.score - a.score)[0];
@@ -7086,6 +7101,14 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
   const femaleLeader = scores
     .filter(score => participantGenderMap.get(score.participant_id) === 'female')
     .sort((a, b) => b.score - a.score)[0];
+
+  const malePlayersCount = participants.filter((p) => (p.gender || '').toLowerCase() === 'male').length;
+  const femalePlayersCount = participants.filter((p) => (p.gender || '').toLowerCase() === 'female').length;
+  const clubsCount = new Set(
+    participants
+      .map((p) => String(p.club || '').trim())
+      .filter((club) => club.length > 0 && club !== '-')
+  ).size;
 
   const completedBracketMatches = bracketMatches
     .filter(m => m.winner_id)
@@ -7241,68 +7264,93 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
       <div className="space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
-            <div className="p-6 border-b border-black/5">
-              <h4 className="font-bold">Tournament Winners</h4>
-              <p className="text-sm text-black/40">Final winners only</p>
+            <div className="p-4 border-b border-black/5">
+              <h4 className="font-bold text-sm">Tournament Winners</h4>
+              <p className="text-xs text-black/40">Final winners only</p>
             </div>
-            <div className="px-6 py-5">
+            <div className="px-4 py-3.5">
               <div className="rounded-lg border border-black/10 overflow-hidden">
                 <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} bg-black/[0.02] border-b border-black/10`}>
-                  <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-black/40">Place</div>
-                  <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-black/40">{isTeamTournament ? 'Winner Team' : 'Winner'}</div>
+                  <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-black/40">Place</div>
+                  <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-black/40">{isTeamTournament ? 'Winner Team' : 'Winner'}</div>
                   {isTeamTournament && (
-                    <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-black/40">Team Members</div>
+                    <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-black/40">Team Members</div>
                   )}
                 </div>
                 <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} border-b border-black/5 bg-emerald-50/70`}>
-                  <div className="px-4 py-3 font-bold text-emerald-700">1st</div>
-                  <div className="px-4 py-3 font-bold text-emerald-700">{firstPlace.toUpperCase()}</div>
+                  <div className="px-3 py-2 font-bold text-sm text-emerald-700">1st</div>
+                  <div className="px-3 py-2 font-bold text-sm text-emerald-700">{firstPlace.toUpperCase()}</div>
                   {isTeamTournament && (
-                    <div className="px-4 py-3 text-emerald-800 text-sm">{getWinnerMembersLabel(firstPlace)}</div>
+                    <div className="px-3 py-2 text-emerald-800 text-xs">{getWinnerMembersLabel(firstPlace)}</div>
                   )}
                 </div>
                 <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} border-b border-black/5 bg-slate-100/80`}>
-                  <div className="px-4 py-3 font-bold text-slate-700">2nd</div>
-                  <div className="px-4 py-3 font-bold text-slate-700">{secondPlace.toUpperCase()}</div>
+                  <div className="px-3 py-2 font-bold text-sm text-slate-700">2nd</div>
+                  <div className="px-3 py-2 font-bold text-sm text-slate-700">{secondPlace.toUpperCase()}</div>
                   {isTeamTournament && (
-                    <div className="px-4 py-3 text-slate-700 text-sm">{getWinnerMembersLabel(secondPlace)}</div>
+                    <div className="px-3 py-2 text-slate-700 text-xs">{getWinnerMembersLabel(secondPlace)}</div>
                   )}
                 </div>
                 <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} bg-amber-50/70`}>
-                  <div className="px-4 py-3 font-bold text-amber-700">3rd</div>
-                  <div className="px-4 py-3 font-bold text-amber-700">{thirdPlace.toUpperCase()}</div>
+                  <div className="px-3 py-2 font-bold text-sm text-amber-700">3rd</div>
+                  <div className="px-3 py-2 font-bold text-sm text-amber-700">{thirdPlace.toUpperCase()}</div>
                   {isTeamTournament && (
-                    <div className="px-4 py-3 text-amber-800 text-sm">{getWinnerMembersLabel(thirdPlace)}</div>
+                    <div className="px-3 py-2 text-amber-800 text-xs">{getWinnerMembersLabel(thirdPlace)}</div>
                   )}
                 </div>
               </div>
             </div>
           </Card>
 
-          <Card className="p-6">
-            <h4 className="font-bold mb-1">Tournament Highlights</h4>
-            <p className="text-sm text-black/40 mb-4">Highest single game score by category</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-lg border border-black/10 p-4 bg-black/[0.02]">
+          <Card className="p-4">
+            <h4 className="font-bold text-sm mb-1">Tournament Highlights</h4>
+            <p className="text-xs text-black/40 mb-3">Highest single game score by category</p>
+            <div className="rounded-lg border border-black/10 p-3 bg-white mb-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Tournament Quick Stats</p>
+              <div className="mt-2 grid grid-cols-2 md:grid-cols-5 gap-2">
+                <div className="rounded border border-black/10 bg-black/[0.02] px-2 py-1.5">
+                  <p className="text-[9px] uppercase tracking-widest text-black/45">Players</p>
+                  <p className="text-sm font-bold text-black/80">{registeredPlayersCount}</p>
+                </div>
+                <div className="rounded border border-black/10 bg-black/[0.02] px-2 py-1.5">
+                  <p className="text-[9px] uppercase tracking-widest text-black/45">Clubs</p>
+                  <p className="text-sm font-bold text-black/80">{clubsCount}</p>
+                </div>
+                <div className="rounded border border-black/10 bg-black/[0.02] px-2 py-1.5">
+                  <p className="text-[9px] uppercase tracking-widest text-black/45">Teams</p>
+                  <p className="text-sm font-bold text-black/80">{isTeamTournament ? teams.length : '-'}</p>
+                </div>
+                <div className="rounded border border-black/10 bg-black/[0.02] px-2 py-1.5">
+                  <p className="text-[9px] uppercase tracking-widest text-black/45">Male</p>
+                  <p className="text-sm font-bold text-black/80">{malePlayersCount}</p>
+                </div>
+                <div className="rounded border border-black/10 bg-black/[0.02] px-2 py-1.5">
+                  <p className="text-[9px] uppercase tracking-widest text-black/45">Female</p>
+                  <p className="text-sm font-bold text-black/80">{femalePlayersCount}</p>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="rounded-lg border border-black/10 p-3 bg-black/[0.02]">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Highest Score Male</p>
                 {maleLeader ? (
                   <>
-                    <p className="text-lg font-bold mt-1">{participantNameMap.get(maleLeader.participant_id) || maleLeader.participant_name || 'N/A'}</p>
-                    <p className="text-sm text-black/50">Game {maleLeader.game_number}: {maleLeader.score}</p>
+                    <p className="text-base font-bold mt-1">{participantNameMap.get(maleLeader.participant_id) || maleLeader.participant_name || 'N/A'}</p>
+                    <p className="text-xs text-black/50">Game {maleLeader.game_number}: {maleLeader.score}</p>
                   </>
                 ) : (
-                  <p className="text-sm text-black/40 mt-1">No male result yet.</p>
+                  <p className="text-xs text-black/40 mt-1">No male result yet.</p>
                 )}
               </div>
-              <div className="rounded-lg border border-black/10 p-4 bg-black/[0.02]">
+              <div className="rounded-lg border border-black/10 p-3 bg-black/[0.02]">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Highest Score Female</p>
                 {femaleLeader ? (
                   <>
-                    <p className="text-lg font-bold mt-1">{participantNameMap.get(femaleLeader.participant_id) || femaleLeader.participant_name || 'N/A'}</p>
-                    <p className="text-sm text-black/50">Game {femaleLeader.game_number}: {femaleLeader.score}</p>
+                    <p className="text-base font-bold mt-1">{participantNameMap.get(femaleLeader.participant_id) || femaleLeader.participant_name || 'N/A'}</p>
+                    <p className="text-xs text-black/50">Game {femaleLeader.game_number}: {femaleLeader.score}</p>
                   </>
                 ) : (
-                  <p className="text-sm text-black/40 mt-1">No female result yet.</p>
+                  <p className="text-xs text-black/40 mt-1">No female result yet.</p>
                 )}
               </div>
             </div>
@@ -7397,11 +7445,53 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                   </td>
                   <td className="px-6 py-4 text-black/40 text-sm">{s.club}</td>
                   <td className="px-6 py-4 text-black/40 text-sm">{s.team_name.toUpperCase()}</td>
-                  {s.games.map((value, gameIndex) => (
-                    <td key={gameIndex} className="px-6 py-4 text-center font-mono">{value}</td>
-                  ))}
+                  {s.games.map((value, gameIndex) => {
+                    const isMalePlayer = (participantGenderMap.get(s.participant_id) || '').startsWith('m');
+                    const isFemalePlayer = (participantGenderMap.get(s.participant_id) || '').startsWith('f');
+                    const isMaleGameLeader = isMalePlayer && highestMaleGameScore > 0 && value === highestMaleGameScore;
+                    const isFemaleGameLeader = isFemalePlayer && highestFemaleGameScore > 0 && value === highestFemaleGameScore;
+
+                    return (
+                      <td
+                        key={gameIndex}
+                        className={`px-6 py-4 text-center font-mono ${
+                          isMaleGameLeader
+                            ? 'bg-sky-50 text-sky-700 font-bold'
+                            : isFemaleGameLeader
+                              ? 'bg-rose-50 text-rose-700 font-bold'
+                              : ''
+                        }`}
+                        title={
+                          isMaleGameLeader
+                            ? 'Highest male game score'
+                            : isFemaleGameLeader
+                              ? 'Highest female game score'
+                              : undefined
+                        }
+                      >
+                        {value}
+                      </td>
+                    );
+                  })}
                   <td className="px-6 py-4 text-center font-mono text-black/60">{formatStandingsAverage(s.average)}</td>
-                  <td className="px-6 py-4 text-right font-bold">{s.total}</td>
+                  <td
+                    className={`px-6 py-4 text-right font-bold ${
+                      topMaleStanding?.participant_id === s.participant_id
+                        ? 'bg-sky-50 text-sky-700'
+                        : topFemaleStanding?.participant_id === s.participant_id
+                          ? 'bg-rose-50 text-rose-700'
+                          : ''
+                    }`}
+                    title={
+                      topMaleStanding?.participant_id === s.participant_id
+                        ? 'Highest male total'
+                        : topFemaleStanding?.participant_id === s.participant_id
+                          ? 'Highest female total'
+                          : undefined
+                    }
+                  >
+                    {s.total}
+                  </td>
                 </tr>
               ))}
               {standingsMode === 'teams' && teamStandingsRows.map((s, idx) => (
