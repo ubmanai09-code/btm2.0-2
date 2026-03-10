@@ -1677,160 +1677,163 @@ export default function App() {
 
       {showSponsorsConfigEditor && (
         <div className="fixed inset-0 z-[60] bg-black/45 flex items-center justify-center p-4">
-          <Card className="w-full max-w-5xl p-4" onClick={(e: any) => e.stopPropagation()}>
-            <div className="flex items-center justify-between gap-3 mb-3">
+          <Card className="w-full max-w-5xl max-h-[92vh] p-4 flex flex-col" onClick={(e: any) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 mb-3 shrink-0">
               <h3 className="text-lg font-bold">Sponsors and Partners Manager</h3>
               <Button size="sm" variant="outline" onClick={() => setShowSponsorsConfigEditor(false)} title="Close" ariaLabel="Close">
                 <X size={14} />
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-              <Card className="p-3 border border-black/10">
-                <h4 className="text-xs font-bold uppercase tracking-widest text-black/60 mb-2">BTM Powered by Slot</h4>
-                <label className="flex items-center gap-2 text-sm font-semibold mb-3">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(sponsorsConfigDraft.globalSponsorEnabled)}
-                    onChange={(e) => setDraftGlobalSponsorEnabled(e.target.checked)}
-                  />
-                  Activate Powered by in Footer
-                </label>
-                {sponsorsConfigDraft.globalSponsorEnabled && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <Input
-                      label="Name"
-                      value={sponsorsConfigDraft.globalSponsor?.name || ''}
-                      onChange={(e: any) => updateDraftGlobalSponsorField('name', e.target.value)}
-                    />
-                    <Select
-                      label="Type"
-                      value={sponsorsConfigDraft.globalSponsor?.kind || 'sponsor'}
-                      onChange={(e: any) => updateDraftGlobalSponsorField('kind', e.target.value)}
-                      options={[
-                        { value: 'sponsor', label: 'Sponsor' },
-                        { value: 'partner', label: 'Partner' },
-                      ]}
-                    />
-                    <Input
-                      label="Logo URL"
-                      value={sponsorsConfigDraft.globalSponsor?.logo || '/logo.png'}
-                      onChange={(e: any) => updateDraftGlobalSponsorField('logo', e.target.value)}
-                    />
-                    <Input
-                      label="Website URL"
-                      value={sponsorsConfigDraft.globalSponsor?.url || ''}
-                      onChange={(e: any) => updateDraftGlobalSponsorField('url', e.target.value)}
-                    />
-                    <Input
-                      label="Contacts"
-                      value={sponsorsConfigDraft.globalSponsor?.contacts || ''}
-                      onChange={(e: any) => updateDraftGlobalSponsorField('contacts', e.target.value)}
-                    />
-                    <Input
-                      label="Description"
-                      value={sponsorsConfigDraft.globalSponsor?.description || ''}
-                      onChange={(e: any) => updateDraftGlobalSponsorField('description', e.target.value)}
-                    />
-                  </div>
-                )}
-              </Card>
-
-              <Card className="p-3 border border-black/10">
-                <h4 className="text-xs font-bold uppercase tracking-widest text-black/60 mb-2">Scope and Actions</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                  <Select
-                    label="Manage For"
-                    value={sponsorsConfigScope}
-                    onChange={(e: any) => setSponsorsConfigScope(e.target.value)}
-                    options={sponsorScopeOptions.map((opt) => ({ value: opt.value, label: opt.label }))}
-                  />
-                  <Input
-                    label="Number of Entries"
-                    type="number"
-                    min="0"
-                    max="20"
-                    value={scopedDraftSponsors.length}
-                    onChange={(e: any) => setDraftSponsorCountForScope(sponsorsConfigScope, Number(e.target.value))}
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => addDraftSponsorForScope(sponsorsConfigScope)}
-                    className="px-3"
-                    title="Add Entry"
-                    ariaLabel="Add Entry"
-                  >
-                    <Plus size={14} />
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={exportSponsorsConfigEditor} className="px-3" title="Export Config" ariaLabel="Export Config">
-                    <Upload size={14} />
-                  </Button>
-                  <div className="relative">
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                <Card className="p-3 border border-black/10">
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-black/60 mb-2">BTM Powered by Slot</h4>
+                  <label className="flex items-center gap-2 text-sm font-semibold mb-3">
                     <input
-                      ref={sponsorsImportInputRef}
-                      type="file"
-                      accept=".json"
-                      className="absolute inset-0 opacity-0 cursor-pointer"
-                      onChange={importSponsorsConfigEditor}
+                      type="checkbox"
+                      checked={Boolean(sponsorsConfigDraft.globalSponsorEnabled)}
+                      onChange={(e) => setDraftGlobalSponsorEnabled(e.target.checked)}
                     />
-                    <Button size="sm" variant="outline" className="px-3" title="Import Config" ariaLabel="Import Config">
-                      <Download size={14} />
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            </div>
+                    Activate Powered by in Footer
+                  </label>
+                  {sponsorsConfigDraft.globalSponsorEnabled && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <Input
+                        label="Name"
+                        value={sponsorsConfigDraft.globalSponsor?.name || ''}
+                        onChange={(e: any) => updateDraftGlobalSponsorField('name', e.target.value)}
+                      />
+                      <Select
+                        label="Type"
+                        value={sponsorsConfigDraft.globalSponsor?.kind || 'sponsor'}
+                        onChange={(e: any) => updateDraftGlobalSponsorField('kind', e.target.value)}
+                        options={[
+                          { value: 'sponsor', label: 'Sponsor' },
+                          { value: 'partner', label: 'Partner' },
+                        ]}
+                      />
+                      <Input
+                        label="Logo URL"
+                        value={sponsorsConfigDraft.globalSponsor?.logo || '/logo.png'}
+                        onChange={(e: any) => updateDraftGlobalSponsorField('logo', e.target.value)}
+                      />
+                      <Input
+                        label="Website URL"
+                        value={sponsorsConfigDraft.globalSponsor?.url || ''}
+                        onChange={(e: any) => updateDraftGlobalSponsorField('url', e.target.value)}
+                      />
+                      <Input
+                        label="Contacts"
+                        value={sponsorsConfigDraft.globalSponsor?.contacts || ''}
+                        onChange={(e: any) => updateDraftGlobalSponsorField('contacts', e.target.value)}
+                      />
+                      <Input
+                        label="Description"
+                        value={sponsorsConfigDraft.globalSponsor?.description || ''}
+                        onChange={(e: any) => updateDraftGlobalSponsorField('description', e.target.value)}
+                      />
+                    </div>
+                  )}
+                </Card>
 
-            <div className="space-y-3 max-h-[360px] overflow-auto pr-1">
-              {scopedDraftSponsors.length === 0 ? (
-                <Card className="p-4 border border-dashed border-black/20 text-sm text-black/50">No entries in this scope yet. Add one to begin.</Card>
-              ) : scopedDraftSponsors.map((item, index) => (
-                <Card key={item.id} className="p-3 border border-black/10">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-bold uppercase tracking-widest text-black/60">Entry {index + 1}</p>
+                <Card className="p-3 border border-black/10">
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-black/60 mb-2">Scope and Actions</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                    <Select
+                      label="Manage For"
+                      value={sponsorsConfigScope}
+                      onChange={(e: any) => setSponsorsConfigScope(e.target.value)}
+                      options={sponsorScopeOptions.map((opt) => ({ value: opt.value, label: opt.label }))}
+                    />
+                    <Input
+                      label="Number of Entries"
+                      type="number"
+                      min="0"
+                      max="20"
+                      value={scopedDraftSponsors.length}
+                      onChange={(e: any) => setDraftSponsorCountForScope(sponsorsConfigScope, Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => removeDraftSponsorForScope(sponsorsConfigScope, item.id)}
-                      className="px-2"
-                      title="Remove Entry"
-                      ariaLabel="Remove Entry"
+                      onClick={() => addDraftSponsorForScope(sponsorsConfigScope)}
+                      className="px-3"
+                      title="Add Entry"
+                      ariaLabel="Add Entry"
                     >
-                      <Trash2 size={12} />
+                      <Plus size={14} />
                     </Button>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <Input label="Name" value={item.name} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'name', e.target.value)} />
-                    <Select
-                      label="Type"
-                      value={item.kind}
-                      onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'kind', e.target.value)}
-                      options={[
-                        { value: 'sponsor', label: 'Sponsor' },
-                        { value: 'partner', label: 'Partner' },
-                      ]}
-                    />
-                    <Input label="Logo URL" value={item.logo} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'logo', e.target.value)} />
-                    <Input label="Website URL" value={item.url} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'url', e.target.value)} />
-                    <Input label="Contacts" value={item.contacts} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'contacts', e.target.value)} />
-                    <Input label="Description" value={item.description} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'description', e.target.value)} />
+                    <Button size="sm" variant="outline" onClick={exportSponsorsConfigEditor} className="px-3" title="Export Config" ariaLabel="Export Config">
+                      <Upload size={14} />
+                    </Button>
+                    <div className="relative">
+                      <input
+                        ref={sponsorsImportInputRef}
+                        type="file"
+                        accept=".json"
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                        onChange={importSponsorsConfigEditor}
+                      />
+                      <Button size="sm" variant="outline" className="px-3" title="Import Config" ariaLabel="Import Config">
+                        <Download size={14} />
+                      </Button>
+                    </div>
                   </div>
                 </Card>
-              ))}
+              </div>
+
+              <div className="space-y-3">
+                {scopedDraftSponsors.length === 0 ? (
+                  <Card className="p-4 border border-dashed border-black/20 text-sm text-black/50">No entries in this scope yet. Add one to begin.</Card>
+                ) : scopedDraftSponsors.map((item, index) => (
+                  <Card key={item.id} className="p-3 border border-black/10">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-bold uppercase tracking-widest text-black/60">Entry {index + 1}</p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => removeDraftSponsorForScope(sponsorsConfigScope, item.id)}
+                        className="px-2"
+                        title="Remove Entry"
+                        ariaLabel="Remove Entry"
+                      >
+                        <Trash2 size={12} />
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <Input label="Name" value={item.name} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'name', e.target.value)} />
+                      <Select
+                        label="Type"
+                        value={item.kind}
+                        onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'kind', e.target.value)}
+                        options={[
+                          { value: 'sponsor', label: 'Sponsor' },
+                          { value: 'partner', label: 'Partner' },
+                        ]}
+                      />
+                      <Input label="Logo URL" value={item.logo} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'logo', e.target.value)} />
+                      <Input label="Website URL" value={item.url} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'url', e.target.value)} />
+                      <Input label="Contacts" value={item.contacts} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'contacts', e.target.value)} />
+                      <Input label="Description" value={item.description} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'description', e.target.value)} />
+                    </div>
+                  </Card>
+                ))}
+              </div>
             </div>
 
-            {sponsorsConfigError && <p className="text-xs text-red-600 font-semibold mt-2">{sponsorsConfigError}</p>}
-
-            <div className="flex flex-wrap gap-2 pt-3">
+            <div className="shrink-0 pt-3 mt-3 border-t border-black/10 bg-white">
+              {sponsorsConfigError && <p className="text-xs text-red-600 font-semibold mb-2">{sponsorsConfigError}</p>}
+              <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={saveSponsorsConfigEditor} className="px-3" title="Save" ariaLabel="Save">
                 <Save size={14} />
               </Button>
               <Button size="sm" variant="outline" onClick={resetSponsorsConfigEditor} className="px-3 normal-case tracking-normal" title="Reset to File" ariaLabel="Reset to File">
                 Reset to File
               </Button>
+              </div>
             </div>
           </Card>
         </div>
@@ -4276,7 +4279,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     });
     const enteredScores = gameScores.filter((value): value is number => value !== null);
     const total = enteredScores.reduce((sum, value) => sum + value, 0);
-    const average = enteredScores.length > 0 ? Math.round(total / enteredScores.length) : 0;
+    const average = enteredScores.length > 0 ? Number((total / enteredScores.length).toFixed(1)) : 0;
     return { total, average };
   };
 
@@ -4331,13 +4334,13 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
   const formatScoringName = (participant: Participant) => {
     const firstName = (participant.first_name || '').trim() || 'Unknown';
     const lastInitial = (participant.last_name || '').trim().charAt(0).toUpperCase();
-    return lastInitial ? `${firstName} ${lastInitial}.` : firstName;
+    return (lastInitial ? `${firstName} ${lastInitial}.` : firstName).toUpperCase();
   };
 
   const formatParticipantFullName = (participant: Participant) => {
     const firstName = (participant.first_name || '').trim();
     const lastName = (participant.last_name || '').trim();
-    return `${firstName} ${lastName}`.trim();
+    return `${firstName} ${lastName}`.trim().toUpperCase();
   };
 
   const scoringParticipants = participants
@@ -4797,7 +4800,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                       );
                     })}
                     <td className="px-4 py-3 text-right font-bold text-base text-black/80">{total}</td>
-                    <td className="px-4 py-3 text-right font-bold text-base text-emerald-700">{average}</td>
+                    <td className="px-4 py-3 text-right font-bold text-base text-emerald-700">{average.toFixed(1)}</td>
                   </tr>
                 </React.Fragment>
               );
@@ -7267,11 +7270,11 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
 
   const formatStandingsName = (participantId: number, fallbackName: string) => {
     const participant = participantInfoMap.get(participantId);
-    if (!participant) return fallbackName;
+    if (!participant) return fallbackName.toUpperCase();
     const firstName = (participant.first_name || '').trim();
     const lastInitial = (participant.last_name || '').trim().charAt(0).toUpperCase();
-    if (!firstName) return fallbackName;
-    return lastInitial ? `${firstName} ${lastInitial}.` : firstName;
+    if (!firstName) return fallbackName.toUpperCase();
+    return (lastInitial ? `${firstName} ${lastInitial}.` : firstName).toUpperCase();
   };
 
   const participantNameMap = new Map<number, string>();
@@ -7293,7 +7296,7 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
       const games = gameNumbers.map((gameNumber) => scoreByParticipantGame.get(`${p.id}-${gameNumber}`) ?? 0);
       const total = games.reduce((sum, value) => sum + value, 0);
       const gamesPlayed = games.filter((value) => value > 0).length;
-      const average = gamesPlayed > 0 ? Math.round(total / gamesPlayed) : 0;
+      const average = gamesPlayed > 0 ? Number((total / gamesPlayed).toFixed(1)) : 0;
       return {
         participant_id: p.id,
         participant_name: formatStandingsName(p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown'),
@@ -7364,6 +7367,20 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
   const femaleLeader = scores
     .filter(score => participantGenderMap.get(score.participant_id) === 'female')
     .sort((a, b) => b.score - a.score)[0];
+  const maleLeaderCellKey = maleLeader ? `${maleLeader.participant_id}-${maleLeader.game_number}` : '';
+  const femaleLeaderCellKey = femaleLeader ? `${femaleLeader.participant_id}-${femaleLeader.game_number}` : '';
+
+  const totalPlayers = participants.length;
+  const totalClubs = new Set(
+    participants
+      .map((participant) => String(participant.club || '').trim().toUpperCase())
+      .filter((club) => club.length > 0)
+  ).size;
+  const totalTeams = isTeamTournament
+    ? Math.max(teams.length, new Set(participants.filter((p) => p.team_id !== null).map((p) => p.team_id)).size)
+    : 0;
+  const totalFemale = participants.filter((participant) => String(participant.gender || '').toLowerCase() === 'female').length;
+  const totalMale = participants.filter((participant) => String(participant.gender || '').toLowerCase() === 'male').length;
 
   const completedBracketMatches = bracketMatches
     .filter(m => m.winner_id)
@@ -7430,7 +7447,7 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
           s.team_name,
           ...s.games,
           s.total,
-          s.average,
+          s.average.toFixed(1),
         ]);
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -7559,7 +7576,31 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
 
           <Card className="p-6">
             <h4 className="font-bold mb-1">Tournament Highlights</h4>
-            <p className="text-sm text-black/40 mb-4">Highest single game score by category</p>
+            <p className="text-sm text-black/40 mb-4">Quick stats and highest single game score by category</p>
+
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+              <div className="rounded-lg border border-black/10 p-3 bg-black/[0.02] text-center">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Players</p>
+                <p className="text-lg font-bold mt-1">{totalPlayers}</p>
+              </div>
+              <div className="rounded-lg border border-black/10 p-3 bg-black/[0.02] text-center">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Clubs</p>
+                <p className="text-lg font-bold mt-1">{totalClubs}</p>
+              </div>
+              <div className="rounded-lg border border-black/10 p-3 bg-black/[0.02] text-center">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Teams</p>
+                <p className="text-lg font-bold mt-1">{totalTeams}</p>
+              </div>
+              <div className="rounded-lg border border-black/10 p-3 bg-black/[0.02] text-center">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">F</p>
+                <p className="text-lg font-bold mt-1">{totalFemale}</p>
+              </div>
+              <div className="rounded-lg border border-black/10 p-3 bg-black/[0.02] text-center">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">M</p>
+                <p className="text-lg font-bold mt-1">{totalMale}</p>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="rounded-lg border border-black/10 p-4 bg-black/[0.02]">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Highest Score Male</p>
@@ -7642,8 +7683,8 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
           <table ref={standingsTableRef} className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 w-16">Rank</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
+                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-black/70 w-12">Rank</th>
+                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-black/70">{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
                 {standingsMode === 'players' && (
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Club</th>
                 )}
@@ -7664,8 +7705,8 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
             <tbody className="divide-y divide-black/5">
               {standingsMode === 'players' && playerStandingsRows.map((s, idx) => (
                 <tr key={s.participant_id} className="hover:bg-[#AFDDE5]/20 transition-colors">
-                  <td className="px-6 py-4 font-bold text-black/60">{idx + 1}</td>
-                  <td className="px-6 py-4 font-bold">
+                  <td className="px-3 py-2 text-[13px] font-bold text-black/60">{idx + 1}</td>
+                  <td className="px-3 py-2 text-[13px] font-bold leading-tight">
                     <span className="inline-flex items-center gap-1.5">
                       {renderFemaleInitialUnderline(
                         s.participant_name,
@@ -7675,19 +7716,33 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                   </td>
                   <td className="px-6 py-4 text-black/40 text-sm">{s.club}</td>
                   <td className="px-6 py-4 text-black/40 text-sm">{s.team_name}</td>
-                  {s.games.map((value, gameIndex) => (
-                    <td key={gameIndex} className="px-6 py-4 text-center font-mono">{value}</td>
-                  ))}
-                  <td className="px-6 py-4 text-center font-mono text-black/60">{s.average}</td>
+                  {s.games.map((value, gameIndex) => {
+                    const gameNo = gameNumbers[gameIndex] || (gameIndex + 1);
+                    const cellKey = `${s.participant_id}-${gameNo}`;
+                    const isMaleLeaderCell = maleLeaderCellKey === cellKey;
+                    const isFemaleLeaderCell = femaleLeaderCellKey === cellKey;
+                    const cellClass = isMaleLeaderCell
+                      ? 'bg-sky-50 text-sky-700 font-bold ring-1 ring-sky-200'
+                      : isFemaleLeaderCell
+                        ? 'bg-rose-50 text-rose-700 font-bold ring-1 ring-rose-200'
+                        : '';
+
+                    return (
+                      <td key={gameIndex} className={`px-6 py-4 text-center font-mono ${cellClass}`}>
+                        {value}
+                      </td>
+                    );
+                  })}
+                  <td className="px-6 py-4 text-center font-mono text-black/60">{s.average.toFixed(1)}</td>
                   <td className="px-6 py-4 text-right font-bold">{s.total}</td>
                 </tr>
               ))}
               {standingsMode === 'teams' && teamStandingsRows.map((s, idx) => (
                 <tr key={s.key} className="hover:bg-[#AFDDE5]/20 transition-colors">
-                  <td className="px-6 py-4 font-bold text-black/60">{idx + 1}</td>
-                  <td className="px-6 py-4">
-                    <div className="font-bold">{s.team_name}</div>
-                    <div className="text-[11px] text-black/50 lowercase">
+                  <td className="px-3 py-2 text-[13px] font-bold text-black/60">{idx + 1}</td>
+                  <td className="px-3 py-2 leading-tight">
+                    <div className="text-[13px] font-bold">{s.team_name}</div>
+                    <div className="text-[10px] text-black/50 lowercase mt-0.5">
                       {s.members.length > 0 ? s.members.join(', ') : 'no members'}
                     </div>
                   </td>
