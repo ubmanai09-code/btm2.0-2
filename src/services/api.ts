@@ -6,7 +6,7 @@ export interface Tournament {
   format: string;
   organizer: string;
   logo: string;
-  match_play_type: 'single_elimination' | 'double_elimination' | 'ladder' | 'playoff';
+  match_play_type: 'single_elimination' | 'double_elimination' | 'ladder' | 'stepladder' | 'playoff';
   qualified_count: number;
   playoff_winners_count: number;
   type: 'individual' | 'team';
@@ -572,7 +572,27 @@ const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ winner_id: winnerId }),
     });
-    return res.json();
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to set bracket winner');
+    }
+    return data;
+  },
+  async setStepladderShootoutWinner(
+    tournamentId: number,
+    matchId: number,
+    scores: { score_p1: number; score_p2: number; score_p3: number }
+  ): Promise<{ success: boolean; winner_id: number }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/brackets/${matchId}/stepladder-shootout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(scores),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to resolve stepladder shootout');
+    }
+    return data;
   },
 };
 

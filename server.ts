@@ -99,8 +99,10 @@ function initDb() {
       match_index INTEGER NOT NULL,
       participant1_id INTEGER,
       participant2_id INTEGER,
+      participant3_id INTEGER,
       participant1_seed INTEGER,
       participant2_seed INTEGER,
+      participant3_seed INTEGER,
       participant1_source_match_id INTEGER,
       participant1_source_outcome TEXT,
       participant2_source_match_id INTEGER,
@@ -212,6 +214,8 @@ function initDb() {
   const bracketMigrations = [
     { name: 'participant1_seed', type: 'INTEGER' },
     { name: 'participant2_seed', type: 'INTEGER' },
+    { name: 'participant3_id', type: 'INTEGER' },
+    { name: 'participant3_seed', type: 'INTEGER' },
     { name: 'participant1_source_match_id', type: 'INTEGER' },
     { name: 'participant1_source_outcome', type: 'TEXT' },
     { name: 'participant2_source_match_id', type: 'INTEGER' },
@@ -1414,16 +1418,20 @@ const existing = db
       SELECT b.*, 
              (p1.first_name || ' ' || p1.last_name) as p1_name, 
              (p2.first_name || ' ' || p2.last_name) as p2_name, 
+             (p3.first_name || ' ' || p3.last_name) as p3_name,
              (w.first_name || ' ' || w.last_name) as winner_name,
              t1.name as p1_team_name,
              t2.name as p2_team_name,
+             t3.name as p3_team_name,
              tw.name as winner_team_name
       FROM brackets b
       LEFT JOIN participants p1 ON b.participant1_id = p1.id
       LEFT JOIN participants p2 ON b.participant2_id = p2.id
+      LEFT JOIN participants p3 ON b.participant3_id = p3.id
       LEFT JOIN participants w ON b.winner_id = w.id
       LEFT JOIN teams t1 ON p1.team_id = t1.id
       LEFT JOIN teams t2 ON p2.team_id = t2.id
+      LEFT JOIN teams t3 ON p3.team_id = t3.id
       LEFT JOIN teams tw ON w.team_id = tw.id
       WHERE b.tournament_id = ?
       ORDER BY b.round ASC, b.match_index ASC
@@ -1659,11 +1667,78 @@ const existing = db
 
     const participants = qualifiedEntries
       .slice(0, effectiveQualifiedCount)
-      .map(entry => ({ id: entry.participant_id }));
+      .map((entry, index) => ({
+        id: entry.participant_id,
+        total_score: Number(entry.total_score) || 0,
+        seed: index + 1,
+      }));
     
     if (participants.length < 2) return res.status(400).json({ error: "Need at least 2 participants" });
 
     db.prepare("DELETE FROM brackets WHERE tournament_id = ?").run(tournamentId);
+
+    if (requestedMatchPlayType === 'stepladder') {
+      const stepladderSeeds = participants.slice(0, 6);
+      if (stepladderSeeds.length < 6) {
+        return res.status(400).json({ error: 'Stepladder requires at least 6 qualified participants (seeds 1-6)' });
+      }
+
+      const seed1 = stepladderSeeds[0];
+      const seed2 = stepladderSeeds[1];
+      const seed3 = stepladderSeeds[2];
+      const seed4 = stepladderSeeds[3];
+      const seed5 = stepladderSeeds[4];
+      const seed6 = stepladderSeeds[5];
+
+      db.prepare(`
+        INSERT INTO brackets (
+          tournament_id, round, match_index,
+          participant1_id, participant2_id, participant3_id,
+          participant1_seed, participant2_seed, participant3_seed,
+          winner_id
+        )
+        VALUES (?, 1, 0, ?, ?, ?, ?, ?, ?, NULL)
+      `).run(tournamentId, seed4.id, seed5.id, seed6.id, seed4.seed, seed5.seed, seed6.seed);
+
+      db.prepare(`
+        INSERT INTO brackets (
+          tournament_id, round, match_index,
+          participant1_id, participant2_id,
+          participant1_seed, participant2_seed,
+          winner_id
+        )
+        VALUES (?, 2, 0, NULL, ?, NULL, ?, NULL)
+      `).run(tournamentId, seed3.id, seed3.seed);
+
+      db.prepare(`
+        INSERT INTO brackets (
+          tournament_id, round, match_index,
+          participant1_id, participant2_id,
+          participant1_seed, participant2_seed,
+          winner_id
+        )
+        VALUES (?, 3, 0, NULL, ?, NULL, ?, NULL)
+      `).run(tournamentId, seed2.id, seed2.seed);
+
+      db.prepare(`
+        INSERT INTO brackets (
+          tournament_id, round, match_index,
+          participant1_id, participant2_id,
+          participant1_seed, participant2_seed,
+          winner_id
+        )
+        VALUES (?, 4, 0, NULL, ?, NULL, ?, NULL)
+      `).run(tournamentId, seed1.id, seed1.seed);
+
+      const generatedMatches = db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ?").get(tournamentId) as any;
+      return res.json({
+        success: true,
+        match_play_type: requestedMatchPlayType,
+        qualified_count: stepladderSeeds.length,
+        rounds_count: 4,
+        generated_matches: generatedMatches?.count || 4,
+      });
+    }
 
     if (requestedMatchPlayType === 'playoff') {
       const bracketSize = nextPowerOfTwo(participants.length);
@@ -1875,7 +1950,7 @@ const existing = db
 
       if (!Number.isFinite(seedId)) return res.status(400).json({ error: 'Invalid seed id' });
 
-      const match = db.prepare("SELECT id, participant1_id, participant2_id, winner_id FROM brackets WHERE id = ? AND tournament_id = ?").get(matchId, tournamentId) as any;
+      const match = db.prepare("SELECT id, participant1_id, participant2_id, participant3_id, winner_id FROM brackets WHERE id = ? AND tournament_id = ?").get(matchId, tournamentId) as any;
       if (!match) return res.status(404).json({ error: 'Match not found' });
 
       let participantId: number | null = null;
@@ -1906,8 +1981,13 @@ const existing = db
       const seedField = slot === 'p1' ? 'participant1_seed' : 'participant2_seed';
       db.prepare(`UPDATE brackets SET ${participantField} = ?, ${seedField} = ? WHERE id = ?`).run(participantId, seedNumber, matchId);
 
-      const refreshed = db.prepare("SELECT participant1_id, participant2_id, winner_id FROM brackets WHERE id = ?").get(matchId) as any;
-      if (refreshed?.winner_id && refreshed.winner_id !== refreshed.participant1_id && refreshed.winner_id !== refreshed.participant2_id) {
+      const refreshed = db.prepare("SELECT participant1_id, participant2_id, participant3_id, winner_id FROM brackets WHERE id = ?").get(matchId) as any;
+      if (
+        refreshed?.winner_id &&
+        refreshed.winner_id !== refreshed.participant1_id &&
+        refreshed.winner_id !== refreshed.participant2_id &&
+        refreshed.winner_id !== refreshed.participant3_id
+      ) {
         db.prepare("UPDATE brackets SET winner_id = NULL WHERE id = ?").run(matchId);
       }
 
@@ -1926,9 +2006,86 @@ const existing = db
       return res.status(400).json({ error: 'Invalid winner or match id' });
     }
 
+    const match = db.prepare(`
+      SELECT id, participant1_id, participant2_id, participant3_id
+      FROM brackets
+      WHERE id = ? AND tournament_id = ?
+      LIMIT 1
+    `).get(numericMatchId, req.params.id) as any;
+    if (!match) {
+      return res.status(404).json({ error: 'Match not found' });
+    }
+
+    const allowedWinnerIds = [
+      Number(match.participant1_id) || 0,
+      Number(match.participant2_id) || 0,
+      Number(match.participant3_id) || 0,
+    ].filter((id) => id > 0);
+
+    if (!allowedWinnerIds.includes(numericWinnerId)) {
+      return res.status(400).json({ error: 'Winner must be one of the participants in this match' });
+    }
+
     db.prepare("UPDATE brackets SET winner_id = ? WHERE id = ?").run(numericWinnerId, numericMatchId);
     advanceWinnerToNextRound(req.params.id, numericMatchId, numericWinnerId);
     res.json({ success: true });
+  });
+
+  app.post("/api/tournaments/:id/brackets/:matchId/stepladder-shootout", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
+    const numericMatchId = Number.parseInt(req.params.matchId, 10);
+    if (!Number.isFinite(numericMatchId)) {
+      return res.status(400).json({ error: 'Invalid match id' });
+    }
+
+    const tournament = db.prepare(`
+      SELECT match_play_type
+      FROM tournaments
+      WHERE id = ?
+      LIMIT 1
+    `).get(req.params.id) as any;
+    if (!tournament) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+    if (String(tournament.match_play_type) !== 'stepladder') {
+      return res.status(400).json({ error: 'Shootout endpoint is only valid for stepladder tournaments' });
+    }
+
+    const match = db.prepare(`
+      SELECT id, round, match_index, participant1_id, participant2_id, participant3_id
+      FROM brackets
+      WHERE id = ? AND tournament_id = ?
+      LIMIT 1
+    `).get(numericMatchId, req.params.id) as any;
+    if (!match) {
+      return res.status(404).json({ error: 'Match not found' });
+    }
+    if (Number(match.round) !== 1 || Number(match.match_index) !== 0 || !match.participant3_id) {
+      return res.status(400).json({ error: 'Shootout applies only to Stepladder Match 1 (seeds 4,5,6)' });
+    }
+
+    const score1 = Number.parseInt(String(req.body?.score_p1), 10);
+    const score2 = Number.parseInt(String(req.body?.score_p2), 10);
+    const score3 = Number.parseInt(String(req.body?.score_p3), 10);
+
+    const validScore = (v: number) => Number.isFinite(v) && v >= 0 && v <= 300;
+    if (!validScore(score1) || !validScore(score2) || !validScore(score3)) {
+      return res.status(400).json({ error: 'All three shootout scores must be valid numbers between 0 and 300' });
+    }
+
+    const scoreRows = [
+      { participantId: Number(match.participant1_id), score: score1 },
+      { participantId: Number(match.participant2_id), score: score2 },
+      { participantId: Number(match.participant3_id), score: score3 },
+    ].sort((a, b) => (b.score - a.score) || (a.participantId - b.participantId));
+
+    if (scoreRows[0].score === scoreRows[1].score) {
+      return res.status(400).json({ error: 'Top shootout score is tied. Resolve tie manually, then set winner.' });
+    }
+
+    const winnerId = scoreRows[0].participantId;
+    db.prepare("UPDATE brackets SET winner_id = ? WHERE id = ?").run(winnerId, numericMatchId);
+    advanceWinnerToNextRound(req.params.id, numericMatchId, winnerId);
+    return res.json({ success: true, winner_id: winnerId });
   });
 
   // Vite middleware for development

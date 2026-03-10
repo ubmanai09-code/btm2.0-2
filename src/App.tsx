@@ -1079,8 +1079,6 @@ export default function App() {
     return value === 'Pre-Qualification' ? 'Total Pinfall' : value;
   };
 
-  const formatStatusLabel = (value: string) => (value === 'draft' ? 'planned' : value);
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-emerald-50/30 text-black font-sans">
       {/* Sidebar / Nav */}
@@ -1290,7 +1288,7 @@ export default function App() {
                             t.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 
                             t.status === 'finished' ? 'bg-black/5 text-black/40' : 'bg-amber-100 text-amber-700'
                           }`}>
-                            {formatStatusLabel(t.status)}
+                            {t.status}
                           </div>
                           {isAdmin && (
                             <div className="flex gap-1">
@@ -1486,7 +1484,7 @@ export default function App() {
                       name="status" 
                       defaultValue={editingTournament?.status}
                       options={[
-                        { value: 'draft', label: 'Planned' },
+                        { value: 'draft', label: 'Draft' },
                         { value: 'active', label: 'Active' },
                         { value: 'finished', label: 'Finished' }
                       ]} 
@@ -1678,16 +1676,15 @@ export default function App() {
       )}
 
       {showSponsorsConfigEditor && (
-        <div className="fixed inset-0 z-[60] bg-black/45 flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <Card className="w-full max-w-5xl max-h-[94vh] sm:max-h-[90vh] p-0 overflow-hidden flex flex-col" onClick={(e: any) => e.stopPropagation()}>
-            <div className="flex items-center justify-between gap-3 p-4 border-b border-black/10 bg-white">
+        <div className="fixed inset-0 z-[60] bg-black/45 flex items-center justify-center p-4">
+          <Card className="w-full max-w-5xl p-4" onClick={(e: any) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 mb-3">
               <h3 className="text-lg font-bold">Sponsors and Partners Manager</h3>
               <Button size="sm" variant="outline" onClick={() => setShowSponsorsConfigEditor(false)} title="Close" ariaLabel="Close">
                 <X size={14} />
               </Button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
               <Card className="p-3 border border-black/10">
                 <h4 className="text-xs font-bold uppercase tracking-widest text-black/60 mb-2">BTM Powered by Slot</h4>
@@ -1826,9 +1823,8 @@ export default function App() {
             </div>
 
             {sponsorsConfigError && <p className="text-xs text-red-600 font-semibold mt-2">{sponsorsConfigError}</p>}
-            </div>
 
-            <div className="flex flex-wrap gap-2 p-4 border-t border-black/10 bg-white sticky bottom-0">
+            <div className="flex flex-wrap gap-2 pt-3">
               <Button size="sm" variant="outline" onClick={saveSponsorsConfigEditor} className="px-3" title="Save" ariaLabel="Save">
                 <Save size={14} />
               </Button>
@@ -2052,59 +2048,79 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       animate={{ opacity: 1 }}
       className="space-y-8"
     >
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <Button variant="ghost" onClick={onBack} className="mb-4 -ml-2 text-black/40" title={tPublic('common.back_to_dashboard', 'Back to Dashboard')} ariaLabel={tPublic('common.back_to_dashboard', 'Back to Dashboard')}>
-            <ArrowLeft size={18} />
-          </Button>
-          <div className="flex items-center gap-3 mb-2">
-            <h1
-              className={`text-4xl font-bold tracking-tight uppercase transition-colors ${role === 'admin' ? 'cursor-pointer hover:text-emerald-600' : ''}`}
-              onClick={() => {
-                if (role === 'admin') onEdit(tournament);
-              }}
-              title={role === 'admin' ? 'Click to edit tournament' : undefined}
-            >
-              {tournament.name}
-            </h1>
-            <span className="px-2 py-0.5 bg-black text-white text-[10px] font-bold uppercase tracking-widest rounded">
-              {formatStatusLabel(tournament.status)}
-            </span>
-          </div>
-          <div className="flex items-center gap-4 text-black/40 text-sm flex-wrap">
-            <div className="flex items-center gap-1.5">
-              <Calendar size={14} />
-              <span>{new Date(tournament.date).toLocaleDateString()}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Users size={14} />
-              <span className="capitalize">{tournament.type === 'team' ? tPublic('public.tournament.type.team', 'team') : tPublic('public.tournament.type.individual', 'individual')}</span>
-              {tournament.type === 'team' && (
-                <span className="text-black/40">({tournament.players_per_team} per team)</span>
-              )}
-            </div>
-            {tournament.location && (
-              <div className="flex items-center gap-1.5">
-                <LayoutGrid size={14} />
-                <span>{tournament.location}</span>
-              </div>
-            )}
-            <div className="flex items-center gap-1.5">
-              <ClipboardList size={14} />
-              <span>{getTournamentFormatLabel(tournament.format)}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Target size={14} />
-              <span>{tournament.games_count} {tPublic('public.tournament.games', 'Games')}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <LayoutGrid size={14} />
-              <span>{tournament.players_per_lane} {tournament.type === 'team' ? tPublic('public.tournament.teams_per_lane', 'Teams') : tPublic('public.tournament.players_per_lane', 'Players')} / {tPublic('lanes.lane', 'Lane')}</span>
-            </div>
-          </div>
-        </div>
+      <div className="space-y-4">
+        <Button variant="ghost" onClick={onBack} className="-ml-2 text-black/40" title={tPublic('common.back_to_dashboard', 'Back to Dashboard')} ariaLabel={tPublic('common.back_to_dashboard', 'Back to Dashboard')}>
+          <ArrowLeft size={18} />
+        </Button>
 
-        <div className="w-full md:w-[430px] space-y-3">
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_430px] gap-4">
+          <Card className="p-5 border border-emerald-200 bg-gradient-to-br from-white via-emerald-50/60 to-[#AFDDE5]/35 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+              <div className="w-[82px] h-[82px] rounded-lg border border-black/10 bg-white p-2 flex items-center justify-center shrink-0">
+                <img
+                  src={tournament.logo || '/logo.png'}
+                  alt={tournament.name}
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                  }}
+                />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <span className="px-2 py-0.5 rounded bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-widest">
+                    League Concept
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-black text-white text-[10px] font-bold uppercase tracking-widest">
+                    {tournament.status}
+                  </span>
+                </div>
+
+                <h1
+                  className={`text-3xl sm:text-4xl font-bold tracking-tight uppercase leading-tight transition-colors ${role === 'admin' ? 'cursor-pointer hover:text-emerald-600' : ''}`}
+                  onClick={() => {
+                    if (role === 'admin') onEdit(tournament);
+                  }}
+                  title={role === 'admin' ? 'Click to edit tournament' : undefined}
+                >
+                  {tournament.name}
+                </h1>
+
+                <div className="mt-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-black/60 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-black/10 bg-white/70">
+                    <Calendar size={13} />
+                    {new Date(tournament.date).toLocaleDateString()}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-black/10 bg-white/70">
+                    <Users size={13} />
+                    <span className="capitalize">{tournament.type === 'team' ? tPublic('public.tournament.type.team', 'team') : tPublic('public.tournament.type.individual', 'individual')}</span>
+                    {tournament.type === 'team' && <span>({tournament.players_per_team}/team)</span>}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-black/10 bg-white/70">
+                    <ClipboardList size={13} />
+                    {getTournamentFormatLabel(tournament.format)}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-black/10 bg-white/70">
+                    <Target size={13} />
+                    {tournament.games_count} {tPublic('public.tournament.games', 'Games')}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-black/10 bg-white/70">
+                    <LayoutGrid size={13} />
+                    {tournament.players_per_lane} {tournament.type === 'team' ? tPublic('public.tournament.teams_per_lane', 'Teams') : tPublic('public.tournament.players_per_lane', 'Players')} / {tPublic('lanes.lane', 'Lane')}
+                  </span>
+                  {tournament.location && (
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-black/10 bg-white/70">
+                      <LayoutGrid size={13} />
+                      {tournament.location}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <div className="w-full space-y-3">
           <div className="flex justify-end items-center gap-2">
             <Button
               size="sm"
@@ -2235,6 +2251,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
             </Card>
           )}
         </div>
+      </div>
       </div>
 
       {role === 'moderator' && !accessLoading && effectiveRole === 'public' && (
@@ -4259,13 +4276,8 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     });
     const enteredScores = gameScores.filter((value): value is number => value !== null);
     const total = enteredScores.reduce((sum, value) => sum + value, 0);
-    const average = enteredScores.length > 0 ? (total / enteredScores.length) : 0;
+    const average = enteredScores.length > 0 ? Math.round(total / enteredScores.length) : 0;
     return { total, average };
-  };
-
-  const formatScoreEntryAverage = (value: number) => {
-    if (!Number.isFinite(value)) return '0.0';
-    return value.toFixed(1);
   };
 
   const teamMemberPositionMap = new Map<number, number>();
@@ -4319,14 +4331,13 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
   const formatScoringName = (participant: Participant) => {
     const firstName = (participant.first_name || '').trim() || 'Unknown';
     const lastInitial = (participant.last_name || '').trim().charAt(0).toUpperCase();
-    const displayName = lastInitial ? `${firstName} ${lastInitial}.` : firstName;
-    return displayName.toUpperCase();
+    return lastInitial ? `${firstName} ${lastInitial}.` : firstName;
   };
 
   const formatParticipantFullName = (participant: Participant) => {
     const firstName = (participant.first_name || '').trim();
     const lastName = (participant.last_name || '').trim();
-    return `${firstName} ${lastName}`.trim().toUpperCase();
+    return `${firstName} ${lastName}`.trim();
   };
 
   const scoringParticipants = participants
@@ -4709,8 +4720,8 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
           <tbody className="divide-y divide-black/5">
             {scoringParticipants.map((p, index) => {
               const { total, average } = getParticipantStats(p.id);
-              const teamLabel = (p.team_name || 'Unassigned').toUpperCase();
-              const previousTeamLabel = index > 0 ? (scoringParticipants[index - 1].team_name || 'Unassigned').toUpperCase() : null;
+              const teamLabel = p.team_name || 'Unassigned';
+              const previousTeamLabel = index > 0 ? (scoringParticipants[index - 1].team_name || 'Unassigned') : null;
               const showTeamHeader = tournament.type === 'team' && teamLabel !== previousTeamLabel;
               
               return (
@@ -4786,7 +4797,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                       );
                     })}
                     <td className="px-4 py-3 text-right font-bold text-base text-black/80">{total}</td>
-                    <td className="px-4 py-3 text-right font-bold text-base text-emerald-700">{formatScoreEntryAverage(average)}</td>
+                    <td className="px-4 py-3 text-right font-bold text-base text-emerald-700">{average}</td>
                   </tr>
                 </React.Fragment>
               );
@@ -4821,7 +4832,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const [bracketParticipants, setBracketParticipants] = useState<Participant[]>([]);
   const [selectedSeed, setSelectedSeed] = useState<any | null>(null);
   const [editingNameSlot, setEditingNameSlot] = useState<{ matchId: number; slot: 'p1' | 'p2' } | null>(null);
-  const [matchScoreDrafts, setMatchScoreDrafts] = useState<Record<number, { p1: string; p2: string }>>({});
+  const [matchScoreDrafts, setMatchScoreDrafts] = useState<Record<number, { p1: string; p2: string; p3: string }>>({});
   const [loading, setLoading] = useState(true);
   const [settingsHydrated, setSettingsHydrated] = useState(false);
   const [matchPlayType, setMatchPlayType] = useState<Tournament['match_play_type']>(
@@ -4838,12 +4849,13 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       : 1
   );
   const [useManualSeedMatchups, setUseManualSeedMatchups] = useState(false);
-  const visualBracketBoardRef = useRef<HTMLDivElement | null>(null);
-  const visualMatchCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const [visualConnectorPaths, setVisualConnectorPaths] = useState<Array<{ id: string; d: string }>>([]);
   const [customSeedMatchups, setCustomSeedMatchups] = useState<Array<{ p1: number | null; p2: number | null }>>([]);
   const [customRoundLinkSelections, setCustomRoundLinkSelections] = useState<Record<number, Array<{ p1: string; p2: string }>>>({});
   const [customRuleTableLocked, setCustomRuleTableLocked] = useState(false);
+  const visualGridRef = useRef<HTMLDivElement | null>(null);
+  const visualCardRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const [visualConnectorPaths, setVisualConnectorPaths] = useState<Array<{ id: string; d: string }>>([]);
+  const [visualConnectorSize, setVisualConnectorSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [bracketViewMode, setBracketViewMode] = useState<'cards' | 'visual'>(() => {
     const stored = localStorage.getItem(`btm_bracket_view_mode_${tournament.id}`);
     return stored === 'visual' ? 'visual' : 'cards';
@@ -4884,25 +4896,26 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const readStoredMatchScoreDrafts = () => {
     try {
       const raw = localStorage.getItem(bracketScoreDraftsStorageKey);
-      if (!raw) return {} as Record<number, { p1: string; p2: string }>;
+      if (!raw) return {} as Record<number, { p1: string; p2: string; p3: string }>;
       const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object') return {} as Record<number, { p1: string; p2: string }>;
+      if (!parsed || typeof parsed !== 'object') return {} as Record<number, { p1: string; p2: string; p3: string }>;
 
-      const normalized: Record<number, { p1: string; p2: string }> = {};
+      const normalized: Record<number, { p1: string; p2: string; p3: string }> = {};
       for (const [key, value] of Object.entries(parsed as Record<string, any>)) {
         const matchId = Number.parseInt(String(key), 10);
         if (!Number.isFinite(matchId) || matchId <= 0) continue;
         const p1 = String((value as any)?.p1 ?? '');
         const p2 = String((value as any)?.p2 ?? '');
-        normalized[matchId] = { p1, p2 };
+        const p3 = String((value as any)?.p3 ?? '');
+        normalized[matchId] = { p1, p2, p3 };
       }
       return normalized;
     } catch {
-      return {} as Record<number, { p1: string; p2: string }>;
+      return {} as Record<number, { p1: string; p2: string; p3: string }>;
     }
   };
 
-  const persistMatchScoreDraftsToStorage = (drafts: Record<number, { p1: string; p2: string }>) => {
+  const persistMatchScoreDraftsToStorage = (drafts: Record<number, { p1: string; p2: string; p3: string }>) => {
     try {
       localStorage.setItem(bracketScoreDraftsStorageKey, JSON.stringify(drafts || {}));
     } catch {
@@ -5061,12 +5074,8 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   };
 
   const participantTeamNameMap = new Map<number, string>();
-  const participantTeamIdMap = new Map<number, number>();
   const participantGenderById = new Map<number, string>();
   for (const participant of bracketParticipants) {
-    if (participant.team_id) {
-      participantTeamIdMap.set(participant.id, participant.team_id);
-    }
     if (participant.team_id && participant.team_name) {
       participantTeamNameMap.set(participant.id, participant.team_name);
     }
@@ -5111,13 +5120,14 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     }
   }
 
-  const getSlotParticipantId = (slot: 'p1' | 'p2' | 'winner', match: any) => {
+  const getSlotParticipantId = (slot: 'p1' | 'p2' | 'p3' | 'winner', match: any) => {
     if (slot === 'p1') return match.participant1_id;
     if (slot === 'p2') return match.participant2_id;
+    if (slot === 'p3') return match.participant3_id;
     return match.winner_id;
   };
 
-  const getDisplayName = (slot: 'p1' | 'p2' | 'winner', match: any) => {
+  const getDisplayName = (slot: 'p1' | 'p2' | 'p3' | 'winner', match: any) => {
     if (tournament.type === 'team') {
       const participantId = getSlotParticipantId(slot, match);
       return participantTeamNameMap.get(participantId)
@@ -5126,15 +5136,6 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         || 'TBD';
     }
     return match[`${slot}_name`] || 'TBD';
-  };
-
-  const getSlotTeamMembersCompact = (slot: 'p1' | 'p2', match: any) => {
-    if (tournament.type !== 'team') return '';
-    const participantId = getSlotParticipantId(slot, match);
-    const teamId = participantTeamIdMap.get(Number(participantId));
-    if (!teamId) return '';
-    const members = teamMembersByTeamId.get(teamId) || [];
-    return members.length > 0 ? members.join(', ') : '';
   };
 
   const loadSeeds = async () => {
@@ -5768,11 +5769,48 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         <td>${escapePrintHtml((Number(m.match_index) || 0) + 1)}</td>
         <td>${escapePrintHtml(m.participant1_seed ? `#${m.participant1_seed} ` : '')}${escapePrintHtml(getDisplayName('p1', m))}</td>
         <td>${escapePrintHtml(m.participant2_seed ? `#${m.participant2_seed} ` : '')}${escapePrintHtml(getDisplayName('p2', m))}</td>
+        <td>${escapePrintHtml(m.participant3_seed ? `#${m.participant3_seed} ` : '')}${escapePrintHtml(getDisplayName('p3', m))}</td>
         <td>${escapePrintHtml(getDisplayName('winner', m))}</td>
       </tr>
     `).join('');
 
-    const bracketsContentHtml = `
+    const printRoundGroups = printMatches.reduce((acc: Record<number, any[]>, match: any) => {
+      const round = Number(match.round) || 0;
+      if (!acc[round]) acc[round] = [];
+      acc[round].push(match);
+      return acc;
+    }, {} as Record<number, any[]>);
+
+    const printOrderedRounds = Object.keys(printRoundGroups)
+      .map((r) => Number(r))
+      .filter((r) => Number.isFinite(r) && r > 0)
+      .sort((a, b) => a - b);
+
+    const visualRoundsHtml = printOrderedRounds.map((roundNumber) => {
+      const roundMatches = [...(printRoundGroups[roundNumber] || [])].sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
+      const roundCardsHtml = roundMatches.map((m: any) => {
+        const p3Name = getDisplayName('p3', m);
+        const showP3 = Boolean((m.p3_name || m.p3_team_name || m.participant3_id) && p3Name !== 'TBD');
+        return `
+          <div class="print-match-card">
+            <div class="print-match-head">M${escapePrintHtml((Number(m.match_index) || 0) + 1)}</div>
+            <div class="print-match-line">${escapePrintHtml(m.participant1_seed ? `#${m.participant1_seed} ` : '')}${escapePrintHtml(getDisplayName('p1', m))}</div>
+            <div class="print-match-line">${escapePrintHtml(m.participant2_seed ? `#${m.participant2_seed} ` : '')}${escapePrintHtml(getDisplayName('p2', m))}</div>
+            ${showP3 ? `<div class="print-match-line">${escapePrintHtml(m.participant3_seed ? `#${m.participant3_seed} ` : '')}${escapePrintHtml(p3Name)}</div>` : ''}
+            <div class="print-match-winner">Winner: ${escapePrintHtml(getDisplayName('winner', m))}</div>
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <section class="print-round-col">
+          <h3>Round ${escapePrintHtml(roundNumber)}</h3>
+          ${roundCardsHtml || '<p style="color:#777;">No matches.</p>'}
+        </section>
+      `;
+    }).join('');
+
+    const tableContentHtml = `
       <h2>Seeds List</h2>
       <table>
         <thead>
@@ -5795,20 +5833,50 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
             <th>Match</th>
             <th>Participant 1</th>
             <th>Participant 2</th>
+            <th>Participant 3</th>
             <th>Winner</th>
           </tr>
         </thead>
         <tbody>
-          ${matchRowsHtml || '<tr><td colspan="5" style="text-align:center;color:#777;">No bracket matches available.</td></tr>'}
+          ${matchRowsHtml || '<tr><td colspan="6" style="text-align:center;color:#777;">No bracket matches available.</td></tr>'}
         </tbody>
       </table>
+    `;
+
+    const visualContentHtml = `
+      <h2>Seeds List</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Seed</th>
+            <th>${tournament.type === 'team' ? 'Team' : 'Player'}</th>
+            <th style="text-align:right;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${seedRowsHtml || '<tr><td colspan="3" style="text-align:center;color:#777;">No seeds available.</td></tr>'}
+        </tbody>
+      </table>
+
+      <h2>Bracket Visual</h2>
+      <div class="print-visual-grid">
+        ${visualRoundsHtml || '<p style="color:#777;">No bracket matches available.</p>'}
+      </div>
     `;
 
     writeAndPrintDocument(printWindow, buildPrintDocument({
       tournament,
       pageTitle: `${tournament.name} - Brackets`,
-      pageSubtitle: 'Tournament Brackets Report',
-      contentHtml: bracketsContentHtml,
+      pageSubtitle: bracketViewMode === 'visual' ? 'Tournament Brackets Visual Report' : 'Tournament Brackets Table Report',
+      contentHtml: bracketViewMode === 'visual' ? visualContentHtml : tableContentHtml,
+      extraStyles: `
+        .print-visual-grid { display: grid; grid-template-columns: repeat(${Math.max(1, printOrderedRounds.length)}, minmax(180px, 1fr)); gap: 12px; align-items: start; }
+        .print-round-col h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #334155; }
+        .print-match-card { border: 1px solid #d1d5db; border-radius: 8px; padding: 8px; margin-bottom: 8px; background: #fff; }
+        .print-match-head { font-size: 11px; font-weight: 700; color: #6b7280; margin-bottom: 4px; }
+        .print-match-line { font-size: 12px; margin-bottom: 3px; }
+        .print-match-winner { font-size: 11px; font-weight: 700; color: #0f766e; margin-top: 4px; }
+      `,
     }));
   };
 
@@ -5824,6 +5892,12 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const bracketFinalRoundNumber = matches.reduce((max: number, m: any) => Math.max(max, Number(m.round) || 0), 0);
   const bracketFinalMatch = matches.find((m: any) => Number(m.round) === bracketFinalRoundNumber && Number(m.match_index) === 0);
   const bracketBronzeMatch = matches.find((m: any) => Number(m.round) === bracketFinalRoundNumber && Number(m.match_index) === 1);
+  const participantTeamIdMap = new Map<number, number>();
+  for (const participant of bracketParticipants) {
+    if (participant.team_id) {
+      participantTeamIdMap.set(participant.id, participant.team_id);
+    }
+  }
   const firstPlaceParticipantId = bracketFinalMatch?.winner_id ? Number(bracketFinalMatch.winner_id) : null;
   const secondPlaceParticipantId = bracketFinalMatch?.winner_id
     ? Number(bracketFinalMatch.winner_id === bracketFinalMatch.participant1_id ? bracketFinalMatch.participant2_id : bracketFinalMatch.participant1_id)
@@ -5849,7 +5923,8 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const isFirstPlaceFemale = tournament.type === 'individual' && isFemalePlacement(firstPlaceParticipantId);
   const isSecondPlaceFemale = tournament.type === 'individual' && isFemalePlacement(secondPlaceParticipantId);
   const isThirdPlaceFemale = tournament.type === 'individual' && isFemalePlacement(thirdPlaceParticipantId);
-  const showBracketPodium = Boolean(bracketFinalMatch?.winner_id && bracketBronzeMatch?.winner_id);
+  const showBracketPodium = matches.length > 0;
+  const hasBracketWinners = Boolean(bracketFinalMatch?.winner_id || bracketBronzeMatch?.winner_id);
   const visibleSeeds = (qualifiedCount > 0 ? seeds.slice(0, qualifiedCount) : seeds)
     .slice()
     .sort((a: any, b: any) => (Number(a.seed) || 0) - (Number(b.seed) || 0));
@@ -5995,6 +6070,14 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     p2: row.p2 || '',
   }));
 
+  const getVisualRoundSpacingClass = (roundIndex: number) => (
+    roundIndex === 0 ? 'space-y-3' : roundIndex === 1 ? 'space-y-8 pt-8' : 'space-y-14 pt-16'
+  );
+
+  const setVisualCardRef = (matchId: number) => (el: HTMLDivElement | null) => {
+    visualCardRefs.current[matchId] = el;
+  };
+
   const getRuleDrivenMatchMeta = (match: any) => {
     const round = Number(match.round) || 0;
     const index = Number(match.match_index) || 0;
@@ -6068,60 +6151,6 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     .filter((r) => Number.isFinite(r) && r > 0)
     .sort((a, b) => a - b);
 
-  const setVisualCardRef = (roundNumber: number, matchIndex: number, node: HTMLDivElement | null) => {
-    visualMatchCardRefs.current[`${roundNumber}-${matchIndex}`] = node;
-  };
-
-  const rebuildVisualConnectorPaths = () => {
-    if (bracketViewMode !== 'visual') {
-      setVisualConnectorPaths([]);
-      return;
-    }
-
-    const board = visualBracketBoardRef.current;
-    if (!board) {
-      setVisualConnectorPaths([]);
-      return;
-    }
-
-    const boardRect = board.getBoundingClientRect();
-    const paths: Array<{ id: string; d: string }> = [];
-
-    for (const roundNumber of orderedRoundNumbers) {
-      const nextRoundNumber = roundNumber + 1;
-      if (!orderedRoundNumbers.includes(nextRoundNumber)) continue;
-
-      const sourceMatches = [...(roundGroups[roundNumber] || [])].sort(
-        (a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0)
-      );
-
-      for (const match of sourceMatches) {
-        const sourceMatchIndex = Number(match.match_index) || 0;
-        const targetMatchIndex = Math.floor(sourceMatchIndex / 2);
-        const sourceNode = visualMatchCardRefs.current[`${roundNumber}-${sourceMatchIndex}`];
-        const targetNode = visualMatchCardRefs.current[`${nextRoundNumber}-${targetMatchIndex}`];
-        if (!sourceNode || !targetNode) continue;
-
-        const sourceRect = sourceNode.getBoundingClientRect();
-        const targetRect = targetNode.getBoundingClientRect();
-
-        const startX = sourceRect.right - boardRect.left;
-        const startY = sourceRect.top - boardRect.top + sourceRect.height / 2;
-        const endX = targetRect.left - boardRect.left;
-        const endY = targetRect.top - boardRect.top + targetRect.height / 2;
-        const horizontalGap = Math.max(24, endX - startX);
-        const elbowX = startX + Math.max(14, Math.min(44, horizontalGap * 0.4));
-
-        paths.push({
-          id: `${roundNumber}-${sourceMatchIndex}-${nextRoundNumber}-${targetMatchIndex}`,
-          d: `M ${startX} ${startY} L ${elbowX} ${startY} L ${elbowX} ${endY} L ${endX} ${endY}`,
-        });
-      }
-    }
-
-    setVisualConnectorPaths(paths);
-  };
-
   useEffect(() => {
     const stored = localStorage.getItem(bracketViewStorageKey);
     setBracketViewMode(stored === 'visual' ? 'visual' : 'cards');
@@ -6132,20 +6161,63 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   }, [bracketViewMode, bracketViewStorageKey]);
 
   useEffect(() => {
-    if (bracketViewMode !== 'visual') {
+    if (bracketViewMode !== 'visual' || matches.length === 0) {
       setVisualConnectorPaths([]);
       return;
     }
 
-    const update = () => rebuildVisualConnectorPaths();
-    const frameId = window.requestAnimationFrame(update);
-    window.addEventListener('resize', update);
+    const drawConnectors = () => {
+      const container = visualGridRef.current;
+      if (!container) return;
 
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      window.removeEventListener('resize', update);
+      const containerRect = container.getBoundingClientRect();
+      const width = Math.ceil(container.scrollWidth || containerRect.width || 0);
+      const height = Math.ceil(container.scrollHeight || containerRect.height || 0);
+      const paths: Array<{ id: string; d: string }> = [];
+
+      for (let roundIdx = 0; roundIdx < orderedRoundNumbers.length - 1; roundIdx += 1) {
+        const roundNo = orderedRoundNumbers[roundIdx];
+        const nextRoundNo = orderedRoundNumbers[roundIdx + 1];
+        const currentMatches = [...(roundGroups[roundNo] || [])].sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
+        const nextRoundMatches = [...(roundGroups[nextRoundNo] || [])].sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
+
+        for (const match of currentMatches) {
+          const sourceEl = visualCardRefs.current[match.id];
+          if (!sourceEl) continue;
+
+          const sourceIndex = Number(match.match_index) || 0;
+          const targetMatch = nextRoundMatches[Math.floor(sourceIndex / 2)];
+          if (!targetMatch) continue;
+
+          const targetEl = visualCardRefs.current[targetMatch.id];
+          if (!targetEl) continue;
+
+          const sourceRect = sourceEl.getBoundingClientRect();
+          const targetRect = targetEl.getBoundingClientRect();
+          const sx = sourceRect.right - containerRect.left;
+          const sy = sourceRect.top + (sourceRect.height / 2) - containerRect.top;
+          const tx = targetRect.left - containerRect.left;
+          const ty = targetRect.top + (targetRect.height / 2) - containerRect.top;
+          if (tx <= sx + 8) continue;
+
+          const midX = sx + Math.max(18, Math.round((tx - sx) * 0.45));
+          const d = `M ${Math.round(sx)} ${Math.round(sy)} L ${Math.round(midX)} ${Math.round(sy)} L ${Math.round(midX)} ${Math.round(ty)} L ${Math.round(tx)} ${Math.round(ty)}`;
+          paths.push({ id: `${match.id}-${targetMatch.id}`, d });
+        }
+      }
+
+      setVisualConnectorSize({ width, height });
+      setVisualConnectorPaths(paths);
     };
-  }, [bracketViewMode, matches, orderedRoundNumbers.join(','), tournament.id]);
+
+    const rafId = window.requestAnimationFrame(drawConnectors);
+    const onResize = () => window.requestAnimationFrame(drawConnectors);
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [bracketViewMode, matches]);
 
   useEffect(() => {
     if (seeds.length > 0 || matches.length === 0) return;
@@ -6168,6 +6240,14 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           total_score: 0,
         });
       }
+      if (m.participant3_seed && (m.p3_name || m.p3_team_name)) {
+        seedRows.push({
+          seed: m.participant3_seed,
+          id: m.participant3_id,
+          name: getDisplayName('p3', m),
+          total_score: 0,
+        });
+      }
     }
     if (seedRows.length > 0) {
       seedRows.sort((a, b) => a.seed - b.seed);
@@ -6180,21 +6260,42 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     await loadBrackets();
   };
 
-  const setScoreDraft = (matchId: number, slot: 'p1' | 'p2', value: string) => {
+  const setScoreDraft = (matchId: number, slot: 'p1' | 'p2' | 'p3', value: string) => {
     setMatchScoreDrafts((prev) => ({
       ...prev,
       [matchId]: {
         p1: prev[matchId]?.p1 ?? '',
         p2: prev[matchId]?.p2 ?? '',
+        p3: prev[matchId]?.p3 ?? '',
         [slot]: value,
       },
     }));
   };
 
-  const tryAutoSetWinnerByScore = async (match: any, p1Raw?: string, p2Raw?: string) => {
+  const tryAutoSetWinnerByScore = async (match: any, p1Raw?: string, p2Raw?: string, p3Raw?: string) => {
     const draft = matchScoreDrafts[match.id];
     const p1Score = Number.parseInt(String(p1Raw ?? draft?.p1 ?? ''), 10);
     const p2Score = Number.parseInt(String(p2Raw ?? draft?.p2 ?? ''), 10);
+    const isStepladderShootoutMatch =
+      matchPlayType === 'stepladder' &&
+      Number(match.round) === 1 &&
+      Number(match.match_index) === 0 &&
+      Number.isFinite(Number(match.participant3_id)) &&
+      Number(match.participant3_id) > 0;
+
+    if (isStepladderShootoutMatch) {
+      const p3Score = Number.parseInt(String(p3Raw ?? draft?.p3 ?? ''), 10);
+      if (!Number.isFinite(p1Score) || !Number.isFinite(p2Score) || !Number.isFinite(p3Score)) return;
+      if (p1Score === p2Score || p1Score === p3Score || p2Score === p3Score) return;
+      await api.setStepladderShootoutWinner(tournament.id, match.id, {
+        score_p1: p1Score,
+        score_p2: p2Score,
+        score_p3: p3Score,
+      });
+      await loadBrackets();
+      return;
+    }
+
     if (!Number.isFinite(p1Score) || !Number.isFinite(p2Score)) return;
     if (p1Score === p2Score) return;
     const winnerId = p1Score > p2Score ? Number(match.participant1_id) : Number(match.participant2_id);
@@ -6204,7 +6305,10 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   };
 
   const renderMatchCard = (m: any, compact = false) => {
-    const isFinalCard = matchPlayType === 'playoff' && Number(m.round) === bracketFinalRoundNumber && Number(m.match_index) === 0;
+    const isFinalCard =
+      Number(m.round) === bracketFinalRoundNumber &&
+      Number(m.match_index) === 0 &&
+      (matchPlayType === 'playoff' || matchPlayType === 'stepladder');
     const isBronzeCard = matchPlayType === 'playoff' && Number(m.round) === bracketFinalRoundNumber && Number(m.match_index) === 1;
     const meta = getRuleDrivenMatchMeta(m);
     const isEditingP1 = editingNameSlot?.matchId === m.id && editingNameSlot?.slot === 'p1';
@@ -6221,16 +6325,31 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       label: `${participant.first_name || ''} ${participant.last_name || ''}`.trim() || `Player ${participant.id}`,
     }));
     const slotOptions = tournament.type === 'team' ? teamOptions : playerOptions;
-    const p1DraftScore = Number.parseInt(String(matchScoreDrafts[m.id]?.p1 ?? ''), 10);
-    const p2DraftScore = Number.parseInt(String(matchScoreDrafts[m.id]?.p2 ?? ''), 10);
-    const hasEnteredScores = Number.isFinite(p1DraftScore) && Number.isFinite(p2DraftScore);
-    const p1IsHighlightedWinner = hasEnteredScores && m.winner_id === m.participant1_id;
-    const p2IsHighlightedWinner = hasEnteredScores && m.winner_id === m.participant2_id;
-    const p1MembersCompact = getSlotTeamMembersCompact('p1', m);
-    const p2MembersCompact = getSlotTeamMembersCompact('p2', m);
+    const hasShootoutThird =
+      matchPlayType === 'stepladder' &&
+      Number(m.round) === 1 &&
+      Number(m.match_index) === 0 &&
+      Number.isFinite(Number(m.participant3_id)) &&
+      Number(m.participant3_id) > 0;
+
+    const getSlotTeamMembers = (participantId: number | null | undefined) => {
+      if (tournament.type !== 'team') return null;
+      const numericId = Number(participantId || 0);
+      if (!Number.isFinite(numericId) || numericId <= 0) return null;
+      const teamId = participantTeamIdMap.get(numericId);
+      if (!teamId) return null;
+      const short = (teamMembersByTeamId.get(teamId) || []).join(', ');
+      if (!short) return null;
+      const full = (teamMembersFullByTeamId.get(teamId) || []).join(', ');
+      return { short, full };
+    };
+
+    const p1Members = getSlotTeamMembers(m.participant1_id);
+    const p2Members = getSlotTeamMembers(m.participant2_id);
+    const p3Members = getSlotTeamMembers(m.participant3_id);
 
     return (
-      <Card className={`${compact ? 'p-2.5' : 'p-3'} ${isFinalCard ? 'bg-emerald-50/60 border-emerald-200' : (isBronzeCard ? 'bg-amber-50/70 border-amber-200' : '')}`}>
+      <Card key={m.id} className={`${compact ? 'p-2.5' : 'p-3'} ${isFinalCard ? 'bg-emerald-50/60 border-emerald-200' : (isBronzeCard ? 'bg-amber-50/70 border-amber-200' : '')}`}>
         <div className="flex justify-between items-center mb-2.5">
           <div className="flex flex-col">
             <span className="text-xs font-bold uppercase tracking-widest text-black/45">{meta.matchCode}</span>
@@ -6244,7 +6363,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         <div className="space-y-2">
           <div
             className={`p-2 rounded-lg border transition-all flex items-center justify-between cursor-pointer ${
-              p1IsHighlightedWinner
+              m.winner_id === m.participant1_id
                 ? 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500/20'
                 : 'bg-black/[0.02] border-black/5 hover:border-black/10'
             }`}
@@ -6276,18 +6395,23 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     setEditingNameSlot({ matchId: m.id, slot: 'p1' });
                   }
                 }}
-                className={`font-medium text-left ${p1IsHighlightedWinner ? 'text-emerald-900' : ''}`}
+                className={`font-medium text-left ${m.winner_id === m.participant1_id ? 'text-emerald-900' : ''}`}
                 title={canManageBrackets ? `Click to change ${tournament.type === 'team' ? 'team' : 'player'}` : undefined}
               >
-                <span className="block">
-                  {m.participant1_seed ? `#${m.participant1_seed} ` : ''}
-                  {getDisplayName('p1', m)}
-                </span>
-                {tournament.type === 'team' && p1MembersCompact && (
-                  <span className="block text-[10px] font-normal text-black/55 leading-tight mt-0.5">
-                    {p1MembersCompact}
+                <span className="inline-flex flex-col items-start gap-0.5 min-w-0 max-w-full align-middle">
+                  <span className="truncate">
+                    {m.participant1_seed ? `#${m.participant1_seed} ` : ''}
+                    {getDisplayName('p1', m)}
                   </span>
-                )}
+                  {p1Members && (
+                    <span
+                      className={`text-[10px] leading-none px-1.5 py-0.5 rounded border border-black/15 bg-white/70 text-black/60 truncate ${compact ? 'max-w-[120px]' : 'max-w-[180px]'}`}
+                      title={p1Members.full}
+                    >
+                      {p1Members.short}
+                    </span>
+                  )}
+                </span>
               </button>
             )}
             <div className="flex items-center gap-2">
@@ -6298,7 +6422,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 onClick={(e) => e.stopPropagation()}
                 onDoubleClick={(e) => e.stopPropagation()}
                 onChange={(e) => setScoreDraft(m.id, 'p1', e.target.value)}
-                onBlur={(e) => tryAutoSetWinnerByScore(m, e.target.value, matchScoreDrafts[m.id]?.p2 ?? '')}
+                onBlur={(e) => tryAutoSetWinnerByScore(m, e.target.value, matchScoreDrafts[m.id]?.p2 ?? '', matchScoreDrafts[m.id]?.p3 ?? '')}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     const target = e.currentTarget as HTMLInputElement;
@@ -6309,7 +6433,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 placeholder="0"
                 title="Participant 1 score"
               />
-              {p1IsHighlightedWinner && <Trophy size={14} className="text-emerald-600" />}
+              {m.winner_id === m.participant1_id && <Trophy size={14} className="text-emerald-600" />}
             </div>
           </div>
 
@@ -6317,7 +6441,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 
           <div
             className={`p-2 rounded-lg border transition-all flex items-center justify-between cursor-pointer ${
-              p2IsHighlightedWinner
+              m.winner_id === m.participant2_id
                 ? 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500/20'
                 : 'bg-black/[0.02] border-black/5 hover:border-black/10'
             }`}
@@ -6349,18 +6473,23 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     setEditingNameSlot({ matchId: m.id, slot: 'p2' });
                   }
                 }}
-                className={`font-medium text-left ${p2IsHighlightedWinner ? 'text-emerald-900' : ''}`}
+                className={`font-medium text-left ${m.winner_id === m.participant2_id ? 'text-emerald-900' : ''}`}
                 title={canManageBrackets ? `Click to change ${tournament.type === 'team' ? 'team' : 'player'}` : undefined}
               >
-                <span className="block">
-                  {m.participant2_seed ? `#${m.participant2_seed} ` : ''}
-                  {getDisplayName('p2', m)}
-                </span>
-                {tournament.type === 'team' && p2MembersCompact && (
-                  <span className="block text-[10px] font-normal text-black/55 leading-tight mt-0.5">
-                    {p2MembersCompact}
+                <span className="inline-flex flex-col items-start gap-0.5 min-w-0 max-w-full align-middle">
+                  <span className="truncate">
+                    {m.participant2_seed ? `#${m.participant2_seed} ` : ''}
+                    {getDisplayName('p2', m)}
                   </span>
-                )}
+                  {p2Members && (
+                    <span
+                      className={`text-[10px] leading-none px-1.5 py-0.5 rounded border border-black/15 bg-white/70 text-black/60 truncate ${compact ? 'max-w-[120px]' : 'max-w-[180px]'}`}
+                      title={p2Members.full}
+                    >
+                      {p2Members.short}
+                    </span>
+                  )}
+                </span>
               </button>
             )}
             <div className="flex items-center gap-2">
@@ -6371,7 +6500,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 onClick={(e) => e.stopPropagation()}
                 onDoubleClick={(e) => e.stopPropagation()}
                 onChange={(e) => setScoreDraft(m.id, 'p2', e.target.value)}
-                onBlur={(e) => tryAutoSetWinnerByScore(m, matchScoreDrafts[m.id]?.p1 ?? '', e.target.value)}
+                onBlur={(e) => tryAutoSetWinnerByScore(m, matchScoreDrafts[m.id]?.p1 ?? '', e.target.value, matchScoreDrafts[m.id]?.p3 ?? '')}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     const target = e.currentTarget as HTMLInputElement;
@@ -6382,9 +6511,62 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 placeholder="0"
                 title="Participant 2 score"
               />
-              {p2IsHighlightedWinner && <Trophy size={14} className="text-emerald-600" />}
+              {m.winner_id === m.participant2_id && <Trophy size={14} className="text-emerald-600" />}
             </div>
           </div>
+
+          {hasShootoutThird && (
+            <>
+              <div className="text-center text-[10px] font-bold text-black/20 uppercase tracking-widest">VS</div>
+              <div
+                className={`p-2 rounded-lg border transition-all flex items-center justify-between ${
+                  m.winner_id === m.participant3_id
+                    ? 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500/20'
+                    : 'bg-black/[0.02] border-black/5'
+                }`}
+                onDoubleClick={() => canManageBrackets && m.participant3_id && handleSetWinner(m.id, m.participant3_id)}
+                title="Stepladder shootout contender"
+              >
+                <span className={`font-medium text-left ${m.winner_id === m.participant3_id ? 'text-emerald-900' : ''}`}>
+                  <span className="inline-flex flex-col items-start gap-0.5 min-w-0 max-w-full align-middle">
+                    <span className="truncate">
+                      {m.participant3_seed ? `#${m.participant3_seed} ` : ''}
+                      {getDisplayName('p3', m)}
+                    </span>
+                    {p3Members && (
+                      <span
+                        className={`text-[10px] leading-none px-1.5 py-0.5 rounded border border-black/15 bg-white/70 text-black/60 truncate ${compact ? 'max-w-[120px]' : 'max-w-[180px]'}`}
+                        title={p3Members.full}
+                      >
+                        {p3Members.short}
+                      </span>
+                    )}
+                  </span>
+                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    value={matchScoreDrafts[m.id]?.p3 ?? ''}
+                    onClick={(e) => e.stopPropagation()}
+                    onDoubleClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setScoreDraft(m.id, 'p3', e.target.value)}
+                    onBlur={(e) => tryAutoSetWinnerByScore(m, matchScoreDrafts[m.id]?.p1 ?? '', matchScoreDrafts[m.id]?.p2 ?? '', e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const target = e.currentTarget as HTMLInputElement;
+                        target.blur();
+                      }
+                    }}
+                    className="w-14 px-2 py-0.5 rounded border border-black/15 text-xs text-right"
+                    placeholder="0"
+                    title="Participant 3 score"
+                  />
+                  {m.winner_id === m.participant3_id && <Trophy size={14} className="text-emerald-600" />}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </Card>
     );
@@ -6458,6 +6640,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 <option value="single_elimination">Single Elimination</option>
                 <option value="double_elimination">Double Elimination</option>
                 <option value="ladder">Ladder</option>
+                <option value="stepladder">Stepladder</option>
                 <option value="playoff">Play-Off</option>
               </select>
             </div>
@@ -6713,15 +6896,18 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           </div>
         </Card>
       ) : (
-        isEightSeedPlayoffMode && (
-          <Card className="p-4 border border-emerald-200 bg-gradient-to-br from-white to-emerald-50/50">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div>
-                <h4 className="text-sm font-bold text-emerald-800 uppercase tracking-widest">8-Seed Play-Off Rules</h4>
-                <p className="text-xs text-black/60 mt-1">Based on tournament rules</p>
-              </div>
-              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded bg-emerald-100 text-emerald-800">Rule-driven view</span>
+        <Card className="p-4 border border-emerald-200 bg-gradient-to-br from-white to-emerald-50/50">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <h4 className="text-sm font-bold text-emerald-800 uppercase tracking-widest">
+                {isEightSeedPlayoffMode ? '8-Seed Play-Off Rules' : 'Rule-Driven Bracket View'}
+              </h4>
+              <p className="text-xs text-black/60 mt-1">Automatically shown for every bracket tournament</p>
             </div>
+            <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded bg-emerald-100 text-emerald-800">Rule-driven view</span>
+          </div>
+
+          {isEightSeedPlayoffMode ? (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-3 text-xs">
               <div className="rounded-md border border-black/10 bg-white p-3">
                 <p className="font-bold text-black/80 mb-1">Quarter-Finals</p>
@@ -6743,14 +6929,109 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 <p className="text-black/60">3rd place match: Loser M5 vs Loser M6</p>
               </div>
             </div>
-          </Card>
-        )
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-3 text-xs">
+              {matchPlayType === 'stepladder' ? (
+                <>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Entry</p>
+                    <p className="text-black/60">Top #6 seeds are required for full stepladder.</p>
+                    <p className="text-black/60">Seeds #1-#3 receive step advantages.</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Flow</p>
+                    <p className="text-black/60">M1: Seed #4 vs #5 vs #6 (shootout).</p>
+                    <p className="text-black/60">M2: Winner M1 vs Seed #3.</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Final Steps</p>
+                    <p className="text-black/60">M3: Winner M2 vs Seed #2.</p>
+                    <p className="text-black/60">M4 Final: Winner M3 vs Seed #1.</p>
+                  </div>
+                </>
+              ) : matchPlayType === 'ladder' ? (
+                <>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Entry</p>
+                    <p className="text-black/60">Top #{qualifiedCount > 0 ? qualifiedCount : 'all'} seeds qualify.</p>
+                    <p className="text-black/60">Higher seed waits in later step.</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Flow</p>
+                    <p className="text-black/60">Lowest two seeds play first.</p>
+                    <p className="text-black/60">Winner climbs one seed at a time.</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Finish</p>
+                    <p className="text-black/60">Last step is vs top seed.</p>
+                    <p className="text-black/60">Winner of final step is champion.</p>
+                  </div>
+                </>
+              ) : matchPlayType === 'double_elimination' ? (
+                <>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Entry</p>
+                    <p className="text-black/60">Top #{qualifiedCount > 0 ? qualifiedCount : 'all'} seeds qualify.</p>
+                    <p className="text-black/60">All seeds start in winners bracket.</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Flow</p>
+                    <p className="text-black/60">1st loss moves team/player to lower bracket.</p>
+                    <p className="text-black/60">2nd loss eliminates from tournament.</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Final</p>
+                    <p className="text-black/60">Winners bracket champion meets lower bracket champion.</p>
+                    <p className="text-black/60">Final winner is champion.</p>
+                  </div>
+                </>
+              ) : matchPlayType === 'playoff' ? (
+                <>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Entry</p>
+                    <p className="text-black/60">Top #{qualifiedCount > 0 ? qualifiedCount : 'all'} seeds qualify.</p>
+                    <p className="text-black/60">Bracket is seeded by standings order.</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Flow</p>
+                    <p className="text-black/60">Round 1 has {roundOneMatchesPreview} match(es).</p>
+                    <p className="text-black/60">Winners progress each round to final.</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Placement</p>
+                    <p className="text-black/60">Podium tracking: top {winnersCountPreview}.</p>
+                    <p className="text-black/60">3rd-place match appears when configured.</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Entry</p>
+                    <p className="text-black/60">Top #{qualifiedCount > 0 ? qualifiedCount : 'all'} seeds qualify.</p>
+                    <p className="text-black/60">Round 1 has {roundOneMatchesPreview} match(es).</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Flow</p>
+                    <p className="text-black/60">Winner advances from each match.</p>
+                    <p className="text-black/60">No second life after a loss.</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Final</p>
+                    <p className="text-black/60">Final round decides champion.</p>
+                    <p className="text-black/60">Current bracket has {roundsCountPreview} round(s).</p>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </Card>
       )}
 
       {showBracketPodium && (
         <Card className="p-4 border border-[#AFDDE5]/80 bg-[#AFDDE5]/18">
           <div className="mb-2.5 pb-2 border-b border-black/10">
             <h4 className="text-sm font-bold uppercase tracking-widest text-black/75">Podium Results</h4>
+            <p className="text-[11px] text-black/45 mt-0.5">{hasBracketWinners ? 'Auto-updates from bracket winners.' : 'Waiting for winners. Podium placeholders are shown.'}</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
             {[
@@ -6858,7 +7139,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         </div>
       ) : (
         bracketViewMode === 'cards' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {orderedRoundNumbers.map((roundNumber) => {
               const roundMatches = [...(roundGroups[roundNumber] || [])].sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
               const roundTitle = isEightSeedPlayoffMode
@@ -6872,9 +7153,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     <p className="text-[11px] text-black/45">{roundMatches.length} match{roundMatches.length === 1 ? '' : 'es'}</p>
                   </div>
                   <div className="space-y-3">
-                    {roundMatches.map((m: any) => (
-                      <div key={m.id}>{renderMatchCard(m)}</div>
-                    ))}
+                    {roundMatches.map((m: any) => renderMatchCard(m))}
                   </div>
                 </Card>
               );
@@ -6882,55 +7161,53 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           </div>
         ) : (
           <div className="overflow-x-auto pb-2">
-            <div ref={visualBracketBoardRef} className="relative min-w-[1080px]">
-              <svg className="pointer-events-none absolute inset-0 w-full h-full z-0" preserveAspectRatio="none" aria-hidden="true">
+            <div
+              ref={visualGridRef}
+              className="relative grid gap-y-4 gap-x-14 items-start min-w-[860px]"
+              style={{ gridTemplateColumns: `repeat(${Math.max(1, orderedRoundNumbers.length)}, minmax(220px, 1fr))` }}
+            >
+              <svg
+                className="absolute top-0 left-0 pointer-events-none z-[1]"
+                width={visualConnectorSize.width}
+                height={visualConnectorSize.height}
+                viewBox={`0 0 ${Math.max(1, visualConnectorSize.width)} ${Math.max(1, visualConnectorSize.height)}`}
+                fill="none"
+              >
                 {visualConnectorPaths.map((path) => (
                   <path
                     key={path.id}
                     d={path.d}
-                    fill="none"
-                    stroke="rgba(51, 65, 85, 0.22)"
-                    strokeWidth="1"
+                    stroke="rgba(110, 231, 183, 0.95)"
+                    strokeWidth="1.2"
                     strokeLinecap="square"
                     strokeLinejoin="miter"
                   />
                 ))}
               </svg>
-              <div className="relative z-10 grid grid-flow-col auto-cols-[320px] gap-8 items-start">
-                {orderedRoundNumbers.map((roundNumber, roundIndex) => {
-                  const roundMatches = [...(roundGroups[roundNumber] || [])].sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
-                  const roundTitle = isEightSeedPlayoffMode
-                    ? (roundNumber === 1 ? 'Quarter-Finals' : roundNumber === 2 ? 'Semi-Finals' : 'Finals')
-                    : `Round ${roundNumber}`;
-                  const spacingClass = roundIndex === 0 ? 'space-y-3' : roundIndex === 1 ? 'space-y-8 pt-8' : 'space-y-14 pt-16';
+              {orderedRoundNumbers.map((roundNumber, roundIndex) => {
+                const roundMatches = [...(roundGroups[roundNumber] || [])].sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
+                const roundTitle = isEightSeedPlayoffMode
+                  ? (roundNumber === 1 ? 'Quarter-Finals' : roundNumber === 2 ? 'Semi-Finals' : 'Finals')
+                  : `Round ${roundNumber}`;
+                const spacingClass = getVisualRoundSpacingClass(roundIndex);
 
-                  return (
-                    <div key={roundNumber} className="relative">
-                      <div className="mb-2">
-                        <h4 className="text-sm font-bold uppercase tracking-widest text-black/70">{roundTitle}</h4>
-                      </div>
-                      <div className={spacingClass}>
-                        {roundMatches.map((m: any) => {
-                          const matchIndex = Number(m.match_index) || 0;
-                          return (
-                            <div
-                              key={m.id}
-                              ref={(node) => setVisualCardRef(roundNumber, matchIndex, node)}
-                            >
-                              {renderMatchCard(m, true)}
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {roundIndex < orderedRoundNumbers.length - 1 && (
-                        <div className="absolute right-[-18px] top-12 bottom-6 w-[18px] flex items-center justify-center pointer-events-none">
-                          <ArrowRightLeft size={13} className="text-black/20 rotate-90" />
-                        </div>
-                      )}
+                return (
+                  <div key={roundNumber} className="relative z-[2]">
+                    <div className="mb-2">
+                      <h4 className="text-sm font-bold uppercase tracking-widest text-black/70">{roundTitle}</h4>
                     </div>
-                  );
-                })}
-              </div>
+                    <div className={spacingClass}>
+                      {roundMatches.map((m: any) => {
+                        return (
+                          <div key={`visual-match-${m.id}`} ref={setVisualCardRef(m.id)} className="relative">
+                            {renderMatchCard(m, true)}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )
@@ -6990,12 +7267,11 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
 
   const formatStandingsName = (participantId: number, fallbackName: string) => {
     const participant = participantInfoMap.get(participantId);
-    if (!participant) return fallbackName.toUpperCase();
+    if (!participant) return fallbackName;
     const firstName = (participant.first_name || '').trim();
     const lastInitial = (participant.last_name || '').trim().charAt(0).toUpperCase();
-    if (!firstName) return fallbackName.toUpperCase();
-    const displayName = lastInitial ? `${firstName} ${lastInitial}.` : firstName;
-    return displayName.toUpperCase();
+    if (!firstName) return fallbackName;
+    return lastInitial ? `${firstName} ${lastInitial}.` : firstName;
   };
 
   const participantNameMap = new Map<number, string>();
@@ -7017,7 +7293,7 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
       const games = gameNumbers.map((gameNumber) => scoreByParticipantGame.get(`${p.id}-${gameNumber}`) ?? 0);
       const total = games.reduce((sum, value) => sum + value, 0);
       const gamesPlayed = games.filter((value) => value > 0).length;
-      const average = gamesPlayed > 0 ? total / gamesPlayed : 0;
+      const average = gamesPlayed > 0 ? Math.round(total / gamesPlayed) : 0;
       return {
         participant_id: p.id,
         participant_name: formatStandingsName(p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown'),
@@ -7030,11 +7306,9 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
     })
     .sort((a, b) => (b.total - a.total) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name));
 
-  const formatStandingsAverage = (value: number) => value.toFixed(1);
-
   const formatTeamMemberCompact = (participant: Participant) => {
-    const firstName = (participant.first_name || '').trim().toUpperCase() || 'UNKNOWN';
-    const lastInitial = (participant.last_name || '').trim().charAt(0).toUpperCase();
+    const firstName = (participant.first_name || '').trim().toLowerCase() || 'unknown';
+    const lastInitial = (participant.last_name || '').trim().charAt(0).toLowerCase();
     return lastInitial ? `${firstName} ${lastInitial}.` : firstName;
   };
 
@@ -7083,19 +7357,6 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
   const rankedTeamsCount = teamStandingsRows.length;
   const teamsCountValid = rankedTeamsCount === expectedTeamsFromPlayers || rankedTeamsCount === teams.length;
 
-  const topMaleStanding = playerStandingsRows
-    .filter((row) => (participantGenderMap.get(row.participant_id) || '').startsWith('m'))
-    .sort((a, b) => (b.total - a.total) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name))[0];
-  const topFemaleStanding = playerStandingsRows
-    .filter((row) => (participantGenderMap.get(row.participant_id) || '').startsWith('f'))
-    .sort((a, b) => (b.total - a.total) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name))[0];
-  const highestMaleGameScore = scores
-    .filter((score) => (participantGenderMap.get(score.participant_id) || '').startsWith('m'))
-    .reduce((max, score) => Math.max(max, Number(score.score) || 0), 0);
-  const highestFemaleGameScore = scores
-    .filter((score) => (participantGenderMap.get(score.participant_id) || '').startsWith('f'))
-    .reduce((max, score) => Math.max(max, Number(score.score) || 0), 0);
-
   const maleLeader = scores
     .filter(score => participantGenderMap.get(score.participant_id) === 'male')
     .sort((a, b) => b.score - a.score)[0];
@@ -7103,14 +7364,6 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
   const femaleLeader = scores
     .filter(score => participantGenderMap.get(score.participant_id) === 'female')
     .sort((a, b) => b.score - a.score)[0];
-
-  const malePlayersCount = participants.filter((p) => (p.gender || '').toLowerCase() === 'male').length;
-  const femalePlayersCount = participants.filter((p) => (p.gender || '').toLowerCase() === 'female').length;
-  const clubsCount = new Set(
-    participants
-      .map((p) => String(p.club || '').trim())
-      .filter((club) => club.length > 0 && club !== '-')
-  ).size;
 
   const completedBracketMatches = bracketMatches
     .filter(m => m.winner_id)
@@ -7139,7 +7392,7 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
     for (const participant of participants) {
       const teamName = (participant.team_name || '').trim();
       if (!teamName) continue;
-      const fullName = `${participant.first_name || ''} ${participant.last_name || ''}`.trim().toUpperCase();
+      const fullName = `${participant.first_name || ''} ${participant.last_name || ''}`.trim();
       if (!fullName) continue;
       const members = teamMembersByTeamName.get(teamName) || [];
       members.push(fullName);
@@ -7148,9 +7401,9 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
   }
 
   const getWinnerMembersLabel = (winnerName: string) => {
-    if (!isTeamTournament) return (winnerName || '').toUpperCase();
+    if (!isTeamTournament) return winnerName;
     const members = teamMembersByTeamName.get((winnerName || '').trim()) || [];
-    return members.length > 0 ? members.join(', ') : 'NO MEMBERS ASSIGNED';
+    return members.length > 0 ? members.join(', ') : 'No members assigned';
   };
 
   const handleSaveStandings = async () => {
@@ -7177,7 +7430,7 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
           s.team_name,
           ...s.games,
           s.total,
-          formatStandingsAverage(s.average),
+          s.average,
         ]);
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -7266,93 +7519,68 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
       <div className="space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
-            <div className="p-4 border-b border-black/5">
-              <h4 className="font-bold text-sm">Tournament Winners</h4>
-              <p className="text-xs text-black/40">Final winners only</p>
+            <div className="p-6 border-b border-black/5">
+              <h4 className="font-bold">Tournament Winners</h4>
+              <p className="text-sm text-black/40">Final winners only</p>
             </div>
-            <div className="px-4 py-3.5">
+            <div className="px-6 py-5">
               <div className="rounded-lg border border-black/10 overflow-hidden">
                 <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} bg-black/[0.02] border-b border-black/10`}>
-                  <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-black/40">Place</div>
-                  <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-black/40">{isTeamTournament ? 'Winner Team' : 'Winner'}</div>
+                  <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-black/40">Place</div>
+                  <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-black/40">{isTeamTournament ? 'Winner Team' : 'Winner'}</div>
                   {isTeamTournament && (
-                    <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-black/40">Team Members</div>
+                    <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-black/40">Team Members</div>
                   )}
                 </div>
                 <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} border-b border-black/5 bg-emerald-50/70`}>
-                  <div className="px-3 py-2 font-bold text-sm text-emerald-700">1st</div>
-                  <div className="px-3 py-2 font-bold text-sm text-emerald-700">{firstPlace.toUpperCase()}</div>
+                  <div className="px-4 py-3 font-bold text-emerald-700">1st</div>
+                  <div className="px-4 py-3 font-bold text-emerald-700">{firstPlace}</div>
                   {isTeamTournament && (
-                    <div className="px-3 py-2 text-emerald-800 text-xs">{getWinnerMembersLabel(firstPlace)}</div>
+                    <div className="px-4 py-3 text-emerald-800 text-sm">{getWinnerMembersLabel(firstPlace)}</div>
                   )}
                 </div>
                 <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} border-b border-black/5 bg-slate-100/80`}>
-                  <div className="px-3 py-2 font-bold text-sm text-slate-700">2nd</div>
-                  <div className="px-3 py-2 font-bold text-sm text-slate-700">{secondPlace.toUpperCase()}</div>
+                  <div className="px-4 py-3 font-bold text-slate-700">2nd</div>
+                  <div className="px-4 py-3 font-bold text-slate-700">{secondPlace}</div>
                   {isTeamTournament && (
-                    <div className="px-3 py-2 text-slate-700 text-xs">{getWinnerMembersLabel(secondPlace)}</div>
+                    <div className="px-4 py-3 text-slate-700 text-sm">{getWinnerMembersLabel(secondPlace)}</div>
                   )}
                 </div>
                 <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} bg-amber-50/70`}>
-                  <div className="px-3 py-2 font-bold text-sm text-amber-700">3rd</div>
-                  <div className="px-3 py-2 font-bold text-sm text-amber-700">{thirdPlace.toUpperCase()}</div>
+                  <div className="px-4 py-3 font-bold text-amber-700">3rd</div>
+                  <div className="px-4 py-3 font-bold text-amber-700">{thirdPlace}</div>
                   {isTeamTournament && (
-                    <div className="px-3 py-2 text-amber-800 text-xs">{getWinnerMembersLabel(thirdPlace)}</div>
+                    <div className="px-4 py-3 text-amber-800 text-sm">{getWinnerMembersLabel(thirdPlace)}</div>
                   )}
                 </div>
               </div>
             </div>
           </Card>
 
-          <Card className="p-4">
-            <h4 className="font-bold text-sm mb-1">Tournament Highlights</h4>
-            <p className="text-xs text-black/40 mb-3">Highest single game score by category</p>
-            <div className="rounded-lg border border-black/10 p-3 bg-white mb-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Tournament Quick Stats</p>
-              <div className="mt-2 grid grid-cols-2 md:grid-cols-5 gap-2">
-                <div className="rounded border border-black/10 bg-black/[0.02] px-2 py-1.5">
-                  <p className="text-[9px] uppercase tracking-widest text-black/45">Players</p>
-                  <p className="text-sm font-bold text-black/80">{registeredPlayersCount}</p>
-                </div>
-                <div className="rounded border border-black/10 bg-black/[0.02] px-2 py-1.5">
-                  <p className="text-[9px] uppercase tracking-widest text-black/45">Clubs</p>
-                  <p className="text-sm font-bold text-black/80">{clubsCount}</p>
-                </div>
-                <div className="rounded border border-black/10 bg-black/[0.02] px-2 py-1.5">
-                  <p className="text-[9px] uppercase tracking-widest text-black/45">Teams</p>
-                  <p className="text-sm font-bold text-black/80">{isTeamTournament ? teams.length : '-'}</p>
-                </div>
-                <div className="rounded border border-black/10 bg-black/[0.02] px-2 py-1.5">
-                  <p className="text-[9px] uppercase tracking-widest text-black/45">Male</p>
-                  <p className="text-sm font-bold text-black/80">{malePlayersCount}</p>
-                </div>
-                <div className="rounded border border-black/10 bg-black/[0.02] px-2 py-1.5">
-                  <p className="text-[9px] uppercase tracking-widest text-black/45">Female</p>
-                  <p className="text-sm font-bold text-black/80">{femalePlayersCount}</p>
-                </div>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="rounded-lg border border-black/10 p-3 bg-black/[0.02]">
+          <Card className="p-6">
+            <h4 className="font-bold mb-1">Tournament Highlights</h4>
+            <p className="text-sm text-black/40 mb-4">Highest single game score by category</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-lg border border-black/10 p-4 bg-black/[0.02]">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Highest Score Male</p>
                 {maleLeader ? (
                   <>
-                    <p className="text-base font-bold mt-1">{participantNameMap.get(maleLeader.participant_id) || maleLeader.participant_name || 'N/A'}</p>
-                    <p className="text-xs text-black/50">Game {maleLeader.game_number}: {maleLeader.score}</p>
+                    <p className="text-lg font-bold mt-1">{participantNameMap.get(maleLeader.participant_id) || maleLeader.participant_name || 'N/A'}</p>
+                    <p className="text-sm text-black/50">Game {maleLeader.game_number}: {maleLeader.score}</p>
                   </>
                 ) : (
-                  <p className="text-xs text-black/40 mt-1">No male result yet.</p>
+                  <p className="text-sm text-black/40 mt-1">No male result yet.</p>
                 )}
               </div>
-              <div className="rounded-lg border border-black/10 p-3 bg-black/[0.02]">
+              <div className="rounded-lg border border-black/10 p-4 bg-black/[0.02]">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Highest Score Female</p>
                 {femaleLeader ? (
                   <>
-                    <p className="text-base font-bold mt-1">{participantNameMap.get(femaleLeader.participant_id) || femaleLeader.participant_name || 'N/A'}</p>
-                    <p className="text-xs text-black/50">Game {femaleLeader.game_number}: {femaleLeader.score}</p>
+                    <p className="text-lg font-bold mt-1">{participantNameMap.get(femaleLeader.participant_id) || femaleLeader.participant_name || 'N/A'}</p>
+                    <p className="text-sm text-black/50">Game {femaleLeader.game_number}: {femaleLeader.score}</p>
                   </>
                 ) : (
-                  <p className="text-xs text-black/40 mt-1">No female result yet.</p>
+                  <p className="text-sm text-black/40 mt-1">No female result yet.</p>
                 )}
               </div>
             </div>
@@ -7446,63 +7674,21 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-black/40 text-sm">{s.club}</td>
-                  <td className="px-6 py-4 text-black/40 text-sm">{s.team_name.toUpperCase()}</td>
-                  {s.games.map((value, gameIndex) => {
-                    const isMalePlayer = (participantGenderMap.get(s.participant_id) || '').startsWith('m');
-                    const isFemalePlayer = (participantGenderMap.get(s.participant_id) || '').startsWith('f');
-                    const isMaleGameLeader = isMalePlayer && highestMaleGameScore > 0 && value === highestMaleGameScore;
-                    const isFemaleGameLeader = isFemalePlayer && highestFemaleGameScore > 0 && value === highestFemaleGameScore;
-
-                    return (
-                      <td
-                        key={gameIndex}
-                        className={`px-6 py-4 text-center font-mono ${
-                          isMaleGameLeader
-                            ? 'bg-sky-50 text-sky-700 font-bold'
-                            : isFemaleGameLeader
-                              ? 'bg-rose-50 text-rose-700 font-bold'
-                              : ''
-                        }`}
-                        title={
-                          isMaleGameLeader
-                            ? 'Highest male game score'
-                            : isFemaleGameLeader
-                              ? 'Highest female game score'
-                              : undefined
-                        }
-                      >
-                        {value}
-                      </td>
-                    );
-                  })}
-                  <td className="px-6 py-4 text-center font-mono text-black/60">{formatStandingsAverage(s.average)}</td>
-                  <td
-                    className={`px-6 py-4 text-right font-bold ${
-                      topMaleStanding?.participant_id === s.participant_id
-                        ? 'bg-sky-50 text-sky-700'
-                        : topFemaleStanding?.participant_id === s.participant_id
-                          ? 'bg-rose-50 text-rose-700'
-                          : ''
-                    }`}
-                    title={
-                      topMaleStanding?.participant_id === s.participant_id
-                        ? 'Highest male total'
-                        : topFemaleStanding?.participant_id === s.participant_id
-                          ? 'Highest female total'
-                          : undefined
-                    }
-                  >
-                    {s.total}
-                  </td>
+                  <td className="px-6 py-4 text-black/40 text-sm">{s.team_name}</td>
+                  {s.games.map((value, gameIndex) => (
+                    <td key={gameIndex} className="px-6 py-4 text-center font-mono">{value}</td>
+                  ))}
+                  <td className="px-6 py-4 text-center font-mono text-black/60">{s.average}</td>
+                  <td className="px-6 py-4 text-right font-bold">{s.total}</td>
                 </tr>
               ))}
               {standingsMode === 'teams' && teamStandingsRows.map((s, idx) => (
                 <tr key={s.key} className="hover:bg-[#AFDDE5]/20 transition-colors">
                   <td className="px-6 py-4 font-bold text-black/60">{idx + 1}</td>
                   <td className="px-6 py-4">
-                    <div className="font-bold">{s.team_name.toUpperCase()}</div>
+                    <div className="font-bold">{s.team_name}</div>
                     <div className="text-[11px] text-black/50 lowercase">
-                      {s.members.length > 0 ? s.members.join(', ') : 'NO MEMBERS'}
+                      {s.members.length > 0 ? s.members.join(', ') : 'no members'}
                     </div>
                   </td>
                   {s.games.map((value, gameIndex) => (
