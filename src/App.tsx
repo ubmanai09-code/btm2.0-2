@@ -4255,8 +4255,13 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     });
     const enteredScores = gameScores.filter((value): value is number => value !== null);
     const total = enteredScores.reduce((sum, value) => sum + value, 0);
-    const average = enteredScores.length > 0 ? Math.round(total / enteredScores.length) : 0;
+    const average = enteredScores.length > 0 ? (total / enteredScores.length) : 0;
     return { total, average };
+  };
+
+  const formatScoreEntryAverage = (value: number) => {
+    if (!Number.isFinite(value)) return '0.0';
+    return value.toFixed(1);
   };
 
   const teamMemberPositionMap = new Map<number, number>();
@@ -4776,7 +4781,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                       );
                     })}
                     <td className="px-4 py-3 text-right font-bold text-base text-black/80">{total}</td>
-                    <td className="px-4 py-3 text-right font-bold text-base text-emerald-700">{average}</td>
+                    <td className="px-4 py-3 text-right font-bold text-base text-emerald-700">{formatScoreEntryAverage(average)}</td>
                   </tr>
                 </React.Fragment>
               );
