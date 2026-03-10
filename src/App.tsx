@@ -4315,13 +4315,14 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
   const formatScoringName = (participant: Participant) => {
     const firstName = (participant.first_name || '').trim() || 'Unknown';
     const lastInitial = (participant.last_name || '').trim().charAt(0).toUpperCase();
-    return lastInitial ? `${firstName} ${lastInitial}.` : firstName;
+    const displayName = lastInitial ? `${firstName} ${lastInitial}.` : firstName;
+    return displayName.toUpperCase();
   };
 
   const formatParticipantFullName = (participant: Participant) => {
     const firstName = (participant.first_name || '').trim();
     const lastName = (participant.last_name || '').trim();
-    return `${firstName} ${lastName}`.trim();
+    return `${firstName} ${lastName}`.trim().toUpperCase();
   };
 
   const scoringParticipants = participants
@@ -4704,8 +4705,8 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
           <tbody className="divide-y divide-black/5">
             {scoringParticipants.map((p, index) => {
               const { total, average } = getParticipantStats(p.id);
-              const teamLabel = p.team_name || 'Unassigned';
-              const previousTeamLabel = index > 0 ? (scoringParticipants[index - 1].team_name || 'Unassigned') : null;
+              const teamLabel = (p.team_name || 'Unassigned').toUpperCase();
+              const previousTeamLabel = index > 0 ? (scoringParticipants[index - 1].team_name || 'Unassigned').toUpperCase() : null;
               const showTeamHeader = tournament.type === 'team' && teamLabel !== previousTeamLabel;
               
               return (
@@ -6857,11 +6858,12 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
 
   const formatStandingsName = (participantId: number, fallbackName: string) => {
     const participant = participantInfoMap.get(participantId);
-    if (!participant) return fallbackName;
+    if (!participant) return fallbackName.toUpperCase();
     const firstName = (participant.first_name || '').trim();
     const lastInitial = (participant.last_name || '').trim().charAt(0).toUpperCase();
-    if (!firstName) return fallbackName;
-    return lastInitial ? `${firstName} ${lastInitial}.` : firstName;
+    if (!firstName) return fallbackName.toUpperCase();
+    const displayName = lastInitial ? `${firstName} ${lastInitial}.` : firstName;
+    return displayName.toUpperCase();
   };
 
   const participantNameMap = new Map<number, string>();
@@ -6883,7 +6885,7 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
       const games = gameNumbers.map((gameNumber) => scoreByParticipantGame.get(`${p.id}-${gameNumber}`) ?? 0);
       const total = games.reduce((sum, value) => sum + value, 0);
       const gamesPlayed = games.filter((value) => value > 0).length;
-      const average = gamesPlayed > 0 ? Math.round(total / gamesPlayed) : 0;
+      const average = gamesPlayed > 0 ? total / gamesPlayed : 0;
       return {
         participant_id: p.id,
         participant_name: formatStandingsName(p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown'),
@@ -6896,9 +6898,11 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
     })
     .sort((a, b) => (b.total - a.total) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name));
 
+  const formatStandingsAverage = (value: number) => value.toFixed(1);
+
   const formatTeamMemberCompact = (participant: Participant) => {
-    const firstName = (participant.first_name || '').trim().toLowerCase() || 'unknown';
-    const lastInitial = (participant.last_name || '').trim().charAt(0).toLowerCase();
+    const firstName = (participant.first_name || '').trim().toUpperCase() || 'UNKNOWN';
+    const lastInitial = (participant.last_name || '').trim().charAt(0).toUpperCase();
     return lastInitial ? `${firstName} ${lastInitial}.` : firstName;
   };
 
@@ -6982,7 +6986,7 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
     for (const participant of participants) {
       const teamName = (participant.team_name || '').trim();
       if (!teamName) continue;
-      const fullName = `${participant.first_name || ''} ${participant.last_name || ''}`.trim();
+      const fullName = `${participant.first_name || ''} ${participant.last_name || ''}`.trim().toUpperCase();
       if (!fullName) continue;
       const members = teamMembersByTeamName.get(teamName) || [];
       members.push(fullName);
@@ -6991,9 +6995,9 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
   }
 
   const getWinnerMembersLabel = (winnerName: string) => {
-    if (!isTeamTournament) return winnerName;
+    if (!isTeamTournament) return (winnerName || '').toUpperCase();
     const members = teamMembersByTeamName.get((winnerName || '').trim()) || [];
-    return members.length > 0 ? members.join(', ') : 'No members assigned';
+    return members.length > 0 ? members.join(', ') : 'NO MEMBERS ASSIGNED';
   };
 
   const handleSaveStandings = async () => {
@@ -7020,7 +7024,7 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
           s.team_name,
           ...s.games,
           s.total,
-          s.average,
+          formatStandingsAverage(s.average),
         ]);
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -7124,21 +7128,21 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                 </div>
                 <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} border-b border-black/5 bg-emerald-50/70`}>
                   <div className="px-4 py-3 font-bold text-emerald-700">1st</div>
-                  <div className="px-4 py-3 font-bold text-emerald-700">{firstPlace}</div>
+                  <div className="px-4 py-3 font-bold text-emerald-700">{firstPlace.toUpperCase()}</div>
                   {isTeamTournament && (
                     <div className="px-4 py-3 text-emerald-800 text-sm">{getWinnerMembersLabel(firstPlace)}</div>
                   )}
                 </div>
                 <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} border-b border-black/5 bg-slate-100/80`}>
                   <div className="px-4 py-3 font-bold text-slate-700">2nd</div>
-                  <div className="px-4 py-3 font-bold text-slate-700">{secondPlace}</div>
+                  <div className="px-4 py-3 font-bold text-slate-700">{secondPlace.toUpperCase()}</div>
                   {isTeamTournament && (
                     <div className="px-4 py-3 text-slate-700 text-sm">{getWinnerMembersLabel(secondPlace)}</div>
                   )}
                 </div>
                 <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} bg-amber-50/70`}>
                   <div className="px-4 py-3 font-bold text-amber-700">3rd</div>
-                  <div className="px-4 py-3 font-bold text-amber-700">{thirdPlace}</div>
+                  <div className="px-4 py-3 font-bold text-amber-700">{thirdPlace.toUpperCase()}</div>
                   {isTeamTournament && (
                     <div className="px-4 py-3 text-amber-800 text-sm">{getWinnerMembersLabel(thirdPlace)}</div>
                   )}
@@ -7264,11 +7268,11 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-black/40 text-sm">{s.club}</td>
-                  <td className="px-6 py-4 text-black/40 text-sm">{s.team_name}</td>
+                  <td className="px-6 py-4 text-black/40 text-sm">{s.team_name.toUpperCase()}</td>
                   {s.games.map((value, gameIndex) => (
                     <td key={gameIndex} className="px-6 py-4 text-center font-mono">{value}</td>
                   ))}
-                  <td className="px-6 py-4 text-center font-mono text-black/60">{s.average}</td>
+                  <td className="px-6 py-4 text-center font-mono text-black/60">{formatStandingsAverage(s.average)}</td>
                   <td className="px-6 py-4 text-right font-bold">{s.total}</td>
                 </tr>
               ))}
@@ -7276,9 +7280,9 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                 <tr key={s.key} className="hover:bg-[#AFDDE5]/20 transition-colors">
                   <td className="px-6 py-4 font-bold text-black/60">{idx + 1}</td>
                   <td className="px-6 py-4">
-                    <div className="font-bold">{s.team_name}</div>
+                    <div className="font-bold">{s.team_name.toUpperCase()}</div>
                     <div className="text-[11px] text-black/50 lowercase">
-                      {s.members.length > 0 ? s.members.join(', ') : 'no members'}
+                      {s.members.length > 0 ? s.members.join(', ') : 'NO MEMBERS'}
                     </div>
                   </td>
                   {s.games.map((value, gameIndex) => (
