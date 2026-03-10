@@ -1079,6 +1079,8 @@ export default function App() {
     return value === 'Pre-Qualification' ? 'Total Pinfall' : value;
   };
 
+  const formatStatusLabel = (value: string) => (value === 'draft' ? 'planned' : value);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-emerald-50/30 text-black font-sans">
       {/* Sidebar / Nav */}
@@ -1288,7 +1290,7 @@ export default function App() {
                             t.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 
                             t.status === 'finished' ? 'bg-black/5 text-black/40' : 'bg-amber-100 text-amber-700'
                           }`}>
-                            {t.status}
+                            {formatStatusLabel(t.status)}
                           </div>
                           {isAdmin && (
                             <div className="flex gap-1">
@@ -1484,7 +1486,7 @@ export default function App() {
                       name="status" 
                       defaultValue={editingTournament?.status}
                       options={[
-                        { value: 'draft', label: 'Draft' },
+                        { value: 'draft', label: 'Planned' },
                         { value: 'active', label: 'Active' },
                         { value: 'finished', label: 'Finished' }
                       ]} 
@@ -2066,7 +2068,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
               {tournament.name}
             </h1>
             <span className="px-2 py-0.5 bg-black text-white text-[10px] font-bold uppercase tracking-widest rounded">
-              {tournament.status}
+              {formatStatusLabel(tournament.status)}
             </span>
           </div>
           <div className="flex items-center gap-4 text-black/40 text-sm flex-wrap">
