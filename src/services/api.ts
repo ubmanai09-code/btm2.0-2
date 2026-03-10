@@ -6,7 +6,7 @@ export interface Tournament {
   format: string;
   organizer: string;
   logo: string;
-  match_play_type: 'single_elimination' | 'double_elimination' | 'ladder' | 'stepladder' | 'playoff';
+  match_play_type: 'single_elimination' | 'double_elimination' | 'ladder' | 'stepladder' | 'playoff' | 'team_selection_playoff';
   qualified_count: number;
   playoff_winners_count: number;
   type: 'individual' | 'team';
@@ -510,6 +510,11 @@ const api = {
       playoff_winners_count?: number;
       seed_ids?: number[];
       seed_kind?: 'team' | 'participant';
+      team_selection_draft?: {
+        seed1_opponent_seed: number;
+        seed2_opponent_seed: number;
+        seed3_opponent_seed: number;
+      };
     }
   ): Promise<{ success: boolean; error?: string }> {
     const res = await fetch(`/api/tournaments/${tournamentId}/brackets/generate`, {

@@ -1414,6 +1414,35 @@ const existing = db
 
   // Brackets
   app.get("/api/tournaments/:id/brackets", (req, res) => {
+    const tournamentId = req.params.id;
+    const tournament = db.prepare("SELECT match_play_type FROM tournaments WHERE id = ?").get(tournamentId) as any;
+
+    // Backfill missing rounds for legacy Team Selection Playoff brackets created before full flow support.
+    if (tournament?.match_play_type === 'team_selection_playoff') {
+      const hasSemi0 = db.prepare("SELECT id FROM brackets WHERE tournament_id = ? AND round = 2 AND match_index = 0 LIMIT 1").get(tournamentId) as any;
+      const hasSemi1 = db.prepare("SELECT id FROM brackets WHERE tournament_id = ? AND round = 2 AND match_index = 1 LIMIT 1").get(tournamentId) as any;
+      const hasFinal = db.prepare("SELECT id FROM brackets WHERE tournament_id = ? AND round = 3 AND match_index = 0 LIMIT 1").get(tournamentId) as any;
+
+      if (!hasSemi0) {
+        db.prepare(`
+          INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
+          VALUES (?, 2, 0, NULL, NULL, NULL, NULL, NULL)
+        `).run(tournamentId);
+      }
+      if (!hasSemi1) {
+        db.prepare(`
+          INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
+          VALUES (?, 2, 1, NULL, NULL, NULL, NULL, NULL)
+        `).run(tournamentId);
+      }
+      if (!hasFinal) {
+        db.prepare(`
+          INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
+          VALUES (?, 3, 0, NULL, NULL, NULL, NULL, NULL)
+        `).run(tournamentId);
+      }
+    }
+
     const rows = db.prepare(`
       SELECT b.*, 
              (p1.first_name || ' ' || p1.last_name) as p1_name, 
@@ -1435,7 +1464,7 @@ const existing = db
       LEFT JOIN teams tw ON w.team_id = tw.id
       WHERE b.tournament_id = ?
       ORDER BY b.round ASC, b.match_index ASC
-    `).all(req.params.id);
+    `).all(tournamentId);
     res.json(rows);
   });
 
@@ -1737,6 +1766,88 @@ const existing = db
         qualified_count: stepladderSeeds.length,
         rounds_count: 4,
         generated_matches: generatedMatches?.count || 4,
+      });
+    }
+
+    if (requestedMatchPlayType === 'team_selection_playoff') {
+      const teamSelectionSeeds = participants.slice(0, 8);
+      if (teamSelectionSeeds.length < 8) {
+        return res.status(400).json({ error: 'Team Selection Playoff requires exactly 8 qualified teams/seeds' });
+      }
+
+      const participantBySeed = new Map<number, { id: number; seed: number }>();
+      for (const entry of teamSelectionSeeds) {
+        participantBySeed.set(Number(entry.seed), { id: Number(entry.id), seed: Number(entry.seed) });
+      }
+
+      const requestedDraft = req.body?.team_selection_draft || {};
+      const requestedSeed1Opponent = Number.parseInt(String(requestedDraft.seed1_opponent_seed ?? ''), 10);
+      const requestedSeed2Opponent = Number.parseInt(String(requestedDraft.seed2_opponent_seed ?? ''), 10);
+      const requestedSeed3Opponent = Number.parseInt(String(requestedDraft.seed3_opponent_seed ?? ''), 10);
+
+      const availableOpponents = [5, 6, 7, 8];
+      const pickFromAvailable = (requestedSeed: number | null | undefined) => {
+        if (Number.isFinite(requestedSeed) && availableOpponents.includes(Number(requestedSeed))) {
+          const idx = availableOpponents.indexOf(Number(requestedSeed));
+          return availableOpponents.splice(idx, 1)[0];
+        }
+        return availableOpponents.shift() || null;
+      };
+
+      const seed1OpponentSeed = pickFromAvailable(requestedSeed1Opponent);
+      const seed2OpponentSeed = pickFromAvailable(requestedSeed2Opponent);
+      const seed3OpponentSeed = pickFromAvailable(requestedSeed3Opponent);
+      const seed4OpponentSeed = availableOpponents.length > 0 ? availableOpponents[0] : null;
+
+      if (!seed1OpponentSeed || !seed2OpponentSeed || !seed3OpponentSeed || !seed4OpponentSeed) {
+        return res.status(400).json({ error: 'Unable to resolve Team Selection draft pairings' });
+      }
+
+      const quarterFinalPairings: Array<{ captainSeed: number; opponentSeed: number }> = [
+        { captainSeed: 1, opponentSeed: seed1OpponentSeed },
+        { captainSeed: 2, opponentSeed: seed2OpponentSeed },
+        { captainSeed: 3, opponentSeed: seed3OpponentSeed },
+        { captainSeed: 4, opponentSeed: seed4OpponentSeed },
+      ];
+
+      for (let i = 0; i < quarterFinalPairings.length; i += 1) {
+        const pair = quarterFinalPairings[i];
+        const left = participantBySeed.get(pair.captainSeed);
+        const right = participantBySeed.get(pair.opponentSeed);
+        if (!left || !right) {
+          return res.status(400).json({ error: `Invalid Team Selection pairing: Seed ${pair.captainSeed} vs Seed ${pair.opponentSeed}` });
+        }
+
+        db.prepare(`
+          INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
+          VALUES (?, 1, ?, ?, ?, ?, ?, NULL)
+        `).run(tournamentId, i, left.id, right.id, left.seed, right.seed);
+      }
+
+      db.prepare(`
+        INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
+        VALUES (?, 2, 0, NULL, NULL, NULL, NULL, NULL)
+      `).run(tournamentId);
+
+      db.prepare(`
+        INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
+        VALUES (?, 2, 1, NULL, NULL, NULL, NULL, NULL)
+      `).run(tournamentId);
+
+      db.prepare(`
+        INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
+        VALUES (?, 3, 0, NULL, NULL, NULL, NULL, NULL)
+      `).run(tournamentId);
+
+      const generatedMatches = db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ?").get(tournamentId) as any;
+      return res.json({
+        success: true,
+        match_play_type: requestedMatchPlayType,
+        qualified_count: 8,
+        seeds_count: 8,
+        rounds_count: 3,
+        winners_count: 1,
+        generated_matches: generatedMatches?.count || 7,
       });
     }
 

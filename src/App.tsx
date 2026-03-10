@@ -4855,6 +4855,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const [customSeedMatchups, setCustomSeedMatchups] = useState<Array<{ p1: number | null; p2: number | null }>>([]);
   const [customRoundLinkSelections, setCustomRoundLinkSelections] = useState<Record<number, Array<{ p1: string; p2: string }>>>({});
   const [customRuleTableLocked, setCustomRuleTableLocked] = useState(false);
+  const [teamSelectionDraft, setTeamSelectionDraft] = useState<{ seed1: number | null; seed2: number | null; seed3: number | null }>({
+    seed1: null,
+    seed2: null,
+    seed3: null,
+  });
   const visualGridRef = useRef<HTMLDivElement | null>(null);
   const visualCardRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const [visualConnectorPaths, setVisualConnectorPaths] = useState<Array<{ id: string; d: string }>>([]);
@@ -5007,8 +5012,16 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     setSelectedSeed(null);
     setMatchScoreDrafts(readStoredMatchScoreDrafts());
     setCustomRuleTableLocked(false);
+    setTeamSelectionDraft({ seed1: null, seed2: null, seed3: null });
     setSettingsHydrated(true);
   }, [tournament.id]);
+
+  useEffect(() => {
+    if (matchPlayType !== 'team_selection_playoff') return;
+    if (qualifiedCount !== 8) setQualifiedCount(8);
+    if (playoffWinnersCount !== 1) setPlayoffWinnersCount(1);
+    if (useManualSeedMatchups) setUseManualSeedMatchups(false);
+  }, [matchPlayType, qualifiedCount, playoffWinnersCount, useManualSeedMatchups]);
 
   useEffect(() => {
     persistMatchScoreDraftsToStorage(matchScoreDrafts);
@@ -5384,6 +5397,25 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         return;
       }
 
+      if (matchPlayType === 'team_selection_playoff') {
+        if (orderedSeedIds.length < 8) {
+          alert('Team Selection Playoff requires 8 qualified teams/seeds.');
+          return;
+        }
+
+        const draftSeeds = [teamSelectionDraft.seed1, teamSelectionDraft.seed2, teamSelectionDraft.seed3].map((seedNo) => Number(seedNo));
+        if (draftSeeds.some((seedNo) => !Number.isFinite(seedNo) || seedNo < 5 || seedNo > 8)) {
+          alert('Complete draft selections for Seed #1, Seed #2, and Seed #3.');
+          return;
+        }
+
+        const uniqueDraftSeeds = new Set(draftSeeds);
+        if (uniqueDraftSeeds.size !== 3) {
+          alert('Each selected opponent must be unique.');
+          return;
+        }
+      }
+
       await api.clearBrackets(tournament.id);
       setMatches([]);
       setMatchScoreDrafts({});
@@ -5529,6 +5561,13 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           playoff_winners_count: Math.min(3, Math.max(1, Number(playoffWinnersCount) || 1)),
           seed_ids: orderedSeedIds,
           seed_kind: seedKind,
+          team_selection_draft: matchPlayType === 'team_selection_playoff'
+            ? {
+                seed1_opponent_seed: Number(teamSelectionDraft.seed1),
+                seed2_opponent_seed: Number(teamSelectionDraft.seed2),
+                seed3_opponent_seed: Number(teamSelectionDraft.seed3),
+              }
+            : undefined,
         });
         setCustomRuleTableLocked(false);
       }
@@ -5883,6 +5922,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     }));
   };
 
+  const isTeamSelectionPlayoffMode = matchPlayType === 'team_selection_playoff';
   const effectiveQualified = qualifiedCount > 0 ? qualifiedCount : 0;
   const normalizedSeedsBase = effectiveQualified > 1 ? effectiveQualified : 2;
   let seedsCount = 1;
@@ -5935,6 +5975,14 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     .map((seed: any) => Number(seed.seed))
     .filter((seedNo: number) => Number.isFinite(seedNo) && seedNo > 0);
   const isEightSeedPlayoffMode = matchPlayType === 'playoff' && seedsCount === 8;
+  const teamSelectionPoolSeeds = visibleSeeds
+    .map((seed: any) => Number(seed.seed))
+    .filter((seedNo: number) => Number.isFinite(seedNo) && seedNo >= 5 && seedNo <= 8)
+    .sort((a: number, b: number) => a - b);
+  const teamSelectionSeed1Options = teamSelectionPoolSeeds;
+  const teamSelectionSeed2Options = teamSelectionPoolSeeds.filter((seedNo: number) => seedNo !== Number(teamSelectionDraft.seed1));
+  const teamSelectionSeed3Options = teamSelectionSeed2Options.filter((seedNo: number) => seedNo !== Number(teamSelectionDraft.seed2));
+  const teamSelectionRemainingForSeed4 = teamSelectionSeed3Options.filter((seedNo: number) => seedNo !== Number(teamSelectionDraft.seed3));
   const lockCustomSeedEditing = useManualSeedMatchups && customRuleTableLocked;
   const customRoundCounts: number[] = [];
   customRoundCounts[1] = Math.max(1, roundOneMatchesPreview);
@@ -5964,6 +6012,17 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const customFinalRoundTitle = 'Finals & Placement';
   const customFinalRoundIndex = roundsCountPreview;
   const customRoundOneTitle = isEightSeedPlayoffMode ? 'Quarter-Finals' : 'Round 1';
+
+  useEffect(() => {
+    if (!isTeamSelectionPlayoffMode) return;
+    setTeamSelectionDraft((prev) => {
+      const seed1 = teamSelectionSeed1Options.includes(Number(prev.seed1)) ? Number(prev.seed1) : null;
+      const seed2 = teamSelectionSeed2Options.includes(Number(prev.seed2)) ? Number(prev.seed2) : null;
+      const seed3 = teamSelectionSeed3Options.includes(Number(prev.seed3)) ? Number(prev.seed3) : null;
+      if (seed1 === prev.seed1 && seed2 === prev.seed2 && seed3 === prev.seed3) return prev;
+      return { seed1, seed2, seed3 };
+    });
+  }, [isTeamSelectionPlayoffMode, teamSelectionSeed1Options.join(','), teamSelectionSeed2Options.join(','), teamSelectionSeed3Options.join(',')]);
 
   useEffect(() => {
     setCustomSeedMatchups((prev) => {
@@ -6311,7 +6370,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     const isFinalCard =
       Number(m.round) === bracketFinalRoundNumber &&
       Number(m.match_index) === 0 &&
-      (matchPlayType === 'playoff' || matchPlayType === 'stepladder');
+      (matchPlayType === 'playoff' || matchPlayType === 'team_selection_playoff' || matchPlayType === 'stepladder');
     const isBronzeCard = matchPlayType === 'playoff' && Number(m.round) === bracketFinalRoundNumber && Number(m.match_index) === 1;
     const meta = getRuleDrivenMatchMeta(m);
     const isEditingP1 = editingNameSlot?.matchId === m.id && editingNameSlot?.slot === 'p1';
@@ -6645,6 +6704,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 <option value="ladder">Ladder</option>
                 <option value="stepladder">Stepladder</option>
                 <option value="playoff">Play-Off</option>
+                <option value="team_selection_playoff">Team Selection Playoff</option>
               </select>
             </div>
 
@@ -6655,7 +6715,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                   type="number"
                   min="0"
                   value={qualifiedCount}
-                  onChange={(e: any) => setQualifiedCount(Math.max(0, Number.parseInt(e.target.value, 10) || 0))}
+                  onChange={(e: any) => {
+                    if (isTeamSelectionPlayoffMode) return;
+                    setQualifiedCount(Math.max(0, Number.parseInt(e.target.value, 10) || 0));
+                  }}
+                  disabled={isTeamSelectionPlayoffMode}
                   className="w-full h-8 px-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 bg-white text-[13px]"
                 />
               </div>
@@ -6666,11 +6730,63 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                   min="1"
                   max="3"
                   value={playoffWinnersCount}
-                  onChange={(e: any) => setPlayoffWinnersCount(Math.min(3, Math.max(1, Number.parseInt(e.target.value, 10) || 1)))}
+                  onChange={(e: any) => {
+                    if (isTeamSelectionPlayoffMode) return;
+                    setPlayoffWinnersCount(Math.min(3, Math.max(1, Number.parseInt(e.target.value, 10) || 1)));
+                  }}
+                  disabled={isTeamSelectionPlayoffMode}
                   className="w-full h-8 px-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 bg-white text-[13px]"
                 />
               </div>
             </div>
+
+            {isTeamSelectionPlayoffMode && (
+              <div className="rounded-md border border-emerald-200 bg-emerald-50/40 px-2 py-2 space-y-1.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-800">Selection Draft (Top 8)</p>
+                <div className="grid grid-cols-1 gap-1 text-[11px]">
+                  <div className="grid grid-cols-[auto_1fr] items-center gap-1.5">
+                    <span className="font-semibold text-black/70">Seed #1 chooses:</span>
+                    <select
+                      value={teamSelectionDraft.seed1 ?? ''}
+                      onChange={(e: any) => setTeamSelectionDraft((prev) => ({ ...prev, seed1: Number.parseInt(String(e.target.value || ''), 10) || null }))}
+                      className="h-7 px-1.5 rounded border border-black/15 bg-white"
+                    >
+                      <option value="">Opponent</option>
+                      {teamSelectionSeed1Options.map((seedNo: number) => (
+                        <option key={`ts-seed1-${seedNo}`} value={seedNo}>Seed #{seedNo}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-[auto_1fr] items-center gap-1.5">
+                    <span className="font-semibold text-black/70">Seed #2 chooses:</span>
+                    <select
+                      value={teamSelectionDraft.seed2 ?? ''}
+                      onChange={(e: any) => setTeamSelectionDraft((prev) => ({ ...prev, seed2: Number.parseInt(String(e.target.value || ''), 10) || null }))}
+                      className="h-7 px-1.5 rounded border border-black/15 bg-white"
+                    >
+                      <option value="">Opponent</option>
+                      {teamSelectionSeed2Options.map((seedNo: number) => (
+                        <option key={`ts-seed2-${seedNo}`} value={seedNo}>Seed #{seedNo}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-[auto_1fr] items-center gap-1.5">
+                    <span className="font-semibold text-black/70">Seed #3 chooses:</span>
+                    <select
+                      value={teamSelectionDraft.seed3 ?? ''}
+                      onChange={(e: any) => setTeamSelectionDraft((prev) => ({ ...prev, seed3: Number.parseInt(String(e.target.value || ''), 10) || null }))}
+                      className="h-7 px-1.5 rounded border border-black/15 bg-white"
+                    >
+                      <option value="">Opponent</option>
+                      {teamSelectionSeed3Options.map((seedNo: number) => (
+                        <option key={`ts-seed3-${seedNo}`} value={seedNo}>Seed #{seedNo}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="text-black/55">Seed #4 auto-pairs with the final remaining opponent: {teamSelectionRemainingForSeed4[0] ? `Seed #${teamSelectionRemainingForSeed4[0]}` : 'TBD'}</p>
+                </div>
+              </div>
+            )}
 
             <div className="pt-0.5 flex items-center gap-1.5">
               {canManageBrackets ? (
@@ -6685,7 +6801,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
               </Button>
             </div>
 
-            {canManageBrackets && (
+            {canManageBrackets && !isTeamSelectionPlayoffMode && (
               <div className="pt-1 border-t border-black/10 space-y-1.5">
                 <label className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-black/55">
                   <input
@@ -6988,6 +7104,24 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     <p className="text-black/60">Final winner is champion.</p>
                   </div>
                 </>
+              ) : matchPlayType === 'team_selection_playoff' ? (
+                <>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Phase 1: Selection (Draft)</p>
+                    <p className="text-black/60">Top 8 teams advance. Seeds 1, 2, and 3 choose opponents in order.</p>
+                    <p className="text-black/60">Seed 4 plays the final remaining team.</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Phase 2: Quarter-Finals</p>
+                    <p className="text-black/60">M1: Seed 1 vs chosen opponent, then M2-M4 continue by seed order.</p>
+                    <p className="text-black/60">All quarter-final winners advance.</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Phase 3: Semi-Finals & Final</p>
+                    <p className="text-black/60">SF1: Winner M1 vs Winner M2, SF2: Winner M3 vs Winner M4.</p>
+                    <p className="text-black/60">Championship: Winner SF1 vs Winner SF2.</p>
+                  </div>
+                </>
               ) : matchPlayType === 'playoff' ? (
                 <>
                   <div className="rounded-md border border-black/10 bg-white p-3">
@@ -7142,25 +7276,30 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         </div>
       ) : (
         bracketViewMode === 'cards' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {orderedRoundNumbers.map((roundNumber) => {
-              const roundMatches = [...(roundGroups[roundNumber] || [])].sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
-              const roundTitle = isEightSeedPlayoffMode
-                ? (roundNumber === 1 ? 'Quarter-Finals' : roundNumber === 2 ? 'Semi-Finals' : 'Finals')
-                : `Round ${roundNumber}`;
+          <div className="overflow-x-auto pb-2">
+            <div
+              className="grid gap-4 items-start min-w-[860px]"
+              style={{ gridTemplateColumns: `repeat(${Math.max(1, orderedRoundNumbers.length)}, minmax(240px, 1fr))` }}
+            >
+              {orderedRoundNumbers.map((roundNumber) => {
+                const roundMatches = [...(roundGroups[roundNumber] || [])].sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
+                const roundTitle = (isEightSeedPlayoffMode || isTeamSelectionPlayoffMode)
+                  ? (roundNumber === 1 ? 'Quarter-Finals' : roundNumber === 2 ? 'Semi-Finals' : 'Finals')
+                  : `Round ${roundNumber}`;
 
-              return (
-                <Card key={roundNumber} className="p-3 border-[#AFDDE5]/60">
-                  <div className="mb-3 pb-2 border-b border-black/10">
-                    <h4 className="text-sm font-bold uppercase tracking-widest text-black/75">{roundTitle}</h4>
-                    <p className="text-[11px] text-black/45">{roundMatches.length} match{roundMatches.length === 1 ? '' : 'es'}</p>
-                  </div>
-                  <div className="space-y-3">
-                    {roundMatches.map((m: any) => renderMatchCard(m))}
-                  </div>
-                </Card>
-              );
-            })}
+                return (
+                  <Card key={roundNumber} className="p-3 border-[#AFDDE5]/60">
+                    <div className="mb-3 pb-2 border-b border-black/10">
+                      <h4 className="text-sm font-bold uppercase tracking-widest text-black/75">{roundTitle}</h4>
+                      <p className="text-[11px] text-black/45">{roundMatches.length} match{roundMatches.length === 1 ? '' : 'es'}</p>
+                    </div>
+                    <div className="space-y-3">
+                      {roundMatches.map((m: any) => renderMatchCard(m))}
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto pb-2">
@@ -7189,7 +7328,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
               </svg>
               {orderedRoundNumbers.map((roundNumber, roundIndex) => {
                 const roundMatches = [...(roundGroups[roundNumber] || [])].sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
-                const roundTitle = isEightSeedPlayoffMode
+                const roundTitle = (isEightSeedPlayoffMode || isTeamSelectionPlayoffMode)
                   ? (roundNumber === 1 ? 'Quarter-Finals' : roundNumber === 2 ? 'Semi-Finals' : 'Finals')
                   : `Round ${roundNumber}`;
                 const spacingClass = getVisualRoundSpacingClass(roundIndex);
