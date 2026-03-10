@@ -30,7 +30,8 @@ import {
   KeyRound,
   Eye,
   EyeOff,
-  Shield
+  Shield,
+  Search
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser } from './services/api';
@@ -326,11 +327,26 @@ const Button = ({
 
 const FemaleSpot = ({ muted = false, className = '' }: { muted?: boolean; className?: string }) => (
   <span
-    className={`inline-block h-1.5 w-1.5 rounded-full ring-1 ring-rose-200/70 ${muted ? 'bg-rose-200/80' : 'bg-rose-400/75'} ${className}`}
+    className={`inline-block w-[3px] h-[3px] rounded-full ${muted ? 'bg-red-300/80' : 'bg-red-500'} ${className}`}
     title="Female"
     aria-label="Female"
   />
 );
+
+const renderFemaleInitialUnderline = (name: string, isFemale: boolean) => {
+  const safeName = String(name || '').trim();
+  if (!safeName) return <span>-</span>;
+  if (!isFemale) return <span>{safeName}</span>;
+
+  const first = safeName.charAt(0);
+  const rest = safeName.slice(1);
+  return (
+    <span>
+      <span className="text-red-600 underline underline-offset-2">{first}</span>
+      <span>{rest}</span>
+    </span>
+  );
+};
 
 const Input = ({ label, ...props }: any) => (
   <div className="space-y-1.5">
@@ -2262,6 +2278,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [editingPlayer, setEditingPlayer] = useState<Participant | null>(null);
   const [selectedTeamMemberIds, setSelectedTeamMemberIds] = useState<number[]>([]);
+  const [teamMemberSearchQuery, setTeamMemberSearchQuery] = useState('');
+  const [playerSearchQuery, setPlayerSearchQuery] = useState('');
   const [playerSort, setPlayerSort] = useState<{ key: 'none' | 'club' | 'average'; direction: 'asc' | 'desc' }>({
     key: 'none',
     direction: 'asc',
@@ -2540,12 +2558,14 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const openCreateTeamModal = () => {
     setEditingTeam(null);
     setSelectedTeamMemberIds([]);
+    setTeamMemberSearchQuery('');
     setShowAddTeam(true);
   };
 
   const openEditTeamModal = (team: Team) => {
     setEditingTeam(team);
     setSelectedTeamMemberIds(participants.filter(p => p.team_id === team.id).map(p => p.id));
+    setTeamMemberSearchQuery('');
     setShowAddTeam(true);
   };
 
@@ -2841,12 +2861,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   playerKeyToRows.forEach((rows) => {
     if (rows.length <= 1) return;
     const clubs = new Set(rows.map(r => (r.club || '').trim().toLowerCase()).filter(Boolean));
-    const teams = new Set(rows.map(r => String(r.team_id ?? 'null')));
+    const teamIds = new Set(rows.map(r => r.team_id).filter((teamId): teamId is number => Number.isFinite(Number(teamId)) && Number(teamId) > 0));
     rows.forEach((r) => {
       const issues = participantIssues.get(r.id) || [];
       issues.push('Duplicate first + family name');
       if (clubs.size > 1) issues.push('Same player appears in multiple clubs');
-      if (teams.size > 1) issues.push('Same player appears in multiple teams');
+      if (teamIds.size > 1) issues.push('Same player appears in multiple teams');
       participantIssues.set(r.id, issues);
     });
   });
@@ -2877,6 +2897,64 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     return playerSort.direction === 'asc' ? comparison : -comparison;
   });
 
+  const normalizedPlayerSearch = playerSearchQuery.trim().toLowerCase();
+
+  const filteredParticipants = sortedParticipants.filter((participant) => {
+    if (!normalizedPlayerSearch) return true;
+    const fullName = `${participant.first_name || ''} ${participant.last_name || ''}`.trim().toLowerCase();
+    const club = (participant.club || '').trim().toLowerCase();
+    const email = (participant.email || '').trim().toLowerCase();
+    const teamName = (participant.team_name || '').trim().toLowerCase();
+    return fullName.includes(normalizedPlayerSearch)
+      || club.includes(normalizedPlayerSearch)
+      || email.includes(normalizedPlayerSearch)
+      || teamName.includes(normalizedPlayerSearch);
+  });
+
+  const filteredTeams = teams.filter((team) => {
+    if (!normalizedPlayerSearch) return true;
+    const teamName = (team.name || '').trim().toLowerCase();
+    if (teamName.includes(normalizedPlayerSearch)) return true;
+    const memberNames = participants
+      .filter((participant) => participant.team_id === team.id)
+      .map((participant) => `${participant.first_name || ''} ${participant.last_name || ''}`.trim().toLowerCase());
+    return memberNames.some((name) => name.includes(normalizedPlayerSearch));
+  });
+
+  const normalizedTeamMemberSearch = teamMemberSearchQuery.trim().toLowerCase();
+  const filteredTeamMemberCandidates = participants.filter((player) => {
+    if (!normalizedTeamMemberSearch) return true;
+    const fullName = `${player.first_name || ''} ${player.last_name || ''}`.trim().toLowerCase();
+    const club = (player.club || '').trim().toLowerCase();
+    const email = (player.email || '').trim().toLowerCase();
+    return fullName.includes(normalizedTeamMemberSearch)
+      || club.includes(normalizedTeamMemberSearch)
+      || email.includes(normalizedTeamMemberSearch);
+  });
+
+  const multiTeamPlayerMap = new Map<string, Set<number>>();
+  const multiTeamPlayerNameMap = new Map<string, string>();
+  participants.forEach((participant) => {
+    if (!participant.team_id) return;
+    const firstName = (participant.first_name || '').trim();
+    const lastName = (participant.last_name || '').trim();
+    if (!firstName && !lastName) return;
+    const key = `${firstName.toLowerCase()}::${lastName.toLowerCase()}`;
+    if (!multiTeamPlayerNameMap.has(key)) {
+      multiTeamPlayerNameMap.set(key, `${firstName} ${lastName}`.trim());
+    }
+    const teamSet = multiTeamPlayerMap.get(key) || new Set<number>();
+    teamSet.add(participant.team_id);
+    multiTeamPlayerMap.set(key, teamSet);
+  });
+  const multiTeamPlayers = Array.from(multiTeamPlayerMap.entries())
+    .filter(([, teamSet]) => teamSet.size > 1)
+    .map(([key, teamSet]) => ({
+      key,
+      name: multiTeamPlayerNameMap.get(key) || key.replace('::', ' '),
+      teamCount: teamSet.size,
+    }));
+
   const togglePlayerSort = (key: 'club' | 'average') => {
     setPlayerSort((previous) => {
       if (previous.key === key) {
@@ -2887,6 +2965,24 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       }
       return { key, direction: 'asc' };
     });
+  };
+
+  const renderNameWithFemaleSpotAfter = (
+    participant: Participant,
+    options?: { includeLastName?: boolean; uppercase?: boolean }
+  ) => {
+    const includeLastName = options?.includeLastName ?? true;
+    const uppercase = options?.uppercase ?? false;
+    const firstNameRaw = (participant.first_name || '').trim();
+    const lastNameRaw = (participant.last_name || '').trim();
+    const firstName = uppercase ? firstNameRaw.toUpperCase() : firstNameRaw;
+    const lastName = uppercase ? lastNameRaw.toUpperCase() : lastNameRaw;
+    const isFemale = (participant.gender || '').toLowerCase().startsWith('f');
+
+    if (!firstName && !lastName) return <span>-</span>;
+
+    const fullName = `${firstName}${includeLastName && lastName ? ` ${lastName}` : ''}`.trim();
+    return renderFemaleInitialUnderline(fullName, isFemale);
   };
 
   return (
@@ -2911,6 +3007,24 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2 w-full md:w-auto md:min-w-[360px]">
                   <div className="flex flex-wrap items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const value = window.prompt('Search player/team/club/email', playerSearchQuery);
+                        if (value !== null) setPlayerSearchQuery(value.trim());
+                      }}
+                      title="Search Player"
+                      ariaLabel="Search Player"
+                      className="px-2"
+                    >
+                      <Search size={14} />
+                    </Button>
+                    {playerSearchQuery && (
+                      <Button size="sm" variant="outline" onClick={() => setPlayerSearchQuery('')} title="Clear Search" ariaLabel="Clear Search" className="px-2">
+                        <X size={14} />
+                      </Button>
+                    )}
                     {canManageParticipants && (
                       <Button size="sm" variant="manage" onClick={handleClearParticipants} title="Clear Players" ariaLabel="Clear Players" className="px-2">
                         <BrushCleaning size={14} />
@@ -2992,14 +3106,19 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       No participants registered yet.
                     </td>
                   </tr>
+                ) : filteredParticipants.length === 0 ? (
+                  <tr>
+                    <td colSpan={canManageParticipants ? 7 : 6} className="px-4 py-8 text-center text-black/40 italic text-sm">
+                      No players match your search.
+                    </td>
+                  </tr>
                 ) : (
-                  sortedParticipants.map((p, index) => (
+                  filteredParticipants.map((p, index) => (
                     <tr key={p.id} className={`${participantIssues.has(p.id) ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-[#AFDDE5]/20'} transition-colors`}>
                       <td className={`px-3 py-2 font-mono text-[10px] ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{index + 1}</td>
                       <td className={`px-3 py-2 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>
                         <span className="inline-flex items-center gap-1">
-                          {(p.gender || '').toLowerCase().startsWith('f') && <FemaleSpot />}
-                          <span>{p.first_name || '-'}</span>
+                          {renderNameWithFemaleSpotAfter(p, { includeLastName: false })}
                         </span>
                       </td>
                       <td className={`px-3 py-2 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>{p.last_name || '-'}</td>
@@ -3041,9 +3160,32 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                   <div>
                     <h4 className="font-bold text-black/80 flex items-center gap-2"><Users size={16} className="text-emerald-700" />Teams ({teams.length})</h4>
+                    {multiTeamPlayers.length > 0 && (
+                      <p className="text-[11px] text-red-600 mt-1 font-semibold">
+                        Warning: {multiTeamPlayers.length} player(s) appear in more than one team ({multiTeamPlayers.slice(0, 3).map((player) => player.name).join(', ')}{multiTeamPlayers.length > 3 ? ', ...' : ''}).
+                      </p>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2 w-full md:w-auto md:min-w-[320px]">
                     <div className="flex flex-wrap items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const value = window.prompt('Search player or team', playerSearchQuery);
+                          if (value !== null) setPlayerSearchQuery(value.trim());
+                        }}
+                        title="Search Player"
+                        ariaLabel="Search Player"
+                        className="px-2"
+                      >
+                        <Search size={14} />
+                      </Button>
+                      {playerSearchQuery && (
+                        <Button size="sm" variant="outline" onClick={() => setPlayerSearchQuery('')} title="Clear Search" ariaLabel="Clear Search" className="px-2">
+                          <X size={14} />
+                        </Button>
+                      )}
                       {canManageParticipants && (
                         <Button size="sm" variant="manage" onClick={handleClearTeams} title="Clear Teams" ariaLabel="Clear Teams" className="px-2">
                           <BrushCleaning size={14} />
@@ -3097,8 +3239,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     <tr>
                       <td colSpan={canManageParticipants ? 4 : 3} className="px-4 py-8 text-center text-black/40 italic text-sm">No teams created.</td>
                     </tr>
+                  ) : filteredTeams.length === 0 ? (
+                    <tr>
+                      <td colSpan={canManageParticipants ? 4 : 3} className="px-4 py-8 text-center text-black/40 italic text-sm">No teams match your search.</td>
+                    </tr>
                   ) : (
-                    teams.map((team, index) => {
+                    filteredTeams.map((team, index) => {
                       const teamMembers = participants.filter(p => p.team_id === team.id);
                       return (
                         <tr key={team.id} className="hover:bg-[#AFDDE5]/20 transition-colors align-top">
@@ -3110,8 +3256,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                                 {teamMembers.length > 0 ? teamMembers.map(member => (
                                   <span key={member.id} className="px-2 py-0.5 rounded bg-black/5 text-[10px] uppercase tracking-wider text-black/70">
                                     <span className="inline-flex items-center gap-1">
-                                      {(member.gender || '').toLowerCase().startsWith('f') && <FemaleSpot />}
-                                      <span>{(member.first_name || '').toUpperCase()} {(member.last_name || '').toUpperCase()}</span>
+                                      {renderNameWithFemaleSpotAfter(member, { includeLastName: true, uppercase: true })}
                                     </span>
                                   </span>
                                 )) : <span className="text-xs text-black/40 italic">No members</span>}
@@ -3215,7 +3360,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }}
               className="absolute inset-0 bg-emerald-950/35 backdrop-blur-sm"
-              onClick={() => { setShowAddTeam(false); setEditingTeam(null); }}
+              onClick={() => { setShowAddTeam(false); setEditingTeam(null); setSelectedTeamMemberIds([]); setTeamMemberSearchQuery(''); }}
             />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -3229,12 +3374,24 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 <form onSubmit={handleAddTeam} className="space-y-4">
                   <Input label="Team Name" name="name" defaultValue={editingTeam?.name} placeholder="e.g. The Strikers" required />
                   <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 px-1">Search Player</label>
+                    <input
+                      type="text"
+                      value={teamMemberSearchQuery}
+                      onChange={(e) => setTeamMemberSearchQuery(e.target.value)}
+                      placeholder="Search by name, club, or email"
+                      className="w-full px-3 py-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 transition-all bg-white text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 px-1">Team Members (from players)</label>
                     <div className="max-h-48 overflow-auto rounded-md border border-black/10 bg-white p-2 space-y-1">
                       {participants.length === 0 ? (
                         <p className="text-xs text-black/40 italic px-1 py-1">No players available.</p>
+                      ) : filteredTeamMemberCandidates.length === 0 ? (
+                        <p className="text-xs text-black/40 italic px-1 py-1">No players match your search.</p>
                       ) : (
-                        participants.map((player) => {
+                        filteredTeamMemberCandidates.map((player) => {
                           const checked = selectedTeamMemberIds.includes(player.id);
                           const assignedToOtherTeam = player.team_id !== null && player.team_id !== (editingTeam?.id ?? null);
                           return (
@@ -3261,8 +3418,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                                   }}
                                 />
                                 <span className="uppercase inline-flex items-center gap-1">
-                                  {(player.gender || '').toLowerCase().startsWith('f') && <FemaleSpot />}
-                                  <span>{player.first_name} {player.last_name}</span>
+                                  {renderNameWithFemaleSpotAfter(player, { includeLastName: true, uppercase: true })}
                                 </span>
                               </div>
                               <span className={`text-[10px] ${assignedToOtherTeam ? 'text-amber-700 font-semibold' : 'text-black/40'}`}>
@@ -3278,7 +3434,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     <Button type="submit" className="flex-1 justify-center" title={editingTeam ? 'Save Changes' : 'Create Team'} ariaLabel={editingTeam ? 'Save Changes' : 'Create Team'}>
                       {editingTeam ? <Save size={16} /> : <Plus size={16} />}
                     </Button>
-                    <Button type="button" variant="outline" onClick={() => { setShowAddTeam(false); setEditingTeam(null); setSelectedTeamMemberIds([]); }} title="Close" ariaLabel="Close">
+                    <Button type="button" variant="outline" onClick={() => { setShowAddTeam(false); setEditingTeam(null); setSelectedTeamMemberIds([]); setTeamMemberSearchQuery(''); }} title="Close" ariaLabel="Close">
                       <X size={16} />
                     </Button>
                   </div>
@@ -3834,14 +3990,12 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <div className="text-sm font-bold uppercase tracking-wide flex items-center gap-1">
-                            {tournament.type === 'individual' && (item as Participant).gender?.toLowerCase() === 'female' && (
-                              <FemaleSpot muted={selectedItem?.id === item.id && selectedItem.type === 'waiting'} />
-                            )}
-                            <span>
-                              {tournament.type === 'individual' 
-                                ? `${(item as Participant).first_name} ${(item as Participant).last_name.charAt(0).toUpperCase()}.` 
-                                : (item as Team).name}
-                            </span>
+                            <span>{renderFemaleInitialUnderline(
+                              tournament.type === 'individual'
+                                ? `${(item as Participant).first_name} ${(item as Participant).last_name.charAt(0).toUpperCase()}.`
+                                : (item as Team).name,
+                              tournament.type === 'individual' && (item as Participant).gender?.toLowerCase() === 'female'
+                            )}</span>
                           </div>
                           {tournament.type === 'team' && teamMembers.length > 0 && (
                             <div className={`text-[10px] mt-1 font-medium ${
@@ -3851,10 +4005,10 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                             }`}>
                               {teamMembers.map((p, idx) => (
                                 <span key={p.id} className="inline-flex items-center gap-1">
-                                  {p.gender?.toLowerCase() === 'female' && (
-                                    <FemaleSpot muted={selectedItem?.id === item.id && selectedItem.type === 'waiting'} />
-                                  )}
-                                  <span>{p.first_name} {p.last_name.charAt(0).toUpperCase()}.{idx < teamMembers.length - 1 ? ', ' : ''}</span>
+                                  <span>{renderFemaleInitialUnderline(
+                                    `${p.first_name} ${p.last_name.charAt(0).toUpperCase()}.${idx < teamMembers.length - 1 ? ', ' : ''}`,
+                                    p.gender?.toLowerCase() === 'female'
+                                  )}</span>
                                 </span>
                               ))}
                             </div>
@@ -3993,10 +4147,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                         >
                           <div className="flex-1">
                             <div className="text-sm font-bold flex items-center gap-1">
-                              {tournament.type === 'individual' && participant?.gender?.toLowerCase() === 'female' && (
-                                <FemaleSpot muted={selectedItem?.id === a.id && selectedItem.type === 'assignment'} />
-                              )}
-                              <span>{displayName}</span>
+                              <span>{renderFemaleInitialUnderline(displayName, tournament.type === 'individual' && participant?.gender?.toLowerCase() === 'female')}</span>
                             </div>
                             {tournament.type === 'team' && teamMembers.length > 0 && (
                               <div className={`text-[10px] mt-0.5 font-medium ${
@@ -4006,10 +4157,10 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                               }`}>
                                 {teamMembers.map((p, idx) => (
                                   <span key={p.id} className="inline-flex items-center gap-1">
-                                    {p.gender?.toLowerCase() === 'female' && (
-                                      <FemaleSpot muted={selectedItem?.id === a.id && selectedItem.type === 'assignment'} />
-                                    )}
-                                    <span>{p.first_name} {p.last_name.charAt(0).toUpperCase()}.{idx < teamMembers.length - 1 ? ', ' : ''}</span>
+                                    <span>{renderFemaleInitialUnderline(
+                                      `${p.first_name} ${p.last_name.charAt(0).toUpperCase()}.${idx < teamMembers.length - 1 ? ', ' : ''}`,
+                                      p.gender?.toLowerCase() === 'female'
+                                    )}</span>
                                   </span>
                                 ))}
                               </div>
@@ -4564,8 +4715,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                   <tr className="hover:bg-[#AFDDE5]/20 transition-colors">
                     <td className="px-4 py-3 font-bold text-sm text-black">
                       <span className="inline-flex items-center gap-1">
-                        {p.gender?.toLowerCase() === 'female' && <FemaleSpot />}
-                        <span>{formatScoringName(p)}</span>
+                        {renderFemaleInitialUnderline(formatScoringName(p), p.gender?.toLowerCase() === 'female')}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -6304,8 +6454,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                             <p className="font-mono font-bold text-black/70">{seed.total_score || 0}</p>
                           </div>
                           <p className="truncate text-black/80 inline-flex items-center gap-1" title={seed.name}>
-                            {isFemaleSeedParticipant ? <FemaleSpot /> : null}
-                            <span>{seedDisplayName || seed.name}</span>
+                            {renderFemaleInitialUnderline(seedDisplayName || seed.name, Boolean(isFemaleSeedParticipant))}
                           </p>
                           {tournament.type === 'team' && (
                             <p
@@ -6530,8 +6679,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     <div className="min-w-0 text-left">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-black/45">Team</p>
                       <p className="text-base leading-tight font-bold uppercase text-black/80 mt-0.5 inline-flex items-center gap-1">
-                        {row.isFemale ? <FemaleSpot /> : null}
-                        <span>{row.team}</span>
+                        {renderFemaleInitialUnderline(row.team, row.isFemale)}
                       </p>
                     </div>
                     <div className="min-w-0 xl:block hidden text-left">
@@ -7104,8 +7252,10 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                   <td className="px-6 py-4 font-bold text-black/60">{idx + 1}</td>
                   <td className="px-6 py-4 font-bold">
                     <span className="inline-flex items-center gap-1.5">
-                      {(participantGenderMap.get(s.participant_id) || '').startsWith('f') ? <FemaleSpot /> : null}
-                      <span>{s.participant_name}</span>
+                      {renderFemaleInitialUnderline(
+                        s.participant_name,
+                        (participantGenderMap.get(s.participant_id) || '').startsWith('f')
+                      )}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-black/40 text-sm">{s.club}</td>
