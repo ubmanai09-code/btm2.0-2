@@ -92,7 +92,7 @@ const SPONSORS_CONFIG_OVERRIDE_KEY = 'btm_sponsors_config_override';
 const normalizeSponsorInfoList = (value: any): SponsorInfo[] => {
   if (!Array.isArray(value)) return [];
   return value
-    .map((item: any, index: number) => ({
+    .map((item: any, index: number): SponsorInfo => ({
       id: String(item?.id || `sponsor-${index + 1}`),
       kind: item?.kind === 'partner' ? 'partner' : 'sponsor',
       name: String(item?.name || 'Unnamed Sponsor'),
@@ -362,6 +362,7 @@ export default function App() {
   const lockedRole = parseRole((import.meta as any).env?.VITE_LOCK_ROLE);
   const originalFetchRef = useRef<typeof window.fetch | null>(null);
   const sponsorsImportInputRef = useRef<HTMLInputElement | null>(null);
+  const tournamentsImportInputRef = useRef<HTMLInputElement | null>(null);
   const [authToken, setAuthToken] = useState<string>(() => localStorage.getItem('btm_auth_token') || '');
   const [currentRole, setCurrentRole] = useState<UserRole>(() => lockedRole || 'public');
   const [showLogin, setShowLogin] = useState(false);
@@ -684,6 +685,76 @@ export default function App() {
     document.body.appendChild(downloadAnchorNode);
     downloadAnchorNode.click();
     downloadAnchorNode.remove();
+  };
+
+  const handleSaveData = async () => {
+    await loadTournaments();
+    alert('Data synchronized.');
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const items = Array.isArray(parsed) ? parsed : [parsed];
+      if (items.length === 0) {
+        alert('Imported file is empty.');
+        return;
+      }
+
+      if (!confirm(`Import ${items.length} tournament(s)? This adds them as new records.`)) {
+        return;
+      }
+
+      let importedCount = 0;
+      let skippedCount = 0;
+
+      for (const raw of items) {
+        const name = String(raw?.name || '').trim();
+        const date = String(raw?.date || '').trim();
+        const type = raw?.type === 'team' ? 'team' : 'individual';
+
+        if (!name || !date) {
+          skippedCount += 1;
+          continue;
+        }
+
+        const payload: any = {
+          name,
+          date,
+          type,
+          location: String(raw?.location || ''),
+          format: String(raw?.format || ''),
+          organizer: String(raw?.organizer || ''),
+          logo: String(raw?.logo || '/logo.png'),
+          games_count: Number(raw?.games_count) || 3,
+          genders_rule: String(raw?.genders_rule || ''),
+          lanes_count: Number(raw?.lanes_count) || 10,
+          players_per_lane: Number(raw?.players_per_lane) || 2,
+          players_per_team: Number(raw?.players_per_team) || 1,
+          shifts_count: Number(raw?.shifts_count) || 1,
+          oil_pattern: String(raw?.oil_pattern || ''),
+          status: raw?.status === 'completed' ? 'completed' : 'draft',
+        };
+
+        try {
+          await api.createTournament(payload);
+          importedCount += 1;
+        } catch {
+          skippedCount += 1;
+        }
+      }
+
+      await loadTournaments();
+      alert(`Import finished. Added: ${importedCount}. Skipped: ${skippedCount}.`);
+    } catch (err: any) {
+      alert(err?.message || 'Invalid import file.');
+    } finally {
+      if (tournamentsImportInputRef.current) tournamentsImportInputRef.current.value = '';
+    }
   };
 
   const handleExportSingle = (t: Tournament) => {
@@ -1102,9 +1173,34 @@ export default function App() {
                   <p className="text-black/40 mt-1">Manage and track your bowling events</p>
                 </div>
                 <div className="flex gap-3">
-                  <Button variant="outline" onClick={handleExport} title="Export" ariaLabel="Export">
-                    <Upload size={18} />
+                  <Button variant="outline" onClick={handleSaveData} title="Save" ariaLabel="Save">
+                    <Save size={16} />
+                    Save
                   </Button>
+                  <Button variant="outline" onClick={handleExport} title="Export" ariaLabel="Export">
+                    <Upload size={16} />
+                    Export
+                  </Button>
+                  {isAdmin && (
+                    <>
+                      <input
+                        ref={tournamentsImportInputRef}
+                        type="file"
+                        accept=".json,application/json"
+                        className="hidden"
+                        onChange={handleImport}
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={() => tournamentsImportInputRef.current?.click()}
+                        title="Import"
+                        ariaLabel="Import"
+                      >
+                        <Download size={16} />
+                        Import
+                      </Button>
+                    </>
+                  )}
                   {isAdmin && (
                     <Button onClick={() => { setFormType('individual'); setView('create'); }} title="New Tournament" ariaLabel="New Tournament">
                       <Plus size={18} />
@@ -1191,7 +1287,7 @@ export default function App() {
                         </div>
                         <div className="flex items-start justify-between gap-3 mb-2">
                           <h3 className="text-xl font-bold group-hover:text-emerald-600 transition-colors">{t.name}</h3>
-                          <div className="w-12 h-12 rounded-md border border-black/10 bg-white p-1.5 flex items-center justify-center shrink-0">
+                          <div className="w-[58px] h-[58px] rounded-md border border-black/10 bg-white p-1.5 flex items-center justify-center shrink-0">
                             <img
                               src={t.logo || '/logo.png'}
                               alt={t.name}
@@ -1242,7 +1338,7 @@ export default function App() {
                                     e.stopPropagation();
                                     openSponsorDetails(sponsor);
                                   }}
-                                  className="w-10 h-10 rounded-md border border-black/10 bg-white p-1.5 hover:border-emerald-300 transition-colors"
+                                  className="w-[60px] h-[60px] rounded-md border border-black/10 bg-white p-1.5 hover:border-emerald-300 transition-colors"
                                   title={sponsor.name}
                                   aria-label={`Open sponsor details: ${sponsor.name}`}
                                 >
@@ -3994,7 +4090,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
   for (const s of scores) {
     scoreMap.set(`${s.participant_id}-${s.game_number}`, s.score);
   }
-  for (const [key, rawValue] of Object.entries(draftScores)) {
+  for (const [key, rawValue] of Object.entries(draftScores as Record<string, string>)) {
     const parsed = Number.parseInt(rawValue, 10);
     if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 300) {
       scoreMap.set(key, parsed);
@@ -4189,7 +4285,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
 
   const handleSaveScores = async () => {
     try {
-      const pending = Object.entries(draftScores);
+      const pending = Object.entries(draftScores as Record<string, string>);
       for (const [key, rawValue] of pending) {
         const [participantId, gameNumber] = key.split('-').map((part) => Number.parseInt(part, 10));
         if (!Number.isFinite(participantId) || !Number.isFinite(gameNumber)) continue;
