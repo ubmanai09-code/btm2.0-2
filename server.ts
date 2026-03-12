@@ -1263,6 +1263,59 @@ async function startServer() {
     }
   });
 
+  app.put("/api/participants/:id/team-order/swap", requirePermission('participants:manage', (req) => {
+    const row = participantTournamentStmt.get(req.params.id) as any;
+    return row ? String(row.tournament_id) : null;
+  }), (req, res) => {
+    try {
+      const withParticipantId = Number.parseInt(req.body?.with_participant_id, 10);
+      if (!Number.isFinite(withParticipantId) || withParticipantId <= 0) {
+        return res.status(400).json({ error: 'Invalid swap participant id' });
+      }
+
+      const participantId = Number.parseInt(req.params.id, 10);
+      if (!Number.isFinite(participantId) || participantId <= 0) {
+        return res.status(400).json({ error: 'Invalid participant id' });
+      }
+
+      const current = db.prepare("SELECT id, team_id FROM participants WHERE id = ?").get(participantId) as any;
+      const target = db.prepare("SELECT id, team_id FROM participants WHERE id = ?").get(withParticipantId) as any;
+      if (!current || !target) {
+        return res.status(404).json({ error: 'Participant not found' });
+      }
+      if (!current.team_id || !target.team_id || current.team_id !== target.team_id) {
+        return res.status(400).json({ error: 'Participants must belong to the same team' });
+      }
+
+      const swapOrder = db.transaction((teamId: number, aId: number, bId: number) => {
+        const members = db.prepare(`
+          SELECT id
+          FROM participants
+          WHERE team_id = ?
+          ORDER BY CASE WHEN team_order IS NULL OR team_order <= 0 THEN 999999 ELSE team_order END, id
+        `).all(teamId) as any[];
+
+        const ids = members.map((m) => Number(m.id));
+        const idxA = ids.indexOf(aId);
+        const idxB = ids.indexOf(bId);
+        if (idxA === -1 || idxB === -1) return;
+
+        [ids[idxA], ids[idxB]] = [ids[idxB], ids[idxA]];
+
+        const update = db.prepare("UPDATE participants SET team_order = ? WHERE id = ?");
+        ids.forEach((id, index) => {
+          update.run(index + 1, id);
+        });
+      });
+
+      swapOrder(current.team_id, participantId, withParticipantId);
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('Error swapping participant team order:', err);
+      res.status(500).json({ error: err.message || 'Failed to swap participant team order' });
+    }
+  });
+
   app.delete("/api/participants/:id", requirePermission('participants:manage', (req) => {
     const row = participantTournamentStmt.get(req.params.id) as any;
     return row ? String(row.tournament_id) : null;
@@ -1412,6 +1465,40 @@ async function startServer() {
       WHERE id = ?
     `).run(lane_number, shift_number, req.params.id);
     res.json({ success: true });
+  });
+
+  app.put("/api/lanes/:id/swap", requirePermission('lanes:manage'), (req, res) => {
+    try {
+      const sourceId = Number.parseInt(req.params.id, 10);
+      const targetId = Number.parseInt(req.body?.with_lane_assignment_id, 10);
+      if (!Number.isFinite(sourceId) || sourceId <= 0 || !Number.isFinite(targetId) || targetId <= 0) {
+        return res.status(400).json({ error: 'Invalid lane assignment ids' });
+      }
+      if (sourceId === targetId) {
+        return res.json({ success: true });
+      }
+
+      const source = db.prepare("SELECT id, tournament_id, lane_number, shift_number FROM lane_assignments WHERE id = ?").get(sourceId) as any;
+      const target = db.prepare("SELECT id, tournament_id, lane_number, shift_number FROM lane_assignments WHERE id = ?").get(targetId) as any;
+      if (!source || !target) {
+        return res.status(404).json({ error: 'Lane assignment not found' });
+      }
+      if (source.tournament_id !== target.tournament_id) {
+        return res.status(400).json({ error: 'Lane assignments must belong to the same tournament' });
+      }
+
+      const swapAssignments = db.transaction((a: any, b: any) => {
+        const update = db.prepare("UPDATE lane_assignments SET lane_number = ?, shift_number = ? WHERE id = ?");
+        update.run(b.lane_number, b.shift_number, a.id);
+        update.run(a.lane_number, a.shift_number, b.id);
+      });
+
+      swapAssignments(source, target);
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('Error swapping lane assignments:', err);
+      res.status(500).json({ error: err.message || 'Failed to swap lane assignments' });
+    }
   });
 
   app.delete("/api/lanes/:id", requirePermission('lanes:manage'), (req, res) => {

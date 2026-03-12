@@ -3141,7 +3141,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 </div>
               </div>
             </div>
-            <table ref={playersTableRef} className="w-full text-left border-collapse">
+            <div className="overflow-x-auto">
+            <table ref={playersTableRef} className="w-full min-w-[880px] text-left border-collapse">
               <thead className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
                 <tr className="text-left">
                   <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 w-12">#</th>
@@ -3226,6 +3227,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 )}
               </tbody>
             </table>
+            </div>
           </Card>
         </div>
 
@@ -4336,7 +4338,6 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
   };
 
   const teamMemberPositionMap = new Map<number, number>();
-  const teamMemberCountMap = new Map<number, number>();
   if (tournament.type === 'team') {
     const teamMembers = new Map<number, Participant[]>();
     for (const participant of participants) {
@@ -4352,7 +4353,6 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
         if (orderA !== orderB) return orderA - orderB;
         return a.id - b.id;
       });
-      teamMemberCountMap.set(teamId, members.length);
       members.forEach((member, index) => {
         teamMemberPositionMap.set(member.id, index + 1);
       });
@@ -4423,19 +4423,81 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
       return `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`);
     });
 
+  const teamVisiblePositionMap = new Map<number, { index: number; count: number }>();
+  if (tournament.type === 'team') {
+    const visibleByTeam = new Map<number, Participant[]>();
+    for (const participant of scoringParticipants) {
+      if (participant.team_id === null) continue;
+      const members = visibleByTeam.get(participant.team_id) || [];
+      members.push(participant);
+      visibleByTeam.set(participant.team_id, members);
+    }
+
+    for (const members of visibleByTeam.values()) {
+      const sortedMembers = [...members].sort((a, b) => {
+        const posA = teamMemberPositionMap.get(a.id) || Number.MAX_SAFE_INTEGER;
+        const posB = teamMemberPositionMap.get(b.id) || Number.MAX_SAFE_INTEGER;
+        if (posA !== posB) return posA - posB;
+        return a.id - b.id;
+      });
+      const count = sortedMembers.length;
+      sortedMembers.forEach((member, index) => {
+        teamVisiblePositionMap.set(member.id, { index, count });
+      });
+    }
+  }
+
   const handleSwapTeamPosition = async (participant: Participant, direction: 'up' | 'down') => {
     if (tournament.type !== 'team' || participant.team_id === null) return;
-    const currentPosition = teamMemberPositionMap.get(participant.id) || 1;
-    const memberCount = teamMemberCountMap.get(participant.team_id) || 1;
-    const nextPosition = direction === 'up' ? currentPosition - 1 : currentPosition + 1;
-    if (nextPosition < 1 || nextPosition > memberCount) return;
+    const teamVisibleMembers = scoringParticipants
+      .filter((p) => p.team_id === participant.team_id)
+      .sort((a, b) => {
+        const posA = teamMemberPositionMap.get(a.id) || Number.MAX_SAFE_INTEGER;
+        const posB = teamMemberPositionMap.get(b.id) || Number.MAX_SAFE_INTEGER;
+        if (posA !== posB) return posA - posB;
+        return a.id - b.id;
+      });
+
+    const currentIndex = teamVisibleMembers.findIndex((p) => p.id === participant.id);
+    if (currentIndex === -1) return;
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= teamVisibleMembers.length) return;
+
+    const swapTarget = teamVisibleMembers[targetIndex];
+    if (!swapTarget) return;
 
     try {
-      await api.updateParticipantTeamOrder(participant.id, nextPosition);
+      await api.swapParticipantTeamOrder(participant.id, swapTarget.id);
       await loadData();
     } catch (err) {
       console.error('Failed to swap team position:', err);
       alert('Failed to swap players within team. Please try again.');
+    }
+  };
+
+  const handleSwapIndividualPosition = async (participant: Participant, direction: 'up' | 'down') => {
+    if (tournament.type !== 'individual') return;
+
+    const currentIndex = scoringParticipants.findIndex((p) => p.id === participant.id);
+    if (currentIndex === -1) return;
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= scoringParticipants.length) return;
+
+    const swapTarget = scoringParticipants[targetIndex];
+    if (!swapTarget) return;
+
+    const currentLaneAssignment = participantLaneMap.get(participant.id);
+    const targetLaneAssignment = participantLaneMap.get(swapTarget.id);
+    if (!currentLaneAssignment || !targetLaneAssignment) return;
+
+    try {
+      await api.swapLaneAssignments(currentLaneAssignment.id, targetLaneAssignment.id);
+      await loadData();
+    } catch (err) {
+      console.error('Failed to swap individual lane positions:', err);
+      alert('Failed to swap players in scoring table. Please try again.');
     }
   };
 
@@ -4803,7 +4865,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                           <button
                             type="button"
                             onClick={() => handleSwapTeamPosition(p, 'up')}
-                            disabled={!canManageScores || (teamMemberPositionMap.get(p.id) || 1) <= 1}
+                            disabled={!canManageScores || (teamVisiblePositionMap.get(p.id)?.index ?? 0) <= 0}
                             className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Swap with previous player"
                           >
@@ -4812,7 +4874,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                           <button
                             type="button"
                             onClick={() => handleSwapTeamPosition(p, 'down')}
-                            disabled={!canManageScores || (teamMemberPositionMap.get(p.id) || 1) >= (teamMemberCountMap.get(p.team_id || 0) || 1)}
+                            disabled={!canManageScores || (teamVisiblePositionMap.get(p.id)?.index ?? 0) >= ((teamVisiblePositionMap.get(p.id)?.count ?? 1) - 1)}
                             className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Swap with next player"
                           >
@@ -4820,9 +4882,29 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                           </button>
                         </div>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest bg-[#AFDDE5]/35 text-emerald-800 border border-[#AFDDE5]/70">
-                          {getLaneBadge(p)}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest bg-[#AFDDE5]/35 text-emerald-800 border border-[#AFDDE5]/70">
+                            {getLaneBadge(p)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleSwapIndividualPosition(p, 'up')}
+                            disabled={!canManageScores || index <= 0}
+                            className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Swap with previous player"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSwapIndividualPosition(p, 'down')}
+                            disabled={!canManageScores || index >= scoringParticipants.length - 1}
+                            className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Swap with next player"
+                          >
+                            ↓
+                          </button>
+                        </div>
                       )}
                     </td>
                     {gameNumbers.map(gameNumber => {
@@ -7858,7 +7940,8 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
               </Button>
             </div>
           </div>
-          <table ref={standingsTableRef} className="w-full text-left border-collapse">
+          <div className="overflow-x-auto">
+          <table ref={standingsTableRef} className="w-full min-w-[920px] text-left border-collapse">
             <thead>
               <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
                 <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-black/70 w-12">Rank</th>
@@ -7959,6 +8042,7 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
               )}
             </tbody>
           </table>
+          </div>
         </Card>
       </div>
     </div>

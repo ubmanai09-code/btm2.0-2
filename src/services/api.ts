@@ -314,6 +314,18 @@ const api = {
     }
     return res.json();
   },
+  async swapParticipantTeamOrder(id: number, withParticipantId: number): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/participants/${id}/team-order/swap`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ with_participant_id: withParticipantId }),
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to swap participant team order');
+    }
+    return res.json();
+  },
   async deleteParticipant(id: number): Promise<{ success: boolean }> {
     const res = await fetch(`/api/participants/${id}`, {
       method: 'DELETE',
@@ -408,6 +420,18 @@ const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
+    return res.json();
+  },
+  async swapLaneAssignments(id: number, withLaneAssignmentId: number): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/lanes/${id}/swap`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ with_lane_assignment_id: withLaneAssignmentId }),
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to swap lane assignments');
+    }
     return res.json();
   },
   async deleteLaneAssignment(id: number): Promise<{ success: boolean }> {
