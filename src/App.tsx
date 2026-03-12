@@ -3142,14 +3142,17 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               </div>
             </div>
             <div className="overflow-x-auto">
-            <table ref={playersTableRef} className="w-full min-w-[880px] text-left border-collapse">
+            <table
+              ref={playersTableRef}
+              className="w-max min-w-[760px] text-left border-collapse"
+            >
               <thead className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
                 <tr className="text-left">
-                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 w-12">#</th>
-                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">First Name</th>
-                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">Family Name</th>
-                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">Gender</th>
-                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">
+                  <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 w-10">#</th>
+                  <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">First Name</th>
+                  <th className="pl-2 pr-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">Family Name</th>
+                  <th className="pl-1 pr-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">Gender</th>
+                  <th className="pl-2 pr-0.5 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">
                     <button
                       type="button"
                       onClick={() => togglePlayerSort('club')}
@@ -3160,50 +3163,38 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       <span>{playerSort.key === 'club' ? (playerSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">
-                    <button
-                      type="button"
-                      onClick={() => togglePlayerSort('average')}
-                      className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-black/70 hover:text-emerald-700 transition-colors"
-                      title="Sort by average score"
-                    >
-                      Average score
-                      <span>{playerSort.key === 'average' ? (playerSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
-                    </button>
-                  </th>
                   {canManageParticipants && (
-                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right">Actions</th>
+                    <th className="pl-0.5 pr-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right">Actions</th>
                   )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/10">
                 {participants.length === 0 ? (
                   <tr>
-                    <td colSpan={canManageParticipants ? 7 : 6} className="px-4 py-8 text-center text-black/40 italic text-sm">
+                    <td colSpan={canManageParticipants ? 6 : 5} className="px-4 py-8 text-center text-black/40 italic text-sm">
                       No participants registered yet.
                     </td>
                   </tr>
                 ) : filteredParticipants.length === 0 ? (
                   <tr>
-                    <td colSpan={canManageParticipants ? 7 : 6} className="px-4 py-8 text-center text-black/40 italic text-sm">
+                    <td colSpan={canManageParticipants ? 6 : 5} className="px-4 py-8 text-center text-black/40 italic text-sm">
                       No players match your search.
                     </td>
                   </tr>
                 ) : (
                   filteredParticipants.map((p, index) => (
                     <tr key={p.id} className={`${participantIssues.has(p.id) ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-[#AFDDE5]/20'} transition-colors`}>
-                      <td className={`px-3 py-2 font-mono text-[10px] ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{index + 1}</td>
-                      <td className={`px-3 py-2 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>
+                      <td className={`px-2 py-1.5 font-mono text-[10px] ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{index + 1}</td>
+                      <td className={`px-2 py-1.5 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>
                         <span className="inline-flex items-center gap-1">
                           {renderNameWithFemaleSpotAfter(p, { includeLastName: false })}
                         </span>
                       </td>
-                      <td className={`px-3 py-2 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>{p.last_name || '-'}</td>
-                      <td className={`px-3 py-2 text-[10px] uppercase ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{(p.gender || '').toLowerCase().startsWith('f') ? 'F' : (p.gender || '').toLowerCase().startsWith('m') ? 'M' : '-'}</td>
-                      <td className={`px-3 py-2 text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{p.club || '-'}</td>
-                      <td className={`px-3 py-2 font-mono text-xs ${(p.average ?? 0) > 300 ? 'text-red-700 font-semibold' : ''}`}>{p.average && p.average > 0 ? p.average : ''}</td>
+                      <td className={`pl-2 pr-1 py-1.5 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>{p.last_name || '-'}</td>
+                      <td className={`pl-1 pr-2 py-1.5 text-[10px] uppercase text-center ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{(p.gender || '').toLowerCase().startsWith('f') ? 'F' : (p.gender || '').toLowerCase().startsWith('m') ? 'M' : '-'}</td>
+                      <td className={`pl-2 pr-0.5 py-1.5 text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`} title={p.club || ''}>{p.club || '-'}</td>
                       {canManageParticipants && (
-                        <td className="px-3 py-2 text-right">
+                        <td className="pl-0.5 pr-2 py-1.5 text-right">
                           <div className="flex justify-end gap-1.5" title={participantIssues.has(p.id) ? participantIssues.get(p.id)?.join(' • ') : undefined}>
                             <button 
                               onClick={() => { setEditingPlayer(p); setShowAddPlayer(true); }}
