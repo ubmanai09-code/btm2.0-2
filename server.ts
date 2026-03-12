@@ -11,14 +11,52 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const copyIfExists = (fromPath: string, toPath: string) => {
+  if (!fs.existsSync(fromPath)) return;
+  fs.mkdirSync(path.dirname(toPath), { recursive: true });
+  fs.copyFileSync(fromPath, toPath);
+};
+
+const resolveDbPath = (): string => {
+  const configuredDbPath = (process.env.BTM_DB_PATH || '').trim();
+  if (configuredDbPath) return path.resolve(configuredDbPath);
+
+  const legacyDataDbPath = path.resolve(process.cwd(), "data", "bowling.db");
+  const legacyRootDbPath = path.resolve(process.cwd(), "bowling.db");
+  const homeDir = process.env.HOME || process.env.USERPROFILE || process.cwd();
+  const persistentDbPath = path.resolve(homeDir, ".btm-data", "bowling.db");
+
+  if (process.env.NODE_ENV === 'production') {
+    if (fs.existsSync(persistentDbPath)) return persistentDbPath;
+
+    // One-time migration from old deploy-local paths to a persistent home path.
+    const legacyBase = fs.existsSync(legacyDataDbPath)
+      ? legacyDataDbPath
+      : (fs.existsSync(legacyRootDbPath) ? legacyRootDbPath : '');
+    if (legacyBase) {
+      copyIfExists(legacyBase, persistentDbPath);
+      copyIfExists(`${legacyBase}-wal`, `${persistentDbPath}-wal`);
+      copyIfExists(`${legacyBase}-shm`, `${persistentDbPath}-shm`);
+      return persistentDbPath;
+    }
+
+    return persistentDbPath;
+  }
+
+  return legacyDataDbPath;
+};
+
 const configuredDbPath = (process.env.BTM_DB_PATH || '').trim();
-const dbPath = configuredDbPath
-  ? path.resolve(configuredDbPath)
-  : path.resolve(process.cwd(), "data", "bowling.db");
+const dbPath = resolveDbPath();
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');
+
+if (!configuredDbPath) {
+  const mode = process.env.NODE_ENV === 'production' ? 'production' : 'development';
+  console.log(`BTM_DB_PATH not set; using default ${mode} database path: ${dbPath}`);
+}
 
 // Initialize Database
 function initDb() {
@@ -378,8 +416,24 @@ const resequenceTeamMembers = (teamId: number) => {
 async function startServer() {
   const app = express();
   const PORT = Number.parseInt(process.env.PORT || '3000', 10) || 3000;
+  const rootDir = path.resolve(__dirname, "..");
+  const clientDist = path.join(rootDir, "dist");
+  const publicSponsorsConfig = path.join(rootDir, "public", "sponsors-config.json");
+  const distSponsorsConfig = path.join(clientDist, "sponsors-config.json");
 
   app.use(express.json());
+
+  // Serve sponsor config directly from public so config-only updates do not require a rebuild.
+  app.get('/sponsors-config.json', (req, res) => {
+    const source = fs.existsSync(publicSponsorsConfig) ? publicSponsorsConfig : distSponsorsConfig;
+    if (!fs.existsSync(source)) {
+      return res.status(404).json({ error: 'sponsors-config.json not found' });
+    }
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.sendFile(source);
+  });
 
   type UserRole = 'admin' | 'moderator' | 'public';
   type ManageRole = 'admin' | 'moderator';
@@ -584,12 +638,8 @@ async function startServer() {
       db.prepare("UPDATE brackets SET winner_id = NULL WHERE id = ?").run(refreshedBronze.id);
     }
 
-    if (!refreshedBronze.winner_id) {
-      if (refreshedBronze.participant1_id && !refreshedBronze.participant2_id) {
-        db.prepare("UPDATE brackets SET winner_id = ? WHERE id = ?").run(refreshedBronze.participant1_id, refreshedBronze.id);
-      } else if (!refreshedBronze.participant1_id && refreshedBronze.participant2_id) {
-        db.prepare("UPDATE brackets SET winner_id = ? WHERE id = ?").run(refreshedBronze.participant2_id, refreshedBronze.id);
-      }
+    if (refreshedBronze.winner_id && (!refreshedBronze.participant1_id || !refreshedBronze.participant2_id)) {
+      db.prepare("UPDATE brackets SET winner_id = NULL WHERE id = ?").run(refreshedBronze.id);
     }
   };
 
@@ -660,14 +710,8 @@ async function startServer() {
           refreshedLinked.winner_id = null;
         }
 
-        if (!refreshedLinked.winner_id) {
-          if (refreshedLinked.participant1_id && !refreshedLinked.participant2_id) {
-            db.prepare('UPDATE brackets SET winner_id = ? WHERE id = ?').run(refreshedLinked.participant1_id, refreshedLinked.id);
-            advanceWinnerToNextRound(tournamentId, refreshedLinked.id, refreshedLinked.participant1_id);
-          } else if (!refreshedLinked.participant1_id && refreshedLinked.participant2_id) {
-            db.prepare('UPDATE brackets SET winner_id = ? WHERE id = ?').run(refreshedLinked.participant2_id, refreshedLinked.id);
-            advanceWinnerToNextRound(tournamentId, refreshedLinked.id, refreshedLinked.participant2_id);
-          }
+        if (refreshedLinked.winner_id && (!refreshedLinked.participant1_id || !refreshedLinked.participant2_id)) {
+          db.prepare('UPDATE brackets SET winner_id = NULL WHERE id = ?').run(refreshedLinked.id);
         }
       }
       return;
@@ -693,17 +737,115 @@ async function startServer() {
     `).get(nextMatch.id) as any;
 
     if (!refreshedNext) return;
-    if (refreshedNext.winner_id) return;
-
     const p1 = refreshedNext.participant1_id;
     const p2 = refreshedNext.participant2_id;
 
-    if (p1 && !p2) {
-      db.prepare("UPDATE brackets SET winner_id = ? WHERE id = ?").run(p1, refreshedNext.id);
-      advanceWinnerToNextRound(tournamentId, refreshedNext.id, p1);
-    } else if (!p1 && p2) {
-      db.prepare("UPDATE brackets SET winner_id = ? WHERE id = ?").run(p2, refreshedNext.id);
-      advanceWinnerToNextRound(tournamentId, refreshedNext.id, p2);
+    if (refreshedNext.winner_id && (
+      refreshedNext.winner_id !== p1 && refreshedNext.winner_id !== p2
+      || !p1
+      || !p2
+    )) {
+      db.prepare("UPDATE brackets SET winner_id = NULL WHERE id = ?").run(refreshedNext.id);
+      refreshedNext.winner_id = null;
+    }
+
+    if (refreshedNext.winner_id) return;
+  };
+
+  const sanitizeBracketStateForDisplay = (tournamentId: string, matchPlayType: string | null | undefined) => {
+    const matches = db.prepare(`
+      SELECT id, round, match_index, participant1_id, participant2_id, participant3_id, winner_id
+      FROM brackets
+      WHERE tournament_id = ?
+      ORDER BY round ASC, match_index ASC
+    `).all(tournamentId) as any[];
+    if (!matches.length) return;
+
+    const keyFor = (round: number, matchIndex: number) => `${round}:${matchIndex}`;
+    const byKey = new Map<string, any>();
+    matches.forEach((m) => byKey.set(keyFor(Number(m.round) || 0, Number(m.match_index) || 0), m));
+
+    const clearInvalidWinnerIfNeeded = (m: any) => {
+      const p1 = Number(m.participant1_id) || 0;
+      const p2 = Number(m.participant2_id) || 0;
+      const p3 = Number(m.participant3_id) || 0;
+      const winner = Number(m.winner_id) || 0;
+      if (!winner) return;
+
+      const allowed = [p1, p2, p3].filter((id) => id > 0);
+      const hasThirdSlot = p3 > 0;
+      const hasCompleteParticipants = hasThirdSlot ? (p1 > 0 && p2 > 0 && p3 > 0) : (p1 > 0 && p2 > 0);
+      const winnerAllowed = allowed.includes(winner);
+      if (winnerAllowed && hasCompleteParticipants) return;
+
+      db.prepare('UPDATE brackets SET winner_id = NULL WHERE id = ?').run(m.id);
+      m.winner_id = null;
+    };
+
+    // Always remove winners that cannot be valid with current slots.
+    matches.forEach((m) => clearInvalidWinnerIfNeeded(m));
+
+    // Rebuild downstream slots only for straightforward winner-progression bracket types.
+    const normalizedType = String(matchPlayType || '').toLowerCase();
+    const supportsSimpleProgression = normalizedType === 'playoff' || normalizedType === 'team_selection_playoff' || normalizedType === 'single_elimination';
+    if (!supportsSimpleProgression) return;
+
+    const maxRound = matches.reduce((max, m) => Math.max(max, Number(m.round) || 0), 0);
+    if (maxRound <= 1) return;
+
+    for (let round = 2; round <= maxRound; round += 1) {
+      const roundMatches = matches
+        .filter((m) => Number(m.round) === round)
+        .sort((a, b) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
+
+      for (const m of roundMatches) {
+        const matchIndex = Number(m.match_index) || 0;
+
+        // Playoff bronze match (final round, index 1) is fed by semifinal losers, not winners.
+        if (normalizedType === 'playoff' && round === maxRound && matchIndex === 1) {
+          clearInvalidWinnerIfNeeded(m);
+          continue;
+        }
+
+        const prevLeft = byKey.get(keyFor(round - 1, matchIndex * 2));
+        const prevRight = byKey.get(keyFor(round - 1, matchIndex * 2 + 1));
+        if (!prevLeft && !prevRight) continue;
+
+        const expectedP1 = Number(prevLeft?.winner_id) > 0 ? Number(prevLeft.winner_id) : null;
+        const expectedP2 = Number(prevRight?.winner_id) > 0 ? Number(prevRight.winner_id) : null;
+
+        const currentP1 = Number(m.participant1_id) > 0 ? Number(m.participant1_id) : null;
+        const currentP2 = Number(m.participant2_id) > 0 ? Number(m.participant2_id) : null;
+
+        if (currentP1 !== expectedP1 || currentP2 !== expectedP2) {
+          db.prepare(`
+            UPDATE brackets
+            SET participant1_id = ?, participant2_id = ?, winner_id = CASE
+              WHEN winner_id IN (?, ?) AND ? IS NOT NULL AND ? IS NOT NULL THEN winner_id
+              ELSE NULL
+            END
+            WHERE id = ?
+          `).run(
+            expectedP1,
+            expectedP2,
+            expectedP1,
+            expectedP2,
+            expectedP1,
+            expectedP2,
+            m.id
+          );
+
+          m.participant1_id = expectedP1;
+          m.participant2_id = expectedP2;
+          const currentWinner = Number(m.winner_id) || 0;
+          m.winner_id = (expectedP1 && expectedP2 && (currentWinner === expectedP1 || currentWinner === expectedP2))
+            ? currentWinner
+            : null;
+        }
+
+        clearInvalidWinnerIfNeeded(m);
+        byKey.set(keyFor(round, matchIndex), m);
+      }
     }
   };
 
@@ -1442,6 +1584,8 @@ const existing = db
         `).run(tournamentId);
       }
     }
+
+    sanitizeBracketStateForDisplay(tournamentId, tournament?.match_play_type);
 
     const rows = db.prepare(`
       SELECT b.*, 
@@ -2218,14 +2362,11 @@ const existing = db
     });
     app.use(vite.middlewares);
   } else {
-  const rootDir = path.resolve(__dirname, "..");
-  const clientDist = path.join(rootDir, "dist");
-
-  app.use(express.static(clientDist));
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(clientDist, "index.html"));
-  });
-}
+    app.use(express.static(clientDist));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(clientDist, "index.html"));
+    });
+  }
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);

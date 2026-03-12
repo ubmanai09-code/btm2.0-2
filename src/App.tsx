@@ -143,6 +143,25 @@ const getTournamentFormatLabel = (value: string) => {
   return value === 'Pre-Qualification' ? 'Total Pinfall' : value;
 };
 
+const getMatchPlayTypeLabel = (value: Tournament['match_play_type'] | string | undefined) => {
+  switch (value) {
+    case 'single_elimination':
+      return 'Single Elimination';
+    case 'double_elimination':
+      return 'Double Elimination';
+    case 'ladder':
+      return 'Ladder';
+    case 'stepladder':
+      return 'Stepladder';
+    case 'playoff':
+      return 'Playoff';
+    case 'team_selection_playoff':
+      return 'Team Selection Playoff';
+    default:
+      return 'Single Elimination';
+  }
+};
+
 type PublicLanguage = 'en' | 'mn';
 type BilingualTerm = { en: string; mn: string };
 const PUBLIC_LANGUAGE_STORAGE_KEY = 'btm_public_language';
@@ -194,12 +213,14 @@ const buildPrintDocument = ({
   pageSubtitle,
   contentHtml,
   extraStyles = '',
+  injectedHeadHtml = '',
 }: {
   tournament: Tournament;
   pageTitle: string;
   pageSubtitle: string;
   contentHtml: string;
   extraStyles?: string;
+  injectedHeadHtml?: string;
 }) => {
   const printedAt = new Date().toLocaleString();
   const logoSrc = typeof window !== 'undefined'
@@ -209,6 +230,7 @@ const buildPrintDocument = ({
     <html>
       <head>
         <title>${escapePrintHtml(pageTitle)}</title>
+        ${injectedHeadHtml}
         <style>
           body { font-family: Arial, sans-serif; padding: 20px; color: #111827; }
           .app-header { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; padding-bottom: 10px; border-bottom: 1px solid #d1d5db; }
@@ -621,6 +643,7 @@ export default function App() {
       date: formData.get('date') as string,
       location: formData.get('location') as string,
       format: formData.get('format') as string,
+      match_play_type: (formData.get('match_play_type') as string) || 'single_elimination',
       organizer: formData.get('organizer') as string,
       logo: formData.get('logo') as string,
       type: formType,
@@ -1189,14 +1212,18 @@ export default function App() {
                   <p className="text-black/40 mt-1">Manage and track your bowling events</p>
                 </div>
                 <div className="flex gap-3">
-                  <Button variant="outline" onClick={handleSaveData} title="Save" ariaLabel="Save">
-                    <Save size={16} />
-                    Save
-                  </Button>
-                  <Button variant="outline" onClick={handleExport} title="Export" ariaLabel="Export">
-                    <Upload size={16} />
-                    Export
-                  </Button>
+                  {currentRole !== 'public' && (
+                    <>
+                      <Button variant="outline" onClick={handleSaveData} title="Save" ariaLabel="Save">
+                        <Save size={16} />
+                        Save
+                      </Button>
+                      <Button variant="outline" onClick={handleExport} title="Export" ariaLabel="Export">
+                        <Upload size={16} />
+                        Export
+                      </Button>
+                    </>
+                  )}
                   {isAdmin && (
                     <>
                       <input
@@ -1242,19 +1269,23 @@ export default function App() {
                       <div>
                         <p className="text-[10px] uppercase tracking-widest font-bold text-emerald-700">BTM Powered by</p>
                         <p className="text-sm font-semibold text-black/85">{appGlobalSponsor.name || 'Unnamed sponsor'}</p>
-                        <p className="text-xs text-black/55">Visible across the app footer</p>
+                        {currentRole !== 'public' && (
+                          <p className="text-xs text-black/55">Visible across the app footer</p>
+                        )}
                       </div>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setShowGlobalSponsorModal(true)}
-                      className="px-3"
-                      title="Open Powered by"
-                      ariaLabel="Open Powered by"
-                    >
-                      <Eye size={14} />
-                    </Button>
+                    {currentRole !== 'public' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setShowGlobalSponsorModal(true)}
+                        className="px-3"
+                        title="Open Powered by"
+                        ariaLabel="Open Powered by"
+                      >
+                        <Eye size={14} />
+                      </Button>
+                    )}
                   </div>
                 </Card>
               )}
@@ -1326,6 +1357,10 @@ export default function App() {
                           <div className="flex items-center gap-1.5">
                             <ClipboardList size={13} className="text-black/45" />
                             <span className="truncate">{formatTournamentLabel(t.format)}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <GitBranch size={13} className="text-black/45" />
+                            <span className="truncate">{getMatchPlayTypeLabel(t.match_play_type)}</span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <User size={13} className="text-black/45" />
@@ -1407,7 +1442,7 @@ export default function App() {
                     <Input label="Tournament Logo URL" name="logo" placeholder="e.g. /logo.png" defaultValue={editingTournament?.logo} />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Select 
                       label="Format" 
                       name="format" 
@@ -1421,6 +1456,19 @@ export default function App() {
                         { value: 'Pre-Qualification & Bracket', label: 'Pre-Qualification & Bracket' },
                         { value: 'Standard', label: 'Standard' }
                       ]} 
+                    />
+                    <Select 
+                      label="Bracket Type"
+                      name="match_play_type"
+                      defaultValue={editingTournament?.match_play_type || 'single_elimination'}
+                      options={[
+                        { value: 'single_elimination', label: 'Single Elimination' },
+                        { value: 'double_elimination', label: 'Double Elimination' },
+                        { value: 'ladder', label: 'Ladder' },
+                        { value: 'stepladder', label: 'Stepladder' },
+                        { value: 'playoff', label: 'Playoff' },
+                        { value: 'team_selection_playoff', label: 'Team Selection Playoff' }
+                      ]}
                     />
                     <Select 
                       label="Type" 
@@ -2105,12 +2153,16 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                     {getTournamentFormatLabel(tournament.format)}
                   </span>
                   <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-black/10 bg-white/70">
+                    <GitBranch size={13} />
+                    {getMatchPlayTypeLabel(tournament.match_play_type)}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-black/10 bg-white/70">
                     <Target size={13} />
                     {tournament.games_count} {tPublic('public.tournament.games', 'Games')}
                   </span>
                   <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-black/10 bg-white/70">
                     <LayoutGrid size={13} />
-                    {tournament.players_per_lane} {tournament.type === 'team' ? tPublic('public.tournament.teams_per_lane', 'Teams') : tPublic('public.tournament.players_per_lane', 'Players')} / {tPublic('lanes.lane', 'Lane')}
+                    {tournament.players_per_lane} {tournament.type === 'team' ? tPublic('public.tournament.teams', 'Teams') : tPublic('public.tournament.players', 'Players')} / {tPublic('lanes.lane', 'Lane')}
                   </span>
                   {tournament.location && (
                     <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-black/10 bg-white/70">
@@ -4861,6 +4913,8 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     seed3: null,
   });
   const visualGridRef = useRef<HTMLDivElement | null>(null);
+  const cardsGridRef = useRef<HTMLDivElement | null>(null);
+  const printSectionRef = useRef<HTMLDivElement | null>(null);
   const visualCardRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const [visualConnectorPaths, setVisualConnectorPaths] = useState<Array<{ id: string; d: string }>>([]);
   const [visualConnectorSize, setVisualConnectorSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
@@ -5788,8 +5842,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   };
 
   const handlePrintBrackets = async () => {
-    const printSeeds = seeds.length > 0 ? seeds : (await loadSeeds() || []);
-    const printMatches = [...matches].sort((a: any, b: any) => (Number(a.round) - Number(b.round)) || (Number(a.match_index) - Number(b.match_index)));
+    const printRoot = printSectionRef.current;
+    if (!printRoot) {
+      alert('No bracket content is available to print yet.');
+      return;
+    }
 
     const printWindow = window.open('', '_blank', 'width=1100,height=800');
     if (!printWindow) {
@@ -5797,129 +5854,35 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       return;
     }
 
-    const seedRowsHtml = (printSeeds || []).map((seed: any) => `
-      <tr>
-        <td>#${escapePrintHtml(seed.seed)}</td>
-        <td>${escapePrintHtml(seed.name)}</td>
-        <td style="text-align:right;">${escapePrintHtml(seed.total_score || 0)}</td>
-      </tr>
-    `).join('');
+    const styleTags = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+      .map((node) => node.outerHTML)
+      .join('\n');
 
-    const matchRowsHtml = printMatches.map((m: any) => `
-      <tr>
-        <td>${escapePrintHtml(m.round)}</td>
-        <td>${escapePrintHtml((Number(m.match_index) || 0) + 1)}</td>
-        <td>${escapePrintHtml(m.participant1_seed ? `#${m.participant1_seed} ` : '')}${escapePrintHtml(getDisplayName('p1', m))}</td>
-        <td>${escapePrintHtml(m.participant2_seed ? `#${m.participant2_seed} ` : '')}${escapePrintHtml(getDisplayName('p2', m))}</td>
-        <td>${escapePrintHtml(m.participant3_seed ? `#${m.participant3_seed} ` : '')}${escapePrintHtml(getDisplayName('p3', m))}</td>
-        <td>${escapePrintHtml(getDisplayName('winner', m))}</td>
-      </tr>
-    `).join('');
-
-    const printRoundGroups = printMatches.reduce((acc: Record<number, any[]>, match: any) => {
-      const round = Number(match.round) || 0;
-      if (!acc[round]) acc[round] = [];
-      acc[round].push(match);
-      return acc;
-    }, {} as Record<number, any[]>);
-
-    const printOrderedRounds = Object.keys(printRoundGroups)
-      .map((r) => Number(r))
-      .filter((r) => Number.isFinite(r) && r > 0)
-      .sort((a, b) => a - b);
-
-    const visualRoundsHtml = printOrderedRounds.map((roundNumber) => {
-      const roundMatches = [...(printRoundGroups[roundNumber] || [])].sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
-      const roundCardsHtml = roundMatches.map((m: any) => {
-        const p3Name = getDisplayName('p3', m);
-        const showP3 = Boolean((m.p3_name || m.p3_team_name || m.participant3_id) && p3Name !== 'TBD');
-        return `
-          <div class="print-match-card">
-            <div class="print-match-head">M${escapePrintHtml((Number(m.match_index) || 0) + 1)}</div>
-            <div class="print-match-line">${escapePrintHtml(m.participant1_seed ? `#${m.participant1_seed} ` : '')}${escapePrintHtml(getDisplayName('p1', m))}</div>
-            <div class="print-match-line">${escapePrintHtml(m.participant2_seed ? `#${m.participant2_seed} ` : '')}${escapePrintHtml(getDisplayName('p2', m))}</div>
-            ${showP3 ? `<div class="print-match-line">${escapePrintHtml(m.participant3_seed ? `#${m.participant3_seed} ` : '')}${escapePrintHtml(p3Name)}</div>` : ''}
-            <div class="print-match-winner">Winner: ${escapePrintHtml(getDisplayName('winner', m))}</div>
-          </div>
-        `;
-      }).join('');
-
-      return `
-        <section class="print-round-col">
-          <h3>Round ${escapePrintHtml(roundNumber)}</h3>
-          ${roundCardsHtml || '<p style="color:#777;">No matches.</p>'}
-        </section>
-      `;
-    }).join('');
-
-    const tableContentHtml = `
-      <h2>Seeds List</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Seed</th>
-            <th>${tournament.type === 'team' ? 'Team' : 'Player'}</th>
-            <th style="text-align:right;">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${seedRowsHtml || '<tr><td colspan="3" style="text-align:center;color:#777;">No seeds available.</td></tr>'}
-        </tbody>
-      </table>
-
-      <h2>Bracket Results</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Round</th>
-            <th>Match</th>
-            <th>Participant 1</th>
-            <th>Participant 2</th>
-            <th>Participant 3</th>
-            <th>Winner</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${matchRowsHtml || '<tr><td colspan="6" style="text-align:center;color:#777;">No bracket matches available.</td></tr>'}
-        </tbody>
-      </table>
-    `;
-
-    const visualContentHtml = `
-      <h2>Seeds List</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Seed</th>
-            <th>${tournament.type === 'team' ? 'Team' : 'Player'}</th>
-            <th style="text-align:right;">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${seedRowsHtml || '<tr><td colspan="3" style="text-align:center;color:#777;">No seeds available.</td></tr>'}
-        </tbody>
-      </table>
-
-      <h2>Bracket Visual</h2>
-      <div class="print-visual-grid">
-        ${visualRoundsHtml || '<p style="color:#777;">No bracket matches available.</p>'}
-      </div>
-    `;
-
-    writeAndPrintDocument(printWindow, buildPrintDocument({
+    const selectedHtml = printRoot.outerHTML;
+    const viewLabel = bracketViewMode === 'visual' ? 'Visual' : 'Cards / Table';
+    const html = buildPrintDocument({
       tournament,
       pageTitle: `${tournament.name} - Brackets`,
-      pageSubtitle: bracketViewMode === 'visual' ? 'Tournament Brackets Visual Report' : 'Tournament Brackets Table Report',
-      contentHtml: bracketViewMode === 'visual' ? visualContentHtml : tableContentHtml,
+      pageSubtitle: `Bracket Overview • ${viewLabel}`,
+      contentHtml: `<div class="print-only-wrapper">${selectedHtml}</div>`,
+      injectedHeadHtml: styleTags,
       extraStyles: `
-        .print-visual-grid { display: grid; grid-template-columns: repeat(${Math.max(1, printOrderedRounds.length)}, minmax(180px, 1fr)); gap: 12px; align-items: start; }
-        .print-round-col h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #334155; }
-        .print-match-card { border: 1px solid #d1d5db; border-radius: 8px; padding: 8px; margin-bottom: 8px; background: #fff; }
-        .print-match-head { font-size: 11px; font-weight: 700; color: #6b7280; margin-bottom: 4px; }
-        .print-match-line { font-size: 12px; margin-bottom: 3px; }
-        .print-match-winner { font-size: 11px; font-weight: 700; color: #0f766e; margin-top: 4px; }
+        .print-only-wrapper { width: max-content; min-width: 100%; }
+        .print-only-wrapper button { display: none !important; }
+        .print-only-wrapper .print-keep-button { display: block !important; }
+        .print-only-wrapper input[type="file"] { display: none !important; }
+        .print-only-wrapper .seed-team-members { line-height: 1.35; overflow: visible !important; }
+        .print-only-wrapper .seed-team-members-short { display: inline; }
+        .print-only-wrapper .seed-team-members-full { display: none; }
+        @media print {
+          .print-only-wrapper .seed-team-members { -webkit-line-clamp: unset !important; white-space: normal !important; }
+          .print-only-wrapper .seed-team-members-short { display: none !important; }
+          .print-only-wrapper .seed-team-members-full { display: inline !important; }
+        }
       `,
-    }));
+    });
+
+    writeAndPrintDocument(printWindow, html);
   };
 
   const isTeamSelectionPlayoffMode = matchPlayType === 'team_selection_playoff';
@@ -6334,7 +6297,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     }));
   };
 
-  const tryAutoSetWinnerByScore = async (match: any, p1Raw?: string, p2Raw?: string, p3Raw?: string) => {
+  const tryAutoSetWinnerByScore = async (match: any, editedSlot?: 'p1' | 'p2' | 'p3', p1Raw?: string, p2Raw?: string, p3Raw?: string) => {
     const draft = matchScoreDrafts[match.id];
     const p1Score = Number.parseInt(String(p1Raw ?? draft?.p1 ?? ''), 10);
     const p2Score = Number.parseInt(String(p2Raw ?? draft?.p2 ?? ''), 10);
@@ -6348,7 +6311,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     if (isStepladderShootoutMatch) {
       const p3Score = Number.parseInt(String(p3Raw ?? draft?.p3 ?? ''), 10);
       if (!Number.isFinite(p1Score) || !Number.isFinite(p2Score) || !Number.isFinite(p3Score)) return;
-      if (p1Score === p2Score || p1Score === p3Score || p2Score === p3Score) return;
+      if (p1Score === p2Score || p1Score === p3Score || p2Score === p3Score) {
+        if (editedSlot) setScoreDraft(match.id, editedSlot, '');
+        alert('Same scores are not allowed in the same match.');
+        return;
+      }
       await api.setStepladderShootoutWinner(tournament.id, match.id, {
         score_p1: p1Score,
         score_p2: p2Score,
@@ -6359,7 +6326,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     }
 
     if (!Number.isFinite(p1Score) || !Number.isFinite(p2Score)) return;
-    if (p1Score === p2Score) return;
+    if (p1Score === p2Score) {
+      if (editedSlot) setScoreDraft(match.id, editedSlot, '');
+      alert('Same scores are not allowed in the same match.');
+      return;
+    }
     const winnerId = p1Score > p2Score ? Number(match.participant1_id) : Number(match.participant2_id);
     if (!Number.isFinite(winnerId) || winnerId <= 0) return;
     if (Number(match.winner_id) === winnerId) return;
@@ -6394,6 +6365,29 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       Number.isFinite(Number(m.participant3_id)) &&
       Number(m.participant3_id) > 0;
 
+    const parseEnteredScore = (value: unknown): number | null => {
+      const raw = String(value ?? '').trim();
+      if (!raw) return null;
+      const parsed = Number.parseInt(raw, 10);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const p1EnteredScore = parseEnteredScore(matchScoreDrafts[m.id]?.p1);
+    const p2EnteredScore = parseEnteredScore(matchScoreDrafts[m.id]?.p2);
+    const p3EnteredScore = parseEnteredScore(matchScoreDrafts[m.id]?.p3);
+    const hasRequiredScores = hasShootoutThird
+      ? p1EnteredScore !== null && p2EnteredScore !== null && p3EnteredScore !== null
+      : p1EnteredScore !== null && p2EnteredScore !== null;
+    const hasDistinctScores = hasShootoutThird
+      ? p1EnteredScore !== null && p2EnteredScore !== null && p3EnteredScore !== null && p1EnteredScore !== p2EnteredScore && p1EnteredScore !== p3EnteredScore && p2EnteredScore !== p3EnteredScore
+      : p1EnteredScore !== null && p2EnteredScore !== null && p1EnteredScore !== p2EnteredScore;
+    const winnerId = Number(m.winner_id);
+    const hasKnownWinner = Number.isFinite(winnerId) && winnerId > 0;
+    const allowWinnerHighlight = hasRequiredScores && hasDistinctScores && hasKnownWinner;
+    const isP1Winner = allowWinnerHighlight && winnerId === Number(m.participant1_id);
+    const isP2Winner = allowWinnerHighlight && winnerId === Number(m.participant2_id);
+    const isP3Winner = allowWinnerHighlight && winnerId === Number(m.participant3_id);
+
     const getSlotTeamMembers = (participantId: number | null | undefined) => {
       if (tournament.type !== 'team') return null;
       const numericId = Number(participantId || 0);
@@ -6425,13 +6419,23 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         <div className="space-y-2">
           <div
             className={`p-2 rounded-lg border transition-all flex items-center justify-between cursor-pointer ${
-              m.winner_id === m.participant1_id
+              isP1Winner
                 ? 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500/20'
                 : 'bg-black/[0.02] border-black/5 hover:border-black/10'
             }`}
             onClick={() => !lockCustomSeedEditing && selectedSeed ? handleAssignSeedToSlot(m.id, 'p1') : undefined}
-            onDoubleClick={() => canManageBrackets && !selectedSeed && m.participant1_id && handleSetWinner(m.id, m.participant1_id)}
-            title={lockCustomSeedEditing ? 'Seed editing is locked in Custom Matchups after generate' : (selectedSeed ? 'Click to place selected seed' : 'Double-click to set winner')}
+            onDoubleClick={() => canManageBrackets && !selectedSeed && hasRequiredScores && hasDistinctScores && m.participant1_id && handleSetWinner(m.id, m.participant1_id)}
+            title={
+              lockCustomSeedEditing
+                ? 'Seed editing is locked in Custom Matchups after generate'
+                : selectedSeed
+                  ? 'Click to place selected seed'
+                  : hasRequiredScores && hasDistinctScores
+                    ? 'Double-click to set winner'
+                    : hasRequiredScores
+                      ? 'Same scores are not allowed'
+                      : 'Enter scores first to set winner'
+            }
           >
             {isEditingP1 ? (
               <select
@@ -6457,7 +6461,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     setEditingNameSlot({ matchId: m.id, slot: 'p1' });
                   }
                 }}
-                className={`font-medium text-left ${m.winner_id === m.participant1_id ? 'text-emerald-900' : ''}`}
+                className={`font-medium text-left ${isP1Winner ? 'text-emerald-900' : ''}`}
                 title={canManageBrackets ? `Click to change ${tournament.type === 'team' ? 'team' : 'player'}` : undefined}
               >
                 <span className="inline-flex flex-col items-start gap-0.5 min-w-0 max-w-full align-middle">
@@ -6481,10 +6485,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 type="number"
                 min="0"
                 value={matchScoreDrafts[m.id]?.p1 ?? ''}
+                onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
                 onClick={(e) => e.stopPropagation()}
                 onDoubleClick={(e) => e.stopPropagation()}
                 onChange={(e) => setScoreDraft(m.id, 'p1', e.target.value)}
-                onBlur={(e) => tryAutoSetWinnerByScore(m, e.target.value, matchScoreDrafts[m.id]?.p2 ?? '', matchScoreDrafts[m.id]?.p3 ?? '')}
+                onBlur={(e) => tryAutoSetWinnerByScore(m, 'p1', e.target.value, matchScoreDrafts[m.id]?.p2 ?? '', matchScoreDrafts[m.id]?.p3 ?? '')}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     const target = e.currentTarget as HTMLInputElement;
@@ -6495,7 +6500,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 placeholder="0"
                 title="Participant 1 score"
               />
-              {m.winner_id === m.participant1_id && <Trophy size={14} className="text-emerald-600" />}
+              {isP1Winner && <Trophy size={14} className="text-emerald-600" />}
             </div>
           </div>
 
@@ -6503,13 +6508,23 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 
           <div
             className={`p-2 rounded-lg border transition-all flex items-center justify-between cursor-pointer ${
-              m.winner_id === m.participant2_id
+              isP2Winner
                 ? 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500/20'
                 : 'bg-black/[0.02] border-black/5 hover:border-black/10'
             }`}
             onClick={() => !lockCustomSeedEditing && selectedSeed ? handleAssignSeedToSlot(m.id, 'p2') : undefined}
-            onDoubleClick={() => canManageBrackets && !selectedSeed && m.participant2_id && handleSetWinner(m.id, m.participant2_id)}
-            title={lockCustomSeedEditing ? 'Seed editing is locked in Custom Matchups after generate' : (selectedSeed ? 'Click to place selected seed' : 'Double-click to set winner')}
+            onDoubleClick={() => canManageBrackets && !selectedSeed && hasRequiredScores && hasDistinctScores && m.participant2_id && handleSetWinner(m.id, m.participant2_id)}
+            title={
+              lockCustomSeedEditing
+                ? 'Seed editing is locked in Custom Matchups after generate'
+                : selectedSeed
+                  ? 'Click to place selected seed'
+                  : hasRequiredScores && hasDistinctScores
+                    ? 'Double-click to set winner'
+                    : hasRequiredScores
+                      ? 'Same scores are not allowed'
+                      : 'Enter scores first to set winner'
+            }
           >
             {isEditingP2 ? (
               <select
@@ -6535,7 +6550,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     setEditingNameSlot({ matchId: m.id, slot: 'p2' });
                   }
                 }}
-                className={`font-medium text-left ${m.winner_id === m.participant2_id ? 'text-emerald-900' : ''}`}
+                className={`font-medium text-left ${isP2Winner ? 'text-emerald-900' : ''}`}
                 title={canManageBrackets ? `Click to change ${tournament.type === 'team' ? 'team' : 'player'}` : undefined}
               >
                 <span className="inline-flex flex-col items-start gap-0.5 min-w-0 max-w-full align-middle">
@@ -6559,10 +6574,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 type="number"
                 min="0"
                 value={matchScoreDrafts[m.id]?.p2 ?? ''}
+                onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
                 onClick={(e) => e.stopPropagation()}
                 onDoubleClick={(e) => e.stopPropagation()}
                 onChange={(e) => setScoreDraft(m.id, 'p2', e.target.value)}
-                onBlur={(e) => tryAutoSetWinnerByScore(m, matchScoreDrafts[m.id]?.p1 ?? '', e.target.value, matchScoreDrafts[m.id]?.p3 ?? '')}
+                onBlur={(e) => tryAutoSetWinnerByScore(m, 'p2', matchScoreDrafts[m.id]?.p1 ?? '', e.target.value, matchScoreDrafts[m.id]?.p3 ?? '')}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     const target = e.currentTarget as HTMLInputElement;
@@ -6573,7 +6589,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 placeholder="0"
                 title="Participant 2 score"
               />
-              {m.winner_id === m.participant2_id && <Trophy size={14} className="text-emerald-600" />}
+              {isP2Winner && <Trophy size={14} className="text-emerald-600" />}
             </div>
           </div>
 
@@ -6582,14 +6598,14 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
               <div className="text-center text-[10px] font-bold text-black/20 uppercase tracking-widest">VS</div>
               <div
                 className={`p-2 rounded-lg border transition-all flex items-center justify-between ${
-                  m.winner_id === m.participant3_id
+                  isP3Winner
                     ? 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500/20'
                     : 'bg-black/[0.02] border-black/5'
                 }`}
-                onDoubleClick={() => canManageBrackets && m.participant3_id && handleSetWinner(m.id, m.participant3_id)}
-                title="Stepladder shootout contender"
+                onDoubleClick={() => canManageBrackets && hasRequiredScores && hasDistinctScores && m.participant3_id && handleSetWinner(m.id, m.participant3_id)}
+                title={hasRequiredScores ? (hasDistinctScores ? 'Stepladder shootout contender (double-click to set winner)' : 'Same scores are not allowed') : 'Enter all scores first to set shootout winner'}
               >
-                <span className={`font-medium text-left ${m.winner_id === m.participant3_id ? 'text-emerald-900' : ''}`}>
+                <span className={`font-medium text-left ${isP3Winner ? 'text-emerald-900' : ''}`}>
                   <span className="inline-flex flex-col items-start gap-0.5 min-w-0 max-w-full align-middle">
                     <span className="truncate">
                       {m.participant3_seed ? `#${m.participant3_seed} ` : ''}
@@ -6610,10 +6626,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     type="number"
                     min="0"
                     value={matchScoreDrafts[m.id]?.p3 ?? ''}
+                    onWheel={(e) => (e.currentTarget as HTMLInputElement).blur()}
                     onClick={(e) => e.stopPropagation()}
                     onDoubleClick={(e) => e.stopPropagation()}
                     onChange={(e) => setScoreDraft(m.id, 'p3', e.target.value)}
-                    onBlur={(e) => tryAutoSetWinnerByScore(m, matchScoreDrafts[m.id]?.p1 ?? '', matchScoreDrafts[m.id]?.p2 ?? '', e.target.value)}
+                    onBlur={(e) => tryAutoSetWinnerByScore(m, 'p3', matchScoreDrafts[m.id]?.p1 ?? '', matchScoreDrafts[m.id]?.p2 ?? '', e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         const target = e.currentTarget as HTMLInputElement;
@@ -6624,7 +6641,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     placeholder="0"
                     title="Participant 3 score"
                   />
-                  {m.winner_id === m.participant3_id && <Trophy size={14} className="text-emerald-600" />}
+                  {isP3Winner && <Trophy size={14} className="text-emerald-600" />}
                 </div>
               </div>
             </>
@@ -6635,7 +6652,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   };
 
   return (
-    <div className="space-y-4">
+    <div ref={printSectionRef} className="space-y-4">
       <div>
         <h3 className="text-lg font-bold">Bracket Setup</h3>
         <p className="text-xs text-black/50">1) Choose rules 2) Review top seeds 3) Generate.</p>
@@ -6851,7 +6868,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     type="button"
                     onClick={() => canManageBrackets && !lockCustomSeedEditing && setSelectedSeed(seed)}
                     disabled={!canManageBrackets || lockCustomSeedEditing}
-                    className={`rounded-md border px-2 py-1 text-xs text-left ${selectedSeed?.id === seed.id ? 'border-emerald-400 bg-emerald-50' : 'border-[#AFDDE5]/70 bg-[#AFDDE5]/12'}`}
+                    className={`print-keep-button rounded-md border px-2 py-1 text-xs text-left ${selectedSeed?.id === seed.id ? 'border-emerald-400 bg-emerald-50' : 'border-[#AFDDE5]/70 bg-[#AFDDE5]/12'}`}
                     title={lockCustomSeedEditing ? 'Seed editing is locked after generate in Custom Matchups mode' : 'Optional: select seed for manual slot replacement'}
                   >
                     {(() => {
@@ -6871,10 +6888,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                           </p>
                           {tournament.type === 'team' && (
                             <p
-                              className="text-[10px] text-black/55 leading-tight mt-0.5 line-clamp-1"
+                              className="seed-team-members text-[10px] text-black/55 leading-tight mt-0.5 line-clamp-1"
                               title={teamMembersFull.join(', ')}
                             >
-                              {teamMembersShort.join(', ') || 'No members'}
+                              <span className="seed-team-members-short">{teamMembersShort.join(', ') || 'No members'}</span>
+                              <span className="seed-team-members-full hidden">{teamMembersFull.join(', ') || 'No members'}</span>
                             </p>
                           )}
                         </>
@@ -7278,6 +7296,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         bracketViewMode === 'cards' ? (
           <div className="overflow-x-auto pb-2">
             <div
+              ref={cardsGridRef}
               className="grid gap-4 items-start min-w-[860px]"
               style={{ gridTemplateColumns: `repeat(${Math.max(1, orderedRoundNumbers.length)}, minmax(240px, 1fr))` }}
             >
@@ -7508,6 +7527,26 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
     .sort((a, b) => b.score - a.score)[0];
   const maleLeaderCellKey = maleLeader ? `${maleLeader.participant_id}-${maleLeader.game_number}` : '';
   const femaleLeaderCellKey = femaleLeader ? `${femaleLeader.participant_id}-${femaleLeader.game_number}` : '';
+
+  const getTopIdsByGender = (genderPrefix: 'm' | 'f', metric: 'total' | 'average') => {
+    const candidates = playerStandingsRows.filter((row) => {
+      const gender = (participantGenderMap.get(row.participant_id) || '').toLowerCase();
+      if (!gender.startsWith(genderPrefix)) return false;
+      return metric === 'total' ? row.total > 0 : row.average > 0;
+    });
+    if (candidates.length === 0) return new Set<number>();
+    const maxValue = Math.max(...candidates.map((row) => row[metric]));
+    return new Set<number>(
+      candidates
+        .filter((row) => row[metric] === maxValue)
+        .map((row) => row.participant_id)
+    );
+  };
+
+  const maleTopTotalIds = getTopIdsByGender('m', 'total');
+  const femaleTopTotalIds = getTopIdsByGender('f', 'total');
+  const maleTopAvgIds = getTopIdsByGender('m', 'average');
+  const femaleTopAvgIds = getTopIdsByGender('f', 'average');
 
   const totalPlayers = participants.length;
   const totalClubs = new Set(
@@ -7835,10 +7874,10 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                     Game {gameNumber}
                   </th>
                 ))}
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Total</th>
                 {standingsMode === 'players' && (
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">Avg</th>
                 )}
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Total</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-black/5">
@@ -7872,8 +7911,28 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                       </td>
                     );
                   })}
-                  <td className="px-6 py-4 text-center font-mono text-black/60">{s.average.toFixed(1)}</td>
-                  <td className="px-6 py-4 text-right font-bold">{s.total}</td>
+                  <td
+                    className={`px-6 py-4 text-right font-bold ${
+                      maleTopTotalIds.has(s.participant_id)
+                        ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'
+                        : femaleTopTotalIds.has(s.participant_id)
+                          ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+                          : ''
+                    }`}
+                  >
+                    {s.total}
+                  </td>
+                  <td
+                    className={`px-6 py-4 text-center font-mono text-black/60 ${
+                      maleTopAvgIds.has(s.participant_id)
+                        ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200 font-bold'
+                        : femaleTopAvgIds.has(s.participant_id)
+                          ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200 font-bold'
+                          : ''
+                    }`}
+                  >
+                    {s.average.toFixed(1)}
+                  </td>
                 </tr>
               ))}
               {standingsMode === 'teams' && teamStandingsRows.map((s, idx) => (
