@@ -1703,6 +1703,32 @@ const existing = db
     res.json({ success: true, deleted: info.changes || 0 });
   });
 
+  app.delete("/api/tournaments/:id/scores/participants", requirePermission('scores:manage', (req) => req.params.id), (req, res) => {
+    try {
+      const participantIdsRaw = Array.isArray(req.body?.participant_ids) ? req.body.participant_ids : [];
+      const participantIds = Array.from(new Set(
+        participantIdsRaw
+          .map((value: any) => Number.parseInt(String(value), 10))
+          .filter((id: number) => Number.isFinite(id) && id > 0)
+      ));
+
+      if (participantIds.length === 0) {
+        return res.json({ success: true, deleted: 0 });
+      }
+
+      const placeholders = participantIds.map(() => '?').join(',');
+      const info = db.prepare(`
+        DELETE FROM scores
+        WHERE tournament_id = ? AND participant_id IN (${placeholders})
+      `).run(req.params.id, ...participantIds);
+
+      res.json({ success: true, deleted: info.changes || 0 });
+    } catch (err: any) {
+      console.error('Error clearing participant scores:', err);
+      res.status(500).json({ error: err.message || 'Failed to clear participant scores' });
+    }
+  });
+
   // Standings
   app.get("/api/tournaments/:id/standings", (req, res) => {
     const tournament = db.prepare("SELECT type FROM tournaments WHERE id = ?").get(req.params.id) as any;

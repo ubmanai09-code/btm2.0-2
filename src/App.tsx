@@ -4631,6 +4631,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
 
   const handleExportScores = () => {
     const headers = [
+      'participant_id',
       'participant_name',
       'team_name',
       'lane_badge',
@@ -4644,6 +4645,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
       const gameValues = gameNumbers.map(gameNumber => scoreMap.get(`${p.id}-${gameNumber}`) ?? '');
       const { total, average } = getParticipantStats(p.id);
       return [
+        p.id,
         formatParticipantFullName(p),
         p.team_name || '',
         getLaneBadge(p),
@@ -4669,7 +4671,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     const inputEl = e.target;
     const file = inputEl.files?.[0];
     if (!file) return;
-    if (!confirm('Importing Scores will replace all existing scores for this tournament. Continue?')) {
+    if (!confirm('Importing Scores will replace scores only for players included in this file. Continue?')) {
       inputEl.value = '';
       return;
     }
@@ -4702,9 +4704,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
           }
         });
 
-        await api.clearScores(tournament.id);
-
-        const tasks: Promise<any>[] = [];
+        const resolvedRows: Array<{ participantId: number; columns: string[] }> = [];
         for (const line of lines.slice(1)) {
           const columns = line.split(',').map(c => c.trim());
 
@@ -4720,6 +4720,28 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
           }
 
           if (!Number.isFinite(participantId)) continue;
+
+          resolvedRows.push({ participantId, columns });
+        }
+
+        const participantIds = Array.from(new Set(resolvedRows.map((row) => row.participantId)));
+        if (participantIds.length === 0) {
+          alert('No valid participants found in scores file.');
+          return;
+        }
+
+        try {
+          await api.clearScoresForParticipants(tournament.id, participantIds);
+        } catch (clearErr) {
+          // Fallback: continue import and rely on addScore upsert semantics.
+          // This keeps shift import functional even if the clear-by-participants endpoint
+          // is unavailable on a running older server instance.
+          console.warn('Failed to clear participant scores before import, continuing with upsert.', clearErr);
+        }
+
+        const tasks: Promise<any>[] = [];
+        for (const row of resolvedRows) {
+          const { participantId, columns } = row;
 
           for (const gameNumber of gameNumbers) {
             const gameColumn = headers.indexOf(`game_${gameNumber}`);
@@ -4739,7 +4761,8 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
         await loadData();
       } catch (err) {
         console.error('Failed to import scores:', err);
-        alert('Failed to import scores. Please check file format.');
+        const message = err instanceof Error ? err.message : String(err || 'Unknown error');
+        alert(`Failed to import scores: ${message}`);
       } finally {
         if (importScoresInputRef.current) {
           importScoresInputRef.current.value = '';

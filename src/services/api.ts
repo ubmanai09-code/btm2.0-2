@@ -491,6 +491,18 @@ const api = {
     }
     return res.json();
   },
+  async clearScoresForParticipants(tournamentId: number, participantIds: number[]): Promise<{ success: boolean; deleted: number }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/scores/participants`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ participant_ids: participantIds }),
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to clear participant scores');
+    }
+    return res.json();
+  },
   async getStandings(tournamentId: number): Promise<Standing[]> {
     const res = await fetch(`/api/tournaments/${tournamentId}/standings`);
     return res.json();
