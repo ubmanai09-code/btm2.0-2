@@ -2852,10 +2852,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
           const teamIdByName = new Map(importedTeams.map((team) => [team.name.trim().toLowerCase(), team.id]));
 
           const playersByName = new Map<string, Participant>();
+          const playersById = new Map<number, Participant>();
           participants.forEach((participant) => {
             const key = `${(participant.first_name || '').trim().toLowerCase()}::${(participant.last_name || '').trim().toLowerCase()}`;
             if (!key || key === '::') return;
             if (!playersByName.has(key)) playersByName.set(key, participant);
+            playersById.set(participant.id, participant);
           });
 
           const splitMembers = (value: string) => {
@@ -2867,6 +2869,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
           let assignedCount = 0;
           let missingCount = 0;
+          const assignmentByParticipantId = new Map<number, number>();
 
           for (const row of dataRows) {
             const teamName = (row[teamNameIndex] || '').trim();
@@ -2894,16 +2897,37 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 continue;
               }
 
-              await api.updateParticipant(existing.id, {
-                first_name: existing.first_name,
-                last_name: existing.last_name,
-                gender: existing.gender || '',
-                club: existing.club || '',
-                average: existing.average || 0,
-                email: existing.email || '',
-                team_id: teamId,
-              });
-              assignedCount += 1;
+              assignmentByParticipantId.set(existing.id, teamId);
+            }
+          }
+
+          const assignments = Array.from(assignmentByParticipantId.entries()).map(([participant_id, team_id]) => ({
+            participant_id,
+            team_id,
+          }));
+          if (assignments.length > 0) {
+            try {
+              const result = await api.bulkAssignParticipantsToTeams(tournament.id, assignments);
+              assignedCount = Number(result?.updated) || assignments.length;
+            } catch (bulkErr) {
+              // Fallback for servers that do not yet expose the bulk team-assignment endpoint.
+              const fallbackTasks: Promise<any>[] = [];
+              for (const assignment of assignments) {
+                const existing = playersById.get(assignment.participant_id);
+                if (!existing) continue;
+                fallbackTasks.push(api.updateParticipant(existing.id, {
+                  first_name: existing.first_name,
+                  last_name: existing.last_name,
+                  gender: existing.gender || '',
+                  club: existing.club || '',
+                  average: existing.average || 0,
+                  email: existing.email || '',
+                  team_id: assignment.team_id,
+                }));
+              }
+              await Promise.all(fallbackTasks);
+              assignedCount = fallbackTasks.length;
+              console.warn('Bulk team assignment failed, used fallback participant updates.', bulkErr);
             }
           }
 
@@ -2915,7 +2939,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         await loadData();
       } catch (error) {
         console.error('Failed to import teams:', error);
-        alert('Failed to import teams. Please check file format.');
+        const message = error instanceof Error ? error.message : String(error || 'Unknown error');
+        alert(`Failed to import teams: ${message}`);
       } finally {
         inputEl.value = '';
       }

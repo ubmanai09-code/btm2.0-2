@@ -361,6 +361,21 @@ const api = {
     }
     return res.json();
   },
+  async bulkAssignParticipantsToTeams(
+    tournamentId: number,
+    assignments: Array<{ participant_id: number; team_id: number }>
+  ): Promise<{ success: boolean; updated: number }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/participants/team-assignments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignments }),
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to bulk assign participants to teams');
+    }
+    return res.json();
+  },
   async getTeams(tournamentId: number): Promise<Team[]> {
     const res = await fetch(`/api/tournaments/${tournamentId}/teams`);
     return res.json();

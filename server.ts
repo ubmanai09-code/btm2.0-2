@@ -1383,6 +1383,78 @@ async function startServer() {
     }
   });
 
+  app.post("/api/tournaments/:id/participants/team-assignments", requirePermission('participants:manage', (req) => req.params.id), (req, res) => {
+    try {
+      const tournamentId = req.params.id;
+      const input = Array.isArray(req.body?.assignments) ? req.body.assignments : [];
+      if (input.length === 0) {
+        return res.json({ success: true, updated: 0 });
+      }
+
+      const normalized = new Map<number, number>();
+      for (const item of input) {
+        const participantId = Number.parseInt(String(item?.participant_id), 10);
+        const teamId = Number.parseInt(String(item?.team_id), 10);
+        if (!Number.isFinite(participantId) || participantId <= 0) continue;
+        if (!Number.isFinite(teamId) || teamId <= 0) continue;
+        normalized.set(participantId, teamId);
+      }
+
+      if (normalized.size === 0) {
+        return res.json({ success: true, updated: 0 });
+      }
+
+      const participantIds = Array.from(normalized.keys());
+      const teamIds = Array.from(new Set(normalized.values()));
+      const participantPlaceholders = participantIds.map(() => '?').join(',');
+      const teamPlaceholders = teamIds.map(() => '?').join(',');
+
+      const participantRows = db.prepare(`
+        SELECT id, team_id
+        FROM participants
+        WHERE tournament_id = ? AND id IN (${participantPlaceholders})
+      `).all(tournamentId, ...participantIds) as Array<{ id: number; team_id: number | null }>;
+
+      const validTeamRows = db.prepare(`
+        SELECT id
+        FROM teams
+        WHERE tournament_id = ? AND active = 1 AND id IN (${teamPlaceholders})
+      `).all(tournamentId, ...teamIds) as Array<{ id: number }>;
+      const validTeams = new Set(validTeamRows.map((row) => Number(row.id)));
+
+      const participantsById = new Map(participantRows.map((row) => [Number(row.id), row]));
+      const updateStmt = db.prepare("UPDATE participants SET team_id = ?, team_order = 0 WHERE id = ? AND tournament_id = ?");
+
+      let updated = 0;
+      const transaction = db.transaction(() => {
+        const affectedTeams = new Set<number>();
+
+        for (const [participantId, nextTeamId] of normalized.entries()) {
+          const participant = participantsById.get(participantId);
+          if (!participant) continue;
+          if (!validTeams.has(nextTeamId)) continue;
+
+          const prevTeamId = Number(participant.team_id || 0);
+          updateStmt.run(nextTeamId, participantId, tournamentId);
+          updated += 1;
+
+          if (prevTeamId > 0) affectedTeams.add(prevTeamId);
+          affectedTeams.add(nextTeamId);
+        }
+
+        for (const teamId of affectedTeams) {
+          resequenceTeamMembers(teamId);
+        }
+      });
+
+      transaction();
+      res.json({ success: true, updated });
+    } catch (err: any) {
+      console.error('Error bulk assigning participants to teams:', err);
+      res.status(500).json({ error: err.message || 'Failed to bulk assign participants to teams' });
+    }
+  });
+
   // Teams
   app.get("/api/tournaments/:id/teams", (req, res) => {
     const rows = db.prepare("SELECT * FROM teams WHERE tournament_id = ? AND active = 1").all(req.params.id);
