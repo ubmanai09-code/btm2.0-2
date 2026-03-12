@@ -17,6 +17,24 @@ const copyIfExists = (fromPath: string, toPath: string) => {
   fs.copyFileSync(fromPath, toPath);
 };
 
+const copyDirMissingFiles = (fromDir: string, toDir: string) => {
+  if (!fs.existsSync(fromDir)) return;
+  const entries = fs.readdirSync(fromDir, { withFileTypes: true });
+  fs.mkdirSync(toDir, { recursive: true });
+
+  for (const entry of entries) {
+    const sourcePath = path.join(fromDir, entry.name);
+    const targetPath = path.join(toDir, entry.name);
+    if (entry.isDirectory()) {
+      copyDirMissingFiles(sourcePath, targetPath);
+      continue;
+    }
+    if (entry.isFile() && !fs.existsSync(targetPath)) {
+      fs.copyFileSync(sourcePath, targetPath);
+    }
+  }
+};
+
 const resolveDbPath = (): string => {
   const configuredDbPath = (process.env.BTM_DB_PATH || '').trim();
   if (configuredDbPath) return path.resolve(configuredDbPath);
@@ -418,10 +436,24 @@ async function startServer() {
   const PORT = Number.parseInt(process.env.PORT || '3000', 10) || 3000;
   const rootDir = path.resolve(__dirname, "..");
   const clientDist = path.join(rootDir, "dist");
+  const publicSponsorsDir = path.join(rootDir, "public", "sponsors");
+  const distSponsorsDir = path.join(clientDist, "sponsors");
   const publicSponsorsConfig = path.join(rootDir, "public", "sponsors-config.json");
   const distSponsorsConfig = path.join(clientDist, "sponsors-config.json");
+  const persistentDataDir = path.dirname(dbPath);
+  const persistentSponsorsDir = path.join(persistentDataDir, "sponsors");
+
+  fs.mkdirSync(persistentSponsorsDir, { recursive: true });
+  // Keep user-uploaded files in persistent storage and only copy missing packaged assets.
+  copyDirMissingFiles(publicSponsorsDir, persistentSponsorsDir);
+  copyDirMissingFiles(distSponsorsDir, persistentSponsorsDir);
 
   app.use(express.json());
+
+  // Persistent sponsor logos survive deployments; packaged assets remain as fallback.
+  app.use('/sponsors', express.static(persistentSponsorsDir));
+  app.use('/sponsors', express.static(publicSponsorsDir));
+  app.use('/sponsors', express.static(distSponsorsDir));
 
   // Serve sponsor config directly from public so config-only updates do not require a rebuild.
   app.get('/sponsors-config.json', (req, res) => {
