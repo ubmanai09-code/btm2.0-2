@@ -117,6 +117,7 @@ function initDb() {
       first_name TEXT NOT NULL DEFAULT '',
       last_name TEXT NOT NULL DEFAULT '',
       gender TEXT,
+      hands TEXT NOT NULL DEFAULT '1H',
       club TEXT,
       average INTEGER DEFAULT 0,
       email TEXT,
@@ -297,6 +298,7 @@ function initDb() {
           first_name TEXT NOT NULL DEFAULT '',
           last_name TEXT NOT NULL DEFAULT '',
           gender TEXT,
+          hands TEXT NOT NULL DEFAULT '1H',
           club TEXT,
           average INTEGER DEFAULT 0,
           email TEXT,
@@ -309,8 +311,8 @@ function initDb() {
 
       const players = db.prepare("SELECT * FROM participants").all();
       const insert = db.prepare(`
-        INSERT INTO participants_new (id, tournament_id, first_name, last_name, gender, club, average, email, team_id, team_order)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO participants_new (id, tournament_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       db.transaction(() => {
@@ -322,7 +324,21 @@ function initDb() {
             first = parts[0] || 'Unknown';
             last = parts.slice(1).join(' ') || 'Player';
           }
-          insert.run(p.id, p.tournament_id, first, last, p.gender || null, p.club || null, p.average || 0, p.email || null, p.team_id || null, p.team_order || 0);
+          const rawHands = String(p.hands || '').trim().toLowerCase();
+          const hands = rawHands.startsWith('2') ? '2H' : '1H';
+          insert.run(
+            p.id,
+            p.tournament_id,
+            first,
+            last,
+            p.gender || null,
+            hands,
+            p.club || null,
+            p.average || 0,
+            p.email || null,
+            p.team_id || null,
+            p.team_order || 0
+          );
         });
       })();
 
@@ -334,6 +350,7 @@ function initDb() {
       { name: 'first_name', type: 'TEXT DEFAULT \'\'' },
       { name: 'last_name', type: 'TEXT DEFAULT \'\'' },
       { name: 'gender', type: 'TEXT' },
+      { name: 'hands', type: "TEXT NOT NULL DEFAULT '1H'" },
       { name: 'club', type: 'TEXT' },
       { name: 'average', type: 'INTEGER DEFAULT 0' },
       { name: 'team_order', type: 'INTEGER DEFAULT 0' }
@@ -396,11 +413,14 @@ const normalizeParticipant = (raw: any) => {
   const parsedAverage = Number.parseInt(raw?.average, 10);
   const parsedTeamId = Number.parseInt(raw?.team_id, 10);
   const parsedTeamOrder = Number.parseInt(raw?.team_order, 10);
+  const handsRaw = (raw?.hands ?? '').toString().trim().toLowerCase();
+  const hands = handsRaw.startsWith('2') ? '2H' : '1H';
 
   return {
     first_name: firstName,
     last_name: lastName,
     gender: (raw?.gender ?? '').toString().trim() || null,
+    hands,
     club: (raw?.club ?? '').toString().trim() || null,
     average: Number.isFinite(parsedAverage) ? parsedAverage : 0,
     email: (raw?.email ?? '').toString().trim() || null,
@@ -1182,13 +1202,13 @@ async function startServer() {
 
   app.post("/api/tournaments/:id/participants", requirePermission('participants:manage', (req) => req.params.id), (req, res) => {
     try {
-      const { first_name, last_name, gender, club, average, email, team_id, team_order } = normalizeParticipant(req.body);
+      const { first_name, last_name, gender, hands, club, average, email, team_id, team_order } = normalizeParticipant(req.body);
       const assignedTeamOrder = team_id ? (team_order || getNextTeamOrder(req.params.id, team_id)) : 0;
-      console.log('Adding participant:', { first_name, last_name, gender, club, average, email, team_id, team_order: assignedTeamOrder });
+      console.log('Adding participant:', { first_name, last_name, gender, hands, club, average, email, team_id, team_order: assignedTeamOrder });
       const info = db.prepare(`
-        INSERT INTO participants (tournament_id, first_name, last_name, gender, club, average, email, team_id, team_order) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(req.params.id, first_name, last_name, gender, club, average || 0, email, team_id || null, assignedTeamOrder);
+        INSERT INTO participants (tournament_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(req.params.id, first_name, last_name, gender, hands, club, average || 0, email, team_id || null, assignedTeamOrder);
       if (team_id) resequenceTeamMembers(team_id);
       res.json({ id: info.lastInsertRowid });
     } catch (err: any) {
@@ -1205,13 +1225,13 @@ async function startServer() {
     if (!existing) {
       return res.status(404).json({ error: 'Participant not found' });
     }
-    const { first_name, last_name, gender, club, average, email, team_id, team_order } = normalizeParticipant(req.body);
+    const { first_name, last_name, gender, hands, club, average, email, team_id, team_order } = normalizeParticipant(req.body);
     const assignedTeamOrder = team_id ? (team_order || getNextTeamOrder(existing.tournament_id.toString(), team_id)) : 0;
     db.prepare(`
       UPDATE participants SET 
-        first_name = ?, last_name = ?, gender = ?, club = ?, average = ?, email = ?, team_id = ?, team_order = ?
+        first_name = ?, last_name = ?, gender = ?, hands = ?, club = ?, average = ?, email = ?, team_id = ?, team_order = ?
       WHERE id = ?
-    `).run(first_name, last_name, gender, club, average || 0, email, team_id || null, assignedTeamOrder, req.params.id);
+    `).run(first_name, last_name, gender, hands, club, average || 0, email, team_id || null, assignedTeamOrder, req.params.id);
     if (existing?.team_id && existing.team_id !== team_id) {
       resequenceTeamMembers(existing.team_id);
     }
@@ -1344,8 +1364,8 @@ async function startServer() {
 
       const clearExisting = db.prepare("DELETE FROM participants WHERE tournament_id = ?");
       const insert = db.prepare(`
-        INSERT INTO participants (tournament_id, first_name, last_name, gender, club, average, email, team_id, team_order) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO participants (tournament_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       const transaction = db.transaction((players: ReturnType<typeof normalizeParticipant>[]) => {
@@ -1362,6 +1382,7 @@ async function startServer() {
             p.first_name,
             p.last_name,
             p.gender,
+            p.hands,
             p.club,
             p.average,
             p.email,

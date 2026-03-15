@@ -2363,6 +2363,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const playersTableRef = useRef<HTMLTableElement | null>(null);
   const teamsTableRef = useRef<HTMLTableElement | null>(null);
 
+  const normalizeHandsStyle = (value: string | null | undefined) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    return normalized.startsWith('2') ? '2H' : '1H';
+  };
+
   useEffect(() => {
     loadData();
   }, [tournament.id]);
@@ -2390,10 +2395,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     const normalizedGender = genderInput === 'f' ? 'female' : genderInput === 'm' ? 'male' : '';
     const averageRaw = (formData.get('average') as string || '').trim();
     const parsedAverage = averageRaw === '' ? 0 : (parseInt(averageRaw, 10) || 0);
+    const normalizedHands = normalizeHandsStyle(formData.get('hands') as string || editingPlayer?.hands || '1H');
     const data = {
       first_name: formData.get('first_name') as string,
       last_name: formData.get('last_name') as string,
       gender: normalizedGender,
+      hands: normalizedHands,
       club: formData.get('club') as string,
       average: parsedAverage,
       email: formData.get('email') as string,
@@ -2429,11 +2436,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   };
 
   const handleExportCSV = () => {
-    const headers = ['First Name', 'Last Name', 'Gender', 'Club', 'Average', 'Email'];
+    const headers = ['First Name', 'Last Name', 'Gender', 'Hands', 'Club', 'Average', 'Email'];
     const rows = participants.map(p => [
       p.first_name,
       p.last_name,
       p.gender,
+      normalizeHandsStyle(p.hands),
       p.club,
       p.average,
       p.email
@@ -2468,16 +2476,26 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     reader.onload = async (event) => {
       const text = event.target?.result as string;
       const lines = text.split('\n');
-      const dataLines = lines.slice(1); // Skip header
+      const parsedHeaders = (lines[0] || '').split(',').map((s) => s.trim().toLowerCase());
+      const hasHeader = parsedHeaders.includes('first name') || parsedHeaders.includes('last name');
+      const firstNameIndex = hasHeader ? parsedHeaders.indexOf('first name') : 0;
+      const lastNameIndex = hasHeader ? parsedHeaders.indexOf('last name') : 1;
+      const genderIndex = hasHeader ? parsedHeaders.indexOf('gender') : 2;
+      const handsIndex = hasHeader ? parsedHeaders.indexOf('hands') : -1;
+      const clubIndex = hasHeader ? parsedHeaders.indexOf('club') : 3;
+      const averageIndex = hasHeader ? parsedHeaders.indexOf('average') : 4;
+      const emailIndex = hasHeader ? parsedHeaders.indexOf('email') : 5;
+      const dataLines = hasHeader ? lines.slice(1) : lines;
       
       const newParticipants = dataLines.filter(line => line.trim()).map(line => {
         const columns = line.split(',').map(s => s.trim());
-        let first_name = columns[0] || '';
-        let last_name = columns[1] || '';
-        const gender = columns[2] || '';
-        const club = columns[3] || '';
-        const average = columns[4] || '';
-        const email = columns[5] || '';
+        let first_name = (firstNameIndex >= 0 ? columns[firstNameIndex] : columns[0]) || '';
+        let last_name = (lastNameIndex >= 0 ? columns[lastNameIndex] : columns[1]) || '';
+        const gender = (genderIndex >= 0 ? columns[genderIndex] : columns[2]) || '';
+        const hands = handsIndex >= 0 ? (columns[handsIndex] || '') : '';
+        const club = (clubIndex >= 0 ? columns[clubIndex] : columns[3]) || '';
+        const average = (averageIndex >= 0 ? columns[averageIndex] : columns[4]) || '';
+        const email = (emailIndex >= 0 ? columns[emailIndex] : columns[5]) || '';
 
         if (first_name && !last_name) {
           const parts = first_name.split(/\s+/).filter(Boolean);
@@ -2501,6 +2519,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
           first_name,
           last_name,
           gender,
+          hands: normalizeHandsStyle(hands),
           club,
           average: parseInt(average) || 0,
           email
@@ -2509,6 +2528,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         first_name: string;
         last_name: string;
         gender: string;
+        hands: string;
         club: string;
         average: number;
         email: string;
@@ -2548,12 +2568,14 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     const playerRowsHtml = sortedParticipants.map((participant, index) => {
       const genderValue = (participant.gender || '').toLowerCase();
       const gender = genderValue.startsWith('f') ? 'F' : genderValue.startsWith('m') ? 'M' : '-';
+      const hands = normalizeHandsStyle(participant.hands);
       return `
         <tr>
           <td>${index + 1}</td>
           <td>${escapePrintHtml(participant.first_name || '-')}</td>
           <td>${escapePrintHtml(participant.last_name || '-')}</td>
           <td>${escapePrintHtml(gender)}</td>
+          <td>${escapePrintHtml(hands)}</td>
           <td>${escapePrintHtml(participant.club || '-')}</td>
           <td>${escapePrintHtml(participant.average && participant.average > 0 ? participant.average : '')}</td>
         </tr>
@@ -2569,12 +2591,13 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
             <th>First Name</th>
             <th>Family Name</th>
             <th>Gender</th>
+            <th>Hands</th>
             <th>Club</th>
             <th>Average</th>
           </tr>
         </thead>
         <tbody>
-          ${playerRowsHtml || '<tr><td colspan="6" style="text-align:center;color:#777;">No participants registered yet.</td></tr>'}
+          ${playerRowsHtml || '<tr><td colspan="7" style="text-align:center;color:#777;">No participants registered yet.</td></tr>'}
         </tbody>
       </table>
     `;
@@ -2597,6 +2620,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         first_name: participant.first_name,
         last_name: participant.last_name,
         gender: participant.gender || '',
+        hands: normalizeHandsStyle(participant.hands),
         club: participant.club || '',
         average: participant.average || 0,
         email: participant.email || '',
@@ -2919,6 +2943,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   first_name: existing.first_name,
                   last_name: existing.last_name,
                   gender: existing.gender || '',
+                  hands: normalizeHandsStyle(existing.hands),
                   club: existing.club || '',
                   average: existing.average || 0,
                   email: existing.email || '',
@@ -3177,6 +3202,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">First Name</th>
                   <th className="pl-2 pr-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">Family Name</th>
                   <th className="pl-1 pr-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">Gender</th>
+                  <th className="pl-2 pr-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">Hands</th>
                   <th className="pl-2 pr-0.5 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">
                     <button
                       type="button"
@@ -3196,13 +3222,13 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               <tbody className="divide-y divide-black/10">
                 {participants.length === 0 ? (
                   <tr>
-                    <td colSpan={canManageParticipants ? 6 : 5} className="px-4 py-8 text-center text-black/40 italic text-sm">
+                    <td colSpan={canManageParticipants ? 7 : 6} className="px-4 py-8 text-center text-black/40 italic text-sm">
                       No participants registered yet.
                     </td>
                   </tr>
                 ) : filteredParticipants.length === 0 ? (
                   <tr>
-                    <td colSpan={canManageParticipants ? 6 : 5} className="px-4 py-8 text-center text-black/40 italic text-sm">
+                    <td colSpan={canManageParticipants ? 7 : 6} className="px-4 py-8 text-center text-black/40 italic text-sm">
                       No players match your search.
                     </td>
                   </tr>
@@ -3217,6 +3243,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       </td>
                       <td className={`pl-2 pr-1 py-1.5 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>{p.last_name || '-'}</td>
                       <td className={`pl-1 pr-2 py-1.5 text-[10px] uppercase text-center ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{(p.gender || '').toLowerCase().startsWith('f') ? 'F' : (p.gender || '').toLowerCase().startsWith('m') ? 'M' : '-'}</td>
+                      <td className={`pl-2 pr-1 py-1.5 text-[10px] uppercase text-center ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{normalizeHandsStyle(p.hands)}</td>
                       <td className={`pl-2 pr-0.5 py-1.5 text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`} title={p.club || ''}>{p.club || '-'}</td>
                       {canManageParticipants && (
                         <td className="pl-0.5 pr-2 py-1.5 text-right">
@@ -3416,7 +3443,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     <Input label="Family Name" name="last_name" defaultValue={editingPlayer?.last_name} placeholder="Doe" required />
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-3 gap-4">
                     <Select 
                       label="Gender (F/M)" 
                       name="gender" 
@@ -3426,6 +3453,15 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         { value: 'f', label: 'F' },
                         { value: 'm', label: 'M' }
                       ]} 
+                    />
+                    <Select
+                      label="Hands"
+                      name="hands"
+                      defaultValue={normalizeHandsStyle(editingPlayer?.hands || '1H')}
+                      options={[
+                        { value: '1H', label: '1H' },
+                        { value: '2H', label: '2H' }
+                      ]}
                     />
                     <Input label="Average score (optional)" name="average" type="number" defaultValue={editingPlayer?.average && editingPlayer.average > 0 ? String(editingPlayer.average) : ""} min="0" />
                   </div>
