@@ -6857,10 +6857,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     const playerOptions = bracketParticipants.map((participant) => {
       const firstName = (participant.first_name || '').trim();
       const lastInitial = (participant.last_name || '').trim().charAt(0).toUpperCase();
+      const hands = (participant.hands || '').trim();
       const displayName = firstName ? (lastInitial ? `${firstName} ${lastInitial}.` : firstName) : `Player ${participant.id}`;
       return {
         value: String(participant.id),
-        label: displayName,
+        label: hands ? `${displayName} (${hands})` : displayName,
       };
     });
     const slotOptions = tournament.type === 'team' ? teamOptions : playerOptions;

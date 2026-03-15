@@ -1976,10 +1976,10 @@ const existing = db
 
     const rows = db.prepare(`
       SELECT b.*, 
-             (p1.first_name || CASE WHEN p1.last_name IS NOT NULL AND p1.last_name != '' THEN (' ' || UPPER(SUBSTR(p1.last_name,1,1)) || '.') ELSE '' END) as p1_name, 
-             (p2.first_name || CASE WHEN p2.last_name IS NOT NULL AND p2.last_name != '' THEN (' ' || UPPER(SUBSTR(p2.last_name,1,1)) || '.') ELSE '' END) as p2_name, 
-             (p3.first_name || CASE WHEN p3.last_name IS NOT NULL AND p3.last_name != '' THEN (' ' || UPPER(SUBSTR(p3.last_name,1,1)) || '.') ELSE '' END) as p3_name,
-             (w.first_name || CASE WHEN w.last_name IS NOT NULL AND w.last_name != '' THEN (' ' || UPPER(SUBSTR(w.last_name,1,1)) || '.') ELSE '' END) as winner_name,
+             (p1.first_name || CASE WHEN p1.last_name IS NOT NULL AND p1.last_name != '' THEN (' ' || UPPER(SUBSTR(p1.last_name,1,1)) || '.') ELSE '' END || CASE WHEN p1.hands IS NOT NULL AND p1.hands != '' THEN (' (' || p1.hands || ')') ELSE '' END) as p1_name, 
+             (p2.first_name || CASE WHEN p2.last_name IS NOT NULL AND p2.last_name != '' THEN (' ' || UPPER(SUBSTR(p2.last_name,1,1)) || '.') ELSE '' END || CASE WHEN p2.hands IS NOT NULL AND p2.hands != '' THEN (' (' || p2.hands || ')') ELSE '' END) as p2_name, 
+             (p3.first_name || CASE WHEN p3.last_name IS NOT NULL AND p3.last_name != '' THEN (' ' || UPPER(SUBSTR(p3.last_name,1,1)) || '.') ELSE '' END || CASE WHEN p3.hands IS NOT NULL AND p3.hands != '' THEN (' (' || p3.hands || ')') ELSE '' END) as p3_name,
+             (w.first_name || CASE WHEN w.last_name IS NOT NULL AND w.last_name != '' THEN (' ' || UPPER(SUBSTR(w.last_name,1,1)) || '.') ELSE '' END || CASE WHEN w.hands IS NOT NULL AND w.hands != '' THEN (' (' || w.hands || ')') ELSE '' END) as winner_name,
              t1.name as p1_team_name,
              t2.name as p2_team_name,
              t3.name as p3_team_name,
@@ -2043,7 +2043,7 @@ const existing = db
     const rankedParticipants = db.prepare(`
       SELECT
         p.id as id,
-        (p.first_name || CASE WHEN p.last_name IS NOT NULL AND p.last_name != '' THEN (' ' || UPPER(SUBSTR(p.last_name,1,1)) || '.') ELSE '' END) as name,
+        (p.first_name || CASE WHEN p.last_name IS NOT NULL AND p.last_name != '' THEN (' ' || UPPER(SUBSTR(p.last_name,1,1)) || '.') ELSE '' END || CASE WHEN p.hands IS NOT NULL AND p.hands != '' THEN (' (' || p.hands || ')') ELSE '' END) as name,
         COALESCE(SUM(s.score), 0) as total_score
       FROM participants p
       LEFT JOIN scores s ON s.participant_id = p.id
