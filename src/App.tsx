@@ -7946,9 +7946,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
             >
               {orderedRoundNumbers.map((roundNumber) => {
                 const roundMatches = [...(roundGroups[roundNumber] || [])].sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
-                const roundTitle = (isEightSeedPlayoffMode || isTeamSelectionPlayoffMode)
-                  ? (roundNumber === 1 ? 'Quarter-Finals' : roundNumber === 2 ? 'Semi-Finals' : 'Finals')
-                  : `Round ${roundNumber}`;
+                const roundTitle = isTwoGroupPlayoffMode
+                  ? (roundNumber === 1 ? 'Group Quarter-Finals' : roundNumber === 2 ? 'Group Semi-Finals' : roundNumber === 3 ? 'Cross Semi-Finals' : 'Finals')
+                  : (isEightSeedPlayoffMode || isTeamSelectionPlayoffMode)
+                    ? (roundNumber === 1 ? 'Quarter-Finals' : roundNumber === 2 ? 'Semi-Finals' : 'Finals')
+                    : `Round ${roundNumber}`;
 
                 return (
                   <Card key={roundNumber} className="p-3 border-[#AFDDE5]/60">
@@ -7991,6 +7993,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
               </svg>
               {orderedRoundNumbers.map((roundNumber, roundIndex) => {
                 const roundMatches = [...(roundGroups[roundNumber] || [])].sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
+                const spacingClass = getVisualRoundSpacingClass(roundIndex);
                 const roundTitle = isTwoGroupPlayoffMode
                   ? (roundNumber === 1 ? 'Group Quarter-Finals' : roundNumber === 2 ? 'Group Semi-Finals' : roundNumber === 3 ? 'Cross Semi-Finals' : 'Finals')
                   : (isEightSeedPlayoffMode || isTeamSelectionPlayoffMode)
