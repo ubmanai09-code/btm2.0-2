@@ -6854,10 +6854,15 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           .map((participant) => [Number(participant.team_id), participant.team_name || `Team ${participant.team_id}`])
       ).entries()
     ).map(([value, label]) => ({ value: String(value), label }));
-    const playerOptions = bracketParticipants.map((participant) => ({
-      value: String(participant.id),
-      label: `${participant.first_name || ''} ${participant.last_name || ''}`.trim() || `Player ${participant.id}`,
-    }));
+    const playerOptions = bracketParticipants.map((participant) => {
+      const firstName = (participant.first_name || '').trim();
+      const lastInitial = (participant.last_name || '').trim().charAt(0).toUpperCase();
+      const displayName = firstName ? (lastInitial ? `${firstName} ${lastInitial}.` : firstName) : `Player ${participant.id}`;
+      return {
+        value: String(participant.id),
+        label: displayName,
+      };
+    });
     const slotOptions = tournament.type === 'team' ? teamOptions : playerOptions;
     const hasShootoutThird =
       matchPlayType === 'stepladder' &&
