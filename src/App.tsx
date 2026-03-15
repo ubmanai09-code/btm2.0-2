@@ -5517,12 +5517,23 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   };
 
   const toShortestName = (rawName: string) => {
-    const parts = String(rawName || '').trim().split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return '';
-    if (parts.length === 1) return parts[0];
+    const normalized = String(rawName || '').trim();
+    if (!normalized) return '';
+
+    // Keep optional hands suffix, but exclude it while deriving last initial.
+    const handsMatch = normalized.match(/\s+\(([^)]+)\)\s*$/);
+    const handsSuffix = handsMatch ? ` (${handsMatch[1]})` : '';
+    const baseName = handsMatch ? normalized.replace(/\s+\([^)]+\)\s*$/, '').trim() : normalized;
+
+    const parts = baseName.split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return handsSuffix.trim();
+    if (parts.length === 1) return `${parts[0]}${handsSuffix}`;
+
     const firstName = parts[0];
-    const lastInitial = parts[parts.length - 1].charAt(0).toUpperCase();
-    return `${firstName} ${lastInitial}.`;
+    const lastToken = parts[parts.length - 1].replace(/\./g, '');
+    const lastInitial = (lastToken.charAt(0) || '').toUpperCase();
+    const shortName = lastInitial ? `${firstName} ${lastInitial}.` : firstName;
+    return `${shortName}${handsSuffix}`;
   };
 
   const teamMembersByTeamId = new Map<number, string[]>();
