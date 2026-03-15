@@ -1550,8 +1550,8 @@ async function startServer() {
         return res.json({ success: true });
       }
 
-      const source = db.prepare("SELECT id, tournament_id, lane_number, shift_number FROM lane_assignments WHERE id = ?").get(sourceId) as any;
-      const target = db.prepare("SELECT id, tournament_id, lane_number, shift_number FROM lane_assignments WHERE id = ?").get(targetId) as any;
+      const source = db.prepare("SELECT id, tournament_id, participant_id, team_id FROM lane_assignments WHERE id = ?").get(sourceId) as any;
+      const target = db.prepare("SELECT id, tournament_id, participant_id, team_id FROM lane_assignments WHERE id = ?").get(targetId) as any;
       if (!source || !target) {
         return res.status(404).json({ error: 'Lane assignment not found' });
       }
@@ -1560,9 +1560,9 @@ async function startServer() {
       }
 
       const swapAssignments = db.transaction((a: any, b: any) => {
-        const update = db.prepare("UPDATE lane_assignments SET lane_number = ?, shift_number = ? WHERE id = ?");
-        update.run(b.lane_number, b.shift_number, a.id);
-        update.run(a.lane_number, a.shift_number, b.id);
+        const update = db.prepare("UPDATE lane_assignments SET participant_id = ?, team_id = ? WHERE id = ?");
+        update.run(b.participant_id || null, b.team_id || null, a.id);
+        update.run(a.participant_id || null, a.team_id || null, b.id);
       });
 
       swapAssignments(source, target);

@@ -4293,6 +4293,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
   const [lanes, setLanes] = useState<LaneAssignment[]>([]);
+  const [swapInFlight, setSwapInFlight] = useState(false);
   const [draftScores, setDraftScores] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [currentShift, setCurrentShift] = useState(1);
@@ -4436,6 +4437,9 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
       const laneA = participantLaneMap.get(a.id)?.lane_number || Number.MAX_SAFE_INTEGER;
       const laneB = participantLaneMap.get(b.id)?.lane_number || Number.MAX_SAFE_INTEGER;
       if (laneA !== laneB) return laneA - laneB;
+      const laneAssignmentA = participantLaneMap.get(a.id)?.id || Number.MAX_SAFE_INTEGER;
+      const laneAssignmentB = participantLaneMap.get(b.id)?.id || Number.MAX_SAFE_INTEGER;
+      if (laneAssignmentA !== laneAssignmentB) return laneAssignmentA - laneAssignmentB;
       return `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`);
     });
 
@@ -4464,7 +4468,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
   }
 
   const handleSwapTeamPosition = async (participant: Participant, direction: 'up' | 'down') => {
-    if (tournament.type !== 'team' || participant.team_id === null) return;
+    if (tournament.type !== 'team' || participant.team_id === null || swapInFlight) return;
     const teamVisibleMembers = scoringParticipants
       .filter((p) => p.team_id === participant.team_id)
       .sort((a, b) => {
@@ -4483,17 +4487,49 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     const swapTarget = teamVisibleMembers[targetIndex];
     if (!swapTarget) return;
 
+    const previousParticipants = participants;
+
+    // Optimistic reorder so movement feels instant.
+    setParticipants((prev) => {
+      const teamId = participant.team_id as number;
+      const teamMembers = prev
+        .filter((p) => p.team_id === teamId)
+        .sort((a, b) => {
+          const orderA = a.team_order && a.team_order > 0 ? a.team_order : Number.MAX_SAFE_INTEGER;
+          const orderB = b.team_order && b.team_order > 0 ? b.team_order : Number.MAX_SAFE_INTEGER;
+          if (orderA !== orderB) return orderA - orderB;
+          return a.id - b.id;
+        });
+
+      const ids = teamMembers.map((p) => p.id);
+      const idxA = ids.indexOf(participant.id);
+      const idxB = ids.indexOf(swapTarget.id);
+      if (idxA === -1 || idxB === -1) return prev;
+      [ids[idxA], ids[idxB]] = [ids[idxB], ids[idxA]];
+
+      const nextOrderById = new Map<number, number>();
+      ids.forEach((id, index) => nextOrderById.set(id, index + 1));
+
+      return prev.map((p) => {
+        const nextOrder = nextOrderById.get(p.id);
+        return nextOrder ? { ...p, team_order: nextOrder } : p;
+      });
+    });
+
+    setSwapInFlight(true);
     try {
       await api.swapParticipantTeamOrder(participant.id, swapTarget.id);
-      await loadData();
     } catch (err) {
+      setParticipants(previousParticipants);
       console.error('Failed to swap team position:', err);
       alert('Failed to swap players within team. Please try again.');
+    } finally {
+      setSwapInFlight(false);
     }
   };
 
   const handleSwapIndividualPosition = async (participant: Participant, direction: 'up' | 'down') => {
-    if (tournament.type !== 'individual') return;
+    if (tournament.type !== 'individual' || swapInFlight) return;
 
     const currentIndex = scoringParticipants.findIndex((p) => p.id === participant.id);
     if (currentIndex === -1) return;
@@ -4508,12 +4544,46 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     const targetLaneAssignment = participantLaneMap.get(swapTarget.id);
     if (!currentLaneAssignment || !targetLaneAssignment) return;
 
+    const previousLanes = lanes;
+
+    // Optimistic occupant swap for immediate UI feedback.
+    setLanes((prev) => {
+      const source = prev.find((lane) => lane.id === currentLaneAssignment.id);
+      const target = prev.find((lane) => lane.id === targetLaneAssignment.id);
+      if (!source || !target) return prev;
+
+      return prev.map((lane) => {
+        if (lane.id === source.id) {
+          return {
+            ...lane,
+            participant_id: target.participant_id,
+            team_id: target.team_id,
+            participant_name: target.participant_name,
+            team_name: target.team_name,
+          };
+        }
+        if (lane.id === target.id) {
+          return {
+            ...lane,
+            participant_id: source.participant_id,
+            team_id: source.team_id,
+            participant_name: source.participant_name,
+            team_name: source.team_name,
+          };
+        }
+        return lane;
+      });
+    });
+
+    setSwapInFlight(true);
     try {
       await api.swapLaneAssignments(currentLaneAssignment.id, targetLaneAssignment.id);
-      await loadData();
     } catch (err) {
+      setLanes(previousLanes);
       console.error('Failed to swap individual lane positions:', err);
       alert('Failed to swap players in scoring table. Please try again.');
+    } finally {
+      setSwapInFlight(false);
     }
   };
 
@@ -4904,7 +4974,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                           <button
                             type="button"
                             onClick={() => handleSwapTeamPosition(p, 'up')}
-                            disabled={!canManageScores || (teamVisiblePositionMap.get(p.id)?.index ?? 0) <= 0}
+                            disabled={swapInFlight || !canManageScores || (teamVisiblePositionMap.get(p.id)?.index ?? 0) <= 0}
                             className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Swap with previous player"
                           >
@@ -4913,12 +4983,18 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                           <button
                             type="button"
                             onClick={() => handleSwapTeamPosition(p, 'down')}
-                            disabled={!canManageScores || (teamVisiblePositionMap.get(p.id)?.index ?? 0) >= ((teamVisiblePositionMap.get(p.id)?.count ?? 1) - 1)}
+                            disabled={swapInFlight || !canManageScores || (teamVisiblePositionMap.get(p.id)?.index ?? 0) >= ((teamVisiblePositionMap.get(p.id)?.count ?? 1) - 1)}
                             className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Swap with next player"
                           >
                             ↓
                           </button>
+                          {swapInFlight && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-emerald-700" aria-live="polite">
+                              <span className="inline-block w-2.5 h-2.5 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin" />
+                              Moving...
+                            </span>
+                          )}
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5">
@@ -4928,7 +5004,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                           <button
                             type="button"
                             onClick={() => handleSwapIndividualPosition(p, 'up')}
-                            disabled={!canManageScores || index <= 0}
+                            disabled={swapInFlight || !canManageScores || index <= 0}
                             className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Swap with previous player"
                           >
@@ -4937,12 +5013,18 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                           <button
                             type="button"
                             onClick={() => handleSwapIndividualPosition(p, 'down')}
-                            disabled={!canManageScores || index >= scoringParticipants.length - 1}
+                            disabled={swapInFlight || !canManageScores || index >= scoringParticipants.length - 1}
                             className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Swap with next player"
                           >
                             ↓
                           </button>
+                          {swapInFlight && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-emerald-700" aria-live="polite">
+                              <span className="inline-block w-2.5 h-2.5 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin" />
+                              Moving...
+                            </span>
+                          )}
                         </div>
                       )}
                     </td>
