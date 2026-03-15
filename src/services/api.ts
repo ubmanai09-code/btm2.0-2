@@ -18,6 +18,8 @@ export interface Tournament {
   shifts_count: number;
   oil_pattern: string;
   status: 'draft' | 'active' | 'finished';
+  has_additional_scores?: number;
+  has_bonus?: number;
   created_at: string;
 }
 
@@ -69,6 +71,22 @@ export interface Standing {
   total_score: number;
   average_score: number;
   games_played: number;
+}
+
+export interface StandingBonus {
+  id: number;
+  tournament_id: number;
+  target_kind: 'participant' | 'team';
+  target_id: number;
+  bonus: number;
+}
+
+export interface StandingAdditionalScore {
+  id: number;
+  tournament_id: number;
+  target_kind: 'participant' | 'team';
+  target_id: number;
+  additional_score: number;
 }
 
 export interface SeedItem {
@@ -506,6 +524,67 @@ const api = {
   },
   async getStandings(tournamentId: number): Promise<Standing[]> {
     const res = await fetch(`/api/tournaments/${tournamentId}/standings`);
+    return res.json();
+  },
+  async getStandingsBonuses(tournamentId: number): Promise<StandingBonus[]> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/bonuses`);
+    if (!res.ok) {
+      const error = await this.safeJson(res);
+      throw new Error(error?.error || `Failed to load standings bonuses (${res.status})`);
+    }
+    return res.json();
+  },
+  async setStandingBonus(
+    tournamentId: number,
+    payload: { target_kind: 'participant' | 'team'; target_id: number; bonus: number }
+  ): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/bonuses`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const error = await this.safeJson(res);
+      throw new Error(error?.error || `Failed to save bonus (${res.status})`);
+    }
+    return res.json();
+  },
+  async getStandingsAdditionalScores(tournamentId: number): Promise<StandingAdditionalScore[]> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/additional-scores`);
+    if (!res.ok) {
+      const error = await this.safeJson(res);
+      throw new Error(error?.error || `Failed to load additional scores (${res.status})`);
+    }
+    return res.json();
+  },
+  async setStandingAdditionalScore(
+    tournamentId: number,
+    payload: { target_kind: 'participant' | 'team'; target_id: number; additional_score: number }
+  ): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/additional-scores`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const error = await this.safeJson(res);
+      throw new Error(error?.error || `Failed to save additional score (${res.status})`);
+    }
+    return res.json();
+  },
+  async setTournamentStandingsConfig(
+    tournamentId: number,
+    config: { has_additional_scores?: number; has_bonus?: number }
+  ): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/standings-config`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    if (!res.ok) {
+      const error = await this.safeJson(res);
+      throw new Error(error?.error || `Failed to update standings config (${res.status})`);
+    }
     return res.json();
   },
   async getBrackets(tournamentId: number): Promise<any[]> {

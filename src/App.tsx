@@ -2338,7 +2338,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
         {activeTab === 'lanes' && <LaneView tournament={tournament} role={effectiveRole} />}
         {activeTab === 'scoring' && <ScoringView tournament={tournament} role={effectiveRole} />}
         {activeTab === 'brackets' && <BracketsView tournament={tournament} role={effectiveRole} onTournamentUpdated={onTournamentUpdated} />}
-        {activeTab === 'standings' && <StandingsView tournament={tournament} />}
+        {activeTab === 'standings' && <StandingsView tournament={tournament} role={effectiveRole} />}
       </div>
     </motion.div>
   );
@@ -8014,16 +8014,32 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   );
 }
 
-function StandingsView({ tournament }: { tournament: Tournament }) {
+function StandingsView({ tournament, role }: { tournament: Tournament; role: UserRole }) {
+  const canManageStandings = role === 'admin' || role === 'moderator';
   const [standings, setStandings] = useState<Standing[]>([]);
   const [bracketMatches, setBracketMatches] = useState<any[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
+  const [bonusByKey, setBonusByKey] = useState<Record<string, number>>({});
+  const [bonusDrafts, setBonusDrafts] = useState<Record<string, string>>({});
+  const [savingBonusKey, setSavingBonusKey] = useState<string | null>(null);
+  const [bonusApiAvailable, setBonusApiAvailable] = useState(true);
+  const [additionalByKey, setAdditionalByKey] = useState<Record<string, number>>({});
+  const [additionalDrafts, setAdditionalDrafts] = useState<Record<string, string>>({});
+  const [savingAdditionalKey, setSavingAdditionalKey] = useState<string | null>(null);
+  const [additionalApiAvailable, setAdditionalApiAvailable] = useState(true);
+  const [showAdditional, setShowAdditional] = useState<boolean>(!!tournament.has_additional_scores);
+  const [showBonus, setShowBonus] = useState<boolean>(!!tournament.has_bonus);
+  const [savingConfig, setSavingConfig] = useState(false);
   const [standingsMode, setStandingsMode] = useState<'players' | 'teams'>('players');
   const [loading, setLoading] = useState(true);
   const standingsImportInputRef = useRef<HTMLInputElement | null>(null);
   const standingsTableRef = useRef<HTMLTableElement | null>(null);
+
+  const toBonusKey = (kind: 'participant' | 'team', id: number) => `${kind}-${id}`;
+  const getBonus = (kind: 'participant' | 'team', id: number) => Number(bonusByKey[toBonusKey(kind, id)] || 0);
+  const getAdditional = (kind: 'participant' | 'team', id: number) => Number(additionalByKey[toBonusKey(kind, id)] || 0);
 
   useEffect(() => {
     loadStandings();
@@ -8031,6 +8047,8 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
 
   useEffect(() => {
     setStandingsMode('players');
+    setShowAdditional(!!tournament.has_additional_scores);
+    setShowBonus(!!tournament.has_bonus);
   }, [tournament.id, tournament.type]);
 
   const loadStandings = async () => {
@@ -8048,10 +8066,140 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
       setParticipants(participantsData);
       setScores(scoresData);
       setTeams(teamsData);
+
+      // Load bonus scores (backward-compatible)
+      let bonusesData: Array<{ target_kind: 'participant' | 'team'; target_id: number; bonus: number }> = [];
+      try {
+        bonusesData = await api.getStandingsBonuses(tournament.id);
+        setBonusApiAvailable(true);
+      } catch (bonusErr) {
+        setBonusApiAvailable(false);
+        console.warn('Standings bonus API unavailable; loading standings without bonuses.', bonusErr);
+      }
+
+      const nextBonuses: Record<string, number> = {};
+      for (const row of bonusesData || []) {
+        const kind = row.target_kind === 'team' ? 'team' : 'participant';
+        const targetId = Number(row.target_id);
+        if (!Number.isFinite(targetId) || targetId <= 0) continue;
+        nextBonuses[toBonusKey(kind, targetId)] = Number(row.bonus) || 0;
+      }
+      setBonusByKey(nextBonuses);
+      setBonusDrafts({});
+
+      // Load additional scores (backward-compatible)
+      let additionalData: Array<{ target_kind: 'participant' | 'team'; target_id: number; additional_score: number }> = [];
+      try {
+        additionalData = await api.getStandingsAdditionalScores(tournament.id);
+        setAdditionalApiAvailable(true);
+      } catch (additionalErr) {
+        setAdditionalApiAvailable(false);
+        console.warn('Additional scores API unavailable.', additionalErr);
+      }
+
+      const nextAdditional: Record<string, number> = {};
+      for (const row of additionalData || []) {
+        const kind = row.target_kind === 'team' ? 'team' : 'participant';
+        const targetId = Number(row.target_id);
+        if (!Number.isFinite(targetId) || targetId <= 0) continue;
+        nextAdditional[toBonusKey(kind, targetId)] = Number(row.additional_score) || 0;
+      }
+      setAdditionalByKey(nextAdditional);
+      setAdditionalDrafts({});
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const persistBonus = async (kind: 'participant' | 'team', id: number, rawValue: string) => {
+    const key = toBonusKey(kind, id);
+    const trimmed = String(rawValue || '').trim();
+    const parsed = trimmed === '' ? 0 : Number.parseInt(trimmed, 10);
+    if (!Number.isFinite(parsed)) {
+      setBonusDrafts((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+
+    const bounded = Math.max(-9999, Math.min(9999, parsed));
+    const previous = getBonus(kind, id);
+    setSavingBonusKey(key);
+    setBonusByKey((prev) => ({ ...prev, [key]: bounded }));
+
+    try {
+      await api.setStandingBonus(tournament.id, {
+        target_kind: kind,
+        target_id: id,
+        bonus: bounded,
+      });
+      setBonusApiAvailable(true);
+      setBonusDrafts((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    } catch (err) {
+      setBonusByKey((prev) => ({ ...prev, [key]: previous }));
+      const message = err instanceof Error ? err.message : String(err || 'Unknown error');
+      if (message.includes('404') || message.toLowerCase().includes('not found')) {
+        setBonusApiAvailable(false);
+        alert('Bonus API is not available on the running server. Restart server with latest code, then try again.');
+      } else {
+        alert(`Failed to save bonus: ${message}`);
+      }
+      console.error('Failed to save bonus:', err);
+    } finally {
+      setSavingBonusKey(null);
+    }
+  };
+
+  const persistAdditional = async (kind: 'participant' | 'team', id: number, rawValue: string) => {
+    const key = toBonusKey(kind, id);
+    const trimmed = String(rawValue || '').trim();
+    const parsed = trimmed === '' ? 0 : Number.parseInt(trimmed, 10);
+    if (!Number.isFinite(parsed)) {
+      setAdditionalDrafts((prev) => { const next = { ...prev }; delete next[key]; return next; });
+      return;
+    }
+    const bounded = Math.max(-9999, Math.min(9999, parsed));
+    const previous = getAdditional(kind, id);
+    setSavingAdditionalKey(key);
+    setAdditionalByKey((prev) => ({ ...prev, [key]: bounded })); // optimistic — always kept
+    setAdditionalDrafts((prev) => { const next = { ...prev }; delete next[key]; return next; });
+    try {
+      await api.setStandingAdditionalScore(tournament.id, { target_kind: kind, target_id: id, additional_score: bounded });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err || 'Unknown error');
+      if (message.includes('404') || message.toLowerCase().includes('not found')) {
+        // Server not yet restarted — value is kept locally for this session
+        console.warn('Additional scores API not yet available (restart server to persist):', message);
+      } else {
+        // Real error — roll back and warn
+        setAdditionalByKey((prev) => ({ ...prev, [key]: previous }));
+        alert(`Failed to save additional score: ${message}`);
+      }
+    } finally {
+      setSavingAdditionalKey(null);
+    }
+  };
+
+  const handleToggleConfig = async (field: 'has_additional_scores' | 'has_bonus', newValue: boolean) => {
+    if (savingConfig) return;
+    const setFn = field === 'has_additional_scores' ? setShowAdditional : setShowBonus;
+    setFn(newValue); // apply immediately locally; don't roll back on server failure
+    setSavingConfig(true);
+    try {
+      await api.setTournamentStandingsConfig(tournament.id, { [field]: newValue ? 1 : 0 });
+    } catch (err) {
+      // Server may not be restarted yet — toggle still works for this session
+      console.warn('Could not persist standings config (restart server to save):', err);
+    } finally {
+      setSavingConfig(false);
     }
   };
 
@@ -8090,6 +8238,9 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
     .map((p) => {
       const games = gameNumbers.map((gameNumber) => scoreByParticipantGame.get(`${p.id}-${gameNumber}`) ?? 0);
       const total = games.reduce((sum, value) => sum + value, 0);
+      const additional = getAdditional('participant', p.id);
+      const bonus = getBonus('participant', p.id);
+      const grandTotal = total + additional + bonus;
       const gamesPlayed = games.filter((value) => value > 0).length;
       const average = gamesPlayed > 0 ? Number((total / gamesPlayed).toFixed(1)) : 0;
       return {
@@ -8097,12 +8248,16 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
         participant_name: formatStandingsName(p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown'),
         team_name: p.team_name || '-',
         club: p.club || '-',
+        hands: (participantInfoMap.get(p.id)?.hands || '').trim() || null,
         games,
+        additional,
+        bonus,
         total,
+        grand_total: grandTotal,
         average,
       };
     })
-    .sort((a, b) => (b.total - a.total) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name));
+    .sort((a, b) => (b.grand_total - a.grand_total) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name));
 
   const formatTeamMemberCompact = (participant: Participant) => {
     const firstName = (participant.first_name || '').trim().toLowerCase() || 'unknown';
@@ -8147,7 +8302,19 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
   }
 
   const teamStandingsRows = Array.from(teamMap.values())
-    .sort((a, b) => (b.total - a.total) || a.team_name.localeCompare(b.team_name));
+    .map((row) => {
+      const teamId = Number(row.team_id || 0);
+      const additional = teamId > 0 ? getAdditional('team', teamId) : 0;
+      const bonus = teamId > 0 ? getBonus('team', teamId) : 0;
+      const grandTotal = row.total + additional + bonus;
+      return {
+        ...row,
+        additional,
+        bonus,
+        grand_total: grandTotal,
+      };
+    })
+    .sort((a, b) => (b.grand_total - a.grand_total) || a.team_name.localeCompare(b.team_name));
   const registeredPlayersCount = participants.length;
   const assignedPlayersCount = participants.filter((p) => p.team_id !== null).length;
   const unassignedPlayersCount = Math.max(0, registeredPlayersCount - assignedPlayersCount);
@@ -8165,11 +8332,11 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
   const maleLeaderCellKey = maleLeader ? `${maleLeader.participant_id}-${maleLeader.game_number}` : '';
   const femaleLeaderCellKey = femaleLeader ? `${femaleLeader.participant_id}-${femaleLeader.game_number}` : '';
 
-  const getTopIdsByGender = (genderPrefix: 'm' | 'f', metric: 'total' | 'average') => {
+  const getTopIdsByGender = (genderPrefix: 'm' | 'f', metric: 'grand_total' | 'average') => {
     const candidates = playerStandingsRows.filter((row) => {
       const gender = (participantGenderMap.get(row.participant_id) || '').toLowerCase();
       if (!gender.startsWith(genderPrefix)) return false;
-      return metric === 'total' ? row.total > 0 : row.average > 0;
+      return metric === 'grand_total' ? row.grand_total > 0 : row.average > 0;
     });
     if (candidates.length === 0) return new Set<number>();
     const maxValue = Math.max(...candidates.map((row) => row[metric]));
@@ -8180,8 +8347,8 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
     );
   };
 
-  const maleTopTotalIds = getTopIdsByGender('m', 'total');
-  const femaleTopTotalIds = getTopIdsByGender('f', 'total');
+  const maleTopTotalIds = getTopIdsByGender('m', 'grand_total');
+  const femaleTopTotalIds = getTopIdsByGender('f', 'grand_total');
   const maleTopAvgIds = getTopIdsByGender('m', 'average');
   const femaleTopAvgIds = getTopIdsByGender('f', 'average');
 
@@ -8245,15 +8412,23 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
 
   const handleExportStandings = () => {
     const gameHeaders = gameNumbers.map((g) => `game_${g}`);
+    const extraHeaders = [
+      ...(showAdditional ? ['additional_score'] : []),
+      ...(showBonus ? ['bonus'] : []),
+      ...((showAdditional || showBonus) ? ['grand_total'] : ['total']),
+    ];
     const headers = standingsMode === 'teams'
-      ? ['rank', 'team', ...gameHeaders, 'total']
-      : ['rank', 'participant', 'club', 'team', ...gameHeaders, 'total', 'avg'];
+      ? ['rank', 'team', ...gameHeaders, ...(showAdditional || showBonus ? ['total'] : []), ...extraHeaders]
+      : ['rank', 'participant', 'club', 'team', ...gameHeaders, ...(showAdditional || showBonus ? ['total'] : []), ...extraHeaders, 'avg'];
     const rows = standingsMode === 'teams'
       ? teamStandingsRows.map((s, idx) => [
           idx + 1,
           s.team_name,
           ...s.games,
-          s.total,
+          ...(showAdditional || showBonus ? [s.total] : []),
+          ...(showAdditional ? [s.additional] : []),
+          ...(showBonus ? [s.bonus] : []),
+          s.grand_total,
         ])
       : playerStandingsRows.map((s, idx) => [
           idx + 1,
@@ -8261,7 +8436,10 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
           s.club,
           s.team_name,
           ...s.games,
-          s.total,
+          ...(showAdditional || showBonus ? [s.total] : []),
+          ...(showAdditional ? [s.additional] : []),
+          ...(showBonus ? [s.bonus] : []),
+          s.grand_total,
           s.average.toFixed(1),
         ]);
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -8454,8 +8632,42 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                   {teamsCountValid ? ' OK.' : ' Mismatch detected. Please review team assignments in Participants page.'}
                 </p>
               )}
+              {!bonusApiAvailable && showBonus && (
+                <p className="text-xs mt-1 text-amber-700">
+                  Bonus editing is currently unavailable on this server build. Standings still load using score totals.
+                </p>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              {canManageStandings && (
+                <div className="flex gap-1.5 items-center">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-black/40 mr-1">Columns:</span>
+                  <button
+                    onClick={() => handleToggleConfig('has_additional_scores', !showAdditional)}
+                    disabled={savingConfig}
+                    className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-widest border transition-all ${
+                      showAdditional
+                        ? 'bg-violet-600 text-white border-violet-600'
+                        : 'bg-white text-black/40 border-black/20 hover:border-black/40'
+                    }`}
+                    title="Toggle Additional Scores column"
+                  >
+                    + Additional
+                  </button>
+                  <button
+                    onClick={() => handleToggleConfig('has_bonus', !showBonus)}
+                    disabled={savingConfig}
+                    className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-widest border transition-all ${
+                      showBonus
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-white text-black/40 border-black/20 hover:border-black/40'
+                    }`}
+                    title="Toggle Bonus column"
+                  >
+                    + Bonus
+                  </button>
+                </div>
+              )}
               <div className="flex gap-1 p-1 bg-black/5 rounded-lg">
                 <button
                   onClick={() => setStandingsMode('players')}
@@ -8504,7 +8716,7 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                 {standingsMode === 'players' && (
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Club</th>
                 )}
-                {standingsMode === 'players' && (
+                {standingsMode === 'players' && isTeamTournament && (
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Team</th>
                 )}
                 {gameNumbers.map((gameNumber) => (
@@ -8513,6 +8725,15 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                   </th>
                 ))}
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Total</th>
+                {showAdditional && (
+                  <th className="px-2 py-4 text-xs font-bold uppercase tracking-widest text-violet-700 text-right w-20">Score++</th>
+                )}
+                {showBonus && (
+                  <th className="px-2 py-4 text-xs font-bold uppercase tracking-widest text-emerald-700 text-right w-20">Bonus</th>
+                )}
+                {(showAdditional || showBonus) && (
+                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Grand Total</th>
+                )}
                 {standingsMode === 'players' && (
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">Avg</th>
                 )}
@@ -8530,8 +8751,14 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                       )}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-black/40 text-sm">{s.club}</td>
-                  <td className="px-6 py-4 text-black/40 text-sm">{s.team_name}</td>
+                  <td className="px-6 py-4 text-black/40 text-sm">
+                    {s.club}{s.hands ? (
+                      <span className={`ml-1 text-xs font-bold ${s.hands === '2H' ? 'text-violet-500' : 'text-sky-500'}`}>({s.hands})</span>
+                    ) : null}
+                  </td>
+                  {isTeamTournament && (
+                    <td className="px-6 py-4 text-black/40 text-sm">{s.team_name}</td>
+                  )}
                   {s.games.map((value, gameIndex) => {
                     const gameNo = gameNumbers[gameIndex] || (gameIndex + 1);
                     const cellKey = `${s.participant_id}-${gameNo}`;
@@ -8549,17 +8776,66 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                       </td>
                     );
                   })}
-                  <td
-                    className={`px-6 py-4 text-right font-bold ${
-                      maleTopTotalIds.has(s.participant_id)
-                        ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'
-                        : femaleTopTotalIds.has(s.participant_id)
-                          ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
-                          : ''
-                    }`}
-                  >
-                    {s.total}
-                  </td>
+                  <td className={`px-6 py-4 text-right font-mono ${
+                    !(showAdditional || showBonus)
+                      ? (maleTopTotalIds.has(s.participant_id)
+                          ? 'font-bold bg-sky-50 text-sky-700 ring-1 ring-sky-200'
+                          : femaleTopTotalIds.has(s.participant_id)
+                            ? 'font-bold bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+                            : 'font-bold text-black/60')
+                      : 'text-black/50'
+                  }`}>{s.total}</td>
+                  {showAdditional && (
+                    <td className="px-2 py-4 text-right font-mono text-violet-700">
+                      {(() => {
+                        const aKey = toBonusKey('participant', s.participant_id);
+                        const liveValue = additionalDrafts[aKey] !== undefined ? additionalDrafts[aKey] : String(s.additional);
+                        return canManageStandings ? (
+                          <input
+                            type="number"
+                            value={liveValue}
+                            onChange={(e) => setAdditionalDrafts((prev) => ({ ...prev, [aKey]: e.target.value }))}
+                            onBlur={(e) => persistAdditional('participant', s.participant_id, e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
+                            disabled={savingAdditionalKey === aKey}
+                            className="w-16 px-1 py-1 rounded border border-violet-200 focus:outline-none focus:ring-2 focus:ring-violet-200 text-right"
+                          />
+                        ) : s.additional;
+                      })()}
+                    </td>
+                  )}
+                  {showBonus && (
+                    <td className="px-2 py-4 text-right font-mono text-emerald-700">
+                      {(() => {
+                        const bonusKey = toBonusKey('participant', s.participant_id);
+                        const liveValue = bonusDrafts[bonusKey] !== undefined ? bonusDrafts[bonusKey] : String(s.bonus);
+                        return (canManageStandings && bonusApiAvailable) ? (
+                          <input
+                            type="number"
+                            value={liveValue}
+                            onChange={(e) => setBonusDrafts((prev) => ({ ...prev, [bonusKey]: e.target.value }))}
+                            onBlur={(e) => persistBonus('participant', s.participant_id, e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
+                            disabled={savingBonusKey === bonusKey}
+                            className="w-16 px-1 py-1 rounded border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 text-right"
+                          />
+                        ) : s.bonus;
+                      })()}
+                    </td>
+                  )}
+                  {(showAdditional || showBonus) && (
+                    <td
+                      className={`px-6 py-4 text-right font-bold ${
+                        maleTopTotalIds.has(s.participant_id)
+                          ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'
+                          : femaleTopTotalIds.has(s.participant_id)
+                            ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+                            : ''
+                      }`}
+                    >
+                      {s.grand_total}
+                    </td>
+                  )}
                   <td
                     className={`px-6 py-4 text-center font-mono text-black/60 ${
                       maleTopAvgIds.has(s.participant_id)
@@ -8585,14 +8861,67 @@ function StandingsView({ tournament }: { tournament: Tournament }) {
                   {s.games.map((value, gameIndex) => (
                     <td key={gameIndex} className="px-6 py-4 text-center font-mono">{value}</td>
                   ))}
-                  <td className="px-6 py-4 text-right font-bold">{s.total}</td>
+                  <td className={`px-6 py-4 text-right font-mono ${!(showAdditional || showBonus) ? 'font-bold text-black/70' : 'text-black/50'}`}>{s.total}</td>
+                  {showAdditional && (
+                    <td className="px-2 py-4 text-right font-mono text-violet-700">
+                      {(() => {
+                        if (!s.team_id) return s.additional;
+                        const aKey = toBonusKey('team', s.team_id);
+                        const liveValue = additionalDrafts[aKey] !== undefined ? additionalDrafts[aKey] : String(s.additional);
+                        return canManageStandings ? (
+                          <input
+                            type="number"
+                            value={liveValue}
+                            onChange={(e) => setAdditionalDrafts((prev) => ({ ...prev, [aKey]: e.target.value }))}
+                            onBlur={(e) => persistAdditional('team', s.team_id as number, e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
+                            disabled={savingAdditionalKey === aKey}
+                            className="w-16 px-1 py-1 rounded border border-violet-200 focus:outline-none focus:ring-2 focus:ring-violet-200 text-right"
+                          />
+                        ) : s.additional;
+                      })()}
+                    </td>
+                  )}
+                  {showBonus && (
+                    <td className="px-2 py-4 text-right font-mono text-emerald-700">
+                      {(() => {
+                        if (!s.team_id) return s.bonus;
+                        const bonusKey = toBonusKey('team', s.team_id);
+                        const liveValue = bonusDrafts[bonusKey] !== undefined ? bonusDrafts[bonusKey] : String(s.bonus);
+                        return (canManageStandings && bonusApiAvailable) ? (
+                          <input
+                            type="number"
+                            value={liveValue}
+                            onChange={(e) => setBonusDrafts((prev) => ({ ...prev, [bonusKey]: e.target.value }))}
+                            onBlur={(e) => persistBonus('team', s.team_id as number, e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
+                            disabled={savingBonusKey === bonusKey}
+                            className="w-20 px-2 py-1 rounded border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 text-right"
+                                                      className="w-16 px-1 py-1 rounded border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 text-right"
+                          />
+                        ) : s.bonus;
+                      })()}
+                    </td>
+                  )}
+                  {(showAdditional || showBonus) && (
+                    <td className="px-6 py-4 text-right font-bold">{s.grand_total}</td>
+                  )}
                 </tr>
               ))}
               {((standingsMode === 'players' && playerStandingsRows.length === 0) || (standingsMode === 'teams' && teamStandingsRows.length === 0)) && (
                 <tr>
-                  <td colSpan={standingsMode === 'players' ? (4 + gameNumbers.length + 2) : (2 + gameNumbers.length + 1)} className="px-6 py-12 text-center text-black/40 italic">
-                    No scores recorded yet.
-                  </td>
+                  {(() => {
+                    const extraCols = (showAdditional ? 1 : 0) + (showBonus ? 1 : 0) + ((showAdditional || showBonus) ? 1 : 0);
+                    // players: Rank + Name + Club + (Team if team tournament) + games + Total + extras + Avg
+                    const colSpan = standingsMode === 'players'
+                      ? (3 + (isTeamTournament ? 1 : 0) + gameNumbers.length + 1 + extraCols + 1)
+                      : (2 + gameNumbers.length + 1 + extraCols);
+                    return (
+                      <td colSpan={colSpan} className="px-6 py-12 text-center text-black/40 italic">
+                        No scores recorded yet.
+                      </td>
+                    );
+                  })()}
                 </tr>
               )}
             </tbody>

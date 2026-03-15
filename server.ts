@@ -100,6 +100,8 @@ function initDb() {
       shifts_count INTEGER DEFAULT 1,
       oil_pattern TEXT,
       status TEXT DEFAULT 'draft',
+      has_additional_scores INTEGER NOT NULL DEFAULT 0,
+      has_bonus INTEGER NOT NULL DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -147,6 +149,26 @@ function initDb() {
       score INTEGER NOT NULL,
       FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
       FOREIGN KEY (participant_id) REFERENCES participants(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS standings_bonus (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id INTEGER NOT NULL,
+      target_kind TEXT CHECK(target_kind IN ('participant','team')) NOT NULL,
+      target_id INTEGER NOT NULL,
+      bonus INTEGER NOT NULL DEFAULT 0,
+      UNIQUE (tournament_id, target_kind, target_id),
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS standings_additional_scores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id INTEGER NOT NULL,
+      target_kind TEXT CHECK(target_kind IN ('participant','team')) NOT NULL,
+      target_id INTEGER NOT NULL,
+      additional_score INTEGER NOT NULL DEFAULT 0,
+      UNIQUE (tournament_id, target_kind, target_id),
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS brackets (
@@ -239,7 +261,9 @@ function initDb() {
     { name: 'players_per_lane', type: 'INTEGER DEFAULT 2' },
     { name: 'players_per_team', type: 'INTEGER DEFAULT 1' },
     { name: 'shifts_count', type: 'INTEGER DEFAULT 1' },
-    { name: 'oil_pattern', type: 'TEXT' }
+    { name: 'oil_pattern', type: 'TEXT' },
+    { name: 'has_additional_scores', type: 'INTEGER NOT NULL DEFAULT 0' },
+    { name: 'has_bonus', type: 'INTEGER NOT NULL DEFAULT 0' }
   ];
 
   migrations.forEach(m => {
@@ -1790,6 +1814,131 @@ const existing = db
       ORDER BY total_score DESC, p.id ASC
     `).all(req.params.id);
     res.json(rows);
+  });
+
+  app.get("/api/tournaments/:id/bonuses", (req, res) => {
+    const rows = db.prepare(`
+      SELECT id, tournament_id, target_kind, target_id, bonus
+      FROM standings_bonus
+      WHERE tournament_id = ?
+    `).all(req.params.id);
+    res.json(rows);
+  });
+
+  app.put("/api/tournaments/:id/bonuses", requirePermission('scores:manage', (req) => req.params.id), (req, res) => {
+    try {
+      const targetKind = String(req.body?.target_kind || '').trim().toLowerCase();
+      const targetId = Number.parseInt(String(req.body?.target_id || ''), 10);
+      const parsedBonus = Number.parseInt(String(req.body?.bonus || 0), 10);
+
+      if ((targetKind !== 'participant' && targetKind !== 'team') || !Number.isFinite(targetId) || targetId <= 0) {
+        return res.status(400).json({ error: 'Invalid bonus target' });
+      }
+
+      if (!Number.isFinite(parsedBonus)) {
+        return res.status(400).json({ error: 'Invalid bonus value' });
+      }
+
+      const bonus = Math.max(-9999, Math.min(9999, parsedBonus));
+      const exists = targetKind === 'participant'
+        ? db.prepare("SELECT id FROM participants WHERE id = ? AND tournament_id = ?").get(targetId, req.params.id)
+        : db.prepare("SELECT id FROM teams WHERE id = ? AND tournament_id = ?").get(targetId, req.params.id);
+
+      if (!exists) {
+        return res.status(404).json({ error: `${targetKind} not found in tournament` });
+      }
+
+      if (bonus === 0) {
+        db.prepare(`
+          DELETE FROM standings_bonus
+          WHERE tournament_id = ? AND target_kind = ? AND target_id = ?
+        `).run(req.params.id, targetKind, targetId);
+        return res.json({ success: true });
+      }
+
+      db.prepare(`
+        INSERT INTO standings_bonus (tournament_id, target_kind, target_id, bonus)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(tournament_id, target_kind, target_id)
+        DO UPDATE SET bonus = excluded.bonus
+      `).run(req.params.id, targetKind, targetId, bonus);
+
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error('Error saving standings bonus:', err);
+      return res.status(500).json({ error: err.message || 'Failed to save standings bonus' });
+    }
+  });
+
+  // Standings config (has_additional_scores, has_bonus toggles)
+  app.patch("/api/tournaments/:id/standings-config", requirePermission('scores:manage', (req) => req.params.id), (req, res) => {
+    try {
+      const hasAdditional = req.body?.has_additional_scores !== undefined ? (req.body.has_additional_scores ? 1 : 0) : null;
+      const hasBonus = req.body?.has_bonus !== undefined ? (req.body.has_bonus ? 1 : 0) : null;
+      if (hasAdditional !== null) {
+        db.prepare("UPDATE tournaments SET has_additional_scores = ? WHERE id = ?").run(hasAdditional, req.params.id);
+      }
+      if (hasBonus !== null) {
+        db.prepare("UPDATE tournaments SET has_bonus = ? WHERE id = ?").run(hasBonus, req.params.id);
+      }
+      return res.json({ success: true });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Additional scores (per-participant / per-team extra score column)
+  app.get("/api/tournaments/:id/additional-scores", (req, res) => {
+    const rows = db.prepare(`
+      SELECT id, tournament_id, target_kind, target_id, additional_score
+      FROM standings_additional_scores
+      WHERE tournament_id = ?
+    `).all(req.params.id);
+    res.json(rows);
+  });
+
+  app.put("/api/tournaments/:id/additional-scores", requirePermission('scores:manage', (req) => req.params.id), (req, res) => {
+    try {
+      const targetKind = String(req.body?.target_kind || '').trim().toLowerCase();
+      const targetId = Number.parseInt(String(req.body?.target_id || ''), 10);
+      const parsedValue = Number.parseInt(String(req.body?.additional_score ?? req.body?.value ?? 0), 10);
+
+      if ((targetKind !== 'participant' && targetKind !== 'team') || !Number.isFinite(targetId) || targetId <= 0) {
+        return res.status(400).json({ error: 'Invalid additional score target' });
+      }
+      if (!Number.isFinite(parsedValue)) {
+        return res.status(400).json({ error: 'Invalid additional score value' });
+      }
+
+      const value = Math.max(-9999, Math.min(9999, parsedValue));
+      const exists = targetKind === 'participant'
+        ? db.prepare("SELECT id FROM participants WHERE id = ? AND tournament_id = ?").get(targetId, req.params.id)
+        : db.prepare("SELECT id FROM teams WHERE id = ? AND tournament_id = ?").get(targetId, req.params.id);
+
+      if (!exists) {
+        return res.status(404).json({ error: `${targetKind} not found in tournament` });
+      }
+
+      if (value === 0) {
+        db.prepare(`
+          DELETE FROM standings_additional_scores
+          WHERE tournament_id = ? AND target_kind = ? AND target_id = ?
+        `).run(req.params.id, targetKind, targetId);
+        return res.json({ success: true });
+      }
+
+      db.prepare(`
+        INSERT INTO standings_additional_scores (tournament_id, target_kind, target_id, additional_score)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(tournament_id, target_kind, target_id)
+        DO UPDATE SET additional_score = excluded.additional_score
+      `).run(req.params.id, targetKind, targetId, value);
+
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error('Error saving additional score:', err);
+      return res.status(500).json({ error: err.message || 'Failed to save additional score' });
+    }
   });
 
   // Brackets
