@@ -6433,6 +6433,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     .map((seed: any) => Number(seed.seed))
     .filter((seedNo: number) => Number.isFinite(seedNo) && seedNo > 0);
   const isEightSeedPlayoffMode = matchPlayTypeForRules === 'playoff' && seedsCount === 8;
+  const isTwoGroupPlayoffMode = matchPlayTypeForRules === 'double_elimination';
   const teamSelectionPoolSeeds = visibleSeeds
     .map((seed: any) => Number(seed.seed))
     .filter((seedNo: number) => Number.isFinite(seedNo) && seedNo >= 5 && seedNo <= 8)
@@ -7744,19 +7745,19 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
               ) : matchPlayTypeForRules === 'double_elimination' ? (
                 <>
                   <div className="rounded-md border border-black/10 bg-white p-3">
-                    <p className="font-bold text-black/80 mb-1">Entry</p>
-                    <p className="text-black/60">Top #{qualifiedCount > 0 ? qualifiedCount : 'all'} seeds qualify.</p>
-                    <p className="text-black/60">All seeds start in winners bracket.</p>
+                    <p className="font-bold text-black/80 mb-1">Group Stage</p>
+                    <p className="text-black/60">16 seeds split into 2 groups of 8.</p>
+                    <p className="text-black/60">QF: 1v8, 4v5, 3v6, 2v7 in each group. Top 2 from each group advance.</p>
                   </div>
                   <div className="rounded-md border border-black/10 bg-white p-3">
-                    <p className="font-bold text-black/80 mb-1">Flow</p>
-                    <p className="text-black/60">1st loss moves team/player to lower bracket.</p>
-                    <p className="text-black/60">2nd loss eliminates from tournament.</p>
+                    <p className="font-bold text-black/80 mb-1">Cross Semi-Finals</p>
+                    <p className="text-black/60">Group 1 Winner 1 vs Group 2 Winner 1.</p>
+                    <p className="text-black/60">Group 1 Winner 2 vs Group 2 Winner 2.</p>
                   </div>
                   <div className="rounded-md border border-black/10 bg-white p-3">
-                    <p className="font-bold text-black/80 mb-1">Final</p>
-                    <p className="text-black/60">Winners bracket champion meets lower bracket champion.</p>
-                    <p className="text-black/60">Final winner is champion.</p>
+                    <p className="font-bold text-black/80 mb-1">Finals</p>
+                    <p className="text-black/60">Championship: Cross-SF winners play for 1st and 2nd.</p>
+                    <p className="text-black/60">3rd Place Match: Cross-SF losers play for 3rd and 4th.</p>
                   </div>
                 </>
               ) : matchPlayTypeForRules === 'team_selection_playoff' ? (
@@ -7984,10 +7985,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
               </svg>
               {orderedRoundNumbers.map((roundNumber, roundIndex) => {
                 const roundMatches = [...(roundGroups[roundNumber] || [])].sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
-                const roundTitle = (isEightSeedPlayoffMode || isTeamSelectionPlayoffMode)
-                  ? (roundNumber === 1 ? 'Quarter-Finals' : roundNumber === 2 ? 'Semi-Finals' : 'Finals')
-                  : `Round ${roundNumber}`;
-                const spacingClass = getVisualRoundSpacingClass(roundIndex);
+                const roundTitle = isTwoGroupPlayoffMode
+                  ? (roundNumber === 1 ? 'Group Quarter-Finals' : roundNumber === 2 ? 'Group Semi-Finals' : roundNumber === 3 ? 'Cross Semi-Finals' : 'Finals')
+                  : (isEightSeedPlayoffMode || isTeamSelectionPlayoffMode)
+                    ? (roundNumber === 1 ? 'Quarter-Finals' : roundNumber === 2 ? 'Semi-Finals' : 'Finals')
+                    : `Round ${roundNumber}`;
 
                 return (
                   <div key={roundNumber} className="relative z-[2]">

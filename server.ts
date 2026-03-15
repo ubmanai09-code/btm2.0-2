@@ -2442,6 +2442,128 @@ const existing = db
       });
     }
 
+    if (requestedMatchPlayType === 'double_elimination') {
+      // 2-Group Playoff format:
+      // Group 1 = top half seeds, Group 2 = bottom half seeds
+      // Each group runs QF → SF → 2 winners
+      // Cross Semi-Finals: G1W1 vs G2W1, G1W2 vs G2W2
+      // Finals: Championship (winners) + 3rd Place (losers)
+
+      const g1Count = Math.ceil(participants.length / 2);
+      const group1 = participants.slice(0, g1Count);
+      const group2 = participants.slice(g1Count);
+
+      if (group1.length < 4 || group2.length < 4) {
+        return res.status(400).json({
+          error: '2-Group Playoff requires at least 8 participants per group (16 total) so each group can produce 2 semi-final winners',
+        });
+      }
+
+      // QF pairing: 1v8, 4v5, 3v6, 2v7 for 8-player groups; generalized for other sizes
+      const makeQFPairs = (grp: typeof participants): Array<[typeof participants[0], typeof participants[0]]> => {
+        const n = grp.length;
+        if (n === 8) {
+          return ([[0,7],[3,4],[2,5],[1,6]] as [number,number][]).map(([a,b]) => [grp[a], grp[b]]);
+        }
+        const pairs: Array<[typeof participants[0], typeof participants[0]]> = [];
+        for (let i = 0; i < Math.floor(n / 2); i++) {
+          pairs.push([grp[i], grp[n - 1 - i]]);
+        }
+        return pairs;
+      };
+
+      const g1Pairs = makeQFPairs(group1);
+      const g2Pairs = makeQFPairs(group2);
+
+      const ins = db.prepare(`
+        INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      // Round 1: Group QFs (G1 first, then G2)
+      for (let i = 0; i < g1Pairs.length; i++) {
+        const [p1, p2] = g1Pairs[i];
+        ins.run(tournamentId, 1, i, p1.id, p2.id, p1.seed, p2.seed);
+      }
+      for (let i = 0; i < g2Pairs.length; i++) {
+        const [p1, p2] = g2Pairs[i];
+        ins.run(tournamentId, 1, g1Pairs.length + i, p1.id, p2.id, p1.seed, p2.seed);
+      }
+
+      // Round 2: Group SFs
+      const g1SFCount = Math.ceil(g1Pairs.length / 2);
+      const g2SFCount = Math.ceil(g2Pairs.length / 2);
+      for (let i = 0; i < g1SFCount + g2SFCount; i++) {
+        ins.run(tournamentId, 2, i, null, null, null, null);
+      }
+
+      // Round 3: Cross Semi-Finals
+      ins.run(tournamentId, 3, 0, null, null, null, null); // G1W1 vs G2W1
+      ins.run(tournamentId, 3, 1, null, null, null, null); // G1W2 vs G2W2
+
+      // Round 4: Finals
+      ins.run(tournamentId, 4, 0, null, null, null, null); // Championship
+      ins.run(tournamentId, 4, 1, null, null, null, null); // 3rd Place
+
+      // Build match ID lookup
+      const allBracketRows = db.prepare(
+        `SELECT id, round, match_index FROM brackets WHERE tournament_id = ? ORDER BY round, match_index`
+      ).all(tournamentId) as any[];
+      const gid = (round: number, idx: number): number | null =>
+        (allBracketRows.find((r: any) => Number(r.round) === round && Number(r.match_index) === idx) as any)?.id ?? null;
+
+      const r3m0Id = gid(3, 0);
+      const r3m1Id = gid(3, 1);
+      const r4m0Id = gid(4, 0);
+      const r4m1Id = gid(4, 1);
+
+      // Cross-SF explicit links (Round 2 → Round 3):
+      // Default advancement would pair G1 winners together and G2 winners together – wrong.
+      // We need G1W2 → R3M1.p1 and G2W1 → R3M0.p2 (the other two use default).
+      const r2g1lastId = gid(2, g1SFCount - 1); // last G1 SF match winner = G1W2
+      const r2g2firstId = gid(2, g1SFCount);     // first G2 SF match winner = G2W1
+
+      if (r2g1lastId && r3m1Id) {
+        db.prepare('UPDATE brackets SET participant1_source_match_id=?, participant1_source_outcome=? WHERE id=?')
+          .run(r2g1lastId, 'winner', r3m1Id);
+      }
+      if (r2g2firstId && r3m0Id) {
+        db.prepare('UPDATE brackets SET participant2_source_match_id=?, participant2_source_outcome=? WHERE id=?')
+          .run(r2g2firstId, 'winner', r3m0Id);
+      }
+
+      // Finals links (Round 3 → Round 4):
+      // Championship gets the winners, 3rd Place gets the losers.
+      // Must set ALL explicitly since loser links require explicit source and winner links
+      // need to coexist on the same match (otherwise default advancement fires without loser fill).
+      if (r3m0Id && r4m0Id) {
+        db.prepare('UPDATE brackets SET participant1_source_match_id=?, participant1_source_outcome=? WHERE id=?')
+          .run(r3m0Id, 'winner', r4m0Id);
+      }
+      if (r3m1Id && r4m0Id) {
+        db.prepare('UPDATE brackets SET participant2_source_match_id=?, participant2_source_outcome=? WHERE id=?')
+          .run(r3m1Id, 'winner', r4m0Id);
+      }
+      if (r3m0Id && r4m1Id) {
+        db.prepare('UPDATE brackets SET participant1_source_match_id=?, participant1_source_outcome=? WHERE id=?')
+          .run(r3m0Id, 'loser', r4m1Id);
+      }
+      if (r3m1Id && r4m1Id) {
+        db.prepare('UPDATE brackets SET participant2_source_match_id=?, participant2_source_outcome=? WHERE id=?')
+          .run(r3m1Id, 'loser', r4m1Id);
+      }
+
+      const genCount = (db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ?").get(tournamentId) as any)?.count || 0;
+      return res.json({
+        success: true,
+        match_play_type: requestedMatchPlayType,
+        qualified_count: participants.length,
+        seeds_count: participants.length,
+        rounds_count: 4,
+        generated_matches: genCount,
+      });
+    }
+
     // Simple single elimination bracket generation
     let currentRoundParticipants = [...participants];
     let round = 1;
