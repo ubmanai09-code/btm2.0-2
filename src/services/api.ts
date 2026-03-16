@@ -293,6 +293,28 @@ const api = {
     });
     return res.json();
   },
+  async saveSponsorsConfig(config: any): Promise<{ success: boolean }> {
+    const res = await fetch('/api/sponsors-config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to save sponsors config');
+    }
+    return data;
+  },
+  async resetSponsorsConfig(): Promise<{ success: boolean }> {
+    const res = await fetch('/api/sponsors-config', {
+      method: 'DELETE',
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to reset sponsors config');
+    }
+    return data;
+  },
   async getParticipants(tournamentId: number): Promise<Participant[]> {
     const res = await fetch(`/api/tournaments/${tournamentId}/participants`);
     return res.json();

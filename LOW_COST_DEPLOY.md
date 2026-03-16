@@ -105,3 +105,19 @@ If host does not provide persistent disk, do not use SQLite there for production
 Recommended app env for SQLite deployments:
 
 - `BTM_DB_PATH=/absolute/persistent/path/bowling.db`
+
+## Sponsor persistence requirement
+
+Sponsor setup must be stored on persistent storage, not inside deployed app folders.
+
+Current app behavior:
+
+- sponsor config is persisted to `sponsors-config.json` beside the persistent database directory
+- sponsor logo files are served from persistent `/sponsors` first
+- packaged files in `public/` and `dist/` are fallback/default sources only
+
+For Hostinger or any redeploy-based host:
+
+- do not treat `public/sponsors/` in the deployed app as permanent storage
+- keep sponsor logo files in the persistent sponsors directory used by the app
+- restart the app after deployment so the latest server code is active

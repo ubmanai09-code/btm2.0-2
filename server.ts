@@ -462,6 +462,16 @@ const getNextTeamOrder = (tournamentId: string, teamId: number) => {
   return (row?.max_order || 0) + 1;
 };
 
+const toBinaryFlag = (value: any, fallback = 0): number => {
+  if (value === undefined || value === null || value === '') return fallback ? 1 : 0;
+  if (typeof value === 'number') return value === 1 ? 1 : 0;
+  if (typeof value === 'boolean') return value ? 1 : 0;
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === '1' || normalized === 'true' || normalized === 'on' || normalized === 'yes') return 1;
+  if (normalized === '0' || normalized === 'false' || normalized === 'off' || normalized === 'no') return 0;
+  return fallback ? 1 : 0;
+};
+
 const resequenceTeamMembers = (teamId: number) => {
   const members = db.prepare(`
     SELECT id
@@ -486,11 +496,16 @@ async function startServer() {
   const distSponsorsConfig = path.join(clientDist, "sponsors-config.json");
   const persistentDataDir = path.dirname(dbPath);
   const persistentSponsorsDir = path.join(persistentDataDir, "sponsors");
+  const persistentSponsorsConfig = path.join(persistentDataDir, "sponsors-config.json");
 
   fs.mkdirSync(persistentSponsorsDir, { recursive: true });
   // Keep user-uploaded files in persistent storage and only copy missing packaged assets.
   copyDirMissingFiles(publicSponsorsDir, persistentSponsorsDir);
   copyDirMissingFiles(distSponsorsDir, persistentSponsorsDir);
+  if (!fs.existsSync(persistentSponsorsConfig)) {
+    const initialSponsorsConfig = fs.existsSync(publicSponsorsConfig) ? publicSponsorsConfig : distSponsorsConfig;
+    copyIfExists(initialSponsorsConfig, persistentSponsorsConfig);
+  }
 
   app.use(express.json());
 
@@ -501,7 +516,9 @@ async function startServer() {
 
   // Serve sponsor config directly from public so config-only updates do not require a rebuild.
   app.get('/sponsors-config.json', (req, res) => {
-    const source = fs.existsSync(publicSponsorsConfig) ? publicSponsorsConfig : distSponsorsConfig;
+    const source = fs.existsSync(persistentSponsorsConfig)
+      ? persistentSponsorsConfig
+      : (fs.existsSync(publicSponsorsConfig) ? publicSponsorsConfig : distSponsorsConfig);
     if (!fs.existsSync(source)) {
       return res.status(404).json({ error: 'sponsors-config.json not found' });
     }
@@ -657,6 +674,31 @@ async function startServer() {
     }
     return next();
   };
+
+  app.put('/api/sponsors-config', requireAdmin, (req, res) => {
+    try {
+      fs.mkdirSync(path.dirname(persistentSponsorsConfig), { recursive: true });
+      fs.writeFileSync(persistentSponsorsConfig, JSON.stringify(req.body || {}, null, 2), 'utf8');
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error('Failed to save sponsors config:', err);
+      return res.status(500).json({ error: err.message || 'Failed to save sponsors config' });
+    }
+  });
+
+  app.delete('/api/sponsors-config', requireAdmin, (req, res) => {
+    try {
+      const fallbackSource = fs.existsSync(publicSponsorsConfig) ? publicSponsorsConfig : distSponsorsConfig;
+      if (fs.existsSync(persistentSponsorsConfig)) {
+        fs.unlinkSync(persistentSponsorsConfig);
+      }
+      copyIfExists(fallbackSource, persistentSponsorsConfig);
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error('Failed to reset sponsors config:', err);
+      return res.status(500).json({ error: err.message || 'Failed to reset sponsors config' });
+    }
+  });
 
   const nextPowerOfTwo = (value: number) => {
     let size = 1;
@@ -1156,20 +1198,23 @@ async function startServer() {
   app.post("/api/tournaments", requirePermission('tournaments:manage'), (req, res) => {
     const { 
       name, date, location, format, organizer, logo, match_play_type, qualified_count, playoff_winners_count, type, 
-      games_count, genders_rule, lanes_count, 
-      players_per_lane, players_per_team, shifts_count, oil_pattern 
+      games_count, genders_rule, lanes_count,
+      players_per_lane, players_per_team, shifts_count, oil_pattern,
+      has_additional_scores, has_bonus
     } = req.body;
+    const hasAdditional = toBinaryFlag(has_additional_scores, 0);
+    const hasBonus = toBinaryFlag(has_bonus, 0);
     
     const info = db.prepare(`
       INSERT INTO tournaments (
         name, date, location, format, organizer, logo, match_play_type, qualified_count, playoff_winners_count, type, 
         games_count, genders_rule, lanes_count, 
-        players_per_lane, players_per_team, shifts_count, oil_pattern
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        players_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       name, date, location, format, organizer, logo, match_play_type || 'single_elimination', Number.isFinite(Number.parseInt(qualified_count, 10)) ? Number.parseInt(qualified_count, 10) : 0, Number.isFinite(Number.parseInt(playoff_winners_count, 10)) ? Number.parseInt(playoff_winners_count, 10) : 1, type, 
       games_count || 3, genders_rule, lanes_count || 10, 
-      players_per_lane || 2, players_per_team || 1, shifts_count || 1, oil_pattern
+      players_per_lane || 2, players_per_team || 1, shifts_count || 1, oil_pattern, hasAdditional, hasBonus
     );
     res.json({ id: info.lastInsertRowid });
   });
@@ -1185,19 +1230,30 @@ async function startServer() {
       const { 
         name, date, location, format, organizer, logo, match_play_type, qualified_count, playoff_winners_count, type, 
         games_count, genders_rule, lanes_count, 
-        players_per_lane, players_per_team, shifts_count, oil_pattern, status
+        players_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus, status
       } = req.body;
+      const existing = db.prepare("SELECT has_additional_scores, has_bonus FROM tournaments WHERE id = ?").get(req.params.id) as any;
+      if (!existing) {
+        return res.status(404).json({ error: "Tournament not found" });
+      }
+
+      const hasAdditional = has_additional_scores === undefined
+        ? Number(existing.has_additional_scores) || 0
+        : toBinaryFlag(has_additional_scores, Number(existing.has_additional_scores) || 0);
+      const hasBonus = has_bonus === undefined
+        ? Number(existing.has_bonus) || 0
+        : toBinaryFlag(has_bonus, Number(existing.has_bonus) || 0);
       
       const result = db.prepare(`
         UPDATE tournaments SET 
           name = ?, date = ?, location = ?, format = ?, organizer = ?, logo = ?, match_play_type = ?, qualified_count = ?, playoff_winners_count = ?, type = ?, 
           games_count = ?, genders_rule = ?, lanes_count = ?, 
-          players_per_lane = ?, players_per_team = ?, shifts_count = ?, oil_pattern = ?, status = ?
+          players_per_lane = ?, players_per_team = ?, shifts_count = ?, oil_pattern = ?, has_additional_scores = ?, has_bonus = ?, status = ?
         WHERE id = ?
       `).run(
         name, date, location, format, organizer, logo, match_play_type || 'single_elimination', Number.isFinite(Number.parseInt(qualified_count, 10)) ? Number.parseInt(qualified_count, 10) : 0, Number.isFinite(Number.parseInt(playoff_winners_count, 10)) ? Number.parseInt(playoff_winners_count, 10) : 1, type, 
         games_count || 3, genders_rule, lanes_count || 10, 
-        players_per_lane || 2, players_per_team || 1, shifts_count || 1, oil_pattern, status || 'draft', req.params.id
+        players_per_lane || 2, players_per_team || 1, shifts_count || 1, oil_pattern, hasAdditional, hasBonus, status || 'draft', req.params.id
       );
       
       res.json({ success: true });
@@ -1873,8 +1929,12 @@ const existing = db
   // Standings config (has_additional_scores, has_bonus toggles)
   app.patch("/api/tournaments/:id/standings-config", requirePermission('scores:manage', (req) => req.params.id), (req, res) => {
     try {
-      const hasAdditional = req.body?.has_additional_scores !== undefined ? (req.body.has_additional_scores ? 1 : 0) : null;
-      const hasBonus = req.body?.has_bonus !== undefined ? (req.body.has_bonus ? 1 : 0) : null;
+      const hasAdditional = req.body?.has_additional_scores !== undefined
+        ? toBinaryFlag(req.body.has_additional_scores, 0)
+        : null;
+      const hasBonus = req.body?.has_bonus !== undefined
+        ? toBinaryFlag(req.body.has_bonus, 0)
+        : null;
       if (hasAdditional !== null) {
         db.prepare("UPDATE tournaments SET has_additional_scores = ? WHERE id = ?").run(hasAdditional, req.params.id);
       }

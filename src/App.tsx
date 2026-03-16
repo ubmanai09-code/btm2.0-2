@@ -484,16 +484,6 @@ export default function App() {
 
     const loadSponsorsConfig = async () => {
       try {
-        const overrideRaw = localStorage.getItem(SPONSORS_CONFIG_OVERRIDE_KEY);
-        if (overrideRaw) {
-          const overrideParsed = JSON.parse(overrideRaw);
-          const normalizedOverride = normalizeSponsorsConfig(overrideParsed);
-          if (!isCancelled) {
-            setSponsorsConfig(normalizedOverride);
-          }
-          return;
-        }
-
         const response = await fetch('/sponsors-config.json', { cache: 'no-store' });
         if (!response.ok) throw new Error(`Failed to load sponsors config: ${response.status}`);
         const parsed = await response.json();
@@ -511,6 +501,32 @@ export default function App() {
     loadSponsorsConfig();
     return () => { isCancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (currentRole !== 'admin') return;
+    const overrideRaw = localStorage.getItem(SPONSORS_CONFIG_OVERRIDE_KEY);
+    if (!overrideRaw) return;
+
+    let cancelled = false;
+    const migrateLocalSponsorsConfig = async () => {
+      try {
+        const overrideParsed = JSON.parse(overrideRaw);
+        const normalizedOverride = normalizeSponsorsConfig(overrideParsed);
+        await api.saveSponsorsConfig(normalizedOverride);
+        if (!cancelled) {
+          setSponsorsConfig(normalizedOverride);
+          localStorage.removeItem(SPONSORS_CONFIG_OVERRIDE_KEY);
+        }
+      } catch (err) {
+        console.warn('Failed to migrate local sponsors config to server storage:', err);
+      }
+    };
+
+    migrateLocalSponsorsConfig();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentRole]);
 
   useEffect(() => {
     loadTournaments();
@@ -653,7 +669,9 @@ export default function App() {
       players_per_lane: parseNum(formData.get('players_per_lane'), 2),
       players_per_team: parseNum(formData.get('players_per_team'), 1),
       shifts_count: parseNum(formData.get('shifts_count'), 1),
-      oil_pattern: formData.get('oil_pattern') as string
+      oil_pattern: formData.get('oil_pattern') as string,
+      has_additional_scores: formData.get('has_additional_scores') ? 1 : 0,
+      has_bonus: formData.get('has_bonus') ? 1 : 0,
     };
 
     if (view === 'edit') {
@@ -664,6 +682,10 @@ export default function App() {
       if (view === 'edit' && editingTournament) {
         const result = await api.updateTournament(editingTournament.id, data);
         if (result && (result.success || !result.error)) {
+          await api.setTournamentStandingsConfig(editingTournament.id, {
+            has_additional_scores: data.has_additional_scores,
+            has_bonus: data.has_bonus,
+          });
           const updated = await api.getTournament(editingTournament.id);
           setSelectedTournament(updated);
           setView('detail');
@@ -672,6 +694,10 @@ export default function App() {
         }
       } else {
         const { id } = await api.createTournament(data);
+        await api.setTournamentStandingsConfig(id, {
+          has_additional_scores: data.has_additional_scores,
+          has_bonus: data.has_bonus,
+        });
         const newT = await api.getTournament(id);
         setSelectedTournament(newT);
         setView('detail');
@@ -776,6 +802,8 @@ export default function App() {
           players_per_team: Number(raw?.players_per_team) || 1,
           shifts_count: Number(raw?.shifts_count) || 1,
           oil_pattern: String(raw?.oil_pattern || ''),
+          has_additional_scores: Number(raw?.has_additional_scores) ? 1 : 0,
+          has_bonus: Number(raw?.has_bonus) ? 1 : 0,
           status: raw?.status === 'completed' ? 'completed' : 'draft',
         };
 
@@ -1016,12 +1044,17 @@ export default function App() {
     setShowSponsorsConfigEditor(true);
   };
 
-  const saveSponsorsConfigEditor = () => {
+  const saveSponsorsConfigEditor = async () => {
     const normalized = normalizeSponsorsConfig(sponsorsConfigDraft);
-    setSponsorsConfig(normalized);
-    localStorage.setItem(SPONSORS_CONFIG_OVERRIDE_KEY, JSON.stringify(normalized));
-    setShowSponsorsConfigEditor(false);
-    setSponsorsConfigError('');
+    try {
+      await api.saveSponsorsConfig(normalized);
+      setSponsorsConfig(normalized);
+      localStorage.removeItem(SPONSORS_CONFIG_OVERRIDE_KEY);
+      setShowSponsorsConfigEditor(false);
+      setSponsorsConfigError('');
+    } catch (err: any) {
+      setSponsorsConfigError(err?.message || 'Failed to save sponsors config');
+    }
   };
 
   const exportSponsorsConfigEditor = () => {
@@ -1057,14 +1090,15 @@ export default function App() {
   };
 
   const resetSponsorsConfigEditor = async () => {
-    localStorage.removeItem(SPONSORS_CONFIG_OVERRIDE_KEY);
     try {
+      await api.resetSponsorsConfig();
       const response = await fetch('/sponsors-config.json', { cache: 'no-store' });
       if (!response.ok) throw new Error(`Failed to load sponsors config: ${response.status}`);
       const parsed = await response.json();
       const normalized = normalizeSponsorsConfig(parsed);
       setSponsorsConfig(normalized);
       setSponsorsConfigDraft(normalized);
+      localStorage.removeItem(SPONSORS_CONFIG_OVERRIDE_KEY);
       setSponsorsConfigError('');
     } catch {
       setSponsorsConfig(DEFAULT_SPONSORS_CONFIG);
@@ -1518,6 +1552,27 @@ export default function App() {
                     {formType === 'individual' && (
                       <Input label="Oil Pattern Info" name="oil_pattern" placeholder="e.g. House Shot" defaultValue={editingTournament?.oil_pattern} />
                     )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <label className="flex items-center gap-3 px-3 py-2 rounded-md border border-black/15 bg-white">
+                      <input
+                        type="checkbox"
+                        name="has_additional_scores"
+                        defaultChecked={Boolean(editingTournament?.has_additional_scores)}
+                        className="h-4 w-4 rounded border-black/30 text-violet-600 focus:ring-violet-200"
+                      />
+                      <span className="text-sm font-semibold text-black/80">Enable Score++ Column</span>
+                    </label>
+                    <label className="flex items-center gap-3 px-3 py-2 rounded-md border border-black/15 bg-white">
+                      <input
+                        type="checkbox"
+                        name="has_bonus"
+                        defaultChecked={Boolean(editingTournament?.has_bonus)}
+                        className="h-4 w-4 rounded border-black/30 text-emerald-600 focus:ring-emerald-200"
+                      />
+                      <span className="text-sm font-semibold text-black/80">Enable Bonus Column</span>
+                    </label>
                   </div>
 
                   {formType === 'team' && (
@@ -8038,6 +8093,8 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 
 function StandingsView({ tournament, role }: { tournament: Tournament; role: UserRole }) {
   const canManageStandings = role === 'admin' || role === 'moderator';
+  const [hasAdditionalScores, setHasAdditionalScores] = useState(Boolean(tournament.has_additional_scores));
+  const [hasBonus, setHasBonus] = useState(Boolean(tournament.has_bonus));
   const [standings, setStandings] = useState<Standing[]>([]);
   const [bracketMatches, setBracketMatches] = useState<any[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -8061,16 +8118,41 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
   const getAdditional = (kind: 'participant' | 'team', id: number) => Number(additionalByKey[toBonusKey(kind, id)] || 0);
 
   useEffect(() => {
-    loadStandings();
-  }, [tournament.id]);
+    loadStandings({
+      includeAdditional: Boolean(tournament.has_additional_scores),
+      includeBonus: Boolean(tournament.has_bonus),
+    });
+  }, [tournament.id, tournament.has_additional_scores, tournament.has_bonus]);
 
   useEffect(() => {
     setStandingsMode('players');
   }, [tournament.id, tournament.type]);
 
-  const loadStandings = async () => {
+  useEffect(() => {
+    setHasAdditionalScores(Boolean(tournament.has_additional_scores));
+    setHasBonus(Boolean(tournament.has_bonus));
+  }, [tournament.id, tournament.has_additional_scores, tournament.has_bonus]);
+
+  const loadStandings = async (options?: { includeAdditional?: boolean; includeBonus?: boolean }) => {
     setLoading(true);
     try {
+      let latestTournamentConfig: Tournament | null = null;
+      try {
+        latestTournamentConfig = await api.getTournament(tournament.id);
+      } catch (configErr) {
+        console.warn('Failed to refresh tournament standings config; using local values.', configErr);
+      }
+
+      const includeAdditional = options?.includeAdditional
+        ?? Boolean(latestTournamentConfig?.has_additional_scores ?? hasAdditionalScores);
+      const includeBonus = options?.includeBonus
+        ?? Boolean(latestTournamentConfig?.has_bonus ?? hasBonus);
+
+      if (latestTournamentConfig) {
+        setHasAdditionalScores(Boolean(latestTournamentConfig.has_additional_scores));
+        setHasBonus(Boolean(latestTournamentConfig.has_bonus));
+      }
+
       const [standingsData, bracketsData, participantsData, scoresData, teamsData] = await Promise.all([
         api.getStandings(tournament.id),
         api.getBrackets(tournament.id),
@@ -8086,12 +8168,16 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
 
       // Load bonus scores (backward-compatible)
       let bonusesData: Array<{ target_kind: 'participant' | 'team'; target_id: number; bonus: number }> = [];
-      try {
-        bonusesData = await api.getStandingsBonuses(tournament.id);
+      if (includeBonus) {
+        try {
+          bonusesData = await api.getStandingsBonuses(tournament.id);
+          setBonusApiAvailable(true);
+        } catch (bonusErr) {
+          setBonusApiAvailable(false);
+          console.warn('Standings bonus API unavailable; loading standings without bonuses.', bonusErr);
+        }
+      } else {
         setBonusApiAvailable(true);
-      } catch (bonusErr) {
-        setBonusApiAvailable(false);
-        console.warn('Standings bonus API unavailable; loading standings without bonuses.', bonusErr);
       }
 
       const nextBonuses: Record<string, number> = {};
@@ -8106,12 +8192,16 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
 
       // Load additional scores (backward-compatible)
       let additionalData: Array<{ target_kind: 'participant' | 'team'; target_id: number; additional_score: number }> = [];
-      try {
-        additionalData = await api.getStandingsAdditionalScores(tournament.id);
+      if (includeAdditional) {
+        try {
+          additionalData = await api.getStandingsAdditionalScores(tournament.id);
+          setAdditionalApiAvailable(true);
+        } catch (additionalErr) {
+          setAdditionalApiAvailable(false);
+          console.warn('Additional scores API unavailable.', additionalErr);
+        }
+      } else {
         setAdditionalApiAvailable(true);
-      } catch (additionalErr) {
-        setAdditionalApiAvailable(false);
-        console.warn('Additional scores API unavailable.', additionalErr);
       }
 
       const nextAdditional: Record<string, number> = {};
@@ -8243,8 +8333,9 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
       const games = gameNumbers.map((gameNumber) => scoreByParticipantGame.get(`${p.id}-${gameNumber}`) ?? 0);
       const total = games.reduce((sum, value) => sum + value, 0);
       const additional = getAdditional('participant', p.id);
-      const bonus = getBonus('participant', p.id);
-      const grandTotal = total + additional + bonus;
+      const bonus = hasBonus ? getBonus('participant', p.id) : 0;
+      const visibleAdditional = hasAdditionalScores ? additional : 0;
+      const grandTotal = total + visibleAdditional + bonus;
       const gamesPlayed = games.filter((value) => value > 0).length;
       const average = gamesPlayed > 0 ? Number((total / gamesPlayed).toFixed(1)) : 0;
       return {
@@ -8254,7 +8345,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
         club: p.club || '-',
         hands: (participantInfoMap.get(p.id)?.hands || '').trim() || null,
         games,
-        additional,
+        additional: visibleAdditional,
         bonus,
         total,
         grand_total: grandTotal,
@@ -8308,8 +8399,8 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
   const teamStandingsRows = Array.from(teamMap.values())
     .map((row) => {
       const teamId = Number(row.team_id || 0);
-      const additional = teamId > 0 ? getAdditional('team', teamId) : 0;
-      const bonus = teamId > 0 ? getBonus('team', teamId) : 0;
+      const additional = hasAdditionalScores && teamId > 0 ? getAdditional('team', teamId) : 0;
+      const bonus = hasBonus && teamId > 0 ? getBonus('team', teamId) : 0;
       const grandTotal = row.total + additional + bonus;
       return {
         ...row,
@@ -8416,7 +8507,11 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
 
   const handleExportStandings = () => {
     const gameHeaders = gameNumbers.map((g) => `game_${g}`);
-    const extraHeaders = ['additional_score', 'bonus', 'grand_total'];
+    const extraHeaders = [
+      ...(hasAdditionalScores ? ['additional_score'] : []),
+      ...(hasBonus ? ['bonus'] : []),
+      'grand_total',
+    ];
     const headers = standingsMode === 'teams'
       ? ['rank', 'team', ...gameHeaders, 'total', ...extraHeaders]
       : ['rank', 'participant', 'club', 'team', ...gameHeaders, 'total', ...extraHeaders, 'avg'];
@@ -8426,8 +8521,8 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
           s.team_name,
           ...s.games,
           s.total,
-          s.additional,
-          s.bonus,
+          ...(hasAdditionalScores ? [s.additional] : []),
+          ...(hasBonus ? [s.bonus] : []),
           s.grand_total,
         ])
       : playerStandingsRows.map((s, idx) => [
@@ -8437,8 +8532,8 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
           s.team_name,
           ...s.games,
           s.total,
-          s.additional,
-          s.bonus,
+          ...(hasAdditionalScores ? [s.additional] : []),
+          ...(hasBonus ? [s.bonus] : []),
           s.grand_total,
           s.average.toFixed(1),
         ]);
@@ -8506,11 +8601,20 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
       return;
     }
 
+    // Print a read-only copy so number inputs do not force overly wide columns.
+    const printTable = table.cloneNode(true) as HTMLTableElement;
+    const inputNodes = Array.from(printTable.querySelectorAll('input'));
+    for (const input of inputNodes) {
+      const value = String((input as HTMLInputElement).value ?? '').trim();
+      const textNode = document.createTextNode(value || '0');
+      input.replaceWith(textNode);
+    }
+
     writeAndPrintDocument(printWindow, buildPrintDocument({
       tournament,
       pageTitle: `${tournament.name} - Tournament Standings`,
       pageSubtitle: 'Tournament Standings',
-      contentHtml: `<h2>${standingsMode === 'teams' ? 'Team Standings' : 'Player Standings'}</h2>${table.outerHTML}`,
+      contentHtml: `<h2>${standingsMode === 'teams' ? 'Team Standings' : 'Player Standings'}</h2>${printTable.outerHTML}`,
     }));
   };
 
@@ -8637,6 +8741,11 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                   Bonus editing is currently unavailable on this server build. Standings still load using score totals.
                 </p>
               )}
+              {!additionalApiAvailable && hasAdditionalScores && (
+                <p className="text-xs mt-1 text-amber-700">
+                  Additional score editing is currently unavailable on this server build.
+                </p>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
               <div className="flex gap-1 p-1 bg-black/5 rounded-lg">
@@ -8696,8 +8805,8 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                   </th>
                 ))}
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Total</th>
-                <th className="px-2 py-4 text-xs font-bold uppercase tracking-widest text-violet-700 text-right w-20">Score++</th>
-                <th className="px-2 py-4 text-xs font-bold uppercase tracking-widest text-emerald-700 text-right w-20">Bonus</th>
+                {hasAdditionalScores && <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-violet-700 text-center">Score++</th>}
+                {hasBonus && <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-emerald-700 text-center">Bonus</th>}
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Grand Total</th>
                 {standingsMode === 'players' && (
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">Avg</th>
@@ -8742,7 +8851,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                     );
                   })}
                   <td className="px-6 py-4 text-right font-mono text-black/50">{s.total}</td>
-                  <td className="px-2 py-4 text-right font-mono text-violet-700">
+                  {hasAdditionalScores && <td className="px-6 py-4 text-center font-mono text-violet-700">
                     {(() => {
                       const aKey = toBonusKey('participant', s.participant_id);
                       const liveValue = additionalDrafts[aKey] !== undefined ? additionalDrafts[aKey] : String(s.additional);
@@ -8754,12 +8863,12 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                           onBlur={(e) => persistAdditional('participant', s.participant_id, e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
                           disabled={savingAdditionalKey === aKey}
-                          className="w-16 px-1 py-1 rounded border border-violet-200 focus:outline-none focus:ring-2 focus:ring-violet-200 text-right"
+                          className="w-12 mx-auto px-1 py-1 rounded border border-violet-200 focus:outline-none focus:ring-2 focus:ring-violet-200 text-center"
                         />
                       ) : s.additional;
                     })()}
-                  </td>
-                  <td className="px-2 py-4 text-right font-mono text-emerald-700">
+                  </td>}
+                  {hasBonus && <td className="px-6 py-4 text-center font-mono text-emerald-700">
                     {(() => {
                       const bonusKey = toBonusKey('participant', s.participant_id);
                       const liveValue = bonusDrafts[bonusKey] !== undefined ? bonusDrafts[bonusKey] : String(s.bonus);
@@ -8771,11 +8880,11 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                           onBlur={(e) => persistBonus('participant', s.participant_id, e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
                           disabled={savingBonusKey === bonusKey}
-                          className="w-16 px-1 py-1 rounded border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 text-right"
+                          className="w-12 mx-auto px-1 py-1 rounded border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 text-center"
                         />
                       ) : s.bonus;
                     })()}
-                  </td>
+                  </td>}
                   <td
                       className={`px-6 py-4 text-right font-bold ${
                         maleTopTotalIds.has(s.participant_id)
@@ -8813,7 +8922,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                     <td key={gameIndex} className="px-6 py-4 text-center font-mono">{value}</td>
                   ))}
                   <td className="px-6 py-4 text-right font-mono text-black/50">{s.total}</td>
-                  <td className="px-2 py-4 text-right font-mono text-violet-700">
+                  {hasAdditionalScores && <td className="px-6 py-4 text-center font-mono text-violet-700">
                     {(() => {
                       if (!s.team_id) return s.additional;
                       const aKey = toBonusKey('team', s.team_id);
@@ -8826,12 +8935,12 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                           onBlur={(e) => persistAdditional('team', s.team_id as number, e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
                           disabled={savingAdditionalKey === aKey}
-                          className="w-16 px-1 py-1 rounded border border-violet-200 focus:outline-none focus:ring-2 focus:ring-violet-200 text-right"
+                          className="w-12 mx-auto px-1 py-1 rounded border border-violet-200 focus:outline-none focus:ring-2 focus:ring-violet-200 text-center"
                         />
                       ) : s.additional;
                     })()}
-                  </td>
-                  <td className="px-2 py-4 text-right font-mono text-emerald-700">
+                  </td>}
+                  {hasBonus && <td className="px-6 py-4 text-center font-mono text-emerald-700">
                     {(() => {
                       if (!s.team_id) return s.bonus;
                       const bonusKey = toBonusKey('team', s.team_id);
@@ -8844,21 +8953,21 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                           onBlur={(e) => persistBonus('team', s.team_id as number, e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
                           disabled={savingBonusKey === bonusKey}
-                          className="w-16 px-1 py-1 rounded border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 text-right"
+                          className="w-12 mx-auto px-1 py-1 rounded border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 text-center"
                         />
                       ) : s.bonus;
                     })()}
-                  </td>
+                  </td>}
                   <td className="px-6 py-4 text-right font-bold">{s.grand_total}</td>
                 </tr>
               ))}
               {((standingsMode === 'players' && playerStandingsRows.length === 0) || (standingsMode === 'teams' && teamStandingsRows.length === 0)) && (
                 <tr>
                   {(() => {
-                    // players: Rank + Name + Club + (Team if team tournament) + games + Total + Score++ + Bonus + GrandTotal + Avg
+                    // players: Rank + Name + Club + (Team if team tournament) + games + Total + [optional extras] + GrandTotal + Avg
                     const colSpan = standingsMode === 'players'
-                      ? (3 + (isTeamTournament ? 1 : 0) + gameNumbers.length + 4)
-                      : (2 + gameNumbers.length + 4);
+                      ? (3 + (isTeamTournament ? 1 : 0) + gameNumbers.length + 2 + (hasAdditionalScores ? 1 : 0) + (hasBonus ? 1 : 0) + 1)
+                      : (2 + gameNumbers.length + 2 + (hasAdditionalScores ? 1 : 0) + (hasBonus ? 1 : 0));
                     return (
                       <td colSpan={colSpan} className="px-6 py-12 text-center text-black/40 italic">
                         No scores recorded yet.
