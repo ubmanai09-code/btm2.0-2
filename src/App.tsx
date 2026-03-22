@@ -2414,7 +2414,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
         </Card>
       )}
 
-      <div className="flex border-b border-black/10 gap-2 overflow-x-auto no-scrollbar">
+      <div className="sticky top-0 z-10 bg-white flex border-b border-black/10 gap-2 overflow-x-auto no-scrollbar">
         {visibleTabs.map(tab => (
           <button
             key={tab.id}
@@ -3299,8 +3299,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
             >
               <thead className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
                 <tr className="text-left">
-                  <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 w-10">#</th>
-                  <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">{tx('First Name')}</th>
+                  <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 w-10 sticky left-0 z-[3] bg-[#e3f3f6]">#</th>
+                  <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 sticky left-10 z-[3] bg-[#e3f3f6]">{tx('First Name')}</th>
                   <th className="pl-2 pr-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">{tx('Family Name')}</th>
                   <th className="pl-1 pr-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">{tx('Gender')}</th>
                   <th className="pl-2 pr-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">{tx('Hands')}</th>
@@ -3336,8 +3336,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 ) : (
                   filteredParticipants.map((p, index) => (
                     <tr key={p.id} className={`${participantIssues.has(p.id) ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-[#AFDDE5]/20'} transition-colors`}>
-                      <td className={`px-2 py-1.5 font-mono text-[10px] ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{index + 1}</td>
-                      <td className={`px-2 py-1.5 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>
+                      <td className={`px-2 py-1.5 font-mono text-[10px] sticky left-0 z-[2] ${participantIssues.has(p.id) ? 'text-red-700 bg-red-50' : 'text-black/60 bg-white'}`}>{index + 1}</td>
+                      <td className={`px-2 py-1.5 uppercase text-xs sticky left-10 z-[2] ${participantIssues.has(p.id) ? 'text-red-700 bg-red-50' : 'text-black bg-white'}`}>
                         <span className="inline-flex items-center gap-1">
                           {renderNameWithFemaleSpotAfter(p, { includeLastName: false })}
                         </span>
@@ -3448,8 +3448,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               <table ref={teamsTableRef} className="w-full text-left border-collapse">
                 <thead className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
                   <tr>
-                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 w-12">#</th>
-                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">{tx('Team Name')}</th>
+                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 w-12 sticky left-0 z-[3] bg-[#e3f3f6]">#</th>
+                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 sticky left-12 z-[3] bg-[#e3f3f6]">{tx('Team Name')}</th>
                     <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">{tx('Team Members')}</th>
                     {canManageParticipants && (
                       <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right whitespace-nowrap w-16">Actions</th>
@@ -3470,8 +3470,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       const teamMembers = participants.filter(p => p.team_id === team.id);
                       return (
                         <tr key={team.id} className="hover:bg-[#AFDDE5]/20 transition-colors align-top">
-                          <td className="px-3 py-2 font-mono text-[10px] text-black/60">{index + 1}</td>
-                          <td className="px-3 py-2 uppercase text-xs text-black">{team.name}</td>
+                          <td className="px-3 py-2 font-mono text-[10px] text-black/60 sticky left-0 z-[2] bg-white">{index + 1}</td>
+                          <td className="px-3 py-2 uppercase text-xs text-black sticky left-12 z-[2] bg-white">{team.name}</td>
                           <td className="px-3 py-2">
                             <div className="space-y-1">
                               <div className="flex flex-wrap gap-1.5">
@@ -5075,7 +5075,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
         <table ref={scoringTableRef} className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
-              <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70">Participant</th>
+              <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70 sticky left-0 z-[3] bg-[#e3f3f6]">Participant</th>
               <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70">Lane</th>
               {gameNumbers.map(gameNumber => (
                 <th key={gameNumber} className="px-3 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70 text-center min-w-[110px]">
@@ -5103,7 +5103,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                     </tr>
                   )}
                   <tr className="hover:bg-[#AFDDE5]/20 transition-colors">
-                    <td className="px-4 py-3 font-bold text-sm text-black">
+                    <td className="px-4 py-3 font-bold text-sm text-black sticky left-0 z-[2] bg-white">
                       <span className="inline-flex items-center gap-1">
                         {renderFemaleInitialUnderline(formatScoringName(p), p.gender?.toLowerCase() === 'female')}
                       </span>
@@ -8874,8 +8874,8 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
           <table ref={standingsTableRef} className="w-full min-w-[920px] text-left border-collapse">
             <thead>
               <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-black/70 w-12">Rank</th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-black/70">{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
+                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-black/70 w-12 sticky left-0 z-[3] bg-[#e3f3f6]">Rank</th>
+                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-black/70 sticky left-12 z-[3] bg-[#e3f3f6]">{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
                 {standingsMode === 'players' && (
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Club</th>
                 )}
@@ -8899,8 +8899,8 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
             <tbody className="divide-y divide-black/5">
               {standingsMode === 'players' && playerStandingsRows.map((s, idx) => (
                 <tr key={s.participant_id} className="hover:bg-[#AFDDE5]/20 transition-colors">
-                  <td className="px-3 py-2 text-[13px] font-bold text-black/60">{idx + 1}</td>
-                  <td className="px-3 py-2 text-[13px] font-bold leading-tight">
+                  <td className="px-3 py-2 text-[13px] font-bold text-black/60 sticky left-0 z-[2] bg-white">{idx + 1}</td>
+                  <td className="px-3 py-2 text-[13px] font-bold leading-tight sticky left-12 z-[2] bg-white">
                     <span className="inline-flex items-center gap-1.5">
                       {renderFemaleInitialUnderline(
                         s.participant_name,
@@ -8994,8 +8994,8 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
               ))}
               {standingsMode === 'teams' && teamStandingsRows.map((s, idx) => (
                 <tr key={s.key} className="hover:bg-[#AFDDE5]/20 transition-colors">
-                  <td className="px-3 py-2 text-[13px] font-bold text-black/60">{idx + 1}</td>
-                  <td className="px-3 py-2 leading-tight">
+                  <td className="px-3 py-2 text-[13px] font-bold text-black/60 sticky left-0 z-[2] bg-white">{idx + 1}</td>
+                  <td className="px-3 py-2 leading-tight sticky left-12 z-[2] bg-white">
                     <div className="text-[13px] font-bold">{s.team_name}</div>
                     <div className="text-[10px] text-black/50 lowercase mt-0.5">
                       {s.members.length > 0 ? s.members.join(', ') : 'no members'}
