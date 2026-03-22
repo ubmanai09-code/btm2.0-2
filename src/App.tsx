@@ -165,6 +165,7 @@ const getMatchPlayTypeLabel = (value: Tournament['match_play_type'] | string | u
 type PublicLanguage = 'en' | 'mn';
 type BilingualTerm = { en: string; mn: string };
 const PUBLIC_LANGUAGE_STORAGE_KEY = 'btm_public_language';
+const UiTranslationContext = React.createContext<(text: string) => string>((text) => text);
 
 const parseCsvLine = (line: string): string[] => {
   const fields: string[] = [];
@@ -319,6 +320,7 @@ const Button = ({
   title?: string,
   ariaLabel?: string
 }) => {
+  const translate = React.useContext(UiTranslationContext);
   const variants = {
     primary: 'bg-emerald-600 text-white hover:bg-emerald-700',
     secondary: 'bg-[#E64833] text-white hover:bg-[#cf3f2c]',
@@ -338,11 +340,11 @@ const Button = ({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      title={title}
-      aria-label={ariaLabel}
+      title={title ? translate(title) : undefined}
+      aria-label={ariaLabel ? translate(ariaLabel) : undefined}
       className={`rounded-md font-semibold uppercase tracking-wide transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2 ${variants[variant]} ${sizes[size]} ${className}`}
     >
-      {children}
+      {typeof children === 'string' ? translate(children) : children}
     </button>
   );
 };
@@ -370,29 +372,36 @@ const renderFemaleInitialUnderline = (name: string, isFemale: boolean) => {
   );
 };
 
-const Input = ({ label, ...props }: any) => (
-  <div className="space-y-1.5">
-    {label && <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 px-1">{label}</label>}
-    <input 
-      {...props}
-      className="w-full px-3 py-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 transition-all bg-white text-sm"
-    />
-  </div>
-);
+const Input = ({ label, placeholder, ...props }: any) => {
+  const translate = React.useContext(UiTranslationContext);
+  return (
+    <div className="space-y-1.5">
+      {label && <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 px-1">{translate(label)}</label>}
+      <input 
+        {...props}
+        placeholder={typeof placeholder === 'string' ? translate(placeholder) : placeholder}
+        className="w-full px-3 py-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 transition-all bg-white text-sm"
+      />
+    </div>
+  );
+};
 
-const Select = ({ label, options, ...props }: any) => (
-  <div className="space-y-1.5">
-    {label && <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 px-1">{label}</label>}
-    <select 
-      {...props}
-      className="w-full px-3 py-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 transition-all bg-white appearance-none text-sm"
-    >
-      {options.map((opt: any) => (
-        <option key={opt.value} value={opt.value}>{opt.label}</option>
-      ))}
-    </select>
-  </div>
-);
+const Select = ({ label, options, ...props }: any) => {
+  const translate = React.useContext(UiTranslationContext);
+  return (
+    <div className="space-y-1.5">
+      {label && <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 px-1">{translate(label)}</label>}
+      <select 
+        {...props}
+        className="w-full px-3 py-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 transition-all bg-white appearance-none text-sm"
+      >
+        {options.map((opt: any) => (
+          <option key={opt.value} value={opt.value}>{typeof opt.label === 'string' ? translate(opt.label) : opt.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+};
 
 // --- Main App ---
 
@@ -460,6 +469,18 @@ export default function App() {
       if (translated.length > 0) return translated;
     }
     return String(row.en || '').trim() || fallback;
+  };
+  const t = tPublic;
+  const translateUiText = (text: string) => {
+    const normalized = String(text || '').trim();
+    if (!normalized || publicLanguage !== 'mn') return text;
+    for (const row of publicDictionary.values()) {
+      if (String(row.en || '').trim() === normalized) {
+        const translated = String(row.mn || '').trim();
+        if (translated) return translated;
+      }
+    }
+    return text;
   };
 
   // Persistence effects
@@ -1132,11 +1153,33 @@ export default function App() {
   };
 
   const formatTournamentLabel = (value: string) => {
-    if (!value) return 'Standard format';
-    return value === 'Pre-Qualification' ? 'Total Pinfall' : value;
+    if (!value) return t('format.standard', 'Standard');
+    return value === 'Pre-Qualification'
+      ? t('format.total_pinfall', 'Total Pinfall')
+      : value;
+  };
+
+  const formatMatchPlayTypeLabel = (value: Tournament['match_play_type'] | string | undefined) => {
+    switch (value) {
+      case 'single_elimination':
+        return t('bracket.single_elimination', 'Single Elimination');
+      case 'double_elimination':
+        return t('bracket.double_elimination', 'Double Elimination');
+      case 'ladder':
+        return t('bracket.ladder', 'Ladder');
+      case 'stepladder':
+        return t('bracket.stepladder', 'Stepladder');
+      case 'playoff':
+        return t('bracket.playoff', 'Playoff');
+      case 'team_selection_playoff':
+        return t('bracket.team_selection_playoff', 'Team Selection Playoff');
+      default:
+        return t('bracket.single_elimination', 'Single Elimination');
+    }
   };
 
   return (
+    <UiTranslationContext.Provider value={translateUiText}>
     <div className="min-h-screen bg-gradient-to-b from-white to-emerald-50/30 text-black font-sans">
       {/* Sidebar / Nav */}
       <nav className="fixed top-0 left-0 right-0 h-16 bg-black/95 backdrop-blur-sm border-b border-white/10 z-50 px-6 flex items-center justify-between">
@@ -1154,33 +1197,31 @@ export default function App() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {currentRole === 'public' && (
-            <select
-              value={publicLanguage}
-              onChange={(e: any) => setPublicLanguage(e.target.value === 'mn' ? 'mn' : 'en')}
-              className="h-8 px-2 rounded-md border border-white/25 bg-white/10 text-xs font-bold uppercase tracking-wider text-white"
-              title="Language"
-              aria-label="Language"
-            >
-              <option value="en">ENG</option>
-              <option value="mn">MON</option>
-            </select>
-          )}
+          <select
+            value={publicLanguage}
+            onChange={(e: any) => setPublicLanguage(e.target.value === 'mn' ? 'mn' : 'en')}
+            className="h-8 px-2 rounded-md border border-white/25 bg-white/10 text-xs font-bold uppercase tracking-wider text-white"
+            title={t('app.nav.language', 'Language')}
+            aria-label={t('app.nav.language', 'Language')}
+          >
+            <option value="en">ENG</option>
+            <option value="mn">MON</option>
+          </select>
           {lockedRole ? (
             <span className="px-2 py-1.5 rounded-md border border-white/20 text-xs font-bold uppercase tracking-wider bg-white/10 text-white">
-              {lockedRole}
+              {t(`role.${lockedRole}`, lockedRole)}
             </span>
           ) : authLoading ? (
             <span className="px-2 py-1.5 rounded-md border border-white/20 text-xs font-bold uppercase tracking-wider bg-white/10 text-white/60">
-              Loading...
+              {t('app.status.loading', 'Loading...')}
             </span>
           ) : currentRole === 'public' ? (
             <Button
               variant="outline"
               size="sm"
               onClick={() => { setAuthError(''); setShowLogin(true); }}
-              title="Login"
-              ariaLabel="Login"
+              title={t('auth.login', 'Login')}
+              ariaLabel={t('auth.login', 'Login')}
               className="text-white border-white/25 hover:bg-white/10 hover:border-white/40"
             >
               <LogIn size={14} />
@@ -1188,15 +1229,15 @@ export default function App() {
           ) : (
             <>
               <span className="px-2 py-1.5 rounded-md border border-white/20 text-xs font-bold uppercase tracking-wider bg-white/10 text-white">
-                {currentRole}
+                {t(`role.${currentRole}`, currentRole)}
               </span>
               {currentRole === 'admin' && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={openSponsorsConfigEditor}
-                  title="Sponsor Config"
-                  ariaLabel="Sponsor Config"
+                  title={t('auth.sponsor_config', 'Sponsor Config')}
+                  ariaLabel={t('auth.sponsor_config', 'Sponsor Config')}
                   className="text-white border-white/25 hover:bg-white/10 hover:border-white/40"
                 >
                   <Edit size={14} />
@@ -1209,8 +1250,8 @@ export default function App() {
                   setPasswordError('');
                   setShowPasswordModal(true);
                 }}
-                title="Change Password"
-                ariaLabel="Change Password"
+                title={t('auth.change_password', 'Change Password')}
+                ariaLabel={t('auth.change_password', 'Change Password')}
                 className="text-white border-white/25 hover:bg-white/10 hover:border-white/40"
               >
                 <KeyRound size={14} />
@@ -1219,8 +1260,8 @@ export default function App() {
                 variant="outline"
                 size="sm"
                 onClick={handleLogout}
-                title="Logout"
-                ariaLabel="Logout"
+                title={t('auth.logout', 'Logout')}
+                ariaLabel={t('auth.logout', 'Logout')}
                 className="text-white border-white/25 hover:bg-white/10 hover:border-white/40"
               >
                 <LogOut size={14} />
@@ -1242,19 +1283,19 @@ export default function App() {
             >
               <div className="flex items-end justify-between">
                 <div>
-                  <h1 className="text-4xl font-bold tracking-tight">Tournaments</h1>
-                  <p className="text-black/40 mt-1">Manage and track your bowling events</p>
+                  <h1 className="text-4xl font-bold tracking-tight">{t('app.tournaments', 'Tournaments')}</h1>
+                  <p className="text-black/40 mt-1">{t('app.tournaments_subtitle', 'Manage and track your bowling events')}</p>
                 </div>
                 <div className="flex gap-3">
                   {currentRole !== 'public' && (
                     <>
-                      <Button variant="outline" onClick={handleSaveData} title="Save" ariaLabel="Save">
+                      <Button variant="outline" onClick={handleSaveData} title={t('common.save', 'Save')} ariaLabel={t('common.save', 'Save')}>
                         <Save size={16} />
-                        Save
+                        {t('common.save', 'Save')}
                       </Button>
-                      <Button variant="outline" onClick={handleExport} title="Export" ariaLabel="Export">
+                      <Button variant="outline" onClick={handleExport} title={t('common.export', 'Export')} ariaLabel={t('common.export', 'Export')}>
                         <Upload size={16} />
-                        Export
+                        {t('common.export', 'Export')}
                       </Button>
                     </>
                   )}
@@ -1270,16 +1311,16 @@ export default function App() {
                       <Button
                         variant="outline"
                         onClick={() => tournamentsImportInputRef.current?.click()}
-                        title="Import"
-                        ariaLabel="Import"
+                        title={t('common.import', 'Import')}
+                        ariaLabel={t('common.import', 'Import')}
                       >
                         <Download size={16} />
-                        Import
+                        {t('common.import', 'Import')}
                       </Button>
                     </>
                   )}
                   {isAdmin && (
-                    <Button onClick={() => { setFormType('individual'); setView('create'); }} title="New Tournament" ariaLabel="New Tournament">
+                    <Button onClick={() => { setFormType('individual'); setView('create'); }} title={t('app.new_tournament', 'New Tournament')} ariaLabel={t('app.new_tournament', 'New Tournament')}>
                       <Plus size={18} />
                     </Button>
                   )}
@@ -1301,10 +1342,10 @@ export default function App() {
                         />
                       </div>
                       <div>
-                        <p className="text-[10px] uppercase tracking-widest font-bold text-emerald-700">BTM Powered by</p>
-                        <p className="text-sm font-semibold text-black/85">{appGlobalSponsor.name || 'Unnamed sponsor'}</p>
+                        <p className="text-[10px] uppercase tracking-widest font-bold text-emerald-700">{t('app.powered_by', 'BTM Powered by')}</p>
+                        <p className="text-sm font-semibold text-black/85">{appGlobalSponsor.name || t('app.unnamed_sponsor', 'Unnamed sponsor')}</p>
                         {currentRole !== 'public' && (
-                          <p className="text-xs text-black/55">Visible across the app footer</p>
+                          <p className="text-xs text-black/55">{t('app.visible_in_footer', 'Visible across the app footer')}</p>
                         )}
                       </div>
                     </div>
@@ -1314,8 +1355,8 @@ export default function App() {
                         variant="outline"
                         onClick={() => setShowGlobalSponsorModal(true)}
                         className="px-3"
-                        title="Open Powered by"
-                        ariaLabel="Open Powered by"
+                        title={t('app.open_powered_by', 'Open Powered by')}
+                        ariaLabel={t('app.open_powered_by', 'Open Powered by')}
                       >
                         <Eye size={14} />
                       </Button>
@@ -1332,33 +1373,33 @@ export default function App() {
                 ) : tournaments.length === 0 ? (
                   <div className="col-span-full py-24 text-center border-2 border-dashed border-black/10 rounded-lg">
                     <Trophy size={48} className="mx-auto text-black/10 mb-4" />
-                    <h3 className="text-xl font-semibold uppercase tracking-wide">No tournaments yet</h3>
-                    <p className="text-black/40 mb-6 text-sm">Create your first tournament to get started</p>
+                    <h3 className="text-xl font-semibold uppercase tracking-wide">{t('app.no_tournaments', 'No tournaments yet')}</h3>
+                    <p className="text-black/40 mb-6 text-sm">{t('app.no_tournaments_subtitle', 'Create your first tournament to get started')}</p>
                     {isAdmin && (
-                      <Button onClick={() => setView('create')} variant="outline" className="mx-auto" title="Create Tournament" ariaLabel="Create Tournament">
+                      <Button onClick={() => setView('create')} variant="outline" className="mx-auto" title={t('app.create_tournament', 'Create Tournament')} ariaLabel={t('app.create_tournament', 'Create Tournament')}>
                         <Plus size={18} />
                       </Button>
                     )}
                   </div>
                 ) : (
-                  tournaments.map(t => {
-                    const cardSponsors = sponsorsConfig.tournaments[String(t.id)] || sponsorsConfig.global;
+                  tournaments.map((tournamentItem) => {
+                    const cardSponsors = sponsorsConfig.tournaments[String(tournamentItem.id)] || sponsorsConfig.global;
                     const displaySponsors = cardSponsors.slice(0, 3);
 
                     return (
-                    <Card key={t.id} className="group cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200" onClick={() => openTournament(t)}>
+                    <Card key={tournamentItem.id} className="group cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200" onClick={() => openTournament(tournamentItem)}>
                       <div className="p-6">
                         <div className="flex justify-between items-start mb-4">
                           <div className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest ${
-                            t.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 
-                            t.status === 'finished' ? 'bg-black/5 text-black/40' : 'bg-amber-100 text-amber-700'
+                            tournamentItem.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 
+                            tournamentItem.status === 'finished' ? 'bg-black/5 text-black/40' : 'bg-amber-100 text-amber-700'
                           }`}>
-                            {t.status}
+                            {tournamentItem.status}
                           </div>
                           {isAdmin && (
                             <div className="flex gap-1">
                               <button 
-                                onClick={(e) => { e.stopPropagation(); handleDelete(t.id); }}
+                                onClick={(e) => { e.stopPropagation(); handleDelete(tournamentItem.id); }}
                                 className="p-1.5 rounded-lg hover:bg-red-50 text-black/40 hover:text-red-500 transition-all"
                               >
                                 <Trash2 size={14} />
@@ -1367,11 +1408,11 @@ export default function App() {
                           )}
                         </div>
                         <div className="flex items-start justify-between gap-3 mb-2">
-                          <h3 className="text-xl font-bold group-hover:text-emerald-600 transition-colors">{t.name}</h3>
+                          <h3 className="text-xl font-bold group-hover:text-emerald-600 transition-colors">{tournamentItem.name}</h3>
                           <div className="w-[58px] h-[58px] rounded-md border border-black/10 bg-white p-1.5 flex items-center justify-center shrink-0">
                             <img
-                              src={t.logo || '/logo.png'}
-                              alt={t.name}
+                              src={tournamentItem.logo || '/logo.png'}
+                              alt={tournamentItem.name}
                               className="w-full h-full object-contain"
                               onError={(e) => {
                                 (e.currentTarget as HTMLImageElement).src = '/logo.png';
@@ -1382,38 +1423,38 @@ export default function App() {
                         <div className="space-y-2 mb-3 text-xs text-black/65">
                           <div className="flex items-center gap-1.5">
                             <Calendar size={13} className="text-black/45" />
-                            <span>{formatTournamentDate(t.date)}</span>
+                            <span>{formatTournamentDate(tournamentItem.date)}</span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <Target size={13} className="text-black/45" />
-                            <span className="truncate">{t.location || 'Location TBA'}</span>
+                            <span className="truncate">{tournamentItem.location || t('app.location_tba', 'Location TBA')}</span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <ClipboardList size={13} className="text-black/45" />
-                            <span className="truncate">{formatTournamentLabel(t.format)}</span>
+                            <span className="truncate">{formatTournamentLabel(tournamentItem.format)}</span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <GitBranch size={13} className="text-black/45" />
-                            <span className="truncate">{getMatchPlayTypeLabel(t.match_play_type)}</span>
+                            <span className="truncate">{formatMatchPlayTypeLabel(tournamentItem.match_play_type)}</span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <User size={13} className="text-black/45" />
-                            <span className="truncate">{t.organizer || 'Organizer TBA'}</span>
+                            <span className="truncate">{tournamentItem.organizer || t('app.organizer_tba', 'Organizer TBA')}</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-4 text-sm text-black/60">
                           <div className="flex items-center gap-1.5">
                             <Users size={14} />
-                            <span>{t.type}</span>
+                            <span>{tournamentItem.type === 'team' ? t('tournament.type.team', 'Team') : t('tournament.type.individual', 'Individual')}</span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <LayoutGrid size={14} />
-                            <span>{t.players_per_lane} {t.type === 'team' ? 'Teams' : 'Players'} / Lane</span>
+                            <span>{tournamentItem.players_per_lane} {tournamentItem.type === 'team' ? t('public.tournament.teams', 'Teams') : t('public.tournament.players', 'Players')} / {t('lanes.lane', 'Lane')}</span>
                           </div>
                         </div>
                         {displaySponsors.length > 0 && (
                           <div className="mt-4 pt-3 border-t border-black/5 flex items-center justify-between gap-3">
-                            <span className="text-[10px] font-semibold uppercase tracking-widest text-black/40">Powered by</span>
+                            <span className="text-[10px] font-semibold uppercase tracking-widest text-black/40">{t('app.powered_by_short', 'Powered by')}</span>
                             <div className="flex items-center gap-2">
                               {displaySponsors.map((sponsor) => (
                                 <button
@@ -1457,83 +1498,83 @@ export default function App() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="max-w-2xl mx-auto"
             >
-              <Button variant="ghost" onClick={() => { setView('list'); setEditingTournament(null); }} className="mb-6 -ml-2" title="Back to List" ariaLabel="Back to List">
+              <Button variant="ghost" onClick={() => { setView('list'); setEditingTournament(null); }} className="mb-6 -ml-2" title={t('app.back_to_list', 'Back to List')} ariaLabel={t('app.back_to_list', 'Back to List')}>
                 <ArrowLeft size={18} />
               </Button>
               
               <Card className="p-8">
-                <h2 className="text-2xl font-bold mb-6">{view === 'edit' ? 'Edit Tournament' : 'Create New Tournament'}</h2>
+                <h2 className="text-2xl font-bold mb-6">{view === 'edit' ? t('tournament.edit', 'Edit Tournament') : t('tournament.create', 'Create New Tournament')}</h2>
                 <form onSubmit={handleCreateTournament} className="space-y-6">
-                  <Input label="Tournament Name" name="name" placeholder="e.g. Summer Open 2026" defaultValue={editingTournament?.name} required />
+                  <Input label={t('tournament.name', 'Tournament Name')} name="name" placeholder={t('tournament.name_placeholder', 'e.g. Summer Open 2026')} defaultValue={editingTournament?.name} required />
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input label="Date" name="date" type="date" defaultValue={editingTournament?.date} required />
-                    <Input label="Location" name="location" placeholder="e.g. Bowl-O-Rama Center" defaultValue={editingTournament?.location} />
+                    <Input label={t('tournament.date', 'Date')} name="date" type="date" defaultValue={editingTournament?.date} required />
+                    <Input label={t('tournament.location', 'Location')} name="location" placeholder={t('tournament.location_placeholder', 'e.g. Bowl-O-Rama Center')} defaultValue={editingTournament?.location} />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input label="Organizer" name="organizer" placeholder="e.g. City Bowling Club" defaultValue={editingTournament?.organizer} />
-                    <Input label="Tournament Logo URL" name="logo" placeholder="e.g. /logo.png" defaultValue={editingTournament?.logo} />
+                    <Input label={t('tournament.organizer', 'Organizer')} name="organizer" placeholder={t('tournament.organizer_placeholder', 'e.g. City Bowling Club')} defaultValue={editingTournament?.organizer} />
+                    <Input label={t('tournament.logo_url', 'Tournament Logo URL')} name="logo" placeholder={t('tournament.logo_placeholder', 'e.g. /logo.png')} defaultValue={editingTournament?.logo} />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Select 
-                      label="Format" 
+                      label={t('tournament.format', 'Format')} 
                       name="format" 
                       defaultValue={editingTournament?.format === 'Pre-Qualification' ? 'Total Pinfall' : editingTournament?.format}
                       options={[
-                        { value: 'Single Elimination', label: 'Single Elimination' },
-                        { value: 'Double Elimination', label: 'Double Elimination' },
-                        { value: 'Round Robin', label: 'Round Robin' },
-                        { value: 'Baker System', label: 'Baker System' },
-                        { value: 'Total Pinfall', label: 'Total Pinfall' },
-                        { value: 'Pre-Qualification & Bracket', label: 'Pre-Qualification & Bracket' },
-                        { value: 'Standard', label: 'Standard' }
+                        { value: 'Single Elimination', label: t('format.single_elimination', 'Single Elimination') },
+                        { value: 'Double Elimination', label: t('format.double_elimination', 'Double Elimination') },
+                        { value: 'Round Robin', label: t('format.round_robin', 'Round Robin') },
+                        { value: 'Baker System', label: t('format.baker_system', 'Baker System') },
+                        { value: 'Total Pinfall', label: t('format.total_pinfall', 'Total Pinfall') },
+                        { value: 'Pre-Qualification & Bracket', label: t('format.pre_qualification_bracket', 'Pre-Qualification & Bracket') },
+                        { value: 'Standard', label: t('format.standard', 'Standard') }
                       ]} 
                     />
                     <Select 
-                      label="Bracket Type"
+                      label={t('tournament.bracket_type', 'Bracket Type')}
                       name="match_play_type"
                       defaultValue={editingTournament?.match_play_type || 'single_elimination'}
                       options={[
-                        { value: 'single_elimination', label: 'Single Elimination' },
-                        { value: 'double_elimination', label: 'Double Elimination' },
-                        { value: 'ladder', label: 'Ladder' },
-                        { value: 'stepladder', label: 'Stepladder' },
-                        { value: 'playoff', label: 'Playoff' },
-                        { value: 'team_selection_playoff', label: 'Team Selection Playoff' }
+                        { value: 'single_elimination', label: t('bracket.single_elimination', 'Single Elimination') },
+                        { value: 'double_elimination', label: t('bracket.double_elimination', 'Double Elimination') },
+                        { value: 'ladder', label: t('bracket.ladder', 'Ladder') },
+                        { value: 'stepladder', label: t('bracket.stepladder', 'Stepladder') },
+                        { value: 'playoff', label: t('bracket.playoff', 'Playoff') },
+                        { value: 'team_selection_playoff', label: t('bracket.team_selection_playoff', 'Team Selection Playoff') }
                       ]}
                     />
                     <Select 
-                      label="Type" 
+                      label={t('tournament.type', 'Type')} 
                       name="type" 
                       value={formType}
                       onChange={(e: any) => setFormType(e.target.value)}
                       options={[
-                        { value: 'individual', label: 'Individual' },
-                        { value: 'team', label: 'Team' }
+                        { value: 'individual', label: t('tournament.type.individual', 'Individual') },
+                        { value: 'team', label: t('tournament.type.team', 'Team') }
                       ]} 
                     />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Input label="Games #" name="games_count" type="number" defaultValue={editingTournament?.games_count || "3"} min="1" />
+                    <Input label={t('tournament.games_count', 'Games #')} name="games_count" type="number" defaultValue={editingTournament?.games_count || "3"} min="1" />
                     <Select 
-                      label="Genders Rule" 
+                      label={t('tournament.genders_rule', 'Genders Rule')} 
                       name="genders_rule" 
                       defaultValue={editingTournament?.genders_rule}
                       options={[
-                        { value: 'Mixed', label: 'Mixed' },
-                        { value: 'Men Only', label: 'Men Only' },
-                        { value: 'Women Only', label: 'Women Only' }
+                        { value: 'Mixed', label: t('genders.mixed', 'Mixed') },
+                        { value: 'Men Only', label: t('genders.men_only', 'Men Only') },
+                        { value: 'Women Only', label: t('genders.women_only', 'Women Only') }
                       ]} 
                     />
-                    <Input label="Lane #" name="lanes_count" type="number" defaultValue={editingTournament?.lanes_count || "12"} min="1" max="60" />
+                    <Input label={t('tournament.lanes_count', 'Lane #')} name="lanes_count" type="number" defaultValue={editingTournament?.lanes_count || "12"} min="1" max="60" />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Input 
-                      label={formType === 'team' ? "Teams per Lane" : "Players per Lane"} 
+                      label={formType === 'team' ? t('tournament.teams_per_lane', 'Teams per Lane') : t('tournament.players_per_lane', 'Players per Lane')} 
                       name="players_per_lane" 
                       type="number" 
                       defaultValue={editingTournament?.players_per_lane || "2"} 
@@ -1541,16 +1582,16 @@ export default function App() {
                     />
                     {formType === 'team' && (
                       <Input 
-                        label="Players per Team" 
+                        label={t('tournament.players_per_team', 'Players per Team')} 
                         name="players_per_team" 
                         type="number" 
                         defaultValue={editingTournament?.players_per_team || "1"} 
                         min="1" 
                       />
                     )}
-                    <Input label="Shift #" name="shifts_count" type="number" defaultValue={editingTournament?.shifts_count || "1"} min="1" />
+                    <Input label={t('tournament.shifts_count', 'Shift #')} name="shifts_count" type="number" defaultValue={editingTournament?.shifts_count || "1"} min="1" />
                     {formType === 'individual' && (
-                      <Input label="Oil Pattern Info" name="oil_pattern" placeholder="e.g. House Shot" defaultValue={editingTournament?.oil_pattern} />
+                      <Input label={t('tournament.oil_pattern', 'Oil Pattern Info')} name="oil_pattern" placeholder={t('tournament.oil_pattern_placeholder', 'e.g. House Shot')} defaultValue={editingTournament?.oil_pattern} />
                     )}
                   </div>
 
@@ -1562,7 +1603,7 @@ export default function App() {
                         defaultChecked={Boolean(editingTournament?.has_additional_scores)}
                         className="h-4 w-4 rounded border-black/30 text-violet-600 focus:ring-violet-200"
                       />
-                      <span className="text-sm font-semibold text-black/80">Enable Score++ Column</span>
+                      <span className="text-sm font-semibold text-black/80">{t('tournament.enable_additional', 'Enable Score++ Column')}</span>
                     </label>
                     <label className="flex items-center gap-3 px-3 py-2 rounded-md border border-black/15 bg-white">
                       <input
@@ -1571,34 +1612,34 @@ export default function App() {
                         defaultChecked={Boolean(editingTournament?.has_bonus)}
                         className="h-4 w-4 rounded border-black/30 text-emerald-600 focus:ring-emerald-200"
                       />
-                      <span className="text-sm font-semibold text-black/80">Enable Bonus Column</span>
+                      <span className="text-sm font-semibold text-black/80">{t('tournament.enable_bonus', 'Enable Bonus Column')}</span>
                     </label>
                   </div>
 
                   {formType === 'team' && (
                     <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-                      <Input label="Oil Pattern Info" name="oil_pattern" placeholder="e.g. House Shot" defaultValue={editingTournament?.oil_pattern} />
+                      <Input label={t('tournament.oil_pattern', 'Oil Pattern Info')} name="oil_pattern" placeholder={t('tournament.oil_pattern_placeholder', 'e.g. House Shot')} defaultValue={editingTournament?.oil_pattern} />
                     </div>
                   )}
 
                   {view === 'edit' && (
                     <Select 
-                      label="Status" 
+                      label={t('tournament.status', 'Status')} 
                       name="status" 
                       defaultValue={editingTournament?.status}
                       options={[
-                        { value: 'draft', label: 'Draft' },
-                        { value: 'active', label: 'Active' },
-                        { value: 'finished', label: 'Finished' }
+                        { value: 'draft', label: t('status.draft', 'Draft') },
+                        { value: 'active', label: t('status.active', 'Active') },
+                        { value: 'finished', label: t('status.finished', 'Finished') }
                       ]} 
                     />
                   )}
                   
                   <div className="pt-4 flex gap-3">
-                    <Button type="submit" className="flex-1 justify-center py-3" title={view === 'edit' ? 'Save Changes' : 'Create Tournament'} ariaLabel={view === 'edit' ? 'Save Changes' : 'Create Tournament'}>
+                    <Button type="submit" className="flex-1 justify-center py-3" title={view === 'edit' ? t('tournament.save_changes', 'Save Changes') : t('app.create_tournament', 'Create Tournament')} ariaLabel={view === 'edit' ? t('tournament.save_changes', 'Save Changes') : t('app.create_tournament', 'Create Tournament')}>
                       {view === 'edit' ? <Save size={16} /> : <Plus size={16} />}
                     </Button>
-                    <Button type="button" variant="outline" onClick={() => { setView('list'); setEditingTournament(null); }} className="px-8" title="Close" ariaLabel="Close">
+                    <Button type="button" variant="outline" onClick={() => { setView('list'); setEditingTournament(null); }} className="px-8" title={t('common.close', 'Close')} ariaLabel={t('common.close', 'Close')}>
                       <X size={16} />
                     </Button>
                   </div>
@@ -1629,17 +1670,17 @@ export default function App() {
       {showLogin && !lockedRole && (
         <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
           <Card className="w-full max-w-md p-6">
-            <h3 className="text-xl font-bold mb-1">Login</h3>
-            <p className="text-sm text-black/50 mb-5">Moderator and Admin access only</p>
+            <h3 className="text-xl font-bold mb-1">{t('auth.login', 'Login')}</h3>
+            <p className="text-sm text-black/50 mb-5">{t('auth.login_subtitle', 'Moderator and Admin access only')}</p>
             <form onSubmit={handleLogin} className="space-y-4">
-              <Input label="Username" name="username" autoComplete="username" required />
-              <Input label="Password" name="password" type="password" autoComplete="current-password" required />
+              <Input label={t('moderator.username', 'Username')} name="username" autoComplete="username" required />
+              <Input label={t('moderator.password', 'Password')} name="password" type="password" autoComplete="current-password" required />
               {authError && <p className="text-xs text-red-600 font-semibold">{authError}</p>}
               <div className="flex gap-3 pt-2">
-                <Button type="submit" className="flex-1 justify-center" title="Login" ariaLabel="Login">
+                <Button type="submit" className="flex-1 justify-center" title={t('auth.login', 'Login')} ariaLabel={t('auth.login', 'Login')}>
                   <LogIn size={16} />
                 </Button>
-                <Button type="button" variant="outline" onClick={() => setShowLogin(false)} className="px-6" title="Close" ariaLabel="Close">
+                <Button type="button" variant="outline" onClick={() => setShowLogin(false)} className="px-6" title={t('common.close', 'Close')} ariaLabel={t('common.close', 'Close')}>
                   <X size={16} />
                 </Button>
               </div>
@@ -1651,17 +1692,17 @@ export default function App() {
       {showPasswordModal && !lockedRole && currentRole !== 'public' && (
         <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
           <Card className="w-full max-w-md p-6">
-            <h3 className="text-xl font-bold mb-1">Change Password</h3>
-            <p className="text-sm text-black/50 mb-5">Update password for {currentUser?.username || 'current user'}</p>
+            <h3 className="text-xl font-bold mb-1">{t('auth.change_password', 'Change Password')}</h3>
+            <p className="text-sm text-black/50 mb-5">{t('auth.change_password_for', 'Update password for')} {currentUser?.username || t('auth.current_user', 'current user')}</p>
             <form onSubmit={handleChangePassword} className="space-y-4">
-              <Input label="New Password" name="new_password" type="password" autoComplete="new-password" required />
-              <Input label="Confirm Password" name="confirm_password" type="password" autoComplete="new-password" required />
+              <Input label={t('auth.new_password', 'New Password')} name="new_password" type="password" autoComplete="new-password" required />
+              <Input label={t('auth.confirm_password', 'Confirm Password')} name="confirm_password" type="password" autoComplete="new-password" required />
               {passwordError && <p className="text-xs text-red-600 font-semibold">{passwordError}</p>}
               <div className="flex gap-3 pt-2">
-                <Button type="submit" className="flex-1 justify-center" disabled={passwordSaving} title="Save" ariaLabel="Save">
-                  {passwordSaving ? 'Saving...' : <Save size={16} />}
+                <Button type="submit" className="flex-1 justify-center" disabled={passwordSaving} title={t('common.save', 'Save')} ariaLabel={t('common.save', 'Save')}>
+                  {passwordSaving ? t('auth.saving', 'Saving...') : <Save size={16} />}
                 </Button>
-                <Button type="button" variant="outline" onClick={() => setShowPasswordModal(false)} className="px-6" disabled={passwordSaving} title="Close" ariaLabel="Close">
+                <Button type="button" variant="outline" onClick={() => setShowPasswordModal(false)} className="px-6" disabled={passwordSaving} title={t('common.close', 'Close')} ariaLabel={t('common.close', 'Close')}>
                   <X size={16} />
                 </Button>
               </div>
@@ -1674,8 +1715,8 @@ export default function App() {
         <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4" onClick={() => setShowSponsorsModal(false)}>
           <Card className="w-full max-w-2xl p-4" onClick={(e: any) => e.stopPropagation()}>
             <div className="flex items-center justify-between gap-3 mb-3">
-              <h3 className="text-lg font-bold">{selectedSponsor ? selectedSponsor.name : 'Sponsors & Partners'}</h3>
-              <Button size="sm" variant="outline" onClick={() => setShowSponsorsModal(false)} title="Close" ariaLabel="Close">
+              <h3 className="text-lg font-bold">{selectedSponsor ? selectedSponsor.name : t('sponsors.title', 'Sponsors & Partners')}</h3>
+              <Button size="sm" variant="outline" onClick={() => setShowSponsorsModal(false)} title={t('common.close', 'Close')} ariaLabel={t('common.close', 'Close')}>
                 <X size={14} />
               </Button>
             </div>
@@ -1687,25 +1728,25 @@ export default function App() {
                 </div>
                 <div className="space-y-2 text-sm text-black/75">
                   <div>
-                    <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">Description</p>
-                    <p>{selectedSponsor.description || 'No description provided.'}</p>
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">{t('sponsors.description', 'Description')}</p>
+                    <p>{selectedSponsor.description || t('sponsors.no_description', 'No description provided.')}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">Contacts</p>
-                    <p>{selectedSponsor.contacts || 'No contact details provided.'}</p>
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">{t('sponsors.contacts', 'Contacts')}</p>
+                    <p>{selectedSponsor.contacts || t('sponsors.no_contacts', 'No contact details provided.')}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">Website</p>
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">{t('sponsors.website', 'Website')}</p>
                     {selectedSponsor.url ? (
                       <a href={selectedSponsor.url} target="_blank" rel="noreferrer" className="text-emerald-700 underline break-all">{selectedSponsor.url}</a>
                     ) : (
-                      <p>No URL provided.</p>
+                      <p>{t('sponsors.no_url', 'No URL provided.')}</p>
                     )}
                   </div>
                 </div>
                 <div>
-                  <Button size="sm" variant="outline" onClick={() => setSelectedSponsor(null)} className="normal-case tracking-normal" title="Back to list" ariaLabel="Back to list">
-                    Back to List
+                  <Button size="sm" variant="outline" onClick={() => setSelectedSponsor(null)} className="normal-case tracking-normal" title={t('sponsors.back_to_list', 'Back to List')} ariaLabel={t('sponsors.back_to_list', 'Back to List')}>
+                    {t('sponsors.back_to_list', 'Back to List')}
                   </Button>
                 </div>
               </div>
@@ -1723,7 +1764,7 @@ export default function App() {
                     </div>
                     <div>
                       <p className="font-semibold text-sm text-black/80">{sponsor.name}</p>
-                      <p className="text-xs text-black/45">View details</p>
+                      <p className="text-xs text-black/45">{t('sponsors.view_details', 'View details')}</p>
                     </div>
                   </button>
                 ))}
@@ -1737,8 +1778,8 @@ export default function App() {
         <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4" onClick={() => setShowGlobalSponsorModal(false)}>
           <Card className="w-full max-w-xl p-4" onClick={(e: any) => e.stopPropagation()}>
             <div className="flex items-center justify-between gap-3 mb-3">
-              <h3 className="text-lg font-bold">BTM Powered by</h3>
-              <Button size="sm" variant="outline" onClick={() => setShowGlobalSponsorModal(false)} title="Close" ariaLabel="Close">
+              <h3 className="text-lg font-bold">{t('app.powered_by', 'BTM Powered by')}</h3>
+              <Button size="sm" variant="outline" onClick={() => setShowGlobalSponsorModal(false)} title={t('common.close', 'Close')} ariaLabel={t('common.close', 'Close')}>
                 <X size={14} />
               </Button>
             </div>
@@ -1754,23 +1795,23 @@ export default function App() {
                 />
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">Name</p>
-                <p className="text-sm text-black/80">{appGlobalSponsor.name || 'Unnamed sponsor'}</p>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">{t('sponsors.name', 'Name')}</p>
+                <p className="text-sm text-black/80">{appGlobalSponsor.name || t('app.unnamed_sponsor', 'Unnamed sponsor')}</p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">Description</p>
-                <p className="text-sm text-black/75">{appGlobalSponsor.description || 'No description provided.'}</p>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">{t('sponsors.description', 'Description')}</p>
+                <p className="text-sm text-black/75">{appGlobalSponsor.description || t('sponsors.no_description', 'No description provided.')}</p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">Contacts</p>
-                <p className="text-sm text-black/75">{appGlobalSponsor.contacts || 'No contact details provided.'}</p>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">{t('sponsors.contacts', 'Contacts')}</p>
+                <p className="text-sm text-black/75">{appGlobalSponsor.contacts || t('sponsors.no_contacts', 'No contact details provided.')}</p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">Website</p>
+                <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">{t('sponsors.website', 'Website')}</p>
                 {appGlobalSponsor.url ? (
                   <a href={appGlobalSponsor.url} target="_blank" rel="noreferrer" className="text-emerald-700 underline break-all text-sm">{appGlobalSponsor.url}</a>
                 ) : (
-                  <p className="text-sm text-black/75">No URL provided.</p>
+                  <p className="text-sm text-black/75">{t('sponsors.no_url', 'No URL provided.')}</p>
                 )}
               </div>
             </div>
@@ -1782,8 +1823,8 @@ export default function App() {
         <div className="fixed inset-0 z-[60] bg-black/45 flex items-center justify-center p-4">
           <Card className="w-full max-w-5xl max-h-[92vh] p-4 flex flex-col" onClick={(e: any) => e.stopPropagation()}>
             <div className="flex items-center justify-between gap-3 mb-3 shrink-0">
-              <h3 className="text-lg font-bold">Sponsors and Partners Manager</h3>
-              <Button size="sm" variant="outline" onClick={() => setShowSponsorsConfigEditor(false)} title="Close" ariaLabel="Close">
+              <h3 className="text-lg font-bold">{t('sponsors.manager_title', 'Sponsors and Partners Manager')}</h3>
+              <Button size="sm" variant="outline" onClick={() => setShowSponsorsConfigEditor(false)} title={t('common.close', 'Close')} ariaLabel={t('common.close', 'Close')}>
                 <X size={14} />
               </Button>
             </div>
@@ -1791,48 +1832,48 @@ export default function App() {
             <div className="flex-1 min-h-0 overflow-y-auto pr-1">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
                 <Card className="p-3 border border-black/10">
-                  <h4 className="text-xs font-bold uppercase tracking-widest text-black/60 mb-2">BTM Powered by Slot</h4>
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-black/60 mb-2">{t('sponsors.slot_title', 'BTM Powered by Slot')}</h4>
                   <label className="flex items-center gap-2 text-sm font-semibold mb-3">
                     <input
                       type="checkbox"
                       checked={Boolean(sponsorsConfigDraft.globalSponsorEnabled)}
                       onChange={(e) => setDraftGlobalSponsorEnabled(e.target.checked)}
                     />
-                    Activate Powered by in Footer
+                    {t('sponsors.activate_footer', 'Activate Powered by in Footer')}
                   </label>
                   {sponsorsConfigDraft.globalSponsorEnabled && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <Input
-                        label="Name"
+                        label={t('sponsors.name', 'Name')}
                         value={sponsorsConfigDraft.globalSponsor?.name || ''}
                         onChange={(e: any) => updateDraftGlobalSponsorField('name', e.target.value)}
                       />
                       <Select
-                        label="Type"
+                        label={t('sponsors.type', 'Type')}
                         value={sponsorsConfigDraft.globalSponsor?.kind || 'sponsor'}
                         onChange={(e: any) => updateDraftGlobalSponsorField('kind', e.target.value)}
                         options={[
-                          { value: 'sponsor', label: 'Sponsor' },
-                          { value: 'partner', label: 'Partner' },
+                          { value: 'sponsor', label: t('sponsors.kind.sponsor', 'Sponsor') },
+                          { value: 'partner', label: t('sponsors.kind.partner', 'Partner') },
                         ]}
                       />
                       <Input
-                        label="Logo URL"
+                        label={t('sponsors.logo_url', 'Logo URL')}
                         value={sponsorsConfigDraft.globalSponsor?.logo || '/logo.png'}
                         onChange={(e: any) => updateDraftGlobalSponsorField('logo', e.target.value)}
                       />
                       <Input
-                        label="Website URL"
+                        label={t('sponsors.website_url', 'Website URL')}
                         value={sponsorsConfigDraft.globalSponsor?.url || ''}
                         onChange={(e: any) => updateDraftGlobalSponsorField('url', e.target.value)}
                       />
                       <Input
-                        label="Contacts"
+                        label={t('sponsors.contacts', 'Contacts')}
                         value={sponsorsConfigDraft.globalSponsor?.contacts || ''}
                         onChange={(e: any) => updateDraftGlobalSponsorField('contacts', e.target.value)}
                       />
                       <Input
-                        label="Description"
+                        label={t('sponsors.description', 'Description')}
                         value={sponsorsConfigDraft.globalSponsor?.description || ''}
                         onChange={(e: any) => updateDraftGlobalSponsorField('description', e.target.value)}
                       />
@@ -1841,16 +1882,16 @@ export default function App() {
                 </Card>
 
                 <Card className="p-3 border border-black/10">
-                  <h4 className="text-xs font-bold uppercase tracking-widest text-black/60 mb-2">Scope and Actions</h4>
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-black/60 mb-2">{t('sponsors.scope_actions', 'Scope and Actions')}</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                     <Select
-                      label="Manage For"
+                      label={t('sponsors.manage_for', 'Manage For')}
                       value={sponsorsConfigScope}
                       onChange={(e: any) => setSponsorsConfigScope(e.target.value)}
                       options={sponsorScopeOptions.map((opt) => ({ value: opt.value, label: opt.label }))}
                     />
                     <Input
-                      label="Number of Entries"
+                      label={t('sponsors.entries_count', 'Number of Entries')}
                       type="number"
                       min="0"
                       max="20"
@@ -1864,12 +1905,12 @@ export default function App() {
                       variant="outline"
                       onClick={() => addDraftSponsorForScope(sponsorsConfigScope)}
                       className="px-3"
-                      title="Add Entry"
-                      ariaLabel="Add Entry"
+                      title={t('sponsors.add_entry', 'Add Entry')}
+                      ariaLabel={t('sponsors.add_entry', 'Add Entry')}
                     >
                       <Plus size={14} />
                     </Button>
-                    <Button size="sm" variant="outline" onClick={exportSponsorsConfigEditor} className="px-3" title="Export Config" ariaLabel="Export Config">
+                    <Button size="sm" variant="outline" onClick={exportSponsorsConfigEditor} className="px-3" title={t('sponsors.export_config', 'Export Config')} ariaLabel={t('sponsors.export_config', 'Export Config')}>
                       <Upload size={14} />
                     </Button>
                     <div className="relative">
@@ -1880,7 +1921,7 @@ export default function App() {
                         className="absolute inset-0 opacity-0 cursor-pointer"
                         onChange={importSponsorsConfigEditor}
                       />
-                      <Button size="sm" variant="outline" className="px-3" title="Import Config" ariaLabel="Import Config">
+                      <Button size="sm" variant="outline" className="px-3" title={t('sponsors.import_config', 'Import Config')} ariaLabel={t('sponsors.import_config', 'Import Config')}>
                         <Download size={14} />
                       </Button>
                     </div>
@@ -1890,37 +1931,37 @@ export default function App() {
 
               <div className="space-y-3">
                 {scopedDraftSponsors.length === 0 ? (
-                  <Card className="p-4 border border-dashed border-black/20 text-sm text-black/50">No entries in this scope yet. Add one to begin.</Card>
+                  <Card className="p-4 border border-dashed border-black/20 text-sm text-black/50">{t('sponsors.no_entries', 'No entries in this scope yet. Add one to begin.')}</Card>
                 ) : scopedDraftSponsors.map((item, index) => (
                   <Card key={item.id} className="p-3 border border-black/10">
                     <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs font-bold uppercase tracking-widest text-black/60">Entry {index + 1}</p>
+                      <p className="text-xs font-bold uppercase tracking-widest text-black/60">{t('sponsors.entry', 'Entry')} {index + 1}</p>
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => removeDraftSponsorForScope(sponsorsConfigScope, item.id)}
                         className="px-2"
-                        title="Remove Entry"
-                        ariaLabel="Remove Entry"
+                        title={t('sponsors.remove_entry', 'Remove Entry')}
+                        ariaLabel={t('sponsors.remove_entry', 'Remove Entry')}
                       >
                         <Trash2 size={12} />
                       </Button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <Input label="Name" value={item.name} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'name', e.target.value)} />
+                      <Input label={t('sponsors.name', 'Name')} value={item.name} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'name', e.target.value)} />
                       <Select
-                        label="Type"
+                        label={t('sponsors.type', 'Type')}
                         value={item.kind}
                         onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'kind', e.target.value)}
                         options={[
-                          { value: 'sponsor', label: 'Sponsor' },
-                          { value: 'partner', label: 'Partner' },
+                          { value: 'sponsor', label: t('sponsors.kind.sponsor', 'Sponsor') },
+                          { value: 'partner', label: t('sponsors.kind.partner', 'Partner') },
                         ]}
                       />
-                      <Input label="Logo URL" value={item.logo} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'logo', e.target.value)} />
-                      <Input label="Website URL" value={item.url} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'url', e.target.value)} />
-                      <Input label="Contacts" value={item.contacts} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'contacts', e.target.value)} />
-                      <Input label="Description" value={item.description} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'description', e.target.value)} />
+                      <Input label={t('sponsors.logo_url', 'Logo URL')} value={item.logo} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'logo', e.target.value)} />
+                      <Input label={t('sponsors.website_url', 'Website URL')} value={item.url} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'url', e.target.value)} />
+                      <Input label={t('sponsors.contacts', 'Contacts')} value={item.contacts} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'contacts', e.target.value)} />
+                      <Input label={t('sponsors.description', 'Description')} value={item.description} onChange={(e: any) => updateDraftSponsorField(sponsorsConfigScope, item.id, 'description', e.target.value)} />
                     </div>
                   </Card>
                 ))}
@@ -1930,11 +1971,11 @@ export default function App() {
             <div className="shrink-0 pt-3 mt-3 border-t border-black/10 bg-white">
               {sponsorsConfigError && <p className="text-xs text-red-600 font-semibold mb-2">{sponsorsConfigError}</p>}
               <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={saveSponsorsConfigEditor} className="px-3" title="Save" ariaLabel="Save">
+              <Button size="sm" variant="outline" onClick={saveSponsorsConfigEditor} className="px-3" title={t('common.save', 'Save')} ariaLabel={t('common.save', 'Save')}>
                 <Save size={14} />
               </Button>
-              <Button size="sm" variant="outline" onClick={resetSponsorsConfigEditor} className="px-3 normal-case tracking-normal" title="Reset to File" ariaLabel="Reset to File">
-                Reset to File
+              <Button size="sm" variant="outline" onClick={resetSponsorsConfigEditor} className="px-3 normal-case tracking-normal" title={t('sponsors.reset_to_file', 'Reset to File')} ariaLabel={t('sponsors.reset_to_file', 'Reset to File')}>
+                {t('sponsors.reset_to_file', 'Reset to File')}
               </Button>
               </div>
             </div>
@@ -1945,11 +1986,11 @@ export default function App() {
       <footer className="border-t border-white/10 bg-black">
         <div className="max-w-7xl mx-auto px-6 py-5 text-xs text-white/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2 font-medium flex-wrap">
-            <span className="font-semibold uppercase tracking-wide text-emerald-400">Total tournament control. From first frame to final payout.</span>
+            <span className="font-semibold uppercase tracking-wide text-emerald-400">{t('app.footer_tagline', 'Total tournament control. From first frame to final payout.')}</span>
             <span className="text-white/40">|</span>
             <span>BTM <span className="text-[#E64833]">v2.0</span></span>
             <span className="text-white/40">|</span>
-            <span>Copyright Murat D. 2026</span>
+            <span>{t('app.footer_copyright', 'Copyright Murat D. 2026')}</span>
           </div>
           <div className="flex items-center gap-2 font-medium flex-wrap justify-end">
             {appGlobalSponsor && (
@@ -1957,10 +1998,10 @@ export default function App() {
                 type="button"
                 onClick={() => setShowGlobalSponsorModal(true)}
                 className="inline-flex items-center gap-2 px-2 py-1 rounded border border-white/20 bg-white/5 hover:border-emerald-300 transition-colors"
-                title="Open Powered by"
-                aria-label="Open Powered by"
+                title={t('app.open_powered_by', 'Open Powered by')}
+                aria-label={t('app.open_powered_by', 'Open Powered by')}
               >
-                <span className="text-[10px] uppercase tracking-wider text-white/65">Powered by</span>
+                <span className="text-[10px] uppercase tracking-wider text-white/65">{t('app.powered_by_short', 'Powered by')}</span>
                 <span className="w-8 h-8 rounded bg-white p-1 border border-white/20 flex items-center justify-center">
                   <img
                     src={appGlobalSponsor.logo || '/logo.png'}
@@ -1978,6 +2019,7 @@ export default function App() {
         </div>
       </footer>
     </div>
+    </UiTranslationContext.Provider>
   );
 }
 
@@ -1994,6 +2036,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
   onOpenSponsors: () => void,
   tPublic: (key: string, fallback: string) => string,
 }) {
+  const t = tPublic;
   const [moderatorAccess, setModeratorAccess] = useState<ModeratorTournamentAccess | null>(null);
   const [moderators, setModerators] = useState<UserAccount[]>([]);
   const [selectedModeratorId, setSelectedModeratorId] = useState<number | ''>('');
@@ -2249,10 +2292,10 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="text-sm font-bold uppercase tracking-wider">Moderator Access</h4>
-                    <p className="text-xs text-black/50 mt-1">Assign one or more moderator accounts to this tournament.</p>
+                    <h4 className="text-sm font-bold uppercase tracking-wider">{tPublic('moderator.access.title', 'Moderator Access')}</h4>
+                    <p className="text-xs text-black/50 mt-1">{tPublic('moderator.access.subtitle', 'Assign one or more moderator accounts to this tournament.')}</p>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => setShowModeratorPanel(v => !v)} title={showModeratorPanel ? 'Hide' : 'Show'} ariaLabel={showModeratorPanel ? 'Hide' : 'Show'}>
+                  <Button variant="outline" size="sm" onClick={() => setShowModeratorPanel(v => !v)} title={showModeratorPanel ? tPublic('common.hide', 'Hide') : tPublic('common.show', 'Show')} ariaLabel={showModeratorPanel ? tPublic('common.hide', 'Hide') : tPublic('common.show', 'Show')}>
                     {showModeratorPanel ? <EyeOff size={14} /> : <Eye size={14} />}
                   </Button>
                 </div>
@@ -2262,16 +2305,16 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
 
               <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
                 <Select
-                  label="Select Moderator"
+                  label={t('moderator.select', 'Select Moderator')}
                   value={selectedModeratorId === '' ? '' : String(selectedModeratorId)}
                   onChange={(e: any) => setSelectedModeratorId(e.target.value ? Number(e.target.value) : '')}
                   options={[
-                    { value: '', label: moderators.length > 0 ? 'Choose moderator' : 'No moderators available' },
+                    { value: '', label: moderators.length > 0 ? t('moderator.choose', 'Choose moderator') : t('moderator.none_available', 'No moderators available') },
                     ...moderators.map((m) => ({ value: String(m.id), label: m.username })),
                   ]}
                 />
                 <Input
-                  label="Auto remove (hours)"
+                  label={t('moderator.auto_remove_hours', 'Auto remove (hours)')}
                   type="number"
                   min="1"
                   value={expiresHours}
@@ -2287,12 +2330,12 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                     const parsed = Number.parseInt(expiresHours, 10);
                     handleGrantModerator(Number.isFinite(parsed) && parsed > 0 ? parsed : 24);
                   }}
-                  title="Grant Timed Access"
-                  ariaLabel="Grant Timed Access"
+                  title={t('moderator.grant_timed', 'Grant Timed Access')}
+                  ariaLabel={t('moderator.grant_timed', 'Grant Timed Access')}
                 >
                   <UserPlus size={14} />
                 </Button>
-                <Button variant="outline" disabled={accessLoading || !selectedModeratorId} onClick={() => handleGrantModerator(null)} title="Grant No Expiry Access" ariaLabel="Grant No Expiry Access">
+                <Button variant="outline" disabled={accessLoading || !selectedModeratorId} onClick={() => handleGrantModerator(null)} title={t('moderator.grant_no_expiry', 'Grant No Expiry Access')} ariaLabel={t('moderator.grant_no_expiry', 'Grant No Expiry Access')}>
                   <Users size={14} />
                 </Button>
               </div>
@@ -2302,53 +2345,53 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                   <div key={assignment.user_id} className="flex items-center justify-between text-xs">
                     <div>
                       <span className="font-semibold">{assignment.username}</span>
-                      <span className="text-black/50"> — {assignment.active ? 'active' : 'inactive'}</span>
+                      <span className="text-black/50"> — {assignment.active ? tPublic('common.active', 'Active').toLowerCase() : tPublic('common.inactive', 'Inactive').toLowerCase()}</span>
                       {assignment.active && assignment.expires_at && (
-                        <span className="text-black/50"> (expires {new Date(assignment.expires_at).toLocaleString()})</span>
+                        <span className="text-black/50"> ({t('moderator.expires', 'expires')} {new Date(assignment.expires_at).toLocaleString()})</span>
                       )}
                     </div>
-                    <Button variant="ghost" size="sm" disabled={accessLoading} onClick={() => handleRemoveModerator(assignment.user_id)} title="Remove Moderator Access" ariaLabel="Remove Moderator Access">
+                    <Button variant="ghost" size="sm" disabled={accessLoading} onClick={() => handleRemoveModerator(assignment.user_id)} title={t('moderator.remove_access', 'Remove Moderator Access')} ariaLabel={t('moderator.remove_access', 'Remove Moderator Access')}>
                       <UserMinus size={14} />
                     </Button>
                   </div>
-                )) : <p className="text-xs text-black/50">No moderator assignments yet.</p>}
+                )) : <p className="text-xs text-black/50">{t('moderator.assignments_empty', 'No moderator assignments yet.')}</p>}
               </div>
 
               <div className="pt-2 border-t border-black/10">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-black/50 mb-2">Create Moderator Account</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-black/50 mb-2">{t('moderator.create_account', 'Create Moderator Account')}</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <Input label="Username" value={newModeratorUsername} onChange={(e: any) => setNewModeratorUsername(e.target.value)} />
-                  <Input label="Password" type="password" value={newModeratorPassword} onChange={(e: any) => setNewModeratorPassword(e.target.value)} />
+                  <Input label={t('moderator.username', 'Username')} value={newModeratorUsername} onChange={(e: any) => setNewModeratorUsername(e.target.value)} />
+                  <Input label={t('moderator.password', 'Password')} type="password" value={newModeratorPassword} onChange={(e: any) => setNewModeratorPassword(e.target.value)} />
                 </div>
                 <div className="mt-2">
-                  <Button variant="outline" disabled={accessLoading} onClick={handleCreateModerator} title="Create Moderator" ariaLabel="Create Moderator"><UserPlus size={14} /></Button>
+                  <Button variant="outline" disabled={accessLoading} onClick={handleCreateModerator} title={t('moderator.create', 'Create Moderator')} ariaLabel={t('moderator.create', 'Create Moderator')}><UserPlus size={14} /></Button>
                 </div>
               </div>
 
               <div className="pt-2 border-t border-black/10">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-black/50 mb-2">Reset Moderator Password</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-black/50 mb-2">{t('moderator.reset_password_title', 'Reset Moderator Password')}</p>
                 <div className="grid grid-cols-1 gap-2">
                   <Select
-                    label="Moderator"
+                    label={t('role.moderator', 'Moderator')}
                     value={resetPasswordUserId === '' ? '' : String(resetPasswordUserId)}
                     onChange={(e: any) => setResetPasswordUserId(e.target.value ? Number(e.target.value) : '')}
                     options={[
-                      { value: '', label: moderators.length > 0 ? 'Choose moderator' : 'No moderators available' },
+                      { value: '', label: moderators.length > 0 ? t('moderator.choose', 'Choose moderator') : t('moderator.none_available', 'No moderators available') },
                       ...moderators.map((m) => ({ value: String(m.id), label: m.username })),
                     ]}
                   />
-                  <Input label="New Password" type="password" value={resetPassword} onChange={(e: any) => setResetPassword(e.target.value)} />
-                  <Input label="Confirm Password" type="password" value={resetPasswordConfirm} onChange={(e: any) => setResetPasswordConfirm(e.target.value)} />
+                  <Input label={t('auth.new_password', 'New Password')} type="password" value={resetPassword} onChange={(e: any) => setResetPassword(e.target.value)} />
+                  <Input label={t('auth.confirm_password', 'Confirm Password')} type="password" value={resetPasswordConfirm} onChange={(e: any) => setResetPasswordConfirm(e.target.value)} />
                 </div>
                 <div className="mt-2">
                   <Button
                     variant="outline"
                     disabled={resetPasswordSaving || !resetPasswordUserId}
                     onClick={handleResetModeratorPassword}
-                    title={resetPasswordSaving ? 'Saving' : 'Reset Password'}
-                    ariaLabel={resetPasswordSaving ? 'Saving' : 'Reset Password'}
+                    title={resetPasswordSaving ? t('auth.saving', 'Saving...') : t('moderator.reset_password', 'Reset Password')}
+                    ariaLabel={resetPasswordSaving ? t('auth.saving', 'Saving...') : t('moderator.reset_password', 'Reset Password')}
                   >
-                    {resetPasswordSaving ? 'Saving...' : <KeyRound size={14} />}
+                    {resetPasswordSaving ? t('auth.saving', 'Saving...') : <KeyRound size={14} />}
                   </Button>
                 </div>
                 {resetPasswordError && <p className="text-xs text-red-600 font-semibold mt-2">{resetPasswordError}</p>}
@@ -2401,6 +2444,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
 
 function ParticipantView({ tournament, role }: { tournament: Tournament; role: UserRole }) {
   const canManageParticipants = role === 'admin' || role === 'moderator';
+  const tx = React.useContext(UiTranslationContext);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2417,6 +2461,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   });
   const playersTableRef = useRef<HTMLTableElement | null>(null);
   const teamsTableRef = useRef<HTMLTableElement | null>(null);
+  const say = (message: string) => alert(tx(message));
+  const ask = (message: string) => confirm(tx(message));
 
   const normalizeHandsStyle = (value: string | null | undefined) => {
     const normalized = String(value || '').trim().toLowerCase();
@@ -2764,31 +2810,31 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
   const handleSaveTeams = async () => {
     await loadData();
-    alert('Teams saved.');
+    say('Teams saved.');
   };
 
   const handleClearTeams = async () => {
-    if (!confirm('Clear all teams from this tournament? Players table will not be changed.')) return;
+    if (!ask('Clear all teams from this tournament? Players table will not be changed.')) return;
     try {
       const teamIds = teams.map((team) => team.id);
       if (teamIds.length === 0) {
-        alert('No teams to clear.');
+        say('No teams to clear.');
         return;
       }
       await Promise.all(teamIds.map((id) => api.deleteTeam(id)));
       setPlayerSort({ key: 'none', direction: 'asc' });
       await loadData();
-      alert(`Cleared ${teamIds.length} team(s).`);
+      alert(`${tx('Cleared')} ${teamIds.length} ${tx('team(s).')}`);
     } catch (err) {
       console.error('Failed to clear teams:', err);
-      alert('Failed to clear teams. Please check server logs.');
+      say('Failed to clear teams. Please check server logs.');
     }
   };
 
   const handlePrintTeams = () => {
     const printWindow = window.open('', '_blank', 'width=1000,height=700');
     if (!printWindow) {
-      alert('Unable to open print window. Please allow popups and try again.');
+      say('Unable to open print window. Please allow popups and try again.');
       return;
     }
 
@@ -2809,31 +2855,31 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         <tr>
           <td>${index + 1}</td>
           <td>${escapePrintHtml(team.name || '-')}</td>
-          <td>${escapePrintHtml(teamMembers || 'No members')}</td>
+          <td>${escapePrintHtml(teamMembers || tx('No members'))}</td>
         </tr>
       `;
     }).join('');
 
     const teamsContentHtml = `
-      <h2>Teams</h2>
+      <h2>${tx('Teams')}</h2>
       <table>
         <thead>
           <tr>
             <th>#</th>
-            <th>Team Name</th>
-            <th>Team Members</th>
+            <th>${tx('Team Name')}</th>
+            <th>${tx('Team Members')}</th>
           </tr>
         </thead>
         <tbody>
-          ${teamRowsHtml || '<tr><td colspan="3" style="text-align:center;color:#777;">No teams created.</td></tr>'}
+          ${teamRowsHtml || `<tr><td colspan="3" style="text-align:center;color:#777;">${tx('No teams created.')}</td></tr>`}
         </tbody>
       </table>
     `;
 
     writeAndPrintDocument(printWindow, buildPrintDocument({
       tournament,
-      pageTitle: `${tournament.name} - Teams`,
-      pageSubtitle: 'Teams Table',
+      pageTitle: `${tournament.name} - ${tx('Teams')}`,
+      pageSubtitle: tx('Teams Table'),
       contentHtml: teamsContentHtml,
     }));
   };
@@ -2842,7 +2888,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     const inputEl = e.target;
     const file = inputEl.files?.[0];
     if (!file) return;
-    if (!confirm('Importing Teams will replace Teams table data only. Players table will not be changed. Continue?')) {
+    if (!ask('Importing Teams will replace Teams table data only. Players table will not be changed. Continue?')) {
       inputEl.value = '';
       return;
     }
@@ -2912,7 +2958,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         const teamNameIndex = headers.indexOf('team name');
         const teamMembersIndex = headers.indexOf('team members');
         if (teamNameIndex === -1) {
-          alert('Invalid teams file: missing Team Name column.');
+          say('Invalid teams file: missing Team Name column.');
           inputEl.value = '';
           return;
         }
@@ -3012,7 +3058,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
           }
 
           if (missingCount > 0) {
-            alert(`Imported teams with ${assignedCount} member assignment(s). ${missingCount} member name(s) were not found in Players table.`);
+            alert(`${tx('Imported teams with')} ${assignedCount} ${tx('member assignment(s).')} ${missingCount} ${tx('member name(s) were not found in Players table.')}`);
           }
         }
 
@@ -3020,7 +3066,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       } catch (error) {
         console.error('Failed to import teams:', error);
         const message = error instanceof Error ? error.message : String(error || 'Unknown error');
-        alert(`Failed to import teams: ${message}`);
+        alert(`${tx('Failed to import teams:')} ${message}`);
       } finally {
         inputEl.value = '';
       }
@@ -3170,8 +3216,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div>
-          <h3 className="text-xl font-bold text-emerald-800">{canManageParticipants ? 'Manage Participants' : 'Participants'}</h3>
-          <p className="text-xs text-black/50 mt-0.5">{canManageParticipants ? 'Roster and participant import/export' : 'Roster view'}</p>
+          <h3 className="text-xl font-bold text-emerald-800">{canManageParticipants ? tx('Manage Participants') : tx('Participants')}</h3>
+          <p className="text-xs text-black/50 mt-0.5">{canManageParticipants ? tx('Roster and participant import/export') : tx('Roster view')}</p>
         </div>
       </div>
 
@@ -3181,9 +3227,9 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
             <div className="p-3 border-b border-[#AFDDE5]/70 bg-white">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div>
-                  <h4 className="font-bold text-black/80 flex items-center gap-2"><User size={16} className="text-emerald-700" />Players ({participants.length}) • M ({maleCount}) • F ({femaleCount})</h4>
+                  <h4 className="font-bold text-black/80 flex items-center gap-2"><User size={16} className="text-emerald-700" />{tx('Players')} ({participants.length}) • M ({maleCount}) • F ({femaleCount})</h4>
                   {issueCount > 0 && (
-                    <p className="text-[11px] text-red-600 mt-1 font-semibold">{issueCount} record(s) need review (highlighted in red).</p>
+                    <p className="text-[11px] text-red-600 mt-1 font-semibold">{issueCount} {tx('record(s) need review (highlighted in red).')}</p>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2 w-full md:w-auto md:min-w-[360px]">
@@ -3192,7 +3238,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        const value = window.prompt('Search player/team/club/email', playerSearchQuery);
+                          const value = window.prompt(tx('Search player/team/club/email'), playerSearchQuery);
                         if (value !== null) setPlayerSearchQuery(value.trim());
                       }}
                       title="Search Player"
@@ -3254,10 +3300,10 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               <thead className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
                 <tr className="text-left">
                   <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 w-10">#</th>
-                  <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">First Name</th>
-                  <th className="pl-2 pr-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">Family Name</th>
-                  <th className="pl-1 pr-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">Gender</th>
-                  <th className="pl-2 pr-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">Hands</th>
+                  <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">{tx('First Name')}</th>
+                  <th className="pl-2 pr-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">{tx('Family Name')}</th>
+                  <th className="pl-1 pr-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">{tx('Gender')}</th>
+                  <th className="pl-2 pr-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">{tx('Hands')}</th>
                   <th className="pl-2 pr-0.5 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">
                     <button
                       type="button"
@@ -3265,7 +3311,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-black/70 hover:text-emerald-700 transition-colors"
                       title="Sort by club"
                     >
-                      Club
+                      {tx('Club')}
                       <span>{playerSort.key === 'club' ? (playerSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
                     </button>
                   </th>
@@ -3278,13 +3324,13 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 {participants.length === 0 ? (
                   <tr>
                     <td colSpan={canManageParticipants ? 7 : 6} className="px-4 py-8 text-center text-black/40 italic text-sm">
-                      No participants registered yet.
+                      {tx('No participants registered yet.')}
                     </td>
                   </tr>
                 ) : filteredParticipants.length === 0 ? (
                   <tr>
                     <td colSpan={canManageParticipants ? 7 : 6} className="px-4 py-8 text-center text-black/40 italic text-sm">
-                      No players match your search.
+                      {tx('No players match your search.')}
                     </td>
                   </tr>
                 ) : (
@@ -3335,10 +3381,10 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               <div className="p-3 border-b border-[#AFDDE5]/70 bg-white">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                   <div>
-                    <h4 className="font-bold text-black/80 flex items-center gap-2"><Users size={16} className="text-emerald-700" />Teams ({teams.length})</h4>
+                    <h4 className="font-bold text-black/80 flex items-center gap-2"><Users size={16} className="text-emerald-700" />{tx('Teams')} ({teams.length})</h4>
                     {multiTeamPlayers.length > 0 && (
                       <p className="text-[11px] text-red-600 mt-1 font-semibold">
-                        Warning: {multiTeamPlayers.length} player(s) appear in more than one team ({multiTeamPlayers.slice(0, 3).map((player) => player.name).join(', ')}{multiTeamPlayers.length > 3 ? ', ...' : ''}).
+                        {tx('Warning:')} {multiTeamPlayers.length} {tx('player(s) appear in more than one team')} ({multiTeamPlayers.slice(0, 3).map((player) => player.name).join(', ')}{multiTeamPlayers.length > 3 ? ', ...' : ''}).
                       </p>
                     )}
                   </div>
@@ -3348,7 +3394,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          const value = window.prompt('Search player or team', playerSearchQuery);
+                          const value = window.prompt(tx('Search player or team'), playerSearchQuery);
                           if (value !== null) setPlayerSearchQuery(value.trim());
                         }}
                         title="Search Player"
@@ -3403,8 +3449,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 <thead className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
                   <tr>
                     <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 w-12">#</th>
-                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">Team Name</th>
-                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">Team Members</th>
+                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">{tx('Team Name')}</th>
+                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">{tx('Team Members')}</th>
                     {canManageParticipants && (
                       <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right whitespace-nowrap w-16">Actions</th>
                     )}
@@ -3413,11 +3459,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 <tbody className="divide-y divide-black/10">
                   {teams.length === 0 ? (
                     <tr>
-                      <td colSpan={canManageParticipants ? 4 : 3} className="px-4 py-8 text-center text-black/40 italic text-sm">No teams created.</td>
+                      <td colSpan={canManageParticipants ? 4 : 3} className="px-4 py-8 text-center text-black/40 italic text-sm">{tx('No teams created.')}</td>
                     </tr>
                   ) : filteredTeams.length === 0 ? (
                     <tr>
-                      <td colSpan={canManageParticipants ? 4 : 3} className="px-4 py-8 text-center text-black/40 italic text-sm">No teams match your search.</td>
+                      <td colSpan={canManageParticipants ? 4 : 3} className="px-4 py-8 text-center text-black/40 italic text-sm">{tx('No teams match your search.')}</td>
                     </tr>
                   ) : (
                     filteredTeams.map((team, index) => {
@@ -3435,7 +3481,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                                       {renderNameWithFemaleSpotAfter(member, { includeLastName: true, uppercase: true })}
                                     </span>
                                   </span>
-                                )) : <span className="text-xs text-black/40 italic">No members</span>}
+                                )) : <span className="text-xs text-black/40 italic">{tx('No members')}</span>}
                               </div>
                             </div>
                           </td>
@@ -3490,8 +3536,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               className="relative w-full max-w-lg"
             >
               <Card className="p-8 border-emerald-200 bg-gradient-to-b from-white to-emerald-50/40 shadow-md">
-                <h3 className="text-2xl font-bold text-emerald-800 mb-2">{editingPlayer ? 'Edit Player' : 'Add New Player'}</h3>
-                <p className="text-xs text-black/50 mb-5">Enter participant details and assign a team if needed.</p>
+                <h3 className="text-2xl font-bold text-emerald-800 mb-2">{editingPlayer ? tx('Edit Player') : tx('Add New Player')}</h3>
+                <p className="text-xs text-black/50 mb-5">{tx('Enter participant details and assign a team if needed.')}</p>
                 <form onSubmit={handleAddPlayer} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <Input label="First Name" name="first_name" defaultValue={editingPlayer?.first_name} placeholder="John" required />
@@ -3554,12 +3600,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               className="relative w-full max-w-md"
             >
               <Card className="p-8 border-emerald-200 bg-gradient-to-b from-white to-emerald-50/40 shadow-md">
-                <h3 className="text-2xl font-bold text-emerald-800 mb-2">{editingTeam ? 'Edit Team' : 'Create New Team'}</h3>
-                <p className="text-xs text-black/50 mb-5">Create a team or rename an existing one.</p>
+                <h3 className="text-2xl font-bold text-emerald-800 mb-2">{editingTeam ? tx('Edit Team') : tx('Create New Team')}</h3>
+                <p className="text-xs text-black/50 mb-5">{tx('Create a team or rename an existing one.')}</p>
                 <form onSubmit={handleAddTeam} className="space-y-4">
                   <Input label="Team Name" name="name" defaultValue={editingTeam?.name} placeholder="e.g. The Strikers" required />
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 px-1">Search Player</label>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 px-1">{tx('Search Player')}</label>
                     <input
                       type="text"
                       value={teamMemberSearchQuery}
@@ -3569,12 +3615,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 px-1">Team Members (from players)</label>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 px-1">{tx('Team Members (from players)')}</label>
                     <div className="max-h-48 overflow-auto rounded-md border border-black/10 bg-white p-2 space-y-1">
                       {participants.length === 0 ? (
-                        <p className="text-xs text-black/40 italic px-1 py-1">No players available.</p>
+                        <p className="text-xs text-black/40 italic px-1 py-1">{tx('No players available.')}</p>
                       ) : filteredTeamMemberCandidates.length === 0 ? (
-                        <p className="text-xs text-black/40 italic px-1 py-1">No players match your search.</p>
+                        <p className="text-xs text-black/40 italic px-1 py-1">{tx('No players match your search.')}</p>
                       ) : (
                         filteredTeamMemberCandidates.map((player) => {
                           const checked = selectedTeamMemberIds.includes(player.id);
@@ -3607,7 +3653,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                                 </span>
                               </div>
                               <span className={`text-[10px] ${assignedToOtherTeam ? 'text-amber-700 font-semibold' : 'text-black/40'}`}>
-                                {assignedToOtherTeam ? `Assigned: ${player.team_name || `Team ${player.team_id}`}` : (player.team_name || 'Unassigned')}
+                                {assignedToOtherTeam ? `${tx('Assigned:')} ${player.team_name || `${tx('Team')} ${player.team_id}`}` : (player.team_name || tx('Unassigned'))}
                               </span>
                             </label>
                           );
@@ -3635,6 +3681,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
 function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole }) {
   const canManageLanes = role === 'admin';
+  const tx = React.useContext(UiTranslationContext);
   const [lanes, setLanes] = useState<LaneAssignment[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -3642,6 +3689,8 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   const [currentShift, setCurrentShift] = useState(1);
   const [selectedItem, setSelectedItem] = useState<{ id: number, type: 'assignment' | 'waiting' } | null>(null);
   const [outOfOperationLanes, setOutOfOperationLanes] = useState<number[]>([]);
+  const say = (message: string) => alert(tx(message));
+  const ask = (message: string) => confirm(tx(message));
 
   useEffect(() => {
     setOutOfOperationLanes([]);
@@ -3692,19 +3741,19 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     if (!canManageLanes) return;
     const items = tournament.type === 'individual' ? eligibleParticipants : teams;
     if (items.length === 0) {
-      alert(tournament.type === 'individual' ? 'No eligible players available for auto assignment.' : 'No teams available for auto assignment.');
+      alert(tournament.type === 'individual' ? tx('No eligible players available for auto assignment.') : tx('No teams available for auto assignment.'));
       return;
     }
 
     const activeLaneCount = operationalLaneNumbers.length;
     if (activeLaneCount === 0) {
-      alert('All lanes are set to out of operation. Mark at least one lane as operational to auto-assign.');
+      say('All lanes are set to out of operation. Mark at least one lane as operational to auto-assign.');
       return;
     }
 
     const totalCapacity = activeLaneCount * tournament.players_per_lane * Math.max(1, tournament.shifts_count || 1);
     if (totalCapacity <= 0) {
-      alert('Tournament lane capacity is invalid. Please check lanes, shifts, and players per lane.');
+      say('Tournament lane capacity is invalid. Please check lanes, shifts, and players per lane.');
       return;
     }
 
@@ -3731,11 +3780,11 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       await loadData();
       const overflowCount = Math.max(0, items.length - totalCapacity);
       if (overflowCount > 0) {
-        alert(`${overflowCount} ${tournament.type === 'individual' ? 'player(s)' : 'team(s)'} remain in waiting queue because lane capacity is full.`);
+        alert(`${overflowCount} ${tx(tournament.type === 'individual' ? 'player(s)' : 'team(s)')} ${tx('remain in waiting queue because lane capacity is full.')}`);
       }
     } catch (err) {
       console.error(err);
-      alert('Failed to auto-assign lanes.');
+      say('Failed to auto-assign lanes.');
     }
   };
 
@@ -3747,7 +3796,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       (lane) => lane.lane_number === laneNumber && lane.shift_number === currentShift
     );
     if (currentLaneAssignments.length >= tournament.players_per_lane) {
-      alert('This lane is already full for the selected shift.');
+      say('This lane is already full for the selected shift.');
       return;
     }
 
@@ -3761,11 +3810,11 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         if (tournament.type === 'individual') {
           const player = participants.find((p) => p.id === selectedItem.id);
           if (!player) {
-            alert('Selected player not found.');
+            say('Selected player not found.');
             return;
           }
           if (!isParticipantAllowedByRule(player)) {
-            alert(`This player cannot be assigned because tournament gender rule is ${tournament.genders_rule}.`);
+            alert(`${tx('This player cannot be assigned because tournament gender rule is')} ${tournament.genders_rule}.`);
             return;
           }
           payload.participant_id = selectedItem.id;
@@ -3795,7 +3844,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
   const handleRemoveFromTournament = async (id: number, type: 'participant' | 'team') => {
     if (!canManageLanes) return;
-    if (!confirm(`Are you sure you want to remove this ${type} from the tournament?`)) return;
+    if (!confirm(`${tx('Are you sure you want to remove this')} ${tx(type)} ${tx('from the tournament?')}`)) return;
     
     if (type === 'participant') {
       await api.deleteParticipant(id);
@@ -3808,8 +3857,8 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
   const handleMoveLane = async (fromLane: number, fromShift: number) => {
     if (!canManageLanes) return;
-    const targetLane = prompt("Move all players from this lane to which lane number?", fromLane.toString());
-    const targetShift = prompt("Move to which shift number?", fromShift.toString());
+    const targetLane = prompt(tx('Move all players from this lane to which lane number?'), fromLane.toString());
+    const targetShift = prompt(tx('Move to which shift number?'), fromShift.toString());
     
     if (!targetLane || !targetShift) return;
     
@@ -3868,7 +3917,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     const inputEl = e.target;
     const file = inputEl.files?.[0];
     if (!file) return;
-    if (!confirm('Importing Lane Assignments will replace all existing lane assignments for this tournament. Continue?')) {
+    if (!ask('Importing Lane Assignments will replace all existing lane assignments for this tournament. Continue?')) {
       inputEl.value = '';
       return;
     }
@@ -3924,7 +3973,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         const text = event.target?.result as string;
         const rows = parseCsv(text);
         if (rows.length < 2) {
-          alert('Invalid file format');
+          say('Invalid file format');
           inputEl.value = '';
           return;
         }
@@ -3938,7 +3987,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         const teamNameIndex = headers.indexOf('team_name');
 
         if (laneNumberIndex === -1 || shiftNumberIndex === -1) {
-          alert('Invalid file format: missing lane_number or shift_number columns.');
+          say('Invalid file format: missing lane_number or shift_number columns.');
           inputEl.value = '';
           return;
         }
@@ -3999,7 +4048,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         loadData();
         inputEl.value = '';
       } catch (err) {
-        alert("Invalid file format");
+        say('Invalid file format');
         inputEl.value = '';
       }
     };
@@ -4008,14 +4057,14 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
   const handleClearLanes = async () => {
     if (!canManageLanes) return;
-    if (!confirm('Clear all lane assignments for this tournament?')) return;
+    if (!ask('Clear all lane assignments for this tournament?')) return;
     try {
       await api.bulkUpdateLanes(tournament.id, []);
       setSelectedItem(null);
       await loadData();
     } catch (err) {
       console.error(err);
-      alert('Failed to clear lane assignments.');
+      say('Failed to clear lane assignments.');
     }
   };
 
@@ -4029,17 +4078,17 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         shift_number: lane.shift_number,
       })));
       await loadData();
-      alert('Lane assignments saved.');
+      say('Lane assignments saved.');
     } catch (err) {
       console.error(err);
-      alert('Failed to save lane assignments.');
+      say('Failed to save lane assignments.');
     }
   };
 
   const handlePrintLanes = () => {
     const printWindow = window.open('', '_blank', 'width=1100,height=800');
     if (!printWindow) {
-      alert('Unable to open print window. Please allow popups and try again.');
+      say('Unable to open print window. Please allow popups and try again.');
       return;
     }
 
@@ -4080,13 +4129,13 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     }).join('');
 
     const lanesContentHtml = `
-      <h2>Lanes</h2>
+      <h2>${tx('Lanes')}</h2>
       <table>
         <thead>
           <tr>
-            <th>Lane</th>
-            <th>${tournament.type === 'individual' ? 'Players' : 'Teams'}</th>
-            ${tournament.type === 'team' ? '<th>Team Members</th>' : ''}
+            <th>${tx('Lane')}</th>
+            <th>${tournament.type === 'individual' ? tx('Players') : tx('Teams')}</th>
+            ${tournament.type === 'team' ? `<th>${tx('Team Members')}</th>` : ''}
           </tr>
         </thead>
         <tbody>
@@ -4097,8 +4146,8 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
     writeAndPrintDocument(printWindow, buildPrintDocument({
       tournament,
-      pageTitle: `${tournament.name} - Lane Assignments`,
-      pageSubtitle: `Lane Assignments • Shift ${currentShift}`,
+      pageTitle: `${tournament.name} - ${tx('Lane Assignments')}`,
+      pageSubtitle: `${tx('Lane Assignments')} • ${tx('Shift')} ${currentShift}`,
       contentHtml: lanesContentHtml,
     }));
   };
@@ -4118,12 +4167,12 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div>
-          <h3 className="text-xl font-bold text-emerald-800">Lane Assignments</h3>
+          <h3 className="text-xl font-bold text-emerald-800">{tx('Lane Assignments')}</h3>
           <p className="text-[10px] text-black/50 font-bold uppercase tracking-widest">
-            {tournament.lanes_count} Lanes • {tournament.shifts_count} Shifts • {tournament.players_per_lane} {tournament.type === 'team' ? 'Teams' : 'Players'} / Lane
+            {tournament.lanes_count} {tx('Lanes')} • {tournament.shifts_count} {tx('Shifts')} • {tournament.players_per_lane} {tournament.type === 'team' ? tx('Teams') : tx('Players')} / {tx('Lane')}
           </p>
           <p className="text-[10px] text-black/50 mt-0.5">
-            Auto assigns randomly by tournament rules; Manual assigns from Waiting Queue to a selected lane.
+            {tx('Auto assigns randomly by tournament rules; Manual assigns from Waiting Queue to a selected lane.')}
           </p>
         </div>
       </div>
@@ -4139,7 +4188,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                 currentShift === s ? 'bg-emerald-600 text-white shadow-sm' : 'text-black/50 hover:text-emerald-700'
               }`}
             >
-              Shift {s}
+              {tx('Shift')} {s}
             </button>
           ))}
         </div>
@@ -4150,12 +4199,12 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         <div className="lg:col-span-1 space-y-4">
           <Card className="p-3 border-[#AFDDE5]/60 bg-white">
             <h4 className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 mb-3 flex items-center justify-between">
-              Waiting Queue
+              {tx('Waiting Queue')}
               <span className="bg-emerald-100 px-1.5 py-0.5 rounded text-emerald-800">{waitingQueue.length}</span>
             </h4>
             <div className="space-y-2 max-h-[600px] overflow-y-auto no-scrollbar">
               {waitingQueue.length === 0 ? (
-                <p className="text-xs text-black/20 italic text-center py-8">All assigned</p>
+                <p className="text-xs text-black/20 italic text-center py-8">{tx('All assigned')}</p>
               ) : (
                 waitingQueue.map(item => {
                   const teamMembers = tournament.type === 'team' 
@@ -4381,6 +4430,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
 function ScoringView({ tournament, role }: { tournament: Tournament; role: UserRole }) {
   const canManageScores = role === 'admin' || role === 'moderator';
+  const tx = React.useContext(UiTranslationContext);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
   const [lanes, setLanes] = useState<LaneAssignment[]>([]);
@@ -4390,6 +4440,8 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
   const [currentShift, setCurrentShift] = useState(1);
   const importScoresInputRef = useRef<HTMLInputElement | null>(null);
   const scoringTableRef = useRef<HTMLTableElement | null>(null);
+  const say = (message: string) => alert(tx(message));
+  const ask = (message: string) => confirm(tx(message));
 
   useEffect(() => {
     loadData();
@@ -4672,7 +4724,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     } catch (err) {
       setLanes(previousLanes);
       console.error('Failed to swap individual lane positions:', err);
-      alert('Failed to swap players in scoring table. Please try again.');
+      say('Failed to swap players in scoring table. Please try again.');
     } finally {
       setSwapInFlight(false);
     }
@@ -4745,7 +4797,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
       await persistScore(participantId, gameNumber, rawValue);
     } catch (err) {
       console.error('Failed to save score:', err);
-      alert('Failed to save score. Please try again.');
+      say('Failed to save score. Please try again.');
     }
   };
 
@@ -4758,32 +4810,32 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
         await persistScore(participantId, gameNumber, rawValue);
       }
       await loadData();
-      alert('Scores saved.');
+      say('Scores saved.');
     } catch (err) {
       console.error('Failed to save scores:', err);
-      alert('Failed to save scores. Please try again.');
+      say('Failed to save scores. Please try again.');
     }
   };
 
   const handleClearScores = async () => {
     if (!canManageScores) return;
-    if (!confirm('Clear all scores for this tournament?')) return;
+    if (!ask('Clear all scores for this tournament?')) return;
     try {
       setScores([]);
       setDraftScores({});
       await api.clearScores(tournament.id);
       await loadData();
-      alert('Scores cleared.');
+      say('Scores cleared.');
     } catch (err) {
       console.error('Failed to clear scores:', err);
-      alert('Failed to clear scores. Please try again.');
+      say('Failed to clear scores. Please try again.');
     }
   };
 
   const handleRefreshScores = async () => {
     try {
       await loadData();
-      alert('Scores refreshed.');
+      say('Scores refreshed.');
     } catch (err) {
       console.error('Failed to refresh scores:', err);
       alert('Failed to refresh scores. Please try again.');
@@ -4832,7 +4884,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     const inputEl = e.target;
     const file = inputEl.files?.[0];
     if (!file) return;
-    if (!confirm('Importing Scores will replace scores only for players included in this file. Continue?')) {
+    if (!ask('Importing Scores will replace scores only for players included in this file. Continue?')) {
       inputEl.value = '';
       return;
     }
@@ -4848,7 +4900,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
         const participantIdIndex = headers.indexOf('participant_id');
         const participantNameIndex = headers.indexOf('participant_name');
         if (participantIdIndex === -1 && participantNameIndex === -1) {
-          alert('Invalid scores file: missing participant_id or participant_name column.');
+          say('Invalid scores file: missing participant_id or participant_name column.');
           return;
         }
 
@@ -4887,7 +4939,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
 
         const participantIds = Array.from(new Set(resolvedRows.map((row) => row.participantId)));
         if (participantIds.length === 0) {
-          alert('No valid participants found in scores file.');
+          say('No valid participants found in scores file.');
           return;
         }
 
@@ -4923,7 +4975,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
       } catch (err) {
         console.error('Failed to import scores:', err);
         const message = err instanceof Error ? err.message : String(err || 'Unknown error');
-        alert(`Failed to import scores: ${message}`);
+        alert(`${tx('Failed to import scores:')} ${message}`);
       } finally {
         if (importScoresInputRef.current) {
           importScoresInputRef.current.value = '';
@@ -4939,15 +4991,15 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
 
     const printWindow = window.open('', '_blank', 'width=1000,height=700');
     if (!printWindow) {
-      alert('Unable to open print window. Please allow popups and try again.');
+      say('Unable to open print window. Please allow popups and try again.');
       return;
     }
 
     writeAndPrintDocument(printWindow, buildPrintDocument({
       tournament,
       pageTitle: `${tournament.name} - Shift ${currentShift} Scores`,
-      pageSubtitle: `Scoring Table • Shift ${currentShift}`,
-      contentHtml: `<h2>Scores</h2>${table.outerHTML}`,
+      pageSubtitle: `${tx('Scoring Table')} • ${tx('Shift')} ${currentShift}`,
+      contentHtml: `<h2>${tx('Scores')}</h2>${table.outerHTML}`,
       extraStyles: `button { display: none !important; } input { border: none; width: 100%; text-align: center; font: inherit; background: transparent; }`,
     }));
   };
@@ -4956,9 +5008,9 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-3">
         <div>
-          <h3 className="text-xl font-bold text-emerald-800">Score Entry</h3>
+          <h3 className="text-xl font-bold text-emerald-800">{tx('Score Entry')}</h3>
           <p className="text-xs text-black/50 mt-0.5">
-            Enter game results for each participant{tournament.type === 'team' ? ' (assigned team players only)' : ''} • Shift {currentShift}
+            {tx('Enter game results for each participant')}{tournament.type === 'team' ? ` ${tx('(assigned team players only)')}` : ''} • {tx('Shift')} {currentShift}
           </p>
         </div>
       </div>
@@ -4974,7 +5026,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                   currentShift === shift ? 'bg-emerald-600 text-white shadow-sm' : 'text-black/50 hover:text-emerald-700'
                 }`}
               >
-                Shift {shift}
+                {tx('Shift')} {shift}
               </button>
             ))}
           </div>
@@ -5169,6 +5221,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
 
 function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: Tournament; role: UserRole; onTournamentUpdated?: (t: Tournament) => void }) {
   type SeedOverrideEntry = { id: number; kind: 'team' | 'participant'; replaced_from_participant_id?: number };
+  const tx = React.useContext(UiTranslationContext);
   const canManageBrackets = role === 'admin' || role === 'moderator';
   const isPublicBracketView = !canManageBrackets;
   const canEditTopSeeds = role === 'admin';
@@ -6335,6 +6388,10 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const bracketFinalRoundNumber = matches.reduce((max: number, m: any) => Math.max(max, Number(m.round) || 0), 0);
   const bracketFinalMatch = matches.find((m: any) => Number(m.round) === bracketFinalRoundNumber && Number(m.match_index) === 0);
   const bracketBronzeMatch = matches.find((m: any) => Number(m.round) === bracketFinalRoundNumber && Number(m.match_index) === 1);
+  const bracketStepladderSemifinalMatch =
+    matchPlayType === 'stepladder'
+      ? matches.find((m: any) => Number(m.round) === Math.max(1, bracketFinalRoundNumber - 1) && Number(m.match_index) === 0)
+      : null;
   const participantTeamIdMap = new Map<number, number>();
   for (const participant of bracketParticipants) {
     if (participant.team_id) {
@@ -6345,12 +6402,27 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const secondPlaceParticipantId = bracketFinalMatch?.winner_id
     ? Number(bracketFinalMatch.winner_id === bracketFinalMatch.participant1_id ? bracketFinalMatch.participant2_id : bracketFinalMatch.participant1_id)
     : null;
-  const thirdPlaceParticipantId = bracketBronzeMatch?.winner_id ? Number(bracketBronzeMatch.winner_id) : null;
+  const stepladderThirdPlaceParticipantId = bracketStepladderSemifinalMatch?.winner_id
+    ? Number(
+        bracketStepladderSemifinalMatch.winner_id === bracketStepladderSemifinalMatch.participant1_id
+          ? bracketStepladderSemifinalMatch.participant2_id
+          : bracketStepladderSemifinalMatch.participant1_id
+      )
+    : null;
+  const thirdPlaceParticipantId = bracketBronzeMatch?.winner_id
+    ? Number(bracketBronzeMatch.winner_id)
+    : stepladderThirdPlaceParticipantId;
   const bracketFirstPlace = bracketFinalMatch?.winner_id ? getDisplayName('winner', bracketFinalMatch) : 'TBD';
   const bracketSecondPlace = bracketFinalMatch?.winner_id
     ? (bracketFinalMatch.winner_id === bracketFinalMatch.participant1_id ? getDisplayName('p2', bracketFinalMatch) : getDisplayName('p1', bracketFinalMatch))
     : 'TBD';
-  const bracketThirdPlace = bracketBronzeMatch?.winner_id ? getDisplayName('winner', bracketBronzeMatch) : 'TBD';
+  const bracketThirdPlace = bracketBronzeMatch?.winner_id
+    ? getDisplayName('winner', bracketBronzeMatch)
+    : (stepladderThirdPlaceParticipantId
+      ? (bracketStepladderSemifinalMatch?.winner_id === bracketStepladderSemifinalMatch?.participant1_id
+        ? getDisplayName('p2', bracketStepladderSemifinalMatch)
+        : getDisplayName('p1', bracketStepladderSemifinalMatch))
+      : 'TBD');
   const getPlacementTeamMembers = (participantId: number | null) => {
     if (tournament.type !== 'team' || !participantId) return { short: '', full: '' };
     const teamId = participantTeamIdMap.get(participantId);
@@ -7227,7 +7299,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     }}
                     className="w-14 px-2 py-0.5 rounded border border-black/15 text-xs text-right"
                     placeholder="0"
-                    title="Participant 3 score"
+                    title={tx('Participant 3 score')}
                   />
                   {isP3Winner && <Trophy size={14} className="text-emerald-600" />}
                 </div>
@@ -7242,15 +7314,15 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   return (
     <div ref={printSectionRef} className="space-y-4">
       <div>
-        <h3 className="text-lg font-bold">Bracket Setup</h3>
-        <p className="text-xs text-black/50">1) Choose rules 2) Review top seeds 3) Generate.</p>
+        <h3 className="text-lg font-bold">{tx('Bracket Setup')}</h3>
+        <p className="text-xs text-black/50">{tx('1) Choose rules 2) Review top seeds 3) Generate.')}</p>
       </div>
 
       <Card className="p-2 border border-black/10">
         {canManageBrackets ? (
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-1.5">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 pr-1">Manage</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 pr-1">{tx('Manage')}</p>
               <Button size="sm" variant="manage" onClick={handleRefreshBrackets} title="Refresh Brackets" ariaLabel="Refresh Brackets" className="px-2">
                 <RefreshCw size={13} />
               </Button>
@@ -7282,7 +7354,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           </div>
         ) : (
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Public View</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Public View')}</p>
             <div className="flex items-center gap-1.5">
               <Button size="sm" variant="outline" onClick={handleRefreshBrackets} title="Refresh Brackets" ariaLabel="Refresh Brackets" className="px-2">
                 <RefreshCw size={13} />
@@ -7298,13 +7370,13 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       <div className="grid grid-cols-1 xl:grid-cols-[28%_72%] gap-2 items-stretch">
         <Card className="p-2 border border-black/10">
           <div className="flex items-center justify-between mb-1.5">
-            <h4 className="text-[11px] font-bold uppercase tracking-widest text-black/60">Setup</h4>
-            <span className="text-[10px] text-black/45">{isPublicBracketView ? 'Read only' : 'Required'}</span>
+            <h4 className="text-[11px] font-bold uppercase tracking-widest text-black/60">{tx('Setup')}</h4>
+            <span className="text-[10px] text-black/45">{isPublicBracketView ? tx('Read only') : tx('Required')}</span>
           </div>
 
           <div className="grid grid-cols-1 gap-1.5">
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">Bracket Type</label>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">{tx('Bracket Type')}</label>
               <select
                 value={matchPlayTypeForRules}
                 onChange={(e: any) => {
@@ -7321,14 +7393,14 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 <option value="double_elimination">Double Elimination</option>
                 <option value="ladder">Ladder</option>
                 <option value="stepladder">Stepladder</option>
-                <option value="playoff">Play-Off</option>
+                <option value="playoff">{tx('Play-Off')}</option>
                 <option value="team_selection_playoff">Team Selection Playoff</option>
               </select>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">Seeds</label>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">{tx('Seeds')}</label>
                 <input
                   type="number"
                   min="0"
@@ -7342,7 +7414,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 />
               </div>
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">Winners</label>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">{tx('Winners')}</label>
                 <input
                   type="number"
                   min="1"
@@ -7360,7 +7432,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 
             {isTeamSelectionPlayoffMode && (
               <div className="rounded-md border border-emerald-200 bg-emerald-50/40 px-2 py-2 space-y-1.5">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-800">Selection Draft (Top 8)</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-800">{tx('Selection Draft (Top 8)')}</p>
                 <div className="grid grid-cols-1 gap-1 text-[11px]">
                   <div className="grid grid-cols-[auto_1fr] items-center gap-1.5">
                     <span className="font-semibold text-black/70">Seed #1 chooses:</span>
@@ -8093,6 +8165,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 
 function StandingsView({ tournament, role }: { tournament: Tournament; role: UserRole }) {
   const canManageStandings = role === 'admin' || role === 'moderator';
+  const tx = React.useContext(UiTranslationContext);
   const [hasAdditionalScores, setHasAdditionalScores] = useState(Boolean(tournament.has_additional_scores));
   const [hasBonus, setHasBonus] = useState(Boolean(tournament.has_bonus));
   const [standings, setStandings] = useState<Standing[]>([]);
@@ -8583,7 +8656,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
         await loadStandings();
       } catch (err) {
         console.error('Failed to import standings data:', err);
-        alert('Failed to import standings data. Please check file format.');
+        alert(tx('Failed to import standings data. Please check file format.'));
       } finally {
         if (standingsImportInputRef.current) standingsImportInputRef.current.value = '';
       }
@@ -8612,9 +8685,9 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
 
     writeAndPrintDocument(printWindow, buildPrintDocument({
       tournament,
-      pageTitle: `${tournament.name} - Tournament Standings`,
-      pageSubtitle: 'Tournament Standings',
-      contentHtml: `<h2>${standingsMode === 'teams' ? 'Team Standings' : 'Player Standings'}</h2>${printTable.outerHTML}`,
+      pageTitle: `${tournament.name} - ${tx('Tournament Standings')}`,
+      pageSubtitle: tx('Tournament Standings'),
+      contentHtml: `<h2>${standingsMode === 'teams' ? tx('Team Standings') : tx('Player Standings')}</h2>${printTable.outerHTML}`,
     }));
   };
 
@@ -8622,8 +8695,8 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-xl font-bold">Tournament Result</h3>
-          <p className="text-sm text-black/40">Standings, bracket winners, and tournament highlights</p>
+          <h3 className="text-xl font-bold">{tx('Tournament Result')}</h3>
+          <p className="text-sm text-black/40">{tx('Standings, bracket winners, and tournament highlights')}</p>
         </div>
         <Button variant="manage" onClick={loadStandings} title="Refresh" ariaLabel="Refresh">
           <RefreshCw size={18} />
@@ -8634,16 +8707,16 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <div className="p-6 border-b border-black/5">
-              <h4 className="font-bold">Tournament Winners</h4>
-              <p className="text-sm text-black/40">Final winners only</p>
+              <h4 className="font-bold">{tx('Tournament Winners')}</h4>
+              <p className="text-sm text-black/40">{tx('Final winners only')}</p>
             </div>
             <div className="px-6 py-5">
               <div className="rounded-lg border border-black/10 overflow-hidden">
                 <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} bg-black/[0.02] border-b border-black/10`}>
-                  <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-black/40">Place</div>
-                  <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-black/40">{isTeamTournament ? 'Winner Team' : 'Winner'}</div>
+                  <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-black/40">{tx('Place')}</div>
+                  <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-black/40">{isTeamTournament ? tx('Winner Team') : tx('Winner')}</div>
                   {isTeamTournament && (
-                    <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-black/40">Team Members</div>
+                    <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-black/40">{tx('Team Members')}</div>
                   )}
                 </div>
                 <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} border-b border-black/5 bg-emerald-50/70`}>
@@ -8672,8 +8745,8 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
           </Card>
 
           <Card className="p-6">
-            <h4 className="font-bold mb-1">Tournament Highlights</h4>
-            <p className="text-sm text-black/40 mb-4">Quick stats and highest single game score by category</p>
+            <h4 className="font-bold mb-1">{tx('Tournament Highlights')}</h4>
+            <p className="text-sm text-black/40 mb-4">{tx('Quick stats and highest single game score by category')}</p>
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
               <div className="rounded-lg border border-black/10 p-3 bg-black/[0.02] text-center">
@@ -8728,8 +8801,8 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
         <Card>
           <div className="p-6 border-b border-black/5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
-              <h4 className="font-bold">Tournament Standings</h4>
-              <p className="text-sm text-black/40">Rankings sorted from highest to lowest total score</p>
+              <h4 className="font-bold">{tx('Tournament Standings')}</h4>
+              <p className="text-sm text-black/40">{tx('Rankings sorted from highest to lowest total score')}</p>
               {standingsMode === 'teams' && isTeamTournament && (
                 <p className={`text-xs mt-1 ${teamsCountValid ? 'text-emerald-700' : 'text-amber-700'}`}>
                   Team check: ranked teams = {rankedTeamsCount} (real teams only), assigned players = {assignedPlayersCount}, unassigned players = {unassignedPlayersCount}.
