@@ -2414,7 +2414,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
         </Card>
       )}
 
-      <div className="sticky top-0 z-10 bg-white flex border-b border-black/10 gap-2 overflow-x-auto no-scrollbar">
+      <div className="sticky top-16 z-40 bg-white flex border-b border-black/10 gap-2 overflow-x-auto no-scrollbar shadow-sm">
         {visibleTabs.map(tab => (
           <button
             key={tab.id}
