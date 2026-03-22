@@ -8547,12 +8547,22 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
   const finalRoundNumber = bracketMatches.reduce((max, m) => Math.max(max, Number(m.round) || 0), 0);
   const finalMatch = bracketMatches.find((m: any) => Number(m.round) === finalRoundNumber && Number(m.match_index) === 0);
   const bronzeMatch = bracketMatches.find((m: any) => Number(m.round) === finalRoundNumber && Number(m.match_index) === 1);
+  const stepladderSemifinalMatch =
+    tournament.match_play_type === 'stepladder'
+      ? bracketMatches.find((m: any) => Number(m.round) === Math.max(1, finalRoundNumber - 1) && Number(m.match_index) === 0)
+      : null;
 
   const firstPlace = finalMatch?.winner_id ? getBracketName(finalMatch, 'winner') : 'TBD';
   const secondPlace = finalMatch?.winner_id
     ? (finalMatch.winner_id === finalMatch.participant1_id ? getBracketName(finalMatch, 'p2') : getBracketName(finalMatch, 'p1'))
     : 'TBD';
-  const thirdPlace = bronzeMatch?.winner_id ? getBracketName(bronzeMatch, 'winner') : 'TBD';
+  const thirdPlace = bronzeMatch?.winner_id
+    ? getBracketName(bronzeMatch, 'winner')
+    : (stepladderSemifinalMatch?.winner_id
+      ? (stepladderSemifinalMatch.winner_id === stepladderSemifinalMatch.participant1_id
+        ? getBracketName(stepladderSemifinalMatch, 'p2')
+        : getBracketName(stepladderSemifinalMatch, 'p1'))
+      : 'TBD');
 
   const teamMembersByTeamName = new Map<string, string[]>();
   if (isTeamTournament) {
