@@ -322,11 +322,11 @@ const Button = ({
 }) => {
   const translate = React.useContext(UiTranslationContext);
   const variants = {
-    primary: 'bg-blue-600 text-white hover:bg-blue-700',
-    secondary: 'bg-[#E64833] text-white hover:bg-[#cf3f2c]',
-    outline: 'border border-black/10 hover:bg-blue-50 hover:border-blue-200',
-    ghost: 'hover:bg-blue-50/70',
-    manage: 'bg-[#E64833] text-white hover:bg-[#cf3f2c] border border-[#E64833]'
+    primary: 'bg-emerald-600 text-white hover:bg-emerald-700',
+    secondary: 'bg-orange-500 text-white hover:bg-orange-600',
+    outline: 'border border-black/10 hover:bg-emerald-50 hover:border-emerald-200',
+    ghost: 'hover:bg-emerald-50/70',
+    manage: 'bg-orange-500 text-white hover:bg-orange-600 border border-orange-500'
   };
 
   const sizes = {
@@ -372,6 +372,32 @@ const renderFemaleInitialUnderline = (name: string, isFemale: boolean) => {
   );
 };
 
+const segmentedTabContainerClass = 'inline-flex items-center rounded-lg border border-[#AFDDE5]/70 bg-white/95 backdrop-blur-sm p-1 shadow-sm';
+const segmentedTabContainerOrangeClass = 'inline-flex items-center rounded-lg border border-orange-200 bg-white/95 backdrop-blur-sm p-1 shadow-sm';
+
+const getSegmentedTabButtonClass = (
+  active: boolean,
+  size: 'default' | 'compact' = 'default',
+  extraClassName = '',
+  tone: 'emerald' | 'orange' = 'emerald'
+) => {
+  const sizeClass = size === 'compact'
+    ? 'px-3 py-1.5 text-[10px]'
+    : 'px-4 py-2 text-xs';
+
+  const activeClass = tone === 'orange'
+    ? 'bg-orange-500 text-white shadow-sm'
+    : 'bg-emerald-700 text-white shadow-sm';
+
+  const inactiveClass = tone === 'orange'
+    ? 'text-black/60 hover:text-black hover:bg-orange-50'
+    : 'text-black/60 hover:text-black hover:bg-[#AFDDE5]/25';
+
+  return `${sizeClass} rounded-md font-bold uppercase tracking-wider transition-colors ${
+    active ? activeClass : inactiveClass
+  } ${extraClassName}`.trim();
+};
+
 const Input = ({ label, placeholder, ...props }: any) => {
   const translate = React.useContext(UiTranslationContext);
   return (
@@ -380,7 +406,7 @@ const Input = ({ label, placeholder, ...props }: any) => {
       <input 
         {...props}
         placeholder={typeof placeholder === 'string' ? translate(placeholder) : placeholder}
-        className="w-full px-3 py-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-200 transition-all bg-white text-sm"
+        className="w-full px-3 py-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 transition-all bg-white text-sm"
       />
     </div>
   );
@@ -393,7 +419,7 @@ const Select = ({ label, options, ...props }: any) => {
       {label && <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 px-1">{translate(label)}</label>}
       <select 
         {...props}
-        className="w-full px-3 py-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-200 transition-all bg-white appearance-none text-sm"
+        className="w-full px-3 py-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 transition-all bg-white appearance-none text-sm"
       >
         {options.map((opt: any) => (
           <option key={opt.value} value={opt.value}>{typeof opt.label === 'string' ? translate(opt.label) : opt.label}</option>
@@ -440,6 +466,9 @@ export default function App() {
   });
   const [loading, setLoading] = useState(true);
   const [formType, setFormType] = useState<'individual' | 'team'>('individual');
+  const [formUseCustomSponsors, setFormUseCustomSponsors] = useState(false);
+  const [formSponsors, setFormSponsors] = useState<SponsorInfo[]>([]);
+  const [showFormSponsorsModal, setShowFormSponsorsModal] = useState(false);
   const [publicLanguage, setPublicLanguage] = useState<PublicLanguage>(() => {
     const stored = localStorage.getItem(PUBLIC_LANGUAGE_STORAGE_KEY);
     return stored === 'mn' ? 'mn' : 'en';
@@ -639,6 +668,12 @@ export default function App() {
     }
   }, [isAdmin, view]);
 
+  useEffect(() => {
+    if (view !== 'create' && view !== 'edit') {
+      setShowFormSponsorsModal(false);
+    }
+  }, [view]);
+
   const loadTournaments = async () => {
     setLoading(true);
     try {
@@ -708,6 +743,7 @@ export default function App() {
             has_additional_scores: data.has_additional_scores,
             has_bonus: data.has_bonus,
           });
+          await persistTournamentSponsors(editingTournament.id);
           const updated = await api.getTournament(editingTournament.id);
           setSelectedTournament(updated);
           setView('detail');
@@ -720,6 +756,7 @@ export default function App() {
           has_additional_scores: data.has_additional_scores,
           has_bonus: data.has_bonus,
         });
+        await persistTournamentSponsors(id);
         const newT = await api.getTournament(id);
         setSelectedTournament(newT);
         setView('detail');
@@ -1156,6 +1193,94 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    if (view === 'edit' && editingTournament) {
+      const scoped = sponsorsConfig.tournaments[String(editingTournament.id)] || [];
+      setFormUseCustomSponsors(scoped.length > 0);
+      setFormSponsors(scoped.map((item, index) => ({
+        ...item,
+        id: item.id || `tournament-${editingTournament.id}-sponsor-${index}`,
+      })));
+      return;
+    }
+
+    if (view === 'create') {
+      setFormUseCustomSponsors(false);
+      setFormSponsors([]);
+    }
+  }, [view, editingTournament, sponsorsConfig]);
+
+  const sanitizeFormSponsors = (entries: SponsorInfo[]): SponsorInfo[] => {
+    return entries
+      .map((item, index) => ({
+        id: String(item.id || `form-sponsor-${Date.now()}-${index}`),
+        kind: item.kind === 'partner' ? 'partner' : 'sponsor',
+        name: String(item.name || '').trim(),
+        logo: String(item.logo || '').trim() || '/logo.png',
+        description: String(item.description || '').trim(),
+        contacts: String(item.contacts || '').trim(),
+        url: String(item.url || '').trim(),
+      }))
+      .filter((item) => Boolean(item.name || item.description || item.contacts || item.url || item.logo !== '/logo.png')) as SponsorInfo[];
+  };
+
+  const persistTournamentSponsors = async (tournamentId: number) => {
+    const normalized = normalizeSponsorsConfig(sponsorsConfig);
+    const nextTournaments = { ...normalized.tournaments };
+
+    if (!formUseCustomSponsors) {
+      delete nextTournaments[String(tournamentId)];
+    } else {
+      const cleaned = sanitizeFormSponsors(formSponsors);
+      if (cleaned.length > 0) {
+        nextTournaments[String(tournamentId)] = cleaned;
+      } else {
+        delete nextTournaments[String(tournamentId)];
+      }
+    }
+
+    const nextConfig: SponsorsConfig = {
+      ...normalized,
+      tournaments: nextTournaments,
+    };
+
+    await api.saveSponsorsConfig(nextConfig);
+    setSponsorsConfig(nextConfig);
+  };
+
+  const updateFormSponsorField = (sponsorId: string, field: keyof SponsorInfo, value: string) => {
+    setFormSponsors((prev) => prev.map((item) => {
+      if (item.id !== sponsorId) return item;
+      if (field === 'kind') {
+        return {
+          ...item,
+          kind: value === 'partner' ? 'partner' : 'sponsor',
+        };
+      }
+      return {
+        ...item,
+        [field]: value,
+      };
+    }));
+  };
+
+  const addFormSponsor = () => {
+    setFormSponsors((prev) => [...prev, makeDraftSponsor('form', prev.length)]);
+  };
+
+  const removeFormSponsor = (sponsorId: string) => {
+    setFormSponsors((prev) => prev.filter((item) => item.id !== sponsorId));
+  };
+
+  const copyGlobalSponsorsToForm = () => {
+    const copied = sponsorsConfig.global.map((item, index) => ({
+      ...item,
+      id: item.id || `global-copy-${Date.now()}-${index}`,
+    }));
+    setFormSponsors(copied);
+    setFormUseCustomSponsors(true);
+  };
+
   const sponsorScopeOptions = [
     { value: 'global', label: 'Global (all tournaments)' },
     ...tournaments.map((t) => ({ value: String(t.id), label: `${t.name} (#${t.id})` })),
@@ -1214,7 +1339,7 @@ export default function App() {
   };
 
   const getStatusPillClass = (status: 'active' | 'incoming' | 'finished' | 'archived') => {
-    if (status === 'active') return 'bg-blue-100 text-blue-700';
+    if (status === 'active') return 'bg-emerald-100 text-emerald-700';
     if (status === 'incoming') return 'bg-amber-100 text-amber-700';
     if (status === 'finished') return 'bg-black/5 text-black/45';
     return 'bg-slate-200 text-slate-700';
@@ -1252,7 +1377,7 @@ export default function App() {
 
   return (
     <UiTranslationContext.Provider value={translateUiText}>
-    <div className="min-h-screen bg-gradient-to-b from-white to-blue-50/30 text-black font-sans">
+    <div className="min-h-screen bg-gradient-to-b from-white to-emerald-50/30 text-black font-sans">
       {/* Sidebar / Nav */}
       <nav className="fixed top-0 left-0 right-0 h-16 bg-black/95 backdrop-blur-sm border-b border-white/10 z-50 px-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -1301,18 +1426,6 @@ export default function App() {
               <span className="px-2 py-1.5 rounded-md border border-white/20 text-xs font-bold uppercase tracking-wider bg-white/10 text-white">
                 {t(`role.${currentRole}`, currentRole)}
               </span>
-              {currentRole === 'admin' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={openSponsorsConfigEditor}
-                  title={t('auth.sponsor_config', 'Sponsor Config')}
-                  ariaLabel={t('auth.sponsor_config', 'Sponsor Config')}
-                  className="text-white border-white/25 hover:bg-white/10 hover:border-white/40"
-                >
-                  <Edit size={14} />
-                </Button>
-              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -1396,44 +1509,6 @@ export default function App() {
                 </div>
               </div>
 
-              {appGlobalSponsor && (
-                <Card className="p-4 border border-blue-200 bg-gradient-to-r from-white to-blue-50/60">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-16 h-16 rounded-md border border-black/10 bg-white p-2 flex items-center justify-center">
-                        <img
-                          src={appGlobalSponsor.logo || '/logo.png'}
-                          alt={appGlobalSponsor.name}
-                          className="w-full h-full object-contain"
-                          onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).src = '/logo.png';
-                          }}
-                        />
-                      </div>
-                      <div>
-                        <p className="text-[10px] uppercase tracking-widest font-bold text-blue-700">{t('app.powered_by', 'BTM Powered by')}</p>
-                        <p className="text-sm font-semibold text-black/85">{appGlobalSponsor.name || t('app.unnamed_sponsor', 'Unnamed sponsor')}</p>
-                        {currentRole !== 'public' && (
-                          <p className="text-xs text-black/55">{t('app.visible_in_footer', 'Visible across the app footer')}</p>
-                        )}
-                      </div>
-                    </div>
-                    {currentRole !== 'public' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setShowGlobalSponsorModal(true)}
-                        className="px-3"
-                        title={t('app.open_powered_by', 'Open Powered by')}
-                        ariaLabel={t('app.open_powered_by', 'Open Powered by')}
-                      >
-                        <Eye size={14} />
-                      </Button>
-                    )}
-                  </div>
-                </Card>
-              )}
-
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {loading ? (
                   Array(6).fill(0).map((_, i) => (
@@ -1461,7 +1536,7 @@ export default function App() {
                             {getStatusLabel(displayStatus)}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold leading-tight group-hover:text-blue-600 transition-colors truncate">{tournamentItem.name}</p>
+                            <p className="text-sm font-bold leading-tight group-hover:text-emerald-600 transition-colors truncate">{tournamentItem.name}</p>
                             <p className="text-[11px] text-black/50 mt-0.5 truncate">
                               {formatTournamentDate(tournamentItem.date)}{tournamentItem.location ? ` · ${tournamentItem.location}` : ''}
                             </p>
@@ -1521,7 +1596,7 @@ export default function App() {
                               <div className="flex gap-1">
                                 <button
                                   onClick={() => openTournament(tournamentItem)}
-                                  className="p-1.5 rounded-md border border-black/10 bg-white text-black/60 hover:text-blue-700"
+                                  className="p-1.5 rounded-md border border-black/10 bg-white text-black/60 hover:text-emerald-700"
                                   title="Open tournament"
                                 >
                                   <Eye size={14} />
@@ -1529,7 +1604,7 @@ export default function App() {
                                 {isAdmin && (
                                   <button
                                     onClick={() => handleArchiveToggle(tournamentItem.id, false)}
-                                    className="p-1.5 rounded-md border border-black/10 bg-white text-black/60 hover:text-blue-700"
+                                    className="p-1.5 rounded-md border border-black/10 bg-white text-black/60 hover:text-emerald-700"
                                     title="Restore from archive"
                                   >
                                     <ArchiveRestore size={14} />
@@ -1667,10 +1742,30 @@ export default function App() {
                         type="checkbox"
                         name="has_bonus"
                         defaultChecked={Boolean(editingTournament?.has_bonus)}
-                        className="h-4 w-4 rounded border-black/30 text-blue-600 focus:ring-blue-200"
+                        className="h-4 w-4 rounded border-black/30 text-emerald-600 focus:ring-emerald-200"
                       />
                       <span className="text-sm font-semibold text-black/80">{t('tournament.enable_bonus', 'Enable Bonus Column')}</span>
                     </label>
+                  </div>
+
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowFormSponsorsModal(true)}
+                      className="w-full flex items-center justify-between gap-3 text-left"
+                    >
+                      <div>
+                        <h3 className="text-sm font-bold text-black/80">Tournament Sponsors Setup</h3>
+                        <p className="text-xs text-black/50">
+                          {formUseCustomSponsors
+                            ? `Custom sponsors enabled (${formSponsors.length})`
+                            : 'Using global sponsors'}
+                        </p>
+                      </div>
+                      <span className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded border border-black/15 text-black/65">
+                        Configure
+                      </span>
+                    </button>
                   </div>
 
                   {formType === 'team' && (
@@ -1703,6 +1798,114 @@ export default function App() {
                   </div>
                 </form>
               </Card>
+
+              {showFormSponsorsModal && (
+                <div className="fixed inset-0 z-[80] bg-black/45 flex items-center justify-center p-4" onClick={() => setShowFormSponsorsModal(false)}>
+                  <Card className="w-full max-w-3xl max-h-[88vh] p-4 flex flex-col" onClick={(e: any) => e.stopPropagation()}>
+                    <div className="flex items-center justify-between gap-3 mb-3 shrink-0">
+                      <h3 className="text-lg font-bold">Tournament Sponsors Setup</h3>
+                      <Button size="sm" variant="outline" onClick={() => setShowFormSponsorsModal(false)} title="Close" ariaLabel="Close">
+                        <X size={14} />
+                      </Button>
+                    </div>
+
+                    <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1">
+                      <label className="flex items-center gap-2 text-xs font-semibold text-black/70">
+                        <input
+                          type="checkbox"
+                          checked={formUseCustomSponsors}
+                          onChange={(e) => setFormUseCustomSponsors(e.target.checked)}
+                          className="h-4 w-4 rounded border-black/30 text-orange-500 focus:ring-orange-200"
+                        />
+                        Use custom sponsors for this tournament
+                      </label>
+
+                      {formUseCustomSponsors && (
+                        <>
+                          <div className="flex flex-wrap gap-2">
+                            <Button type="button" size="sm" variant="outline" onClick={addFormSponsor} title="Add Sponsor" ariaLabel="Add Sponsor">
+                              <Plus size={14} />
+                            </Button>
+                            <Button type="button" size="sm" variant="outline" onClick={copyGlobalSponsorsToForm} title="Copy Global Sponsors" ariaLabel="Copy Global Sponsors">
+                              <RefreshCw size={14} />
+                            </Button>
+                          </div>
+
+                          {formSponsors.length === 0 ? (
+                            <p className="text-xs text-black/50">No custom sponsors yet. Add one or copy global sponsors.</p>
+                          ) : (
+                            <div className="space-y-3">
+                              {formSponsors.map((sponsorItem, index) => (
+                                <div key={sponsorItem.id} className="rounded-md border border-black/10 p-3 space-y-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className="text-xs font-bold uppercase tracking-wider text-black/50">Sponsor {index + 1}</p>
+                                    <Button type="button" size="sm" variant="outline" onClick={() => removeFormSponsor(sponsorItem.id)} title="Remove Sponsor" ariaLabel="Remove Sponsor">
+                                      <Trash2 size={12} />
+                                    </Button>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    <Input
+                                      label="Name"
+                                      value={sponsorItem.name}
+                                      onChange={(e: any) => updateFormSponsorField(sponsorItem.id, 'name', e.target.value)}
+                                      placeholder="Sponsor name"
+                                    />
+                                    <Select
+                                      label="Type"
+                                      value={sponsorItem.kind}
+                                      onChange={(e: any) => updateFormSponsorField(sponsorItem.id, 'kind', e.target.value)}
+                                      options={[
+                                        { value: 'sponsor', label: 'Sponsor' },
+                                        { value: 'partner', label: 'Partner' },
+                                      ]}
+                                    />
+                                  </div>
+
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    <Input
+                                      label="Logo URL"
+                                      value={sponsorItem.logo}
+                                      onChange={(e: any) => updateFormSponsorField(sponsorItem.id, 'logo', e.target.value)}
+                                      placeholder="/sponsors/logo.png"
+                                    />
+                                    <Input
+                                      label="Website URL"
+                                      value={sponsorItem.url}
+                                      onChange={(e: any) => updateFormSponsorField(sponsorItem.id, 'url', e.target.value)}
+                                      placeholder="https://example.com"
+                                    />
+                                  </div>
+
+                                  <Input
+                                    label="Contacts"
+                                    value={sponsorItem.contacts}
+                                    onChange={(e: any) => updateFormSponsorField(sponsorItem.id, 'contacts', e.target.value)}
+                                    placeholder="email | phone"
+                                  />
+
+                                  <Input
+                                    label="Description"
+                                    value={sponsorItem.description}
+                                    onChange={(e: any) => updateFormSponsorField(sponsorItem.id, 'description', e.target.value)}
+                                    placeholder="Short sponsor description"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    <div className="pt-3 flex justify-end shrink-0">
+                      <Button type="button" variant="outline" onClick={() => setShowFormSponsorsModal(false)} title="Done" ariaLabel="Done">
+                        <Save size={14} />
+                      </Button>
+                    </div>
+                  </Card>
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -1716,10 +1919,7 @@ export default function App() {
               setActiveTab={setActiveTab}
               role={currentRole}
               tPublic={tPublic}
-              onOpenSponsors={() => {
-                setSelectedSponsor(null);
-                setShowSponsorsModal(true);
-              }}
+              sponsorsConfig={sponsorsConfig}
             />
           )}
         </AnimatePresence>
@@ -1796,7 +1996,7 @@ export default function App() {
                   <div>
                     <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">{t('sponsors.website', 'Website')}</p>
                     {selectedSponsor.url ? (
-                      <a href={selectedSponsor.url} target="_blank" rel="noreferrer" className="text-blue-700 underline break-all">{selectedSponsor.url}</a>
+                      <a href={selectedSponsor.url} target="_blank" rel="noreferrer" className="text-emerald-700 underline break-all">{selectedSponsor.url}</a>
                     ) : (
                       <p>{t('sponsors.no_url', 'No URL provided.')}</p>
                     )}
@@ -1815,7 +2015,7 @@ export default function App() {
                     key={sponsor.id}
                     type="button"
                     onClick={() => setSelectedSponsor(sponsor)}
-                    className="p-2 rounded-md border border-black/10 bg-white hover:border-blue-300 text-left flex items-center gap-2"
+                    className="p-2 rounded-md border border-black/10 bg-white hover:border-emerald-300 text-left flex items-center gap-2"
                   >
                     <div className="w-12 h-12 rounded border border-black/10 bg-white p-1 flex items-center justify-center">
                       <img src={sponsor.logo} alt={sponsor.name} className="w-full h-full object-contain" />
@@ -1867,7 +2067,7 @@ export default function App() {
               <div>
                 <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">{t('sponsors.website', 'Website')}</p>
                 {appGlobalSponsor.url ? (
-                  <a href={appGlobalSponsor.url} target="_blank" rel="noreferrer" className="text-blue-700 underline break-all text-sm">{appGlobalSponsor.url}</a>
+                  <a href={appGlobalSponsor.url} target="_blank" rel="noreferrer" className="text-emerald-700 underline break-all text-sm">{appGlobalSponsor.url}</a>
                 ) : (
                   <p className="text-sm text-black/75">{t('sponsors.no_url', 'No URL provided.')}</p>
                 )}
@@ -2046,33 +2246,9 @@ export default function App() {
           <div className="flex items-center gap-2 font-medium flex-wrap">
             <span className="font-semibold uppercase tracking-wide text-orange-500">{t('app.footer_tagline', 'Total tournament control. From first frame to final payout.')}</span>
             <span className="text-white/40">|</span>
-            <span>BTM <span className="text-[#E64833]">v2.0</span></span>
+            <span>BTM <span className="text-orange-500">v2.0</span></span>
             <span className="text-white/40">|</span>
             <span>{t('app.footer_copyright', '© Murat D. 2026')}</span>
-          </div>
-          <div className="flex items-center gap-2 font-medium flex-wrap justify-end">
-            {appGlobalSponsor && (
-              <button
-                type="button"
-                onClick={() => setShowGlobalSponsorModal(true)}
-                className="inline-flex items-center gap-2 px-2 py-1 rounded border border-white/20 bg-white/5 hover:border-orange-400 transition-colors"
-                title={t('app.open_powered_by', 'Open Powered by')}
-                aria-label={t('app.open_powered_by', 'Open Powered by')}
-              >
-                <span className="text-[10px] uppercase tracking-wider text-white/65">{t('app.powered_by_short', 'Powered by')}</span>
-                <span className="w-8 h-8 rounded bg-white p-1 border border-white/20 flex items-center justify-center">
-                  <img
-                    src={appGlobalSponsor.logo || '/logo.png'}
-                    alt={appGlobalSponsor.name}
-                    className="w-full h-full object-contain"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = '/logo.png';
-                    }}
-                  />
-                </span>
-              </button>
-            )}
-            {!appGlobalSponsor && <Trophy size={12} className="text-orange-500" />}
           </div>
         </div>
       </footer>
@@ -2083,7 +2259,7 @@ export default function App() {
 
 // --- Sub-Views ---
 
-function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, activeTab, setActiveTab, role, onOpenSponsors, tPublic }: {
+function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, activeTab, setActiveTab, role, tPublic, sponsorsConfig }: {
   tournament: Tournament,
   onBack: () => void,
   onEdit: (t: Tournament) => void,
@@ -2091,8 +2267,8 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
   activeTab: string,
   setActiveTab: (t: any) => void,
   role: UserRole,
-  onOpenSponsors: () => void,
   tPublic: (key: string, fallback: string) => string,
+  sponsorsConfig: SponsorsConfig,
 }) {
   const t = tPublic;
   const [moderatorAccess, setModeratorAccess] = useState<ModeratorTournamentAccess | null>(null);
@@ -2232,6 +2408,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
   };
 
   const effectiveRole: UserRole = role === 'moderator' && !moderatorAccess?.can_manage ? 'public' : role;
+  const tournamentSponsors = (sponsorsConfig?.tournaments?.[String(tournament.id)] || []).filter((s) => s.logo);
 
   const visibleTabs = effectiveRole === 'public'
     ? [
@@ -2261,31 +2438,50 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
         </Button>
 
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_430px] gap-4">
-          <Card className="p-5 border border-blue-200 bg-gradient-to-br from-white via-blue-50/60 to-[#BFDBFE]/35 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-              <div className="w-[82px] h-[82px] rounded-lg border border-black/10 bg-white p-2 flex items-center justify-center shrink-0">
-                <img
-                  src={tournament.logo || '/logo.png'}
-                  alt={tournament.name}
-                  className="w-full h-full object-contain"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src = '/logo.png';
-                  }}
-                />
+          <Card className="p-5 border border-emerald-200 bg-gradient-to-br from-white via-emerald-50/60 to-[#AFDDE5]/35 shadow-sm">
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="w-[82px] h-[82px] rounded-lg border border-black/10 bg-white p-2 flex items-center justify-center shrink-0">
+                  <img
+                    src={tournament.logo || '/logo.png'}
+                    alt={tournament.name}
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                    }}
+                  />
+                </div>
+
+                {tournamentSponsors.length > 0 && (
+                  <div className="flex flex-wrap items-center justify-end gap-2 shrink min-w-0 sm:max-w-[260px]">
+                    {tournamentSponsors.map((sponsor) => (
+                      <div
+                        key={sponsor.id}
+                        className="h-[82px] w-[82px] rounded-lg border border-black/10 bg-white p-2 flex items-center justify-center overflow-hidden shrink-0"
+                      >
+                        <img
+                          src={sponsor.logo}
+                          alt={sponsor.name}
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <span className="px-2 py-0.5 rounded bg-blue-700 text-white text-[10px] font-bold uppercase tracking-widest">
-                    League Concept
-                  </span>
                   <span className="px-2 py-0.5 rounded bg-black text-white text-[10px] font-bold uppercase tracking-widest">
                     {tournament.status}
                   </span>
                 </div>
 
                 <h1
-                  className={`text-3xl sm:text-4xl font-bold tracking-tight uppercase leading-tight transition-colors ${role === 'admin' ? 'cursor-pointer hover:text-blue-600' : ''}`}
+                  className={`text-3xl sm:text-4xl font-bold tracking-tight uppercase leading-tight transition-colors ${role === 'admin' ? 'cursor-pointer hover:text-emerald-600' : ''}`}
                   onClick={() => {
                     if (role === 'admin') onEdit(tournament);
                   }}
@@ -2332,18 +2528,6 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
           </Card>
 
           <div className="w-full space-y-3">
-          <div className="flex justify-end items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onOpenSponsors}
-              className="px-3 normal-case tracking-normal"
-              title={tPublic('common.sponsors', 'Sponsors')}
-              ariaLabel={tPublic('common.sponsors', 'Sponsors')}
-            >
-              {tPublic('common.sponsors', 'Sponsors')}
-            </Button>
-          </div>
 
           {role === 'admin' && activeTab === 'participants' && (
             <Card className="p-4">
@@ -2472,21 +2656,19 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
         </Card>
       )}
 
-      <div className="sticky top-16 z-40 bg-white flex border-b border-slate-200 gap-0 overflow-x-auto no-scrollbar shadow-sm px-0">
-        {visibleTabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-5 py-3 border-b-2 transition-all whitespace-nowrap text-xs uppercase tracking-wide font-semibold ${
-              activeTab === tab.id
-                ? 'bg-white text-slate-800 border-b-orange-500 shadow-sm'
-                : 'text-slate-600 border-b-transparent hover:text-slate-800 hover:bg-slate-50/60'
-              }`}
-          >
-            <tab.icon size={16} />
-            {tab.label}
-          </button>
-        ))}
+      <div className="sticky top-16 z-40 bg-white/95 backdrop-blur-sm border-b border-orange-100 shadow-sm px-0 py-2 overflow-x-auto no-scrollbar">
+        <div className={`${segmentedTabContainerOrangeClass} min-w-max`}>
+          {visibleTabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={getSegmentedTabButtonClass(activeTab === tab.id, 'default', 'flex items-center gap-2 whitespace-nowrap', 'orange')}
+            >
+              <tab.icon size={16} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="min-h-[400px]">
@@ -2505,6 +2687,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const tx = React.useContext(UiTranslationContext);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [mobileRosterTab, setMobileRosterTab] = useState<'players' | 'teams'>('players');
   const [loading, setLoading] = useState(true);
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showAddTeam, setShowAddTeam] = useState(false);
@@ -2530,6 +2713,10 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   useEffect(() => {
     loadData();
   }, [tournament.id]);
+
+  useEffect(() => {
+    setMobileRosterTab('players');
+  }, [tournament.id, tournament.type]);
 
   const loadData = async () => {
     setLoading(true);
@@ -3274,18 +3461,37 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div>
-          <h3 className="text-xl font-bold text-blue-800">{canManageParticipants ? tx('Manage Participants') : tx('Participants')}</h3>
+          <h3 className="text-xl font-bold text-emerald-800">{canManageParticipants ? tx('Manage Participants') : tx('Participants')}</h3>
           <p className="text-xs text-black/50 mt-0.5">{canManageParticipants ? tx('Roster and participant import/export') : tx('Roster view')}</p>
         </div>
       </div>
 
+      {tournament.type === 'team' && (
+        <div className={`lg:hidden sticky top-[7.25rem] z-30 ${segmentedTabContainerClass} w-fit`}>
+          <button
+            type="button"
+            onClick={() => setMobileRosterTab('players')}
+            className={getSegmentedTabButtonClass(mobileRosterTab === 'players')}
+          >
+            {tx('Players')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileRosterTab('teams')}
+            className={getSegmentedTabButtonClass(mobileRosterTab === 'teams')}
+          >
+            {tx('Teams')}
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-        <div className="lg:col-span-3">
-          <Card className="border-[#BFDBFE]/60 overflow-hidden">
-            <div className="p-3 border-b border-[#BFDBFE]/70 bg-white">
+        <div className={`${tournament.type === 'team' && mobileRosterTab !== 'players' ? 'hidden lg:block' : ''} lg:col-span-3`}>
+          <Card className="border-[#AFDDE5]/60 overflow-hidden">
+            <div className="p-3 border-b border-[#AFDDE5]/70 bg-white">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div>
-                  <h4 className="font-bold text-black/80 flex items-center gap-2"><User size={16} className="text-blue-700" />{tx('Players')} ({participants.length}) • M ({maleCount}) • F ({femaleCount})</h4>
+                  <h4 className="font-bold text-black/80 flex items-center gap-2"><User size={16} className="text-emerald-700" />{tx('Players')} ({participants.length}) • M ({maleCount}) • F ({femaleCount})</h4>
                   {issueCount > 0 && (
                     <p className="text-[11px] text-red-600 mt-1 font-semibold">{issueCount} {tx('record(s) need review (highlighted in red).')}</p>
                   )}
@@ -3355,10 +3561,10 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               ref={playersTableRef}
               className="w-max min-w-[760px] text-left border-collapse"
             >
-              <thead className="bg-[#BFDBFE]/35 border-b border-[#BFDBFE]/70">
+              <thead className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
                 <tr className="text-left">
-                  <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 w-10 sticky left-0 z-[3] bg-[#EFF6FF]">#</th>
-                  <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 sticky left-10 z-[3] bg-[#EFF6FF]">{tx('First Name')}</th>
+                  <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 w-10 sticky left-0 z-[3] bg-[#e3f3f6]">#</th>
+                  <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 sticky left-10 z-[3] bg-[#e3f3f6]">{tx('First Name')}</th>
                   <th className="pl-2 pr-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">{tx('Family Name')}</th>
                   <th className="pl-1 pr-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">{tx('Gender')}</th>
                   <th className="pl-2 pr-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">{tx('Hands')}</th>
@@ -3366,7 +3572,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     <button
                       type="button"
                       onClick={() => togglePlayerSort('club')}
-                      className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-black/70 hover:text-blue-700 transition-colors"
+                      className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-black/70 hover:text-emerald-700 transition-colors"
                       title="Sort by club"
                     >
                       {tx('Club')}
@@ -3393,7 +3599,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   </tr>
                 ) : (
                   filteredParticipants.map((p, index) => (
-                    <tr key={p.id} className={`${participantIssues.has(p.id) ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-[#BFDBFE]/20'} transition-colors`}>
+                    <tr key={p.id} className={`${participantIssues.has(p.id) ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-[#AFDDE5]/20'} transition-colors`}>
                       <td className={`px-2 py-1.5 font-mono text-[10px] sticky left-0 z-[2] ${participantIssues.has(p.id) ? 'text-red-700 bg-red-50' : 'text-black/60 bg-white'}`}>{index + 1}</td>
                       <td className={`px-2 py-1.5 uppercase text-xs sticky left-10 z-[2] ${participantIssues.has(p.id) ? 'text-red-700 bg-red-50' : 'text-black bg-white'}`}>
                         <span className="inline-flex items-center gap-1">
@@ -3409,7 +3615,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                           <div className="flex justify-end gap-1.5" title={participantIssues.has(p.id) ? participantIssues.get(p.id)?.join(' • ') : undefined}>
                             <button 
                               onClick={() => { setEditingPlayer(p); setShowAddPlayer(true); }}
-                              className="p-1 rounded hover:bg-blue-50 text-black/40 hover:text-blue-700 transition-all"
+                              className="p-1 rounded hover:bg-emerald-50 text-black/40 hover:text-emerald-700 transition-all"
                               title="Edit Player"
                             >
                               <Edit size={12} />
@@ -3433,13 +3639,13 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
           </Card>
         </div>
 
-        <div className="lg:col-span-2 space-y-6">
+        <div className={`${tournament.type === 'team' && mobileRosterTab !== 'teams' ? 'hidden lg:block' : ''} lg:col-span-2 space-y-6`}>
         {tournament.type === 'team' && (
-            <Card className="border-[#BFDBFE]/60 overflow-hidden">
-              <div className="p-3 border-b border-[#BFDBFE]/70 bg-white">
+            <Card className="border-[#AFDDE5]/60 overflow-hidden">
+              <div className="p-3 border-b border-[#AFDDE5]/70 bg-white">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                   <div>
-                    <h4 className="font-bold text-black/80 flex items-center gap-2"><Users size={16} className="text-blue-700" />{tx('Teams')} ({teams.length})</h4>
+                    <h4 className="font-bold text-black/80 flex items-center gap-2"><Users size={16} className="text-emerald-700" />{tx('Teams')} ({teams.length})</h4>
                     {multiTeamPlayers.length > 0 && (
                       <p className="text-[11px] text-red-600 mt-1 font-semibold">
                         {tx('Warning:')} {multiTeamPlayers.length} {tx('player(s) appear in more than one team')} ({multiTeamPlayers.slice(0, 3).map((player) => player.name).join(', ')}{multiTeamPlayers.length > 3 ? ', ...' : ''}).
@@ -3504,10 +3710,10 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
               <div className="overflow-x-auto">
               <table ref={teamsTableRef} className="w-full text-left border-collapse">
-                <thead className="bg-[#BFDBFE]/35 border-b border-[#BFDBFE]/70">
+                <thead className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
                   <tr>
-                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 w-12 sticky left-0 z-[3] bg-[#EFF6FF]">#</th>
-                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 sticky left-12 z-[3] bg-[#EFF6FF]">{tx('Team Name')}</th>
+                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 w-12 sticky left-0 z-[3] bg-[#e3f3f6]">#</th>
+                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 sticky left-12 z-[3] bg-[#e3f3f6]">{tx('Team Name')}</th>
                     <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">{tx('Team Members')}</th>
                     {canManageParticipants && (
                       <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right whitespace-nowrap w-16">Actions</th>
@@ -3527,7 +3733,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     filteredTeams.map((team, index) => {
                       const teamMembers = participants.filter(p => p.team_id === team.id);
                       return (
-                        <tr key={team.id} className="hover:bg-[#BFDBFE]/20 transition-colors align-top">
+                        <tr key={team.id} className="hover:bg-[#AFDDE5]/20 transition-colors align-top">
                           <td className="px-3 py-2 font-mono text-[10px] text-black/60 sticky left-0 z-[2] bg-white">{index + 1}</td>
                           <td className="px-3 py-2 uppercase text-xs text-black sticky left-12 z-[2] bg-white">{team.name}</td>
                           <td className="px-3 py-2">
@@ -3548,7 +3754,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                               <div className="flex justify-end gap-1">
                                 <button 
                                   onClick={() => openEditTeamModal(team)}
-                                  className="p-1 rounded hover:bg-blue-50 text-black/40 hover:text-blue-700 transition-all"
+                                  className="p-1 rounded hover:bg-emerald-50 text-black/40 hover:text-emerald-700 transition-all"
                                   title="Edit Team"
                                 >
                                   <Edit size={12} />
@@ -3584,7 +3790,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-blue-950/35 backdrop-blur-sm"
+              className="absolute inset-0 bg-emerald-950/35 backdrop-blur-sm"
               onClick={() => { setShowAddPlayer(false); setEditingPlayer(null); }}
             />
             <motion.div 
@@ -3593,8 +3799,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="relative w-full max-w-lg"
             >
-              <Card className="p-8 border-blue-200 bg-gradient-to-b from-white to-blue-50/40 shadow-md">
-                <h3 className="text-2xl font-bold text-blue-800 mb-2">{editingPlayer ? tx('Edit Player') : tx('Add New Player')}</h3>
+              <Card className="p-8 border-emerald-200 bg-gradient-to-b from-white to-emerald-50/40 shadow-md">
+                <h3 className="text-2xl font-bold text-emerald-800 mb-2">{editingPlayer ? tx('Edit Player') : tx('Add New Player')}</h3>
                 <p className="text-xs text-black/50 mb-5">{tx('Enter participant details and assign a team if needed.')}</p>
                 <form onSubmit={handleAddPlayer} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -3628,7 +3834,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   <Input label="Team/Club" name="club" defaultValue={editingPlayer?.club} placeholder="e.g. City Bowlers" />
                   <Input label="Email Address" name="email" type="email" defaultValue={editingPlayer?.email} placeholder="john@example.com" />
                   
-                  <div className="pt-4 flex gap-3 border-t border-blue-100/80">
+                  <div className="pt-4 flex gap-3 border-t border-emerald-100/80">
                     <Button type="submit" className="flex-1 justify-center" title={editingPlayer ? 'Save Changes' : 'Add Player'} ariaLabel={editingPlayer ? 'Save Changes' : 'Add Player'}>
                       {editingPlayer ? <Save size={16} /> : <Plus size={16} />}
                     </Button>
@@ -3648,7 +3854,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-blue-950/35 backdrop-blur-sm"
+              className="absolute inset-0 bg-emerald-950/35 backdrop-blur-sm"
               onClick={() => { setShowAddTeam(false); setEditingTeam(null); setSelectedTeamMemberIds([]); setTeamMemberSearchQuery(''); }}
             />
             <motion.div 
@@ -3657,8 +3863,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="relative w-full max-w-md"
             >
-              <Card className="p-8 border-blue-200 bg-gradient-to-b from-white to-blue-50/40 shadow-md">
-                <h3 className="text-2xl font-bold text-blue-800 mb-2">{editingTeam ? tx('Edit Team') : tx('Create New Team')}</h3>
+              <Card className="p-8 border-emerald-200 bg-gradient-to-b from-white to-emerald-50/40 shadow-md">
+                <h3 className="text-2xl font-bold text-emerald-800 mb-2">{editingTeam ? tx('Edit Team') : tx('Create New Team')}</h3>
                 <p className="text-xs text-black/50 mb-5">{tx('Create a team or rename an existing one.')}</p>
                 <form onSubmit={handleAddTeam} className="space-y-4">
                   <Input label="Team Name" name="name" defaultValue={editingTeam?.name} placeholder="e.g. The Strikers" required />
@@ -3669,7 +3875,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       value={teamMemberSearchQuery}
                       onChange={(e) => setTeamMemberSearchQuery(e.target.value)}
                       placeholder="Search by name, club, or email"
-                      className="w-full px-3 py-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-200 transition-all bg-white text-sm"
+                      className="w-full px-3 py-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 transition-all bg-white text-sm"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -3688,7 +3894,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                               key={player.id}
                               className={`flex items-center justify-between gap-2 px-1 py-1 text-xs rounded ${
                                 checked
-                                  ? 'bg-blue-50 border border-blue-200'
+                                  ? 'bg-emerald-50 border border-emerald-200'
                                   : assignedToOtherTeam
                                     ? 'bg-amber-50/60 border border-amber-200/70'
                                     : 'hover:bg-black/[0.02]'
@@ -3719,7 +3925,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       )}
                     </div>
                   </div>
-                  <div className="pt-4 flex gap-3 border-t border-blue-100/80">
+                  <div className="pt-4 flex gap-3 border-t border-emerald-100/80">
                     <Button type="submit" className="flex-1 justify-center" title={editingTeam ? 'Save Changes' : 'Create Team'} ariaLabel={editingTeam ? 'Save Changes' : 'Create Team'}>
                       {editingTeam ? <Save size={16} /> : <Plus size={16} />}
                     </Button>
@@ -4225,7 +4431,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div>
-          <h3 className="text-xl font-bold text-blue-800">{tx('Lane Assignments')}</h3>
+          <h3 className="text-xl font-bold text-emerald-800">{tx('Lane Assignments')}</h3>
           <p className="text-[10px] text-black/50 font-bold uppercase tracking-widest">
             {tournament.lanes_count} {tx('Lanes')} • {tournament.shifts_count} {tx('Shifts')} • {tournament.players_per_lane} {tournament.type === 'team' ? tx('Teams') : tx('Players')} / {tx('Lane')}
           </p>
@@ -4237,14 +4443,12 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
       {/* Shift Selector */}
       {tournament.shifts_count > 1 && (
-        <div className="flex gap-1.5 p-1 bg-[#BFDBFE]/35 rounded-lg w-fit border border-[#BFDBFE]/70">
+        <div className={`sticky top-[7.25rem] z-30 ${segmentedTabContainerClass} w-fit`}>
           {Array.from({ length: tournament.shifts_count }, (_, i) => i + 1).map(s => (
             <button
               key={s}
               onClick={() => setCurrentShift(s)}
-              className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
-                currentShift === s ? 'bg-blue-600 text-white shadow-sm' : 'text-black/50 hover:text-blue-700'
-              }`}
+              className={getSegmentedTabButtonClass(currentShift === s, 'compact')}
             >
               {tx('Shift')} {s}
             </button>
@@ -4255,10 +4459,10 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* Waiting Queue */}
         <div className="lg:col-span-1 space-y-4">
-          <Card className="p-3 border-[#BFDBFE]/60 bg-white">
-            <h4 className="text-[10px] font-bold uppercase tracking-widest text-blue-700 mb-3 flex items-center justify-between">
+          <Card className="p-3 border-[#AFDDE5]/60 bg-white">
+            <h4 className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 mb-3 flex items-center justify-between">
               {tx('Waiting Queue')}
-              <span className="bg-blue-100 px-1.5 py-0.5 rounded text-blue-800">{waitingQueue.length}</span>
+              <span className="bg-emerald-100 px-1.5 py-0.5 rounded text-emerald-800">{waitingQueue.length}</span>
             </h4>
             <div className="space-y-2 max-h-[600px] overflow-y-auto no-scrollbar">
               {waitingQueue.length === 0 ? (
@@ -4275,8 +4479,8 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                       onClick={() => setSelectedItem({ id: item.id, type: 'waiting' })}
                       className={`p-2 rounded border transition-all cursor-pointer group ${
                         selectedItem?.id === item.id && selectedItem.type === 'waiting'
-                        ? 'bg-blue-700 text-white border-blue-700'
-                        : 'bg-white border-black/10 hover:border-blue-300 hover:bg-blue-50/30'
+                        ? 'bg-emerald-700 text-white border-emerald-700'
+                        : 'bg-white border-black/10 hover:border-emerald-300 hover:bg-emerald-50/30'
                       }`}
                     >
                       <div className="flex justify-between items-start">
@@ -4372,11 +4576,11 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
               <Card 
                 key={laneNum} 
                 className={`flex flex-col h-full min-h-[160px] transition-all border-2 ${
-                  selectedItem ? 'border-blue-300 bg-blue-50/20 cursor-pointer hover:border-blue-500' : 'border-[#BFDBFE]/70 bg-white'
+                  selectedItem ? 'border-emerald-300 bg-emerald-50/20 cursor-pointer hover:border-emerald-500' : 'border-[#AFDDE5]/70 bg-white'
                 }`}
                 onClick={() => selectedItem && handleMoveToLane(laneNumber)}
               >
-                <div className="bg-[#BFDBFE]/45 text-blue-900 px-2.5 py-1.5 flex justify-between items-center group/header border-b border-[#BFDBFE]/70">
+                <div className="bg-[#AFDDE5]/45 text-emerald-900 px-2.5 py-1.5 flex justify-between items-center group/header border-b border-[#AFDDE5]/70">
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-[10px] uppercase tracking-widest">Lane {laneNum}</span>
                     <button
@@ -4389,7 +4593,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                       className={`h-3.5 min-w-3.5 rounded-full text-[9px] leading-none font-bold inline-flex items-center justify-center border transition-all ${
                         isLaneOutOfOperation
                           ? 'bg-red-500 border-red-500 text-white'
-                          : 'bg-blue-500 border-blue-500 text-white'
+                          : 'bg-emerald-500 border-emerald-500 text-white'
                       }`}
                       title={isLaneOutOfOperation
                         ? 'Out of operation (double-click to set operational)'
@@ -4400,7 +4604,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                     </button>
                     <button 
                       onClick={(e) => { e.stopPropagation(); handleMoveLane(laneNumber, currentShift); }}
-                      className="opacity-0 group-hover/header:opacity-100 p-1 hover:text-blue-700 transition-all"
+                      className="opacity-0 group-hover/header:opacity-100 p-1 hover:text-emerald-700 transition-all"
                       title="Move entire lane"
                     >
                       <ArrowRightLeft size={10} />
@@ -4410,7 +4614,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                 </div>
                 <div className="p-2 flex-1 flex flex-col gap-1.5">
                   {assignments.length === 0 ? (
-                    <div className="flex-1 flex items-center justify-center text-blue-200/60">
+                    <div className="flex-1 flex items-center justify-center text-emerald-200/60">
                       <Plus size={32} />
                     </div>
                   ) : (
@@ -4433,8 +4637,8 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                           onClick={(e) => { e.stopPropagation(); setSelectedItem({ id: a.id, type: 'assignment' }); }}
                           className={`text-[10px] p-1.5 rounded border font-bold uppercase tracking-wide flex justify-between items-start group cursor-pointer transition-all ${
                             selectedItem?.id === a.id && selectedItem.type === 'assignment'
-                            ? 'bg-blue-700 text-white border-blue-700'
-                            : 'bg-[#BFDBFE]/20 border-transparent hover:border-blue-200'
+                            ? 'bg-emerald-700 text-white border-emerald-700'
+                            : 'bg-[#AFDDE5]/20 border-transparent hover:border-emerald-200'
                           }`}
                         >
                           <div className="flex-1">
@@ -4472,8 +4676,8 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                     })
                   )}
                   {selectedItem && assignments.length < tournament.players_per_lane && (
-                    <div className="mt-auto pt-2 border-t border-dashed border-blue-500/20 text-center">
-                      <span className="text-[8px] font-bold text-blue-600 uppercase tracking-widest">Click to place here</span>
+                    <div className="mt-auto pt-2 border-t border-dashed border-emerald-500/20 text-center">
+                      <span className="text-[8px] font-bold text-emerald-600 uppercase tracking-widest">Click to place here</span>
                     </div>
                   )}
                 </div>
@@ -5066,23 +5270,21 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-3">
         <div>
-          <h3 className="text-xl font-bold text-blue-800">{tx('Score Entry')}</h3>
+          <h3 className="text-xl font-bold text-emerald-800">{tx('Score Entry')}</h3>
           <p className="text-xs text-black/50 mt-0.5">
             {tx('Enter game results for each participant')}{tournament.type === 'team' ? ` ${tx('(assigned team players only)')}` : ''} • {tx('Shift')} {currentShift}
           </p>
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+      <div className="sticky top-[7.25rem] z-30 flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-white/95 backdrop-blur-sm py-1">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex gap-1.5 p-1 bg-[#BFDBFE]/35 rounded-lg w-fit border border-[#BFDBFE]/70">
+          <div className={`${segmentedTabContainerClass} w-fit`}>
             {Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1).map(shift => (
               <button
                 key={shift}
                 onClick={() => setCurrentShift(shift)}
-                className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
-                  currentShift === shift ? 'bg-blue-600 text-white shadow-sm' : 'text-black/50 hover:text-blue-700'
-                }`}
+                className={getSegmentedTabButtonClass(currentShift === shift, 'compact')}
               >
                 {tx('Shift')} {shift}
               </button>
@@ -5129,11 +5331,11 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
         </div>
       </div>
 
-      <Card className="overflow-x-auto border-[#BFDBFE]/60">
+      <Card className="overflow-x-auto border-[#AFDDE5]/60">
         <table ref={scoringTableRef} className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-[#BFDBFE]/35 border-b border-[#BFDBFE]/70">
-              <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70 sticky left-0 z-[3] bg-[#EFF6FF]">Participant</th>
+            <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
+              <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70 sticky left-0 z-[3] bg-[#e3f3f6]">Participant</th>
               <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70">Lane</th>
               {gameNumbers.map(gameNumber => (
                 <th key={gameNumber} className="px-3 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70 text-center min-w-[110px]">
@@ -5154,13 +5356,13 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
               return (
                 <React.Fragment key={p.id}>
                   {showTeamHeader && (
-                    <tr className="bg-[#BFDBFE]/20">
-                      <td className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-blue-700" colSpan={gameNumbers.length + 4}>
+                    <tr className="bg-[#AFDDE5]/20">
+                      <td className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-emerald-700" colSpan={gameNumbers.length + 4}>
                         Team: {teamLabel}
                       </td>
                     </tr>
                   )}
-                  <tr className="hover:bg-[#BFDBFE]/20 transition-colors">
+                  <tr className="hover:bg-[#AFDDE5]/20 transition-colors">
                     <td className="px-4 py-3 font-bold text-sm text-black sticky left-0 z-[2] bg-white">
                       <span className="inline-flex items-center gap-1">
                         {renderFemaleInitialUnderline(formatScoringName(p), p.gender?.toLowerCase() === 'female')}
@@ -5169,14 +5371,14 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                     <td className="px-4 py-3">
                       {tournament.type === 'team' ? (
                         <div className="flex items-center gap-1.5">
-                          <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest bg-[#BFDBFE]/35 text-blue-800 border border-[#BFDBFE]/70">
+                          <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest bg-[#AFDDE5]/35 text-emerald-800 border border-[#AFDDE5]/70">
                             {getLaneBadge(p)}
                           </span>
                           <button
                             type="button"
                             onClick={() => handleSwapTeamPosition(p, 'up')}
                             disabled={swapInFlight || !canManageScores || (teamVisiblePositionMap.get(p.id)?.index ?? 0) <= 0}
-                            className="w-6 h-6 rounded border border-[#BFDBFE]/70 text-black/50 hover:text-blue-700 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Swap with previous player"
                           >
                             ↑
@@ -5185,28 +5387,28 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                             type="button"
                             onClick={() => handleSwapTeamPosition(p, 'down')}
                             disabled={swapInFlight || !canManageScores || (teamVisiblePositionMap.get(p.id)?.index ?? 0) >= ((teamVisiblePositionMap.get(p.id)?.count ?? 1) - 1)}
-                            className="w-6 h-6 rounded border border-[#BFDBFE]/70 text-black/50 hover:text-blue-700 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Swap with next player"
                           >
                             ↓
                           </button>
                           {swapInFlight && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-blue-700" aria-live="polite">
-                              <span className="inline-block w-2.5 h-2.5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-emerald-700" aria-live="polite">
+                              <span className="inline-block w-2.5 h-2.5 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin" />
                               Moving...
                             </span>
                           )}
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5">
-                          <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest bg-[#BFDBFE]/35 text-blue-800 border border-[#BFDBFE]/70">
+                          <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest bg-[#AFDDE5]/35 text-emerald-800 border border-[#AFDDE5]/70">
                             {getLaneBadge(p)}
                           </span>
                           <button
                             type="button"
                             onClick={() => handleSwapIndividualPosition(p, 'up')}
                             disabled={swapInFlight || !canManageScores || index <= 0}
-                            className="w-6 h-6 rounded border border-[#BFDBFE]/70 text-black/50 hover:text-blue-700 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Swap with previous player"
                           >
                             ↑
@@ -5215,14 +5417,14 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                             type="button"
                             onClick={() => handleSwapIndividualPosition(p, 'down')}
                             disabled={swapInFlight || !canManageScores || index >= scoringParticipants.length - 1}
-                            className="w-6 h-6 rounded border border-[#BFDBFE]/70 text-black/50 hover:text-blue-700 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Swap with next player"
                           >
                             ↓
                           </button>
                           {swapInFlight && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-blue-700" aria-live="polite">
-                              <span className="inline-block w-2.5 h-2.5 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-emerald-700" aria-live="polite">
+                              <span className="inline-block w-2.5 h-2.5 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin" />
                               Moving...
                             </span>
                           )}
@@ -5249,14 +5451,14 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                               }
                             }}
                             disabled={!canManageScores}
-                            className="w-20 px-2 py-1.5 rounded-lg border border-[#BFDBFE]/80 focus:outline-none focus:ring-2 focus:ring-blue-200 font-mono font-bold text-center"
+                            className="w-20 px-2 py-1.5 rounded-lg border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 font-mono font-bold text-center"
                             placeholder="0"
                           />
                         </td>
                       );
                     })}
                     <td className="px-4 py-3 text-right font-bold text-base text-black/80">{total}</td>
-                    <td className="px-4 py-3 text-right font-bold text-base text-blue-700">{average.toFixed(1)}</td>
+                    <td className="px-4 py-3 text-right font-bold text-base text-emerald-700">{average.toFixed(1)}</td>
                   </tr>
                 </React.Fragment>
               );
@@ -7108,13 +7310,13 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     const p3Members = getSlotTeamMembers(m.participant3_id);
 
     return (
-      <Card key={m.id} className={`${compact ? 'p-2.5' : 'p-3'} ${isFinalCard ? 'bg-blue-50/60 border-blue-200' : (isBronzeCard ? 'bg-amber-50/70 border-amber-200' : '')}`}>
+      <Card key={m.id} className={`${compact ? 'p-2.5' : 'p-3'} ${isFinalCard ? 'bg-emerald-50/60 border-emerald-200' : (isBronzeCard ? 'bg-amber-50/70 border-amber-200' : '')}`}>
         <div className="flex justify-between items-center mb-2.5">
           <div className="flex flex-col">
             <span className="text-xs font-bold uppercase tracking-widest text-black/45">{meta.matchCode}</span>
             {meta.pairingHint && <span className="text-[10px] text-black/45">{meta.pairingHint}</span>}
           </div>
-          <span className={`text-xs font-bold uppercase tracking-widest px-2 py-1 rounded ${isFinalCard ? 'bg-blue-100 text-blue-800' : (isBronzeCard ? 'bg-amber-100 text-amber-800' : 'bg-black/5')}`}>
+          <span className={`text-xs font-bold uppercase tracking-widest px-2 py-1 rounded ${isFinalCard ? 'bg-emerald-100 text-emerald-800' : (isBronzeCard ? 'bg-amber-100 text-amber-800' : 'bg-black/5')}`}>
             {isFinalCard ? 'Final' : (isBronzeCard ? '3rd Place' : meta.stage)}
           </span>
         </div>
@@ -7123,7 +7325,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           <div
             className={`p-2 rounded-lg border transition-all flex items-center justify-between ${
               isP1Winner
-                ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-500/20'
+                ? 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500/20'
                 : 'bg-black/[0.02] border-black/5 hover:border-black/10'
             } ${readOnlyMatchCard ? 'cursor-default' : 'cursor-pointer'}`}
             onClick={() => canManageBrackets && !lockCustomSeedEditing && selectedSeed ? handleAssignSeedToSlot(m.id, 'p1') : undefined}
@@ -7167,7 +7369,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     setEditingNameSlot({ matchId: m.id, slot: 'p1' });
                   }
                 }}
-                className={`font-medium text-left ${isP1Winner ? 'text-blue-900' : ''}`}
+                className={`font-medium text-left ${isP1Winner ? 'text-emerald-900' : ''}`}
                 title={canManageBrackets ? `Click to change ${tournament.type === 'team' ? 'team' : 'player'}` : undefined}
               >
                 <span className="inline-flex flex-col items-start gap-0.5 min-w-0 max-w-full align-middle">
@@ -7207,7 +7409,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 placeholder="0"
                 title="Participant 1 score"
               />
-              {isP1Winner && <Trophy size={14} className="text-blue-600" />}
+              {isP1Winner && <Trophy size={14} className="text-emerald-600" />}
             </div>
           </div>
 
@@ -7216,7 +7418,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           <div
             className={`p-2 rounded-lg border transition-all flex items-center justify-between ${
               isP2Winner
-                ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-500/20'
+                ? 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500/20'
                 : 'bg-black/[0.02] border-black/5 hover:border-black/10'
             } ${readOnlyMatchCard ? 'cursor-default' : 'cursor-pointer'}`}
             onClick={() => canManageBrackets && !lockCustomSeedEditing && selectedSeed ? handleAssignSeedToSlot(m.id, 'p2') : undefined}
@@ -7260,7 +7462,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     setEditingNameSlot({ matchId: m.id, slot: 'p2' });
                   }
                 }}
-                className={`font-medium text-left ${isP2Winner ? 'text-blue-900' : ''}`}
+                className={`font-medium text-left ${isP2Winner ? 'text-emerald-900' : ''}`}
                 title={canManageBrackets ? `Click to change ${tournament.type === 'team' ? 'team' : 'player'}` : undefined}
               >
                 <span className="inline-flex flex-col items-start gap-0.5 min-w-0 max-w-full align-middle">
@@ -7300,7 +7502,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 placeholder="0"
                 title="Participant 2 score"
               />
-              {isP2Winner && <Trophy size={14} className="text-blue-600" />}
+              {isP2Winner && <Trophy size={14} className="text-emerald-600" />}
             </div>
           </div>
 
@@ -7310,7 +7512,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
               <div
                 className={`p-2 rounded-lg border transition-all flex items-center justify-between ${
                   isP3Winner
-                    ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-500/20'
+                    ? 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500/20'
                     : 'bg-black/[0.02] border-black/5'
                 }`}
                 onDoubleClick={() => canManageBrackets && hasRequiredScores && hasDistinctScores && m.participant3_id && handleSetWinner(m.id, m.participant3_id)}
@@ -7322,7 +7524,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                       : 'Enter all scores first to set shootout winner'
                 }
               >
-                <span className={`font-medium text-left ${isP3Winner ? 'text-blue-900' : ''}`}>
+                <span className={`font-medium text-left ${isP3Winner ? 'text-emerald-900' : ''}`}>
                   <span className="inline-flex flex-col items-start gap-0.5 min-w-0 max-w-full align-middle">
                     <span className="truncate">
                       {m.participant3_seed ? `#${m.participant3_seed} ` : ''}
@@ -7359,7 +7561,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     placeholder="0"
                     title={tx('Participant 3 score')}
                   />
-                  {isP3Winner && <Trophy size={14} className="text-blue-600" />}
+                  {isP3Winner && <Trophy size={14} className="text-emerald-600" />}
                 </div>
               </div>
             </>
@@ -7445,7 +7647,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                   }
                   setMatchPlayType(nextType);
                 }}
-                className="w-full h-8 px-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-200 bg-white text-[13px]"
+                className="w-full h-8 px-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 bg-white text-[13px]"
               >
                 <option value="single_elimination">Single Elimination</option>
                 <option value="double_elimination">Double Elimination</option>
@@ -7468,7 +7670,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     setQualifiedCount(Math.max(0, Number.parseInt(e.target.value, 10) || 0));
                   }}
                   disabled={isTeamSelectionPlayoffMode || isPublicBracketView}
-                  className="w-full h-8 px-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-200 bg-white text-[13px]"
+                  className="w-full h-8 px-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 bg-white text-[13px]"
                 />
               </div>
               <div>
@@ -7483,14 +7685,14 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     setPlayoffWinnersCount(Math.min(3, Math.max(1, Number.parseInt(e.target.value, 10) || 1)));
                   }}
                   disabled={isTeamSelectionPlayoffMode || isPublicBracketView}
-                  className="w-full h-8 px-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-200 bg-white text-[13px]"
+                  className="w-full h-8 px-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 bg-white text-[13px]"
                 />
               </div>
             </div>
 
             {isTeamSelectionPlayoffMode && (
-              <div className="rounded-md border border-blue-200 bg-blue-50/40 px-2 py-2 space-y-1.5">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-blue-800">{tx('Selection Draft (Top 8)')}</p>
+              <div className="rounded-md border border-emerald-200 bg-emerald-50/40 px-2 py-2 space-y-1.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-800">{tx('Selection Draft (Top 8)')}</p>
                 <div className="grid grid-cols-1 gap-1 text-[11px]">
                   <div className="grid grid-cols-[auto_1fr] items-center gap-1.5">
                     <span className="font-semibold text-black/70">Seed #1 chooses:</span>
@@ -7580,8 +7782,8 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           </div>
         </Card>
 
-        <Card className="border-[#BFDBFE]/60 h-full overflow-visible">
-          <div className="px-2.5 py-2 border-b border-[#BFDBFE]/70 flex items-center justify-between gap-2">
+        <Card className="border-[#AFDDE5]/60 h-full overflow-visible">
+          <div className="px-2.5 py-2 border-b border-[#AFDDE5]/70 flex items-center justify-between gap-2">
             <div>
               <h4 className="font-bold text-[13px]">Top Seeds</h4>
               <p className="text-[11px] text-black/45 leading-tight">
@@ -7617,7 +7819,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     key={`seed-card-${seed.seed}`}
                     onClick={() => canManageBrackets && !lockCustomSeedEditing && setSelectedSeed(seed)}
                     onDoubleClick={() => startSeedEdit(seed)}
-                    className={`print-keep-button relative rounded-md border px-2 py-1 text-xs text-left ${selectedSeed?.id === seed.id ? 'border-blue-400 bg-blue-50' : 'border-[#BFDBFE]/70 bg-[#BFDBFE]/12'} ${canEditTopSeeds && editingSeedNumber === Number(seed.seed) ? 'z-30 shadow-lg' : 'z-0'}`}
+                    className={`print-keep-button relative rounded-md border px-2 py-1 text-xs text-left ${selectedSeed?.id === seed.id ? 'border-emerald-400 bg-emerald-50' : 'border-[#AFDDE5]/70 bg-[#AFDDE5]/12'} ${canEditTopSeeds && editingSeedNumber === Number(seed.seed) ? 'z-30 shadow-lg' : 'z-0'}`}
                     title={lockCustomSeedEditing ? 'Seed editing is locked after generate in Custom Matchups mode' : 'Optional: select seed for manual slot replacement'}
                   >
                     {(() => {
@@ -7637,7 +7839,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                       return (
                         <>
                           {hasOverride && baseSeed && (
-                            <p className="text-[11px] font-bold leading-tight text-blue-900 bg-blue-100 border border-blue-300 rounded px-1.5 py-1 mb-1" title={`Original: ${baseSeed.name || 'N/A'} -> Replacement: ${seed.name || 'N/A'}`}>
+                            <p className="text-[11px] font-bold leading-tight text-emerald-900 bg-emerald-100 border border-emerald-300 rounded px-1.5 py-1 mb-1" title={`Original: ${baseSeed.name || 'N/A'} -> Replacement: ${seed.name || 'N/A'}`}>
                               {(() => {
                                 if (overrideKind === 'participant') {
                                   const replacedFromId = Number(overrideEntry?.replaced_from_participant_id || 0);
@@ -7747,13 +7949,13 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       </div>
 
       {useManualSeedMatchups ? (
-        <Card className="p-4 border border-blue-200 bg-gradient-to-br from-white to-blue-50/50">
+        <Card className="p-4 border border-emerald-200 bg-gradient-to-br from-white to-emerald-50/50">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
-              <h4 className="text-sm font-bold text-blue-800 uppercase tracking-widest">Custom Matchup Rules</h4>
+              <h4 className="text-sm font-bold text-emerald-800 uppercase tracking-widest">Custom Matchup Rules</h4>
               <p className="text-xs text-black/60 mt-1">Editable before generate. Seed slots are locked after generate.</p>
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded bg-blue-100 text-blue-800">Customized rule view</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded bg-emerald-100 text-emerald-800">Customized rule view</span>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-3 text-xs">
             <div className="rounded-md border border-black/10 bg-white p-3">
@@ -7873,15 +8075,15 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           </div>
         </Card>
       ) : (
-        <Card className="p-4 border border-blue-200 bg-gradient-to-br from-white to-blue-50/50">
+        <Card className="p-4 border border-emerald-200 bg-gradient-to-br from-white to-emerald-50/50">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
-              <h4 className="text-sm font-bold text-blue-800 uppercase tracking-widest">
+              <h4 className="text-sm font-bold text-emerald-800 uppercase tracking-widest">
                 {isEightSeedPlayoffMode ? '8-Seed Play-Off Rules' : 'Rule-Driven Bracket View'}
               </h4>
               <p className="text-xs text-black/60 mt-1">Automatically shown for every bracket tournament</p>
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded bg-blue-100 text-blue-800">Rule-driven view</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded bg-emerald-100 text-emerald-800">Rule-driven view</span>
           </div>
 
           {isEightSeedPlayoffMode ? (
@@ -8023,7 +8225,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       )}
 
       {showBracketPodium && (
-        <Card className="p-4 border border-[#BFDBFE]/80 bg-[#BFDBFE]/18">
+        <Card className="p-4 border border-[#AFDDE5]/80 bg-[#AFDDE5]/18">
           <div className="mb-2.5 pb-2 border-b border-black/10">
             <h4 className="text-sm font-bold uppercase tracking-widest text-black/75">Podium Results</h4>
             <p className="text-[11px] text-black/45 mt-0.5">{hasBracketWinners ? 'Auto-updates from bracket winners.' : 'Waiting for winners. Podium placeholders are shown.'}</p>
@@ -8101,18 +8303,18 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         <Card className="p-3 border border-black/10">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="text-xs text-black/50">Bracket Results View</div>
-            <div className="inline-flex rounded-md border border-black/15 overflow-hidden">
+            <div className={`sticky top-[7.25rem] z-30 ${segmentedTabContainerClass}`}>
               <button
                 type="button"
                 onClick={() => setBracketViewMode('cards')}
-                className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wider ${bracketViewMode === 'cards' ? 'bg-blue-600 text-white' : 'bg-white text-black/60 hover:bg-black/5'}`}
+                className={getSegmentedTabButtonClass(bracketViewMode === 'cards', 'compact')}
               >
                 Cards / Table
               </button>
               <button
                 type="button"
                 onClick={() => setBracketViewMode('visual')}
-                className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wider border-l border-black/15 ${bracketViewMode === 'visual' ? 'bg-blue-600 text-white' : 'bg-white text-black/60 hover:bg-black/5'}`}
+                className={getSegmentedTabButtonClass(bracketViewMode === 'visual', 'compact')}
               >
                 Visual
               </button>
@@ -8149,7 +8351,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     : `Round ${roundNumber}`;
 
                 return (
-                  <Card key={roundNumber} className="p-3 border-[#BFDBFE]/60">
+                  <Card key={roundNumber} className="p-3 border-[#AFDDE5]/60">
                     <div className="mb-3 pb-2 border-b border-black/10">
                       <h4 className="text-sm font-bold uppercase tracking-widest text-black/75">{roundTitle}</h4>
                       <p className="text-[11px] text-black/45">{roundMatches.length} match{roundMatches.length === 1 ? '' : 'es'}</p>
@@ -8787,11 +8989,11 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                     <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-black/40">{tx('Team Members')}</div>
                   )}
                 </div>
-                <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} border-b border-black/5 bg-blue-50/70`}>
-                  <div className="px-4 py-3 font-bold text-blue-700">1st</div>
-                  <div className="px-4 py-3 font-bold text-blue-700">{firstPlace}</div>
+                <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} border-b border-black/5 bg-emerald-50/70`}>
+                  <div className="px-4 py-3 font-bold text-emerald-700">1st</div>
+                  <div className="px-4 py-3 font-bold text-emerald-700">{firstPlace}</div>
                   {isTeamTournament && (
-                    <div className="px-4 py-3 text-blue-800 text-sm">{getWinnerMembersLabel(firstPlace)}</div>
+                    <div className="px-4 py-3 text-emerald-800 text-sm">{getWinnerMembersLabel(firstPlace)}</div>
                   )}
                 </div>
                 <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} border-b border-black/5 bg-slate-100/80`}>
@@ -8866,13 +9068,13 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
           </Card>
         </div>
 
-        <Card>
+        <Card className="overflow-visible">
           <div className="p-6 border-b border-black/5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
               <h4 className="font-bold">{tx('Tournament Standings')}</h4>
               <p className="text-sm text-black/40">{tx('Rankings sorted from highest to lowest total score')}</p>
               {standingsMode === 'teams' && isTeamTournament && (
-                <p className={`text-xs mt-1 ${teamsCountValid ? 'text-blue-700' : 'text-amber-700'}`}>
+                <p className={`text-xs mt-1 ${teamsCountValid ? 'text-emerald-700' : 'text-amber-700'}`}>
                   Team check: ranked teams = {rankedTeamsCount} (real teams only), assigned players = {assignedPlayersCount}, unassigned players = {unassignedPlayersCount}.
                   {teamsCountValid ? ' OK.' : ' Mismatch detected. Please review team assignments in Participants page.'}
                 </p>
@@ -8889,24 +9091,6 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-              <div className="flex gap-1 p-1 bg-black/5 rounded-lg">
-                <button
-                  onClick={() => setStandingsMode('players')}
-                  className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
-                    standingsMode === 'players' ? 'bg-black text-white shadow-sm' : 'text-black/40 hover:text-black/60'
-                  }`}
-                >
-                  Players
-                </button>
-                <button
-                  onClick={() => setStandingsMode('teams')}
-                  className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${
-                    standingsMode === 'teams' ? 'bg-black text-white shadow-sm' : 'text-black/40 hover:text-black/60'
-                  }`}
-                >
-                  Teams
-                </button>
-              </div>
               <Button variant="outline" onClick={handleSaveStandings} title="Save" ariaLabel="Save">
                 <Save size={14} />
               </Button>
@@ -8928,12 +9112,28 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
               </Button>
             </div>
           </div>
+          <div className="sticky top-[7.25rem] z-30 px-6 py-2 border-b border-black/5 bg-white/95 backdrop-blur-sm">
+            <div className={`${segmentedTabContainerClass} w-fit`}>
+              <button
+                onClick={() => setStandingsMode('players')}
+                className={getSegmentedTabButtonClass(standingsMode === 'players', 'compact')}
+              >
+                Players
+              </button>
+              <button
+                onClick={() => setStandingsMode('teams')}
+                className={getSegmentedTabButtonClass(standingsMode === 'teams', 'compact')}
+              >
+                Teams
+              </button>
+            </div>
+          </div>
           <div className="overflow-x-auto">
           <table ref={standingsTableRef} className="w-full min-w-[920px] text-left border-collapse">
             <thead>
-              <tr className="bg-[#BFDBFE]/35 border-b border-[#BFDBFE]/70">
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-black/70 w-12 sticky left-0 z-[3] bg-[#EFF6FF]">Rank</th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-black/70 sticky left-12 z-[3] bg-[#EFF6FF]">{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
+              <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
+                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-black/70 w-12 sticky left-0 z-[3] bg-[#e3f3f6]">Rank</th>
+                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-black/70 sticky left-12 z-[3] bg-[#e3f3f6]">{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
                 {standingsMode === 'players' && (
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Club</th>
                 )}
@@ -8947,7 +9147,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                 ))}
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Total</th>
                 {hasAdditionalScores && <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-violet-700 text-center">Score++</th>}
-                {hasBonus && <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-blue-700 text-center">Bonus</th>}
+                {hasBonus && <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-emerald-700 text-center">Bonus</th>}
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Grand Total</th>
                 {standingsMode === 'players' && (
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">Avg</th>
@@ -8956,7 +9156,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
             </thead>
             <tbody className="divide-y divide-black/5">
               {standingsMode === 'players' && playerStandingsRows.map((s, idx) => (
-                <tr key={s.participant_id} className="hover:bg-[#BFDBFE]/20 transition-colors">
+                <tr key={s.participant_id} className="hover:bg-[#AFDDE5]/20 transition-colors">
                   <td className="px-3 py-2 text-[13px] font-bold text-black/60 sticky left-0 z-[2] bg-white">{idx + 1}</td>
                   <td className="px-3 py-2 text-[13px] font-bold leading-tight sticky left-12 z-[2] bg-white">
                     <span className="inline-flex items-center gap-1.5">
@@ -9009,7 +9209,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                       ) : s.additional;
                     })()}
                   </td>}
-                  {hasBonus && <td className="px-6 py-4 text-center font-mono text-blue-700">
+                  {hasBonus && <td className="px-6 py-4 text-center font-mono text-emerald-700">
                     {(() => {
                       const bonusKey = toBonusKey('participant', s.participant_id);
                       const liveValue = bonusDrafts[bonusKey] !== undefined ? bonusDrafts[bonusKey] : String(s.bonus);
@@ -9021,7 +9221,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                           onBlur={(e) => persistBonus('participant', s.participant_id, e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
                           disabled={savingBonusKey === bonusKey}
-                          className="w-12 mx-auto px-1 py-1 rounded border border-[#BFDBFE]/80 focus:outline-none focus:ring-2 focus:ring-blue-200 text-center"
+                          className="w-12 mx-auto px-1 py-1 rounded border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 text-center"
                         />
                       ) : s.bonus;
                     })()}
@@ -9051,7 +9251,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                 </tr>
               ))}
               {standingsMode === 'teams' && teamStandingsRows.map((s, idx) => (
-                <tr key={s.key} className="hover:bg-[#BFDBFE]/20 transition-colors">
+                <tr key={s.key} className="hover:bg-[#AFDDE5]/20 transition-colors">
                   <td className="px-3 py-2 text-[13px] font-bold text-black/60 sticky left-0 z-[2] bg-white">{idx + 1}</td>
                   <td className="px-3 py-2 leading-tight sticky left-12 z-[2] bg-white">
                     <div className="text-[13px] font-bold">{s.team_name}</div>
@@ -9081,7 +9281,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                       ) : s.additional;
                     })()}
                   </td>}
-                  {hasBonus && <td className="px-6 py-4 text-center font-mono text-blue-700">
+                  {hasBonus && <td className="px-6 py-4 text-center font-mono text-emerald-700">
                     {(() => {
                       if (!s.team_id) return s.bonus;
                       const bonusKey = toBonusKey('team', s.team_id);
@@ -9094,7 +9294,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                           onBlur={(e) => persistBonus('team', s.team_id as number, e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
                           disabled={savingBonusKey === bonusKey}
-                          className="w-12 mx-auto px-1 py-1 rounded border border-[#BFDBFE]/80 focus:outline-none focus:ring-2 focus:ring-blue-200 text-center"
+                          className="w-12 mx-auto px-1 py-1 rounded border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 text-center"
                         />
                       ) : s.bonus;
                     })()}
