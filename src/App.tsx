@@ -1275,7 +1275,6 @@ export default function App() {
             title={t('app.nav.language', 'Language')}
             aria-label={t('app.nav.language', 'Language')}
           >
-            <span className="text-base leading-none">{publicLanguage === 'mn' ? '🇲🇳' : '🇬🇧'}</span>
             <span>{publicLanguage === 'mn' ? 'Mn' : 'En'}</span>
           </button>
           {lockedRole ? (
