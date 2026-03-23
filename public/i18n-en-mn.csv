@@ -1,10 +1,10 @@
 key,english,mongolian
-note,Edit the mongolian column manually. Keep key unchanged.,
-common.back_to_dashboard,Back to Dashboard,
+note,Edit the mongolian column manually. Keep key unchanged.,Монгол орчуулгын баганыг гараар засна. Түлхүүрийг өөрчлөхгүй.
+common.back_to_dashboard,Back to Dashboard,Удирдлагын самбар руу буцах
 common.sponsors,Sponsors,Спонсорууд
-common.show,Show,
-common.hide,Hide,
-common.refresh,Refresh,
+common.show,Show,Харах
+common.hide,Hide,Нуух
+common.refresh,Refresh,Шинэчлэх
 common.save,Save,Хадгалах
 common.export,Export,Экспорт хийх
 common.import,Import,Татаж авах
@@ -12,11 +12,11 @@ common.print,Print,Хэвлэх
 common.clear,Clear,Цэвэрлэх
 common.generate,Generate,Үүсгэх
 common.required,Required,Шаардлагатай 
-common.ready,Ready,
-common.active,Active,
-common.inactive,Inactive,
-common.no_data,No data,
-common.no_results,No results yet,
+common.ready,Ready,Бэлэн
+common.active,Active,Идэвхтэй
+common.inactive,Inactive,Идэвхгүй
+common.no_data,No data,Өгөгдөл алга
+common.no_results,No results yet,Одоогоор үр дүн алга
 public.tab.lane_assignments,Lane Assignments,Зам хуваарилалт
 public.tab.scoring,Scoring,Оноо
 public.tab.brackets,Brackets,Бракетууд
@@ -27,57 +27,299 @@ public.status.finished,finished,Дууссан
 public.tournament.games,Games,Тоглолт
 public.tournament.players_per_lane,Players / Lane,Тамирчид / Зам
 public.tournament.teams_per_lane,Teams / Lane,Баг / Зам
-public.tournament.type.individual,individual,
+public.tournament.type.individual,individual,ганцаарчилсан
 public.tournament.type.team,team,баг
 lanes.waiting_queue,Waiting Queue,Хүлээгдэж байгаа
 lanes.all_assigned,All assigned,Бүгд хуваарилагдсан 
 lanes.shift,Shift,Ээлж
 lanes.lane,Lane,Зам
 lanes.unassigned,Unassigned,Хуваарилагдаагүй
-lanes.no_assignments,No assignments,
+lanes.no_assignments,No assignments,Хуваарилалт алга
 scoring.team,Team,Баг
 scoring.total,Total,Бүгд
 scoring.avg,Avg,Дундаж 
 scoring.game,Game,Тоглолт
-scoring.no_participants_shift,No participants assigned to this shift.,
-brackets.setup.title,Bracket Setup,
+scoring.no_participants_shift,No participants assigned to this shift.,Энэ ээлжид оролцогч хуваарилагдаагүй байна.
+brackets.setup.title,Bracket Setup,Бракетын тохиргоо
 brackets.setup.subtitle,1) Choose rules 2) Review top seeds 3) Generate.,1) Дүрмийг сонго 2) Оноолтой танилц 3) Үүсгэ.
 brackets.setup.section,Setup,Тохиргоо
 brackets.setup.bracket_type,Bracket Type,Бракетын төрөл
 brackets.setup.seeds,Seeds,Оноолт 
 brackets.setup.winners,Winners,Ялагч 
 brackets.top_seeds.title,Top Seeds,ТОП оноолт
-brackets.top_seeds.subtitle,Top by total pinfall,
-brackets.rules.title,8-Seed Play-Off Rules,
-brackets.rules.subtitle,Based on tournament rules,
+brackets.top_seeds.subtitle,Top by total pinfall,Нийт пиний оноогоор тэргүүлж буй оролцогчид
+brackets.rules.title,8-Seed Play-Off Rules,8 оноолтын плэй-оффын дүрэм
+brackets.rules.subtitle,Based on tournament rules,Тэмцээний дүрэмд үндэслэв
 brackets.rules.quarter_finals,Quarter-Finals,1/4 финал
 brackets.rules.semi_finals,Semi-Finals,Хагас финал
 brackets.rules.finals,Finals & Placement,Финал / Байр
-brackets.results.view,Bracket Results View,
-brackets.results.cards_table,Cards / Table,
-brackets.results.visual,Visual,
-brackets.results.none_title,No brackets generated,
-brackets.results.none_subtitle,Generate brackets to start the elimination round,
+brackets.results.view,Bracket Results View,Бракетын үр дүнгийн харагдац
+brackets.results.cards_table,Cards / Table,Карт / Хүснэгт
+brackets.results.visual,Visual,Дүрслэл
+brackets.results.none_title,No brackets generated,Бракет үүсгээгүй байна
+brackets.results.none_subtitle,Generate brackets to start the elimination round,Хасагдах шатыг эхлүүлэхийн тулд бракет үүсгэнэ үү
 brackets.results.congratulation,Congratulation!,Баяр хүргэе!
-brackets.results.first_place,1st place,
-brackets.results.second_place,2nd place,
-brackets.results.third_place,3rd place,
+brackets.results.first_place,1st place,1-р байр
+brackets.results.second_place,2nd place,2-р байр
+brackets.results.third_place,3rd place,3-р байр
 standings.title,Tournament Standings,Тэмцээний дараах жагсаалт 
 standings.player_standings,Player Standings,Тамирчид
 standings.team_standings,Team Standings,Багууд
 standings.place,Place,Байр
-standings.participant,Participant,
+standings.participant,Participant,Оролцогч
 standings.team,Team,Баг
 standings.club,Club,Клуб
 standings.total,Total,Бүгд
 standings.avg,Avg,Дундаж
-standings.no_scores,No scores recorded yet,
+standings.no_scores,No scores recorded yet,Одоогоор оноо бүртгэгдээгүй байна
 highlights.title,Tournament Highlights,Тэмцээний онцлогтой 
-highlights.subtitle,Highest single game score by category,
-highlights.male,Highest Score Male,
-highlights.female,Highest Score Female,
-moderator.access.title,Moderator Access,
-moderator.access.subtitle,Assign one or more moderator accounts to this tournament.,
-moderator.not_active,Moderator access is not active for this tournament.,
-moderator.ask_admin,Ask admin to grant access for this tournament or wait for a new assignment.,
+highlights.subtitle,Highest single game score by category,Ангилал бүрийн нэг тоглолтын хамгийн өндөр оноо
+highlights.male,Highest Score Male,Эрэгтэй ангиллын хамгийн өндөр оноо
+highlights.female,Highest Score Female,Эмэгтэй ангиллын хамгийн өндөр оноо
+moderator.access.title,Moderator Access,Модераторын эрх
+moderator.access.subtitle,Assign one or more moderator accounts to this tournament.,Энэ тэмцээнд нэг буюу хэд хэдэн модераторын эрх онооно.
+moderator.not_active,Moderator access is not active for this tournament.,Энэ тэмцээнд модераторын эрх идэвхгүй байна.
+moderator.ask_admin,Ask admin to grant access for this tournament or wait for a new assignment.,Админаас энэ тэмцээнд эрх олгохыг хүсэх эсвэл шинэ эрхийн хуваарилалт хүлээнэ үү.
+public.tournament.players,Players,Тамирчид
+public.tournament.teams,Teams,Багууд
+app.nav.language,Language,Хэл
+app.status.loading,Loading...,Ачаалж байна...
+app.tournaments,Tournaments,Тэмцээнүүд
+app.tournaments_subtitle,Manage and track your bowling events,Боулингийн тэмцээнүүдийг удирдаж хянах
+app.new_tournament,New Tournament,Шинэ тэмцээн
+app.create_tournament,Create Tournament,Тэмцээн үүсгэх
+app.no_tournaments,No tournaments yet,Одоогоор тэмцээн алга
+app.no_tournaments_subtitle,Create your first tournament to get started,Эхний тэмцээнээ үүсгээд эхлээрэй
+app.powered_by,BTM Powered by,BTM-ийг дэмжигч
+app.powered_by_short,Powered by,Дэмжигч
+app.open_powered_by,Open Powered by,Дэмжигчийн мэдээлэл нээх
+app.visible_in_footer,Visible across the app footer,Аппын footer хэсэгт харагдана
+app.unnamed_sponsor,Unnamed sponsor,Нэргүй спонсор
+app.location_tba,Location TBA,Байршил тодорхойгүй
+app.organizer_tba,Organizer TBA,Зохион байгуулагч тодорхойгүй
+app.back_to_list,Back to List,Жагсаалт руу буцах
+app.footer_tagline,Total tournament control. From first frame to final payout.,Тэмцээнийг эхний фрэймээс эцсийн шагнал хүртэл бүрэн удирдана.
+app.footer_copyright,© Murat D. 2026,© Murat D. 2026
+auth.login,Login,Нэвтрэх
+auth.login_subtitle,Moderator and Admin access only,Зөвхөн модератор болон админ нэвтэрнэ
+auth.change_password,Change Password,Нууц үг солих
+auth.change_password_for,Update password for,Нууц үгийг шинэчлэх хэрэглэгч:
+auth.current_user,current user,одоогийн хэрэглэгч
+auth.new_password,New Password,Шинэ нууц үг
+auth.confirm_password,Confirm Password,Нууц үг давтах
+auth.saving,Saving...,Хадгалж байна...
+auth.logout,Logout,Гарах
+auth.sponsor_config,Sponsor Config,Спонсорын тохиргоо
+role.public,public,нийтэд
+role.admin,admin,админ
+role.moderator,moderator,модератор
+tournament.edit,Edit Tournament,Тэмцээн засах
+tournament.create,Create New Tournament,Шинэ тэмцээн үүсгэх
+tournament.name,Tournament Name,Тэмцээний нэр
+tournament.name_placeholder,e.g. Summer Open 2026,ж.нь. Summer Open 2026
+tournament.date,Date,Огноо
+tournament.location,Location,Байршил
+tournament.location_placeholder,e.g. Bowl-O-Rama Center,ж.нь. Bowl-O-Rama Center
+tournament.organizer,Organizer,Зохион байгуулагч
+tournament.organizer_placeholder,e.g. City Bowling Club,ж.нь. City Bowling Club
+tournament.logo_url,Tournament Logo URL,Тэмцээний лого URL
+tournament.logo_placeholder,e.g. /logo.png,ж.нь. /logo.png
+tournament.format,Format,Формат
+tournament.bracket_type,Bracket Type,Бракетын төрөл
+tournament.type,Type,Төрөл
+tournament.type.individual,Individual,Ганцаарчилсан
+tournament.type.team,Team,Баг
+tournament.games_count,Games #,Тоглолтын тоо
+tournament.genders_rule,Genders Rule,Хүйсийн дүрэм
+tournament.lanes_count,Lane #,Замын тоо
+tournament.players_per_lane,Players per Lane,Нэг замд тоглох тамирчид
+tournament.teams_per_lane,Teams per Lane,Нэг замд тоглох багууд
+tournament.players_per_team,Players per Team,Нэг багийн тамирчид
+tournament.shifts_count,Shift #,Ээлжийн тоо
+tournament.oil_pattern,Oil Pattern Info,Тосолгооны мэдээлэл
+tournament.oil_pattern_placeholder,e.g. House Shot,ж.нь. House Shot
+tournament.enable_additional,Enable Score++ Column,Score++ багана идэвхжүүлэх
+tournament.enable_bonus,Enable Bonus Column,Бонус багана идэвхжүүлэх
+tournament.status,Status,Төлөв
+tournament.save_changes,Save Changes,Өөрчлөлт хадгалах
+format.single_elimination,Single Elimination,Хасагдах систем
+format.double_elimination,Double Elimination,Давхар хасагдах систем
+format.round_robin,Round Robin,Тойргийн систем
+format.baker_system,Baker System,Бэйкер систем
+format.total_pinfall,Total Pinfall,Нийт унагасан пин
+format.pre_qualification_bracket,Pre-Qualification & Bracket,Урьдчилсан шат ба бракет
+format.standard,Standard,Стандарт
+bracket.single_elimination,Single Elimination,Хасагдах систем
+bracket.double_elimination,Double Elimination,Давхар хасагдах систем
+bracket.ladder,Ladder,Шаталсан
+bracket.stepladder,Stepladder,Алхамт шаталсан
+bracket.playoff,Playoff,Плэй-офф
+bracket.team_selection_playoff,Team Selection Playoff,Баг сонгон шалгаруулах плэй-офф
+genders.mixed,Mixed,Холимог
+genders.men_only,Men Only,Зөвхөн эрэгтэй
+genders.women_only,Women Only,Зөвхөн эмэгтэй
+status.draft,Draft,Ноорог
+status.active,Active,Идэвхтэй
+status.finished,Finished,Дууссан
+sponsors.title,Sponsors & Partners,Спонсор ба хамтрагчид
+sponsors.name,Name,Нэр
+sponsors.type,Type,Төрөл
+sponsors.logo_url,Logo URL,Лого URL
+sponsors.website_url,Website URL,Вебсайт URL
+sponsors.description,Description,Тайлбар
+sponsors.contacts,Contacts,Холбоо барих
+sponsors.website,Website,Вебсайт
+sponsors.no_description,No description provided.,Тайлбар оруулаагүй байна.
+sponsors.no_contacts,No contact details provided.,Холбоо барих мэдээлэл оруулаагүй байна.
+sponsors.no_url,No URL provided.,URL оруулаагүй байна.
+sponsors.back_to_list,Back to List,Жагсаалт руу буцах
+sponsors.view_details,View details,Дэлгэрэнгүй харах
+sponsors.manager_title,Sponsors and Partners Manager,Спонсор ба хамтрагчийн удирдлага
+sponsors.slot_title,BTM Powered by Slot,BTM дэмжигчийн талбар
+sponsors.activate_footer,Activate Powered by in Footer,Footer хэсэгт дэмжигч харуулах
+sponsors.scope_actions,Scope and Actions,Хамрах хүрээ ба үйлдэл
+sponsors.manage_for,Manage For,Удирдах хүрээ
+sponsors.entries_count,Number of Entries,Бичлэгийн тоо
+sponsors.add_entry,Add Entry,Бичлэг нэмэх
+sponsors.export_config,Export Config,Тохиргоо экспортлох
+sponsors.import_config,Import Config,Тохиргоо импортлох
+sponsors.no_entries,No entries in this scope yet. Add one to begin.,Энэ хүрээнд одоогоор бичлэг алга. Эхлэхийн тулд нэгийг нэмнэ үү.
+sponsors.entry,Entry,Бичлэг
+sponsors.remove_entry,Remove Entry,Бичлэг устгах
+sponsors.reset_to_file,Reset to File,Файлаас сэргээх
+sponsors.kind.sponsor,Sponsor,Спонсор
+sponsors.kind.partner,Partner,Хамтрагч
+moderator.select,Select Moderator,Модератор сонгох
+moderator.choose,Choose moderator,Модератор сонгоно уу
+moderator.none_available,No moderators available,Модератор алга
+moderator.auto_remove_hours,Auto remove (hours),Автоматаар хасах хугацаа (цаг)
+moderator.grant_timed,Grant Timed Access,Хугацаатай эрх олгох
+moderator.grant_no_expiry,Grant No Expiry Access,Хугацаагүй эрх олгох
+moderator.assignments_empty,No moderator assignments yet.,Модераторын эрх олголт алга байна.
+moderator.expires,expires,дуусах хугацаа
+moderator.remove_access,Remove Moderator Access,Модераторын эрх хасах
+moderator.create_account,Create Moderator Account,Модераторын эрх үүсгэх
+moderator.username,Username,Нэвтрэх нэр
+moderator.password,Password,Нууц үг
+moderator.create,Create Moderator,Модератор үүсгэх
+moderator.reset_password_title,Reset Moderator Password,Модераторын нууц үг сэргээх
+moderator.reset_password,Reset Password,Нууц үг сэргээх
+common.close,Close,Хаах
+players.add,Add Player,Тамирчин нэмэх
+teams.add,Add Team,Баг нэмэх
+brackets.apply_seed_replacement,Apply Seed Replacement,Оноолтын өөрчлөлт хэрэгжүүлэх
+lanes.auto_assign,Auto-Assign,Автоматаар хуваарилах
+players.average_optional,Average score (optional),Дундаж оноо (заавал биш)
+brackets.cancel_seed_replacement,Cancel Seed Replacement,Оноолтын өөрчлөлтийг цуцлах
+lanes.clear_assignments,Clear Assignments,Хуваарилалт цэвэрлэх
+brackets.clear,Clear Brackets,Бракет цэвэрлэх
+players.clear,Clear Players,Тамирчид цэвэрлэх
+common.clear_search,Clear Search,Хайлтыг цэвэрлэх
+teams.clear,Clear Teams,Багууд цэвэрлэх
+lanes.delete_from_tournament,Delete from Tournament,Тэмцээнээс хасах
+players.delete,Delete Player,Тамирчин устгах
+teams.delete,Delete Team,Баг устгах
+common.placeholder.doe,Doe,Дорж
+common.placeholder.city_bowlers,e.g. City Bowlers,ж.нь. Хотын боулингчид
+common.placeholder.team_name,e.g. The Strikers,ж.нь. The Strikers
+players.edit,Edit Player,Тамирчин засах
+teams.edit,Edit Team,Баг засах
+players.email,Email Address,И-мэйл хаяг
+brackets.export,Export Brackets,Бракет экспортлох
+players.export,Export Players,Тамирчид экспортлох
+teams.export,Export Teams,Багууд экспортлох
+players.last_name,Family Name,Овог
+common.female,Female,Эмэгтэй
+players.first_name,First Name,Нэр
+players.gender_short,Gender (F/M),Хүйс (Э/Эр)
+players.hands,Hands,Барилт
+brackets.generate,Generate Bracket,Бракет үүсгэх
+brackets.generate_now,Generate Now,Одоо үүсгэх
+players.import,Import Players,Тамирчид импортлох
+teams.import,Import Teams,Багууд импортлох
+brackets.import,Import Brackets,Бракет импортлох
+common.placeholder.john,John,Бат
+common.placeholder.email,john@example.com,bat@example.com
+lanes.move_back_queue,Move back to Waiting Queue,Хүлээлгийн жагсаалт руу буцаах
+lanes.move_entire_lane,Move entire lane,Бүх замыг шилжүүлэх
+brackets.participant1_score,Participant 1 score,Оролцогч 1-ийн оноо
+brackets.participant2_score,Participant 2 score,Оролцогч 2-ийн оноо
+brackets.participant3_score,Participant 3 score,Оролцогч 3-ийн оноо
+brackets.player_to_replace,Player to replace,Солих тамирчин
+brackets.print,Print Brackets,Бракет хэвлэх
+players.print,Print Players,Тамирчид хэвлэх
+teams.print,Print Teams,Багууд хэвлэх
+brackets.refresh,Refresh Brackets,Бракет шинэчлэх
+brackets.refresh_top_seeds,Refresh Top Seeds,Топ оноолт шинэчлэх
+brackets.rollback_seeds,Rollback All Seed Changes,Бүх оноолтын өөрчлөлтийг буцаах
+brackets.save_setup,Save Bracket Setup,Бракет тохиргоо хадгалах
+players.save,Save Players,Тамирчдыг хадгалах
+teams.save,Save Teams,Багуудыг хадгалах
+players.search_placeholder,"Search by name, club, or email",Нэр клуб эсвэл и-мэйлээр хайх
+players.search,Search Player,Тамирчин хайх
+players.sort_by_club,Sort by club,Клубээр эрэмбэлэх
+lanes.swap_next,Swap with next player,Дараагийн тамирчинтай солих
+lanes.swap_previous,Swap with previous player,Өмнөх тамирчинтай солих
+teams.name,Team Name,Багийн нэр
+players.team_club,Team/Club,Баг/Клуб
+participants.assigned_team_players_only,(assigned team players only),(зөвхөн багт хуваарилсан тоглогчид)
+players.add_new,Add New Player,Шинэ тамирчин нэмэх
+common.confirm_remove,Are you sure you want to remove this,Үүнийг устгахдаа итгэлтэй байна уу
+lanes.assigned,Assigned:,Хуваарилсан:
+lanes.auto_assign_description,Auto assigns randomly by tournament rules; Manual assigns from Waiting Queue to a selected lane.,Тэмцээний дүрмээр автоматаар санамсаргүй хуваарилна; Гар аргаар бол хүлээлгийн жагсаалтаас сонгосон зам руу хуваарилна.
+common.cleared,Cleared,Цэвэрлэгдсэн
+teams.rename_hint,Create a team or rename an existing one.,Баг шинээр үүсгэх эсвэл байгаа багийн нэрийг өөрчилнө.
+teams.create_new,Create New Team,Шинэ баг үүсгэх
+scoring.entry_hint,Enter game results for each participant,Оролцогч бүрийн тоглолтын дүнг оруулна
+players.entry_hint,Enter participant details and assign a team if needed.,Оролцогчийн мэдээллийг оруулж шаардлагатай бол багт хуваарилна.
+scoring.import_failed,Failed to import scores:,Оноо импортолж чадсангүй:
+standings.import_failed,Failed to import standings data. Please check file format.,Чансааны мэдээллийг импортолж чадсангүй. Файлын форматыг шалгана уу.
+teams.import_failed,Failed to import teams:,Багуудыг импортолж чадсангүй:
+brackets.winners_only,Final winners only,Зөвхөн эцсийн ялагчид
+players.gender,Gender,Хүйс
+teams.imported_count,Imported teams with,Импортолсон багийн тоо
+lanes.title,Lanes,Замууд
+common.manage,Manage,Удирдах
+participants.manage_title,Manage Participants,Оролцогчдыг удирдах
+common.remove_from_tournament,from the tournament?,тэмцээнээс хасах уу?
+lanes.member_assignments,member assignment(s).,гишүүний хуваарилалт.
+teams.missing_member_names,member name(s) were not found in Players table.,гишүүний нэр Players хүснэгтээс олдсонгүй.
+lanes.move_all_prompt,Move all players from this lane to which lane number?,Энэ зам дээрх бүх тоглогчийг аль зам руу шилжүүлэх вэ?
+lanes.move_shift_prompt,Move to which shift number?,Аль ээлж рүү шилжүүлэх вэ?
+lanes.no_eligible_auto,No eligible players available for auto assignment.,Автоматаар хуваарилах боломжтой тоглогч алга.
+teams.no_members,No members,Гишүүн алга
+participants.none_registered,No participants registered yet.,Одоогоор оролцогч бүртгэгдээгүй байна.
+players.none_available,No players available.,Тоглогч алга.
+players.no_search_results,No players match your search.,Таны хайлттай тохирох тоглогч алга.
+teams.no_auto_available,No teams available for auto assignment.,Автоматаар хуваарилах баг алга.
+teams.none_created,No teams created.,Баг үүсгээгүй байна.
+teams.no_search_results,No teams match your search.,Таны хайлттай тохирох баг алга.
+participants.title,Participants,Оролцогчид
+teams.duplicate_players,player(s) appear in more than one team,тоглогч нэгээс олон багт орсон байна
+brackets.playoff,Play-Off,Плэй-офф
+public.view,Public View,Нийтийн харагдац
+highlights.stats_hint,Quick stats and highest single game score by category,Төрлөөр нь хурдан статистик болон нэг тоглолтын хамгийн өндөр оноо
+standings.rankings_hint,Rankings sorted from highest to lowest total score,Нийт оноогоор өндөрөөс нам руу эрэмбэлсэн чансаа
+common.read_only,Read only,Зөвхөн харах
+common.review_needed,record(s) need review (highlighted in red).,мөрийг шалгах шаардлагатай (улаанаар тэмдэглэсэн).
+lanes.queue_full,remain in waiting queue because lane capacity is full.,зам дүүрсэн тул хүлээлгийн жагсаалтад үлдэнэ.
+participants.roster_hint,Roster and participant import/export,Бүрэлдэхүүн болон оролцогч импорт/экспорт
+participants.roster_view,Roster view,Бүрэлдэхүүний харагдац
+scoring.entry_title,Score Entry,Оноо оруулах
+scoring.scores,Scores,Оноонууд
+scoring.table,Scoring Table,Онооны хүснэгт
+common.search_player_team,Search player or team,Тоглогч эсвэл баг хайх
+common.search_player_team_club_email,Search player/team/club/email,Тоглогч/баг/клуб/и-мэйл хайх
+brackets.selection_draft_top8,Selection Draft (Top 8),Сонголтын драфт (Шилдэг 8)
+lanes.shifts,Shifts,Ээлжүүд
+results.summary_hint,"Standings, bracket winners, and tournament highlights","Чансаа, бракетын ялагчид, тэмцээний онцлох үр дүн"
+teams.members,Team Members,Багийн гишүүд
+teams.members_from_players,Team Members (from players),Багийн гишүүд (тоглогчдоос)
+teams.count_suffix,team(s).,баг.
+teams.table,Teams Table,Багийн хүснэгт
+players.gender_rule_blocked,This player cannot be assigned because tournament gender rule is,Энэ тоглогчийг хуваарилах боломжгүй. Учир нь тэмцээний хүйсийн дүрэм нь
+results.winners_title,Tournament Winners,Тэмцээний ялагчид
+common.warning,Warning:,Анхааруулга:
+results.winner,Winner,Ялагч
+results.winner_team,Winner Team,Ялагч баг
 ,,
