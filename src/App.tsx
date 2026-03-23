@@ -20,8 +20,8 @@ import {
   ArrowRightLeft,
   UserMinus,
   Upload,
-  MoveHorizontal,
-  MoreVertical,
+  Archive,
+  ArchiveRestore,
   Printer,
   BrushCleaning,
   X,
@@ -432,6 +432,7 @@ export default function App() {
     return savedView === 'detail' ? 'detail' : 'list';
   });
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [showArchivedTournaments, setShowArchivedTournaments] = useState(false);
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
   const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
   const [activeTab, setActiveTab] = useState<'participants' | 'lanes' | 'scoring' | 'brackets' | 'standings'>(() => {
@@ -763,6 +764,31 @@ export default function App() {
     return false;
   };
 
+  const handleArchiveToggle = async (id: number, shouldArchive: boolean) => {
+    const tournamentItem = tournaments.find((item) => item.id === id);
+    if (!tournamentItem) return;
+
+    const prompt = shouldArchive
+      ? 'Move this tournament to archive?'
+      : 'Restore this tournament from archive?';
+
+    if (!window.confirm(prompt)) return;
+
+    try {
+      await api.updateTournament(id, {
+        ...tournamentItem,
+        status: shouldArchive ? 'archived' : 'draft',
+      });
+      await loadTournaments();
+      if (selectedTournament?.id === id && shouldArchive) {
+        setSelectedTournament(null);
+        setView('list');
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Failed to update archive status.');
+    }
+  };
+
   const handleExport = () => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(tournaments, null, 2));
     const downloadAnchorNode = document.createElement('a');
@@ -825,7 +851,9 @@ export default function App() {
           oil_pattern: String(raw?.oil_pattern || ''),
           has_additional_scores: Number(raw?.has_additional_scores) ? 1 : 0,
           has_bonus: Number(raw?.has_bonus) ? 1 : 0,
-          status: raw?.status === 'completed' ? 'completed' : 'draft',
+          status: raw?.status === 'active' || raw?.status === 'finished' || raw?.status === 'archived'
+            ? raw.status
+            : 'draft',
         };
 
         try {
@@ -1178,6 +1206,50 @@ export default function App() {
     }
   };
 
+  const resolveTournamentDisplayStatus = (tournamentItem: Tournament): 'active' | 'incoming' | 'finished' | 'archived' => {
+    if (tournamentItem.status === 'archived') return 'archived';
+    if (tournamentItem.status === 'active') return 'active';
+    if (tournamentItem.status === 'finished') return 'finished';
+    return 'incoming';
+  };
+
+  const getStatusPillClass = (status: 'active' | 'incoming' | 'finished' | 'archived') => {
+    if (status === 'active') return 'bg-emerald-100 text-emerald-700';
+    if (status === 'incoming') return 'bg-amber-100 text-amber-700';
+    if (status === 'finished') return 'bg-black/5 text-black/45';
+    return 'bg-slate-200 text-slate-700';
+  };
+
+  const getStatusLabel = (status: 'active' | 'incoming' | 'finished' | 'archived') => {
+    if (status === 'incoming') return 'Incoming';
+    return status.charAt(0).toUpperCase() + status.slice(1);
+  };
+
+  const getTournamentSortRank = (tournamentItem: Tournament) => {
+    const displayStatus = resolveTournamentDisplayStatus(tournamentItem);
+    if (displayStatus === 'active') return 0;
+    if (displayStatus === 'incoming') return 1;
+    if (displayStatus === 'finished') return 2;
+    return 3;
+  };
+
+  const sortedTournaments = [...tournaments].sort((a, b) => {
+    const rankDiff = getTournamentSortRank(a) - getTournamentSortRank(b);
+    if (rankDiff !== 0) return rankDiff;
+
+    const aDate = new Date(`${a.date}T00:00:00`).getTime();
+    const bDate = new Date(`${b.date}T00:00:00`).getTime();
+
+    if (getTournamentSortRank(a) <= 1) {
+      return (Number.isNaN(aDate) ? Number.MAX_SAFE_INTEGER : aDate) - (Number.isNaN(bDate) ? Number.MAX_SAFE_INTEGER : bDate);
+    }
+
+    return (Number.isNaN(bDate) ? 0 : bDate) - (Number.isNaN(aDate) ? 0 : aDate);
+  });
+
+  const visibleTournaments = sortedTournaments.filter((tournamentItem) => resolveTournamentDisplayStatus(tournamentItem) !== 'archived');
+  const archivedTournaments = sortedTournaments.filter((tournamentItem) => resolveTournamentDisplayStatus(tournamentItem) === 'archived');
+
   return (
     <UiTranslationContext.Provider value={translateUiText}>
     <div className="min-h-screen bg-gradient-to-b from-white to-emerald-50/30 text-black font-sans">
@@ -1281,21 +1353,19 @@ export default function App() {
               exit={{ opacity: 0, y: -20 }}
               className="space-y-8"
             >
-              <div className="flex items-end justify-between">
+              <div className="flex items-end justify-between gap-3">
                 <div>
                   <h1 className="text-4xl font-bold tracking-tight">{t('app.tournaments', 'Tournaments')}</h1>
                   <p className="text-black/40 mt-1">{t('app.tournaments_subtitle', 'Manage and track your bowling events')}</p>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex gap-2 flex-wrap justify-end">
                   {currentRole !== 'public' && (
                     <>
-                      <Button variant="outline" onClick={handleSaveData} title={t('common.save', 'Save')} ariaLabel={t('common.save', 'Save')}>
+                      <Button size="sm" variant="outline" onClick={handleSaveData} className="px-2" title={t('common.save', 'Save')} ariaLabel={t('common.save', 'Save')}>
                         <Save size={16} />
-                        {t('common.save', 'Save')}
                       </Button>
-                      <Button variant="outline" onClick={handleExport} title={t('common.export', 'Export')} ariaLabel={t('common.export', 'Export')}>
+                      <Button size="sm" variant="outline" onClick={handleExport} className="px-2" title={t('common.export', 'Export')} ariaLabel={t('common.export', 'Export')}>
                         <Upload size={16} />
-                        {t('common.export', 'Export')}
                       </Button>
                     </>
                   )}
@@ -1309,19 +1379,20 @@ export default function App() {
                         onChange={handleImport}
                       />
                       <Button
+                        size="sm"
                         variant="outline"
+                        className="px-2"
                         onClick={() => tournamentsImportInputRef.current?.click()}
                         title={t('common.import', 'Import')}
                         ariaLabel={t('common.import', 'Import')}
                       >
                         <Download size={16} />
-                        {t('common.import', 'Import')}
                       </Button>
                     </>
                   )}
                   {isAdmin && (
-                    <Button onClick={() => { setFormType('individual'); setView('create'); }} title={t('app.new_tournament', 'New Tournament')} ariaLabel={t('app.new_tournament', 'New Tournament')}>
-                      <Plus size={18} />
+                    <Button size="sm" className="px-2" onClick={() => { setFormType('individual'); setView('create'); }} title={t('app.new_tournament', 'New Tournament')} ariaLabel={t('app.new_tournament', 'New Tournament')}>
+                      <Plus size={16} />
                     </Button>
                   )}
                 </div>
@@ -1365,12 +1436,12 @@ export default function App() {
                 </Card>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {loading ? (
-                  Array(3).fill(0).map((_, i) => (
-                    <div key={i} className="h-48 bg-black/5 rounded-md animate-pulse" />
+                  Array(6).fill(0).map((_, i) => (
+                    <div key={i} className="h-32 bg-black/5 rounded-md animate-pulse" />
                   ))
-                ) : tournaments.length === 0 ? (
+                ) : visibleTournaments.length === 0 ? (
                   <div className="col-span-full py-24 text-center border-2 border-dashed border-black/10 rounded-lg">
                     <Trophy size={48} className="mx-auto text-black/10 mb-4" />
                     <h3 className="text-xl font-semibold uppercase tracking-wide">{t('app.no_tournaments', 'No tournaments yet')}</h3>
@@ -1382,111 +1453,99 @@ export default function App() {
                     )}
                   </div>
                 ) : (
-                  tournaments.map((tournamentItem) => {
-                    const cardSponsors = sponsorsConfig.tournaments[String(tournamentItem.id)] || sponsorsConfig.global;
-                    const displaySponsors = cardSponsors.slice(0, 3);
+                  visibleTournaments.map((tournamentItem) => {
+                    const displayStatus = resolveTournamentDisplayStatus(tournamentItem);
 
                     return (
-                    <Card key={tournamentItem.id} className="group cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200" onClick={() => openTournament(tournamentItem)}>
-                      <div className="p-6">
-                        <div className="flex justify-between items-start mb-4">
-                          <div className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest ${
-                            tournamentItem.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 
-                            tournamentItem.status === 'finished' ? 'bg-black/5 text-black/40' : 'bg-amber-100 text-amber-700'
-                          }`}>
-                            {tournamentItem.status}
+                      <Card key={tournamentItem.id} className="group cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 border border-black/8" onClick={() => openTournament(tournamentItem)}>
+                        <div className="px-3 py-2 flex items-center gap-3">
+                          <div className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest shrink-0 ${getStatusPillClass(displayStatus)}`}>
+                            {getStatusLabel(displayStatus)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold leading-tight group-hover:text-emerald-600 transition-colors truncate">{tournamentItem.name}</p>
+                            <p className="text-[11px] text-black/50 mt-0.5 truncate">
+                              {formatTournamentDate(tournamentItem.date)}{tournamentItem.location ? ` · ${tournamentItem.location}` : ''}
+                            </p>
                           </div>
                           {isAdmin && (
-                            <div className="flex gap-1">
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); handleDelete(tournamentItem.id); }}
-                                className="p-1.5 rounded-lg hover:bg-red-50 text-black/40 hover:text-red-500 transition-all"
+                            <div className="flex gap-1 shrink-0">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleArchiveToggle(tournamentItem.id, true); }}
+                                className="p-1 rounded hover:bg-slate-100 text-black/35 hover:text-slate-600 transition-all"
+                                title="Archive tournament"
                               >
-                                <Trash2 size={14} />
+                                <Archive size={13} />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDelete(tournamentItem.id); }}
+                                className="p-1 rounded hover:bg-red-50 text-black/35 hover:text-red-500 transition-all"
+                                title="Delete tournament"
+                              >
+                                <Trash2 size={13} />
                               </button>
                             </div>
                           )}
                         </div>
-                        <div className="flex items-start justify-between gap-3 mb-2">
-                          <h3 className="text-xl font-bold group-hover:text-emerald-600 transition-colors">{tournamentItem.name}</h3>
-                          <div className="w-[58px] h-[58px] rounded-md border border-black/10 bg-white p-1.5 flex items-center justify-center shrink-0">
-                            <img
-                              src={tournamentItem.logo || '/logo.png'}
-                              alt={tournamentItem.name}
-                              className="w-full h-full object-contain"
-                              onError={(e) => {
-                                (e.currentTarget as HTMLImageElement).src = '/logo.png';
-                              }}
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-2 mb-3 text-xs text-black/65">
-                          <div className="flex items-center gap-1.5">
-                            <Calendar size={13} className="text-black/45" />
-                            <span>{formatTournamentDate(tournamentItem.date)}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <Target size={13} className="text-black/45" />
-                            <span className="truncate">{tournamentItem.location || t('app.location_tba', 'Location TBA')}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <ClipboardList size={13} className="text-black/45" />
-                            <span className="truncate">{formatTournamentLabel(tournamentItem.format)}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <GitBranch size={13} className="text-black/45" />
-                            <span className="truncate">{formatMatchPlayTypeLabel(tournamentItem.match_play_type)}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <User size={13} className="text-black/45" />
-                            <span className="truncate">{tournamentItem.organizer || t('app.organizer_tba', 'Organizer TBA')}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-black/60">
-                          <div className="flex items-center gap-1.5">
-                            <Users size={14} />
-                            <span>{tournamentItem.type === 'team' ? t('tournament.type.team', 'Team') : t('tournament.type.individual', 'Individual')}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <LayoutGrid size={14} />
-                            <span>{tournamentItem.players_per_lane} {tournamentItem.type === 'team' ? t('public.tournament.teams', 'Teams') : t('public.tournament.players', 'Players')} / {t('lanes.lane', 'Lane')}</span>
-                          </div>
-                        </div>
-                        {displaySponsors.length > 0 && (
-                          <div className="mt-4 pt-3 border-t border-black/5 flex items-center justify-between gap-3">
-                            <span className="text-[10px] font-semibold uppercase tracking-widest text-black/40">{t('app.powered_by_short', 'Powered by')}</span>
-                            <div className="flex items-center gap-2">
-                              {displaySponsors.map((sponsor) => (
-                                <button
-                                  key={sponsor.id}
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openSponsorDetails(sponsor);
-                                  }}
-                                  className="w-[60px] h-[60px] rounded-md border border-black/10 bg-white p-1.5 hover:border-emerald-300 transition-colors"
-                                  title={sponsor.name}
-                                  aria-label={`Open sponsor details: ${sponsor.name}`}
-                                >
-                                  <img
-                                    src={sponsor.logo || '/logo.png'}
-                                    alt={sponsor.name}
-                                    className="w-full h-full object-contain"
-                                    onError={(e) => {
-                                      (e.currentTarget as HTMLImageElement).src = '/logo.png';
-                                    }}
-                                  />
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </Card>
+                      </Card>
                     );
                   })
                 )}
               </div>
+
+              {!loading && archivedTournaments.length > 0 && (
+                <div className="pt-2">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-black/65">Archive ({archivedTournaments.length})</h3>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowArchivedTournaments((prev) => !prev)}
+                      className="px-2"
+                      title={showArchivedTournaments ? 'Hide archive' : 'Show archive'}
+                      ariaLabel={showArchivedTournaments ? 'Hide archive' : 'Show archive'}
+                    >
+                      {showArchivedTournaments ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </Button>
+                  </div>
+
+                  {showArchivedTournaments && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {archivedTournaments.map((tournamentItem) => (
+                        <Card key={`archived-${tournamentItem.id}`} className="border border-black/10 bg-black/[0.02]">
+                          <div className="p-3 sm:p-4">
+                            <div className="flex justify-between items-start gap-2">
+                              <div>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600 mb-1">Archived</p>
+                                <h4 className="text-sm font-semibold leading-tight text-black/80">{tournamentItem.name}</h4>
+                                <p className="text-[11px] text-black/50 mt-1">{formatTournamentDate(tournamentItem.date)}</p>
+                              </div>
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => openTournament(tournamentItem)}
+                                  className="p-1.5 rounded-md border border-black/10 bg-white text-black/60 hover:text-emerald-700"
+                                  title="Open tournament"
+                                >
+                                  <Eye size={14} />
+                                </button>
+                                {isAdmin && (
+                                  <button
+                                    onClick={() => handleArchiveToggle(tournamentItem.id, false)}
+                                    className="p-1.5 rounded-md border border-black/10 bg-white text-black/60 hover:text-emerald-700"
+                                    title="Restore from archive"
+                                  >
+                                    <ArchiveRestore size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -1628,9 +1687,10 @@ export default function App() {
                       name="status" 
                       defaultValue={editingTournament?.status}
                       options={[
-                        { value: 'draft', label: t('status.draft', 'Draft') },
+                        { value: 'draft', label: t('status.incoming', 'Incoming') },
                         { value: 'active', label: t('status.active', 'Active') },
-                        { value: 'finished', label: t('status.finished', 'Finished') }
+                        { value: 'finished', label: t('status.finished', 'Finished') },
+                        { value: 'archived', label: t('status.archived', 'Archived') }
                       ]} 
                     />
                   )}

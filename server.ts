@@ -1191,6 +1191,14 @@ async function startServer() {
   
   // Tournaments
   app.get("/api/tournaments", (req, res) => {
+    db.prepare(`
+      UPDATE tournaments
+      SET status = 'archived'
+      WHERE status = 'finished'
+        AND date IS NOT NULL
+        AND date(date) <= date('now', '-30 day')
+    `).run();
+
     const rows = db.prepare("SELECT * FROM tournaments ORDER BY created_at DESC").all();
     res.json(rows);
   });
