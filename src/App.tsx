@@ -2050,7 +2050,7 @@ export default function App() {
             <span className="text-white/40">|</span>
             <span>BTM <span className="text-[#E64833]">v2.0</span></span>
             <span className="text-white/40">|</span>
-            <span>{t('app.footer_copyright', 'Copyright Murat D. 2026')}</span>
+            <span>{t('app.footer_copyright', '© Murat D. 2026')}</span>
           </div>
           <div className="flex items-center gap-2 font-medium flex-wrap justify-end">
             {appGlobalSponsor && (
