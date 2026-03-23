@@ -1264,8 +1264,8 @@ export default function App() {
             />
           </div>
           <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2">
-            <span className="hidden sm:inline text-sm text-white font-semibold">BOWLING TOURNAMENT MANAGER | <span className="text-[#E64833]">All In One</span></span>
-            <span className="sm:hidden text-[11px] text-white font-semibold leading-tight">BOWLING TOURNAMENT MANAGER | <span className="text-[#E64833]">All In One</span></span>
+            <span className="hidden sm:inline text-sm text-white font-semibold">BOWLING TOURNAMENT MANAGER | <span className="text-orange-500">All In One</span></span>
+            <span className="sm:hidden text-[11px] text-white font-semibold leading-tight">BOWLING TOURNAMENT MANAGER | <span className="text-orange-500">All In One</span></span>
           </div>
         </div>
         <div className="flex items-center gap-2">
