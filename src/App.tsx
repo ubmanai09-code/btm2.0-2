@@ -2046,7 +2046,7 @@ export default function App() {
       <footer className="border-t border-white/10 bg-black">
         <div className="max-w-7xl mx-auto px-6 py-5 text-xs text-white/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2 font-medium flex-wrap">
-            <span className="font-semibold uppercase tracking-wide text-emerald-400">{t('app.footer_tagline', 'Total tournament control. From first frame to final payout.')}</span>
+            <span className="font-semibold uppercase tracking-wide text-orange-500">{t('app.footer_tagline', 'Total tournament control. From first frame to final payout.')}</span>
             <span className="text-white/40">|</span>
             <span>BTM <span className="text-[#E64833]">v2.0</span></span>
             <span className="text-white/40">|</span>
@@ -2057,7 +2057,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setShowGlobalSponsorModal(true)}
-                className="inline-flex items-center gap-2 px-2 py-1 rounded border border-white/20 bg-white/5 hover:border-emerald-300 transition-colors"
+                className="inline-flex items-center gap-2 px-2 py-1 rounded border border-white/20 bg-white/5 hover:border-orange-400 transition-colors"
                 title={t('app.open_powered_by', 'Open Powered by')}
                 aria-label={t('app.open_powered_by', 'Open Powered by')}
               >
@@ -2074,7 +2074,7 @@ export default function App() {
                 </span>
               </button>
             )}
-            {!appGlobalSponsor && <Trophy size={12} className="text-emerald-400" />}
+            {!appGlobalSponsor && <Trophy size={12} className="text-orange-500" />}
           </div>
         </div>
       </footer>
@@ -2474,18 +2474,18 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
         </Card>
       )}
 
-      <div className="sticky top-16 z-40 bg-white flex border-b border-black/10 gap-2 overflow-x-auto no-scrollbar shadow-sm">
+      <div className="sticky top-16 z-40 bg-white flex border-b border-slate-200 gap-0 overflow-x-auto no-scrollbar shadow-sm px-0">
         {visibleTabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-all whitespace-nowrap text-xs uppercase tracking-widest ${
+            className={`flex items-center gap-2 px-5 py-3 border-b-2 transition-all whitespace-nowrap text-xs uppercase tracking-wide font-semibold ${
               activeTab === tab.id
-                ? 'border-emerald-600 text-emerald-700 font-bold'
-                : 'border-transparent text-black/40 hover:text-black/60'
+                ? 'bg-white text-slate-800 border-b-orange-500 shadow-sm'
+                : 'text-slate-600 border-b-transparent hover:text-slate-800 hover:bg-slate-50/60'
               }`}
           >
-            <tab.icon size={14} />
+            <tab.icon size={16} />
             {tab.label}
           </button>
         ))}
