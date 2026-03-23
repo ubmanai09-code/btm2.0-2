@@ -1269,16 +1269,15 @@ export default function App() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <select
-            value={publicLanguage}
-            onChange={(e: any) => setPublicLanguage(e.target.value === 'mn' ? 'mn' : 'en')}
-            className="h-8 px-2 rounded-md border border-white/25 bg-white/10 text-xs font-bold uppercase tracking-wider text-white"
+          <button
+            onClick={() => setPublicLanguage(publicLanguage === 'mn' ? 'en' : 'mn')}
+            className="flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-white/25 bg-white/10 hover:bg-white/20 transition-colors text-xs font-bold uppercase tracking-wider text-white"
             title={t('app.nav.language', 'Language')}
             aria-label={t('app.nav.language', 'Language')}
           >
-            <option value="en">ENG</option>
-            <option value="mn">MON</option>
-          </select>
+            <span className="text-base leading-none">{publicLanguage === 'mn' ? '🇲🇳' : '🇬🇧'}</span>
+            <span>{publicLanguage === 'mn' ? 'MNG' : 'ENG'}</span>
+          </button>
           {lockedRole ? (
             <span className="px-2 py-1.5 rounded-md border border-white/20 text-xs font-bold uppercase tracking-wider bg-white/10 text-white">
               {t(`role.${lockedRole}`, lockedRole)}
