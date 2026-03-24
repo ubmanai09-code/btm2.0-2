@@ -573,7 +573,7 @@ async function startServer() {
     copyIfExists(initialSponsorsConfig, persistentSponsorsConfig);
   }
 
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
 
   // Persistent sponsor logos survive deployments; packaged assets remain as fallback.
   app.use('/sponsors', express.static(persistentSponsorsDir));
