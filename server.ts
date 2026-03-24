@@ -253,6 +253,16 @@ function initDb() {
       active INTEGER NOT NULL DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS auth_sessions (
+      token TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      role TEXT CHECK(role IN ('admin', 'moderator')) NOT NULL,
+      username TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      expires_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
   `);
 
   const accessTableInfo = db.prepare("PRAGMA table_info(moderator_tournament_access)").all() as any[];
@@ -604,7 +614,6 @@ async function startServer() {
   const moderatorPassword = process.env.BTM_MODERATOR_PASSWORD || 'moderator123';
 
   const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
-  const authSessions = new Map<string, AuthSession>();
 
   const participantTournamentStmt = db.prepare("SELECT tournament_id FROM participants WHERE id = ?");
   const teamTournamentStmt = db.prepare("SELECT tournament_id FROM teams WHERE id = ?");
@@ -622,6 +631,31 @@ async function startServer() {
     SET active = 0
     WHERE tournament_id = ? AND moderator_user_id = ?
   `);
+  const cleanupExpiredSessionsStmt = db.prepare(`
+    DELETE FROM auth_sessions
+    WHERE julianday(expires_at) <= julianday('now')
+  `);
+  const getSessionStmt = db.prepare(`
+    SELECT user_id, role, username, created_at, expires_at
+    FROM auth_sessions
+    WHERE token = ?
+    LIMIT 1
+  `);
+  const upsertSessionStmt = db.prepare(`
+    INSERT INTO auth_sessions (token, user_id, role, username, expires_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(token)
+    DO UPDATE SET user_id = excluded.user_id, role = excluded.role, username = excluded.username, expires_at = excluded.expires_at
+  `);
+  const extendSessionStmt = db.prepare(`
+    UPDATE auth_sessions
+    SET expires_at = ?
+    WHERE token = ?
+  `);
+  const deleteSessionStmt = db.prepare(`
+    DELETE FROM auth_sessions
+    WHERE token = ?
+  `);
 
   const readBearerToken = (req: express.Request): string | null => {
     const authHeader = String(req.header('authorization') || '').trim();
@@ -633,13 +667,26 @@ async function startServer() {
   const readSession = (req: express.Request): AuthSession | null => {
     const token = readBearerToken(req);
     if (!token) return null;
-    const session = authSessions.get(token);
-    if (!session) return null;
-    if (Date.now() - session.createdAt > SESSION_TTL_MS) {
-      authSessions.delete(token);
+
+    cleanupExpiredSessionsStmt.run();
+    const row = getSessionStmt.get(token) as any;
+    if (!row) return null;
+
+    const expiryTs = Date.parse(String(row.expires_at || ''));
+    if (!Number.isFinite(expiryTs) || Date.now() > expiryTs) {
+      deleteSessionStmt.run(token);
       return null;
     }
-    return session;
+
+    const nextExpiry = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+    extendSessionStmt.run(nextExpiry, token);
+
+    return {
+      userId: Number(row.user_id),
+      role: String(row.role) as ManageRole,
+      username: String(row.username),
+      createdAt: Date.now(),
+    };
   };
 
   const readSessionRole = (req: express.Request): ManageRole | null => {
@@ -1079,7 +1126,8 @@ async function startServer() {
 
     const role = user.role as ManageRole;
     const token = randomUUID();
-    authSessions.set(token, { userId: Number(user.id), role, username: String(user.username), createdAt: Date.now() });
+    const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+    upsertSessionStmt.run(token, Number(user.id), role, String(user.username), expiresAt);
     return res.json({ token, role, id: Number(user.id), username: String(user.username) });
   });
 
@@ -1093,7 +1141,7 @@ async function startServer() {
 
   app.post('/api/auth/logout', (req, res) => {
     const token = readBearerToken(req);
-    if (token) authSessions.delete(token);
+    if (token) deleteSessionStmt.run(token);
     return res.json({ success: true });
   });
 
