@@ -482,6 +482,7 @@ export default function App() {
   const [selectedSponsor, setSelectedSponsor] = useState<SponsorInfo | null>(null);
   const [sponsorsConfig, setSponsorsConfig] = useState<SponsorsConfig>(DEFAULT_SPONSORS_CONFIG);
   const [showSponsorsConfigEditor, setShowSponsorsConfigEditor] = useState(false);
+  const [sponsorsEditorMode, setSponsorsEditorMode] = useState<'sponsors' | 'adblock'>('sponsors');
   const [sponsorsConfigDraft, setSponsorsConfigDraft] = useState<SponsorsConfig>(DEFAULT_SPONSORS_CONFIG);
   const [sponsorsConfigScope, setSponsorsConfigScope] = useState<string>('global');
   const [sponsorsConfigError, setSponsorsConfigError] = useState('');
@@ -1191,10 +1192,11 @@ export default function App() {
     reader.readAsDataURL(file);
   };
 
-  const openSponsorsConfigEditor = () => {
+  const openSponsorsConfigEditor = (mode: 'sponsors' | 'adblock' = 'sponsors') => {
     setSponsorsConfigError('');
     setSponsorsConfigDraft(normalizeSponsorsConfig(sponsorsConfig));
     setSponsorsConfigScope(selectedTournament ? String(selectedTournament.id) : 'global');
+    setSponsorsEditorMode(mode);
     setShowSponsorsConfigEditor(true);
   };
 
@@ -1626,7 +1628,7 @@ export default function App() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={openSponsorsConfigEditor}
+                          onClick={() => openSponsorsConfigEditor('sponsors')}
                           className="px-3"
                           title="Manage Sponsors"
                           ariaLabel="Manage Sponsors"
@@ -1647,10 +1649,10 @@ export default function App() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={openSponsorsConfigEditor}
+                            onClick={() => openSponsorsConfigEditor('adblock')}
                             className="px-2"
-                            title={t('sponsors.manager_title', 'Sponsors and Partners Manager')}
-                            ariaLabel={t('sponsors.manager_title', 'Sponsors and Partners Manager')}
+                            title="Manage Ad Block"
+                            ariaLabel="Manage Ad Block"
                           >
                             <Edit size={13} />
                           </Button>
@@ -1688,7 +1690,7 @@ export default function App() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={openSponsorsConfigEditor}
+                            onClick={() => openSponsorsConfigEditor('adblock')}
                             className="px-3"
                             title="Manage Ad Block"
                             ariaLabel="Manage Ad Block"
@@ -2263,11 +2265,11 @@ export default function App() {
         </div>
       )}
 
-      {showSponsorsConfigEditor && (
+      {isAdmin && showSponsorsConfigEditor && (
         <div className="fixed inset-0 z-[60] bg-black/45 flex items-center justify-center p-4">
           <Card className="w-full max-w-5xl max-h-[92vh] p-4 flex flex-col" onClick={(e: any) => e.stopPropagation()}>
             <div className="flex items-center justify-between gap-3 mb-3 shrink-0">
-              <h3 className="text-lg font-bold">{t('sponsors.manager_title', 'Sponsors and Partners Manager')}</h3>
+              <h3 className="text-lg font-bold">{sponsorsEditorMode === 'adblock' ? 'Ad Block Settings' : t('sponsors.manager_title', 'Sponsors and Partners Manager')}</h3>
               <Button size="sm" variant="outline" onClick={() => setShowSponsorsConfigEditor(false)} title={t('common.close', 'Close')} ariaLabel={t('common.close', 'Close')}>
                 <X size={14} />
               </Button>
@@ -2275,7 +2277,7 @@ export default function App() {
 
             <div className="flex-1 min-h-0 overflow-y-auto pr-1">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-                <Card className="p-3 border border-black/10">
+                {sponsorsEditorMode === 'sponsors' && <Card className="p-3 border border-black/10">
                   <h4 className="text-xs font-bold uppercase tracking-widest text-black/60 mb-2">{t('sponsors.slot_title', 'BTM Powered by Slot')}</h4>
                   <label className="flex items-center gap-2 text-sm font-semibold mb-3">
                     <input
@@ -2323,9 +2325,9 @@ export default function App() {
                       />
                     </div>
                   )}
-                </Card>
+                </Card>}
 
-                <Card className="p-3 border border-black/10">
+                {sponsorsEditorMode === 'sponsors' && <Card className="p-3 border border-black/10">
                   <h4 className="text-xs font-bold uppercase tracking-widest text-black/60 mb-2">{t('sponsors.scope_actions', 'Scope and Actions')}</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                     <Select
@@ -2370,9 +2372,9 @@ export default function App() {
                       </Button>
                     </div>
                   </div>
-                </Card>
+                </Card>}
 
-                <Card className="p-3 border border-black/10 lg:col-span-2">
+                {sponsorsEditorMode === 'adblock' && <Card className="p-3 border border-black/10 lg:col-span-2">
                   <h4 className="text-xs font-bold uppercase tracking-widest text-black/60 mb-2">Dashboard Ad Block</h4>
                   <label className="flex items-center gap-2 text-sm font-semibold mb-3">
                     <input
@@ -2444,10 +2446,10 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                </Card>
+                </Card>}
               </div>
 
-              <div className="space-y-3">
+              {sponsorsEditorMode === 'sponsors' && <div className="space-y-3">
                 {scopedDraftSponsors.length === 0 ? (
                   <Card className="p-4 border border-dashed border-black/20 text-sm text-black/50">{t('sponsors.no_entries', 'No entries in this scope yet. Add one to begin.')}</Card>
                 ) : scopedDraftSponsors.map((item, index) => (
@@ -2483,7 +2485,7 @@ export default function App() {
                     </div>
                   </Card>
                 ))}
-              </div>
+              </div>}
             </div>
 
             <div className="shrink-0 pt-3 mt-3 border-t border-black/10 bg-white">
