@@ -972,6 +972,10 @@ export default function App() {
 
   const handleChangePassword = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (currentRole !== 'admin') {
+      setPasswordError('Only admin can change passwords.');
+      return;
+    }
     if (!currentUser) {
       setPasswordError('No authenticated user found. Please login again.');
       return;
@@ -1437,19 +1441,21 @@ export default function App() {
               <span className="px-2 py-1.5 rounded-md border border-white/20 text-xs font-bold uppercase tracking-wider bg-white/10 text-white">
                 {t(`role.${currentRole}`, currentRole)}
               </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setPasswordError('');
-                  setShowPasswordModal(true);
-                }}
-                title={t('auth.change_password', 'Change Password')}
-                ariaLabel={t('auth.change_password', 'Change Password')}
-                className="text-white border-white/25 hover:bg-white/10 hover:border-white/40"
-              >
-                <KeyRound size={14} />
-              </Button>
+              {currentRole === 'admin' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setPasswordError('');
+                    setShowPasswordModal(true);
+                  }}
+                  title={t('auth.change_password', 'Change Password')}
+                  ariaLabel={t('auth.change_password', 'Change Password')}
+                  className="text-white border-white/25 hover:bg-white/10 hover:border-white/40"
+                >
+                  <KeyRound size={14} />
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -1958,7 +1964,7 @@ export default function App() {
         </div>
       )}
 
-      {showPasswordModal && !lockedRole && currentRole !== 'public' && (
+      {showPasswordModal && !lockedRole && currentRole === 'admin' && (
         <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
           <Card className="w-full max-w-md p-6">
             <h3 className="text-xl font-bold mb-1">{t('auth.change_password', 'Change Password')}</h3>

@@ -1142,12 +1142,12 @@ async function startServer() {
     const requester = readSession(req);
     if (!requester) return res.status(401).json({ error: 'Not authenticated' });
 
+    if (requester.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: admin only' });
+    }
+
     const targetId = Number.parseInt(req.params.id, 10);
     if (!Number.isFinite(targetId)) return res.status(400).json({ error: 'Invalid user id' });
-
-    if (requester.role !== 'admin' && requester.userId !== targetId) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
 
     const newPassword = String(req.body?.new_password || '');
     if (newPassword.length < 6) {
