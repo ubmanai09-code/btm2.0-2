@@ -6012,6 +6012,13 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     ? bracketDivisionForApi
     : undefined;
 
+  const normalizeGender = (raw: unknown): 'male' | 'female' | '' => {
+    const value = String(raw || '').trim().toLowerCase();
+    if (value === 'm' || value === 'male' || value === 'men' || value === 'man' || value === 'boy') return 'male';
+    if (value === 'f' || value === 'female' || value === 'women' || value === 'woman' || value === 'girl') return 'female';
+    return '';
+  };
+
   const getNormalizedBracketSettings = () => ({
     match_play_type: matchPlayType,
     qualified_count: Math.max(0, Number(qualifiedCount) || 0),
@@ -6427,8 +6434,19 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       try {
         const data = await api.getSeeds(tournament.id, qualifiedCount, { gender: bracketGenderFilter });
         if (Array.isArray(data.seeds) && data.seeds.length > 0) {
-          setSeeds(data.seeds);
-          return data.seeds;
+          let nextSeeds = data.seeds;
+          if (tournament.type === 'individual' && bracketGenderFilter) {
+            const participantsData = await api.getParticipants(tournament.id);
+            const allowedIds = new Set(
+              participantsData
+                .filter((p) => normalizeGender(p.gender) === bracketGenderFilter)
+                .map((p) => Number(p.id))
+                .filter((id) => Number.isFinite(id) && id > 0)
+            );
+            nextSeeds = nextSeeds.filter((seed) => allowedIds.has(Number(seed.id)));
+          }
+          setSeeds(nextSeeds);
+          return nextSeeds;
         }
       } catch (err) {
         console.warn('Falling back to local seed calculation:', err);
@@ -6478,7 +6496,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       }
 
       const eligibleParticipants = bracketGenderFilter
-        ? participantsData.filter((participant) => String(participant.gender || '').toLowerCase().startsWith(bracketGenderFilter.charAt(0)))
+        ? participantsData.filter((participant) => normalizeGender(participant.gender) === bracketGenderFilter)
         : participantsData;
 
       const playerInfo = new Map<number, { id: number; name: string; total_score: number }>();
