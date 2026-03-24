@@ -5949,6 +5949,9 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestCurrentSettingsRef = useRef<{ match_play_type: Tournament['match_play_type']; qualified_count: number; playoff_winners_count: number } | null>(null);
   const latestPersistedSettingsRef = useRef<{ match_play_type: Tournament['match_play_type']; qualified_count: number; playoff_winners_count: number } | null>(null);
+  // Monotonically-increasing counter: each loadSeeds call captures its version at start and
+  // discards its result if a newer call has already started, preventing stale async overwrites.
+  const seedLoadVersionRef = useRef(0);
   const bracketViewStorageKey = `btm_bracket_view_mode_${tournament.id}`;
   const bracketScoreDraftsStorageKey = `btm_bracket_score_drafts_${tournament.id}`;
   const bracketDivisionStorageKey = `btm_bracket_division_${tournament.id}`;
@@ -6203,12 +6206,12 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     loadBrackets();
   }, [tournament.id, bracketDivisionForApi]);
 
-  useEffect(() => {
-    loadSeeds();
-  }, [tournament.id, qualifiedCount, bracketDivisionForApi]);
-
+  // Settings hydration runs BEFORE seeds so it sets the correct qualifiedCount for the new
+  // division first, then drives a single seed load with the right count.
   useEffect(() => {
     setSettingsHydrated(false);
+    // Reset bracket division to 'all' when tournament changes
+    setBracketDivision('all');
     const preferredSettings = getNormalizedTournamentSettings();
     setMatchPlayType(preferredSettings.match_play_type);
     setQualifiedCount(preferredSettings.qualified_count);
@@ -6219,24 +6222,18 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     setSelectedSeed(null);
     setMatchScoreDrafts(readStoredMatchScoreDrafts());
     setCustomRuleTableLocked(false);
+    setUseManualSeedMatchups(false);
     setTeamSelectionDraft({ seed1: null, seed2: null, seed3: null });
     setSettingsHydrated(true);
-  }, [tournament.id, bracketDivisionForApi]);
+    // Pass the freshly-read qualifiedCount directly to avoid using the stale state value
+    loadSeeds(preferredSettings.qualified_count);
+  }, [tournament.id]);
 
+  // When division changes (after tournament init), reload seeds and brackets for the new division
   useEffect(() => {
-    if (matchPlayType !== 'team_selection_playoff') return;
-    if (qualifiedCount !== 8) setQualifiedCount(8);
-    if (playoffWinnersCount !== 1) setPlayoffWinnersCount(1);
-    if (useManualSeedMatchups) setUseManualSeedMatchups(false);
-  }, [matchPlayType, qualifiedCount, playoffWinnersCount, useManualSeedMatchups]);
-
-  useEffect(() => {
-    setSeedOverridesBySeedNumber(readStoredSeedOverrides());
-    setEditingSeedNumber(null);
-    setSeedEditDraftKind(tournament.type === 'team' ? 'team' : 'participant');
-    setSeedEditDraftReplaceFromId('');
-    setSeedEditDraftId('');
-  }, [tournament.id, bracketDivisionForApi]);
+    loadBrackets();
+    loadSeeds();
+  }, [bracketDivisionForApi]);
 
   useEffect(() => {
     persistSeedOverrides(seedOverridesBySeedNumber);
@@ -6439,24 +6436,34 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     return match[`${slot}_name`] || 'TBD';
   };
 
-  const loadSeeds = async () => {
+  const loadSeeds = async (overrideQualifiedCount?: number) => {
+    const myVersion = ++seedLoadVersionRef.current;
+    const capturedGenderFilter = bracketGenderFilter; // freeze at call time — guards against closure staleness
+    const effectiveQualifiedCount = overrideQualifiedCount !== undefined ? overrideQualifiedCount : qualifiedCount;
+
+    const applySeeds = (nextSeeds: any[]) => {
+      // Discard if a newer loadSeeds call has already started
+      if (seedLoadVersionRef.current !== myVersion) return;
+      // Safety: enforce gender filter on whatever the server returned
+      if (tournament.type === 'individual' && capturedGenderFilter) {
+        const allowedIds = new Set(
+          bracketParticipants
+            .filter((p) => normalizeGender(p.gender) === capturedGenderFilter)
+            .map((p) => Number(p.id))
+        );
+        if (allowedIds.size > 0) {
+          nextSeeds = nextSeeds.filter((seed) => allowedIds.has(Number(seed.id)));
+        }
+      }
+      setSeeds(nextSeeds);
+    };
+
     try {
       try {
-        const data = await api.getSeeds(tournament.id, qualifiedCount, { gender: bracketGenderFilter });
+        const data = await api.getSeeds(tournament.id, effectiveQualifiedCount, { gender: capturedGenderFilter });
         if (Array.isArray(data.seeds) && data.seeds.length > 0) {
-          let nextSeeds = data.seeds;
-          if (tournament.type === 'individual' && bracketGenderFilter) {
-            const participantsData = await api.getParticipants(tournament.id);
-            const allowedIds = new Set(
-              participantsData
-                .filter((p) => normalizeGender(p.gender) === bracketGenderFilter)
-                .map((p) => Number(p.id))
-                .filter((id) => Number.isFinite(id) && id > 0)
-            );
-            nextSeeds = nextSeeds.filter((seed) => allowedIds.has(Number(seed.id)));
-          }
-          setSeeds(nextSeeds);
-          return nextSeeds;
+          applySeeds(data.seeds);
+          return data.seeds;
         }
       } catch (err) {
         console.warn('Falling back to local seed calculation:', err);
@@ -6490,8 +6497,8 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         const rankedTeams = Array.from(teamTotals.values())
           .sort((a, b) => (b.total_score - a.total_score) || (a.id - b.id));
 
-        const effectiveQualified = qualifiedCount > 0
-          ? Math.min(qualifiedCount, rankedTeams.length)
+        const effectiveQualified = effectiveQualifiedCount > 0
+          ? Math.min(effectiveQualifiedCount, rankedTeams.length)
           : rankedTeams.length;
 
         const computedSeeds = rankedTeams.slice(0, effectiveQualified).map((team, index) => ({
@@ -6501,12 +6508,12 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
             total_score: team.total_score,
             kind: 'team',
           }));
-        setSeeds(computedSeeds);
+        applySeeds(computedSeeds);
         return computedSeeds;
       }
 
-      const eligibleParticipants = bracketGenderFilter
-        ? participantsData.filter((participant) => normalizeGender(participant.gender) === bracketGenderFilter)
+      const eligibleParticipants = capturedGenderFilter
+        ? participantsData.filter((participant) => normalizeGender(participant.gender) === capturedGenderFilter)
         : participantsData;
 
       const playerInfo = new Map<number, { id: number; name: string; total_score: number }>();
@@ -6527,8 +6534,8 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       const rankedPlayers = Array.from(playerInfo.values())
         .sort((a, b) => (b.total_score - a.total_score) || (a.id - b.id));
 
-      const effectiveQualified = qualifiedCount > 0
-        ? Math.min(qualifiedCount, rankedPlayers.length)
+      const effectiveQualified = effectiveQualifiedCount > 0
+        ? Math.min(effectiveQualifiedCount, rankedPlayers.length)
         : rankedPlayers.length;
 
       const computedSeeds = rankedPlayers.slice(0, effectiveQualified).map((player, index) => ({
@@ -6538,11 +6545,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           total_score: player.total_score,
           kind: 'participant',
         }));
-      setSeeds(computedSeeds);
+      applySeeds(computedSeeds);
       return computedSeeds;
     } catch (err) {
       console.error(err);
-      setSeeds([]);
+      if (seedLoadVersionRef.current === myVersion) setSeeds([]);
       return [];
     }
   };
@@ -8326,6 +8333,26 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
               <p className="text-[11px] text-black/45 leading-tight">
                 Top #{qualifiedCount > 0 ? qualifiedCount : 'all'} by total pinfall.
               </p>
+              {(() => {
+                if (!bracketGenderFilter) return null;
+                const poolCount = bracketParticipants.filter(p => normalizeGender(p.gender) === bracketGenderFilter).length;
+                const requested = qualifiedCount > 0 ? qualifiedCount : poolCount;
+                if (poolCount === 0) return (
+                  <p className="text-[10px] text-red-500 leading-tight mt-0.5">
+                    No {bracketGenderFilter} participants found — check gender data.
+                  </p>
+                );
+                if (poolCount < requested) return (
+                  <p className="text-[10px] text-amber-600 leading-tight mt-0.5">
+                    {poolCount} {bracketGenderFilter} participants available (requested {requested})
+                  </p>
+                );
+                return (
+                  <p className="text-[10px] text-black/40 leading-tight mt-0.5">
+                    {poolCount} {bracketGenderFilter} participants in pool
+                  </p>
+                );
+              })()}
               {canEditTopSeeds && (
                 <p className="text-[10px] text-black/45 leading-tight mt-0.5">Double-click a seed card, choose source (team/player), then pick replacement from all registered entries.</p>
               )}
@@ -9388,6 +9415,17 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
     };
   };
 
+  const getTeamStandingsPodium = () => ({
+    first: teamStandingsRows[0]?.team_name || 'TBD',
+    second: teamStandingsRows[1]?.team_name || 'TBD',
+    third: teamStandingsRows[2]?.team_name || 'TBD',
+  });
+
+  const getEmptyPodium = () => ({ first: 'TBD', second: 'TBD', third: 'TBD' });
+
+  const tournamentFormat = String(tournament.format || '').trim();
+  const usesBracketWinnersOnly = tournamentFormat === 'Pre-Qualification & Bracket';
+
   const bracketMatchesByDivision = {
     all: bracketMatches.filter((m: any) => String(m.division || 'all') === 'all'),
     female: bracketMatches.filter((m: any) => String(m.division || 'all') === 'female'),
@@ -9396,32 +9434,71 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
 
   const winnersPodium = (() => {
     if (isTeamTournament) {
-      const podium = getBracketPodium(bracketMatches, tournament.match_play_type);
+      const podium = usesBracketWinnersOnly
+        ? (bracketMatches.length > 0 ? getBracketPodium(bracketMatches, tournament.match_play_type) : getEmptyPodium())
+        : getTeamStandingsPodium();
       return {
-        title: tx('All Teams'),
+        title: usesBracketWinnersOnly ? tx('Bracket Results') : tx('All Teams'),
         ...podium,
       };
     }
 
+    if (usesBracketWinnersOnly) {
+      if (winnersViewMode === 'female') {
+        return {
+          title: tx('Female Bracket Results'),
+          ...(bracketMatchesByDivision.female.length > 0
+            ? getBracketPodium(bracketMatchesByDivision.female, 'stepladder')
+            : getEmptyPodium()),
+        };
+      }
+
+      if (winnersViewMode === 'male') {
+        return {
+          title: tx('Male Bracket Results'),
+          ...(bracketMatchesByDivision.male.length > 0
+            ? getBracketPodium(bracketMatchesByDivision.male, 'stepladder')
+            : getEmptyPodium()),
+        };
+      }
+
+      return {
+        title: tx('All Bracket Results'),
+        ...(bracketMatchesByDivision.all.length > 0
+          ? getBracketPodium(bracketMatchesByDivision.all, tournament.match_play_type)
+          : getEmptyPodium()),
+      };
+    }
+
     if (winnersViewMode === 'female') {
-      const femaleBracketPodium = bracketMatchesByDivision.female.length > 0
-        ? getBracketPodium(bracketMatchesByDivision.female, 'stepladder')
-        : getStandingsPodium('female');
-      return { title: tx('Female Results'), ...femaleBracketPodium };
+      return { title: tx('Female Results'), ...getStandingsPodium('female') };
     }
 
     if (winnersViewMode === 'male') {
-      const maleBracketPodium = bracketMatchesByDivision.male.length > 0
-        ? getBracketPodium(bracketMatchesByDivision.male, 'stepladder')
-        : getStandingsPodium('male');
-      return { title: tx('Male Results'), ...maleBracketPodium };
+      return { title: tx('Male Results'), ...getStandingsPodium('male') };
     }
 
-    const allBracketPodium = bracketMatchesByDivision.all.length > 0
-      ? getBracketPodium(bracketMatchesByDivision.all, tournament.match_play_type)
-      : getStandingsPodium('all');
-    return { title: tx('All Results'), ...allBracketPodium };
+    return { title: tx('All Results'), ...getStandingsPodium('all') };
   })();
+
+  const combinedDivisionWinnersRows = (!isTeamTournament && usesBracketWinnersOnly && winnersViewMode === 'all' && (
+    bracketMatchesByDivision.female.length > 0 || bracketMatchesByDivision.male.length > 0
+  ))
+    ? [
+        { place: 'F 1st', winner: getBracketPodium(bracketMatchesByDivision.female, 'stepladder').first, tone: 'emerald' },
+        { place: 'F 2nd', winner: getBracketPodium(bracketMatchesByDivision.female, 'stepladder').second, tone: 'slate' },
+        { place: 'F 3rd', winner: getBracketPodium(bracketMatchesByDivision.female, 'stepladder').third, tone: 'amber' },
+        { place: 'M 1st', winner: getBracketPodium(bracketMatchesByDivision.male, 'stepladder').first, tone: 'emerald' },
+        { place: 'M 2nd', winner: getBracketPodium(bracketMatchesByDivision.male, 'stepladder').second, tone: 'slate' },
+        { place: 'M 3rd', winner: getBracketPodium(bracketMatchesByDivision.male, 'stepladder').third, tone: 'amber' },
+      ]
+    : null;
+
+  const winnersRows = combinedDivisionWinnersRows || [
+    { place: '1st', winner: winnersPodium.first, tone: 'emerald' },
+    { place: '2nd', winner: winnersPodium.second, tone: 'slate' },
+    { place: '3rd', winner: winnersPodium.third, tone: 'amber' },
+  ];
 
   const firstPlace = winnersPodium.first;
   const secondPlace = winnersPodium.second;
@@ -9614,27 +9691,37 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                     <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-black/40">{tx('Team Members')}</div>
                   )}
                 </div>
-                <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} border-b border-black/5 bg-emerald-50/70`}>
-                  <div className="px-4 py-3 font-bold text-emerald-700">1st</div>
-                  <div className="px-4 py-3 font-bold text-emerald-700">{firstPlace}</div>
-                  {isTeamTournament && (
-                    <div className="px-4 py-3 text-emerald-800 text-sm">{getWinnerMembersLabel(firstPlace)}</div>
-                  )}
-                </div>
-                <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} border-b border-black/5 bg-slate-100/80`}>
-                  <div className="px-4 py-3 font-bold text-slate-700">2nd</div>
-                  <div className="px-4 py-3 font-bold text-slate-700">{secondPlace}</div>
-                  {isTeamTournament && (
-                    <div className="px-4 py-3 text-slate-700 text-sm">{getWinnerMembersLabel(secondPlace)}</div>
-                  )}
-                </div>
-                <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} bg-amber-50/70`}>
-                  <div className="px-4 py-3 font-bold text-amber-700">3rd</div>
-                  <div className="px-4 py-3 font-bold text-amber-700">{thirdPlace}</div>
-                  {isTeamTournament && (
-                    <div className="px-4 py-3 text-amber-800 text-sm">{getWinnerMembersLabel(thirdPlace)}</div>
-                  )}
-                </div>
+                {winnersRows.map((row, index) => {
+                  const isLast = index === winnersRows.length - 1;
+                  const rowClass = row.tone === 'emerald'
+                    ? 'bg-emerald-50/70'
+                    : row.tone === 'amber'
+                      ? 'bg-amber-50/70'
+                      : 'bg-slate-100/80';
+                  const textClass = row.tone === 'emerald'
+                    ? 'text-emerald-700'
+                    : row.tone === 'amber'
+                      ? 'text-amber-700'
+                      : 'text-slate-700';
+                  const memberTextClass = row.tone === 'emerald'
+                    ? 'text-emerald-800'
+                    : row.tone === 'amber'
+                      ? 'text-amber-800'
+                      : 'text-slate-700';
+
+                  return (
+                    <div
+                      key={`${row.place}-${index}`}
+                      className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} ${rowClass} ${isLast ? '' : 'border-b border-black/5'}`}
+                    >
+                      <div className={`px-4 py-3 font-bold ${textClass}`}>{row.place}</div>
+                      <div className={`px-4 py-3 font-bold ${textClass}`}>{row.winner}</div>
+                      {isTeamTournament && (
+                        <div className={`px-4 py-3 text-sm ${memberTextClass}`}>{getWinnerMembersLabel(row.winner)}</div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </Card>
