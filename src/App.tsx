@@ -2707,6 +2707,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const [selectedTeamMemberIds, setSelectedTeamMemberIds] = useState<number[]>([]);
   const [teamMemberSearchQuery, setTeamMemberSearchQuery] = useState('');
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
+  const [showPlayersSearch, setShowPlayersSearch] = useState(false);
+  const [showTeamsSearch, setShowTeamsSearch] = useState(false);
   const [playerSort, setPlayerSort] = useState<{ key: 'none' | 'club' | 'average'; direction: 'asc' | 'desc' }>({
     key: 'none',
     direction: 'asc',
@@ -2727,6 +2729,9 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
   useEffect(() => {
     setMobileRosterTab('players');
+    setShowPlayersSearch(false);
+    setShowTeamsSearch(false);
+    setPlayerSearchQuery('');
   }, [tournament.id, tournament.type]);
 
   const loadData = async () => {
@@ -3381,27 +3386,28 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   });
 
   const normalizedPlayerSearch = playerSearchQuery.trim().toLowerCase();
+  const activePlayerSearch = normalizedPlayerSearch.length >= 3 ? normalizedPlayerSearch : '';
 
   const filteredParticipants = sortedParticipants.filter((participant) => {
-    if (!normalizedPlayerSearch) return true;
+    if (!activePlayerSearch) return true;
     const fullName = `${participant.first_name || ''} ${participant.last_name || ''}`.trim().toLowerCase();
     const club = (participant.club || '').trim().toLowerCase();
     const email = (participant.email || '').trim().toLowerCase();
     const teamName = (participant.team_name || '').trim().toLowerCase();
-    return fullName.includes(normalizedPlayerSearch)
-      || club.includes(normalizedPlayerSearch)
-      || email.includes(normalizedPlayerSearch)
-      || teamName.includes(normalizedPlayerSearch);
+    return fullName.includes(activePlayerSearch)
+      || club.includes(activePlayerSearch)
+      || email.includes(activePlayerSearch)
+      || teamName.includes(activePlayerSearch);
   });
 
   const filteredTeams = teams.filter((team) => {
-    if (!normalizedPlayerSearch) return true;
+    if (!activePlayerSearch) return true;
     const teamName = (team.name || '').trim().toLowerCase();
-    if (teamName.includes(normalizedPlayerSearch)) return true;
+    if (teamName.includes(activePlayerSearch)) return true;
     const memberNames = participants
       .filter((participant) => participant.team_id === team.id)
       .map((participant) => `${participant.first_name || ''} ${participant.last_name || ''}`.trim().toLowerCase());
-    return memberNames.some((name) => name.includes(normalizedPlayerSearch));
+    return memberNames.some((name) => name.includes(activePlayerSearch));
   });
 
   const normalizedTeamMemberSearch = teamMemberSearchQuery.trim().toLowerCase();
@@ -3498,8 +3504,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
         <div className={`${tournament.type === 'team' && mobileRosterTab !== 'players' ? 'hidden lg:block' : ''} lg:col-span-3`}>
-          <Card className="border-[#AFDDE5]/60 overflow-hidden">
-            <div className="p-3 border-b border-[#AFDDE5]/70 bg-white">
+          <Card className="border-[#AFDDE5]/60 overflow-visible">
+            <div className="p-3 border-b border-[#AFDDE5]/70 bg-white sticky top-[7.25rem] z-20">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div>
                   <h4 className="font-bold text-black/80 flex items-center gap-2"><User size={16} className="text-emerald-700" />{tx('Players')} ({participants.length}) • M ({maleCount}) • F ({femaleCount})</h4>
@@ -3512,20 +3518,40 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => {
-                          const value = window.prompt(tx('Search player/team/club/email'), playerSearchQuery);
-                        if (value !== null) setPlayerSearchQuery(value.trim());
-                      }}
-                      title="Search Player"
-                      ariaLabel="Search Player"
+                      onClick={() => setShowPlayersSearch((prev) => !prev)}
+                      title="Search Players"
+                      ariaLabel="Search Players"
                       className="px-2"
                     >
                       <Search size={14} />
                     </Button>
-                    {playerSearchQuery && (
-                      <Button size="sm" variant="outline" onClick={() => setPlayerSearchQuery('')} title="Clear Search" ariaLabel="Clear Search" className="px-2">
-                        <X size={14} />
-                      </Button>
+                    {showPlayersSearch && (
+                      <>
+                        <div className="relative">
+                          <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-black/40 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={playerSearchQuery}
+                            onChange={(e) => setPlayerSearchQuery(e.target.value)}
+                            placeholder={tx('Type at least 3 letters to search')}
+                            className="h-8 w-[220px] rounded-md border border-black/15 bg-white pl-7 pr-2 text-xs text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-[#AFDDE5]"
+                            aria-label={tx('Search players, teams, club, email')}
+                          />
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setShowPlayersSearch(false);
+                            setPlayerSearchQuery('');
+                          }}
+                          title="Close Search"
+                          ariaLabel="Close Search"
+                          className="px-2"
+                        >
+                          <X size={14} />
+                        </Button>
+                      </>
                     )}
                     {canManageParticipants && (
                       <Button size="sm" variant="manage" onClick={handleClearParticipants} title="Clear Players" ariaLabel="Clear Players" className="px-2">
@@ -3591,7 +3617,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     </button>
                   </th>
                   {canManageParticipants && (
-                    <th className="pl-0.5 pr-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right">Actions</th>
+                    <th className="pl-0.5 pr-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right sticky right-0 z-[3] bg-[#e3f3f6]">Actions</th>
                   )}
                 </tr>
               </thead>
@@ -3622,7 +3648,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       <td className={`pl-2 pr-1 py-1.5 text-[10px] uppercase text-center ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{normalizeHandsStyle(p.hands)}</td>
                       <td className={`pl-2 pr-0.5 py-1.5 text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`} title={p.club || ''}>{p.club || '-'}</td>
                       {canManageParticipants && (
-                        <td className="pl-0.5 pr-2 py-1.5 text-right">
+                        <td className={`pl-0.5 pr-2 py-1.5 text-right sticky right-0 z-[2] ${participantIssues.has(p.id) ? 'bg-red-50' : 'bg-white'}`}>
                           <div className="flex justify-end gap-1.5" title={participantIssues.has(p.id) ? participantIssues.get(p.id)?.join(' • ') : undefined}>
                             <button 
                               onClick={() => { setEditingPlayer(p); setShowAddPlayer(true); }}
@@ -3652,8 +3678,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
         <div className={`${tournament.type === 'team' && mobileRosterTab !== 'teams' ? 'hidden lg:block' : ''} lg:col-span-2 space-y-6`}>
         {tournament.type === 'team' && (
-            <Card className="border-[#AFDDE5]/60 overflow-hidden">
-              <div className="p-3 border-b border-[#AFDDE5]/70 bg-white">
+            <Card className="border-[#AFDDE5]/60 overflow-visible">
+              <div className="p-3 border-b border-[#AFDDE5]/70 bg-white sticky top-[7.25rem] z-20">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                   <div>
                     <h4 className="font-bold text-black/80 flex items-center gap-2"><Users size={16} className="text-emerald-700" />{tx('Teams')} ({teams.length})</h4>
@@ -3665,24 +3691,44 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2 w-full md:w-auto md:min-w-[320px]">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          const value = window.prompt(tx('Search player or team'), playerSearchQuery);
-                          if (value !== null) setPlayerSearchQuery(value.trim());
-                        }}
-                        title="Search Player"
-                        ariaLabel="Search Player"
-                        className="px-2"
-                      >
-                        <Search size={14} />
-                      </Button>
-                      {playerSearchQuery && (
-                        <Button size="sm" variant="outline" onClick={() => setPlayerSearchQuery('')} title="Clear Search" ariaLabel="Clear Search" className="px-2">
-                          <X size={14} />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setShowTeamsSearch((prev) => !prev)}
+                          title="Search Teams"
+                          ariaLabel="Search Teams"
+                          className="px-2"
+                        >
+                          <Search size={14} />
                         </Button>
-                      )}
+                        {showTeamsSearch && (
+                          <>
+                            <div className="relative">
+                              <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-black/40 pointer-events-none" />
+                              <input
+                                type="text"
+                                value={playerSearchQuery}
+                                onChange={(e) => setPlayerSearchQuery(e.target.value)}
+                                placeholder={tx('Type at least 3 letters to search')}
+                                className="h-8 w-[220px] rounded-md border border-black/15 bg-white pl-7 pr-2 text-xs text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-[#AFDDE5]"
+                                aria-label={tx('Search players or teams')}
+                              />
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setShowTeamsSearch(false);
+                                setPlayerSearchQuery('');
+                              }}
+                              title="Close Search"
+                              ariaLabel="Close Search"
+                              className="px-2"
+                            >
+                              <X size={14} />
+                            </Button>
+                          </>
+                        )}
                       {canManageParticipants && (
                         <Button size="sm" variant="manage" onClick={handleClearTeams} title="Clear Teams" ariaLabel="Clear Teams" className="px-2">
                           <BrushCleaning size={14} />
@@ -3727,7 +3773,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 sticky left-12 z-[3] bg-[#e3f3f6]">{tx('Team Name')}</th>
                     <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">{tx('Team Members')}</th>
                     {canManageParticipants && (
-                      <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right whitespace-nowrap w-16">Actions</th>
+                      <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right whitespace-nowrap w-16 sticky right-0 z-[3] bg-[#e3f3f6]">Actions</th>
                     )}
                   </tr>
                 </thead>
@@ -3761,7 +3807,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                             </div>
                           </td>
                           {canManageParticipants && (
-                            <td className="px-3 py-2 text-right whitespace-nowrap w-16">
+                            <td className="px-3 py-2 text-right whitespace-nowrap w-16 sticky right-0 z-[2] bg-white">
                               <div className="flex justify-end gap-1">
                                 <button 
                                   onClick={() => openEditTeamModal(team)}
