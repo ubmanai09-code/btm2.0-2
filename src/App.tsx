@@ -5949,10 +5949,8 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestCurrentSettingsRef = useRef<{ match_play_type: Tournament['match_play_type']; qualified_count: number; playoff_winners_count: number } | null>(null);
   const latestPersistedSettingsRef = useRef<{ match_play_type: Tournament['match_play_type']; qualified_count: number; playoff_winners_count: number } | null>(null);
-  const bracketSettingsStorageKey = `btm_bracket_settings_${tournament.id}`;
   const bracketViewStorageKey = `btm_bracket_view_mode_${tournament.id}`;
   const bracketScoreDraftsStorageKey = `btm_bracket_score_drafts_${tournament.id}`;
-  const bracketSeedOverridesStorageKey = `btm_bracket_seed_overrides_${tournament.id}`;
   const bracketDivisionStorageKey = `btm_bracket_division_${tournament.id}`;
   const [matches, setMatches] = useState<any[]>([]);
   const [seeds, setSeeds] = useState<any[]>([]);
@@ -6011,6 +6009,8 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const bracketGenderFilter: 'male' | 'female' | undefined = bracketDivisionForApi === 'male' || bracketDivisionForApi === 'female'
     ? bracketDivisionForApi
     : undefined;
+  const bracketSettingsStorageKey = `btm_bracket_settings_${tournament.id}_${bracketDivisionForApi}`;
+  const bracketSeedOverridesStorageKey = `btm_bracket_seed_overrides_${tournament.id}_${bracketDivisionForApi}`;
 
   const normalizeGender = (raw: unknown): 'male' | 'female' | '' => {
     const value = String(raw || '').trim().toLowerCase();
@@ -6144,6 +6144,15 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const saveBracketSettings = async ({ silent }: { silent: boolean }) => {
     const normalizedSettings = getNormalizedBracketSettings();
     persistBracketSettingsToStorage(normalizedSettings);
+    if (bracketDivisionForApi !== 'all') {
+      latestPersistedSettingsRef.current = normalizedSettings;
+      if (!silent) {
+        await loadSeeds();
+        alert(`${bracketDivisionForApi === 'male' ? 'Male' : 'Female'} bracket setup saved.`);
+      }
+      return;
+    }
+
     try {
       await api.updateBracketSettings(tournament.id, normalizedSettings);
     } catch (err: any) {
@@ -6212,7 +6221,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     setCustomRuleTableLocked(false);
     setTeamSelectionDraft({ seed1: null, seed2: null, seed3: null });
     setSettingsHydrated(true);
-  }, [tournament.id]);
+  }, [tournament.id, bracketDivisionForApi]);
 
   useEffect(() => {
     if (matchPlayType !== 'team_selection_playoff') return;
@@ -6227,7 +6236,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     setSeedEditDraftKind(tournament.type === 'team' ? 'team' : 'participant');
     setSeedEditDraftReplaceFromId('');
     setSeedEditDraftId('');
-  }, [tournament.id]);
+  }, [tournament.id, bracketDivisionForApi]);
 
   useEffect(() => {
     persistSeedOverrides(seedOverridesBySeedNumber);
@@ -6264,7 +6273,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [matchPlayType, qualifiedCount, playoffWinnersCount, tournament.id, canManageBrackets, settingsHydrated]);
+  }, [matchPlayType, qualifiedCount, playoffWinnersCount, tournament.id, canManageBrackets, settingsHydrated, bracketDivisionForApi]);
 
   useEffect(() => {
     return () => {
@@ -6277,11 +6286,12 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       const persisted = latestPersistedSettingsRef.current;
       if (!current || !persisted) return;
       if (JSON.stringify(current) === JSON.stringify(persisted)) return;
+      if (bracketDivisionForApi !== 'all') return;
       api.updateBracketSettings(tournament.id, current).catch((err) => {
         console.error('Failed to flush bracket settings on leave:', err);
       });
     };
-  }, [canManageBrackets, tournament.id, settingsHydrated]);
+  }, [canManageBrackets, tournament.id, settingsHydrated, bracketDivisionForApi]);
 
   const loadBrackets = async () => {
     setLoading(true);
@@ -7390,6 +7400,12 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   useEffect(() => {
     setPublicPreviewMatchPlayType(null);
   }, [tournament.id]);
+
+  useEffect(() => {
+    setSelectedSeed(null);
+    setEditingNameSlot(null);
+    setCustomRuleTableLocked(false);
+  }, [bracketDivisionForApi]);
 
   useEffect(() => {
     setCustomRoundLinkSelections((prev) => {
@@ -8947,6 +8963,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 function StandingsView({ tournament, role }: { tournament: Tournament; role: UserRole }) {
   const canManageStandings = role === 'admin' || role === 'moderator';
   const tx = React.useContext(UiTranslationContext);
+  const [winnersViewMode, setWinnersViewMode] = useState<'all' | 'female' | 'male'>('all');
   const [hasAdditionalScores, setHasAdditionalScores] = useState(Boolean(tournament.has_additional_scores));
   const [hasBonus, setHasBonus] = useState(Boolean(tournament.has_bonus));
   const [standings, setStandings] = useState<Standing[]>([]);
@@ -8970,6 +8987,12 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
   const toBonusKey = (kind: 'participant' | 'team', id: number) => `${kind}-${id}`;
   const getBonus = (kind: 'participant' | 'team', id: number) => Number(bonusByKey[toBonusKey(kind, id)] || 0);
   const getAdditional = (kind: 'participant' | 'team', id: number) => Number(additionalByKey[toBonusKey(kind, id)] || 0);
+  const normalizeGender = (raw: unknown): 'male' | 'female' | '' => {
+    const value = String(raw || '').trim().toLowerCase();
+    if (value === 'm' || value === 'male' || value === 'men' || value === 'man' || value === 'boy') return 'male';
+    if (value === 'f' || value === 'female' || value === 'women' || value === 'woman' || value === 'girl') return 'female';
+    return '';
+  };
 
   useEffect(() => {
     loadStandings({
@@ -8981,6 +9004,10 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
   useEffect(() => {
     setStandingsMode('players');
   }, [tournament.id, tournament.type]);
+
+  useEffect(() => {
+    setWinnersViewMode('all');
+  }, [tournament.id]);
 
   useEffect(() => {
     setHasAdditionalScores(Boolean(tournament.has_additional_scores));
@@ -9155,7 +9182,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
   const participantInfoMap = new Map<number, Participant>();
   const isTeamTournament = tournament.type === 'team';
   for (const p of participants) {
-    participantGenderMap.set(p.id, (p.gender || '').toLowerCase());
+    participantGenderMap.set(p.id, normalizeGender(p.gender));
     participantInfoMap.set(p.id, p);
   }
 
@@ -9325,25 +9352,80 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
     return match[`${slot}_name`] || 'TBD';
   };
 
-  const finalRoundNumber = bracketMatches.reduce((max, m) => Math.max(max, Number(m.round) || 0), 0);
-  const finalMatch = bracketMatches.find((m: any) => Number(m.round) === finalRoundNumber && Number(m.match_index) === 0);
-  const bronzeMatch = bracketMatches.find((m: any) => Number(m.round) === finalRoundNumber && Number(m.match_index) === 1);
-  const stepladderSemifinalMatch =
-    tournament.match_play_type === 'stepladder'
-      ? bracketMatches.find((m: any) => Number(m.round) === Math.max(1, finalRoundNumber - 1) && Number(m.match_index) === 0)
-      : null;
+  const getBracketPodium = (matches: any[], matchPlayType: Tournament['match_play_type'] | string | undefined) => {
+    const finalRoundNumber = matches.reduce((max, m) => Math.max(max, Number(m.round) || 0), 0);
+    const finalMatch = matches.find((m: any) => Number(m.round) === finalRoundNumber && Number(m.match_index) === 0);
+    const bronzeMatch = matches.find((m: any) => Number(m.round) === finalRoundNumber && Number(m.match_index) === 1);
+    const stepladderSemifinalMatch =
+      String(matchPlayType || '') === 'stepladder'
+        ? matches.find((m: any) => Number(m.round) === Math.max(1, finalRoundNumber - 1) && Number(m.match_index) === 0)
+        : null;
 
-  const firstPlace = finalMatch?.winner_id ? getBracketName(finalMatch, 'winner') : 'TBD';
-  const secondPlace = finalMatch?.winner_id
-    ? (finalMatch.winner_id === finalMatch.participant1_id ? getBracketName(finalMatch, 'p2') : getBracketName(finalMatch, 'p1'))
-    : 'TBD';
-  const thirdPlace = bronzeMatch?.winner_id
-    ? getBracketName(bronzeMatch, 'winner')
-    : (stepladderSemifinalMatch?.winner_id
-      ? (stepladderSemifinalMatch.winner_id === stepladderSemifinalMatch.participant1_id
-        ? getBracketName(stepladderSemifinalMatch, 'p2')
-        : getBracketName(stepladderSemifinalMatch, 'p1'))
-      : 'TBD');
+    const first = finalMatch?.winner_id ? getBracketName(finalMatch, 'winner') : 'TBD';
+    const second = finalMatch?.winner_id
+      ? (finalMatch.winner_id === finalMatch.participant1_id ? getBracketName(finalMatch, 'p2') : getBracketName(finalMatch, 'p1'))
+      : 'TBD';
+    const third = bronzeMatch?.winner_id
+      ? getBracketName(bronzeMatch, 'winner')
+      : (stepladderSemifinalMatch?.winner_id
+        ? (stepladderSemifinalMatch.winner_id === stepladderSemifinalMatch.participant1_id
+          ? getBracketName(stepladderSemifinalMatch, 'p2')
+          : getBracketName(stepladderSemifinalMatch, 'p1'))
+        : 'TBD');
+
+    return { first, second, third };
+  };
+
+  const getStandingsPodium = (gender: 'all' | 'female' | 'male') => {
+    const filteredRows = playerStandingsRows.filter((row) => {
+      if (gender === 'all') return true;
+      return participantGenderMap.get(row.participant_id) === gender;
+    });
+    return {
+      first: filteredRows[0]?.participant_name || 'TBD',
+      second: filteredRows[1]?.participant_name || 'TBD',
+      third: filteredRows[2]?.participant_name || 'TBD',
+    };
+  };
+
+  const bracketMatchesByDivision = {
+    all: bracketMatches.filter((m: any) => String(m.division || 'all') === 'all'),
+    female: bracketMatches.filter((m: any) => String(m.division || 'all') === 'female'),
+    male: bracketMatches.filter((m: any) => String(m.division || 'all') === 'male'),
+  };
+
+  const winnersPodium = (() => {
+    if (isTeamTournament) {
+      const podium = getBracketPodium(bracketMatches, tournament.match_play_type);
+      return {
+        title: tx('All Teams'),
+        ...podium,
+      };
+    }
+
+    if (winnersViewMode === 'female') {
+      const femaleBracketPodium = bracketMatchesByDivision.female.length > 0
+        ? getBracketPodium(bracketMatchesByDivision.female, 'stepladder')
+        : getStandingsPodium('female');
+      return { title: tx('Female Results'), ...femaleBracketPodium };
+    }
+
+    if (winnersViewMode === 'male') {
+      const maleBracketPodium = bracketMatchesByDivision.male.length > 0
+        ? getBracketPodium(bracketMatchesByDivision.male, 'stepladder')
+        : getStandingsPodium('male');
+      return { title: tx('Male Results'), ...maleBracketPodium };
+    }
+
+    const allBracketPodium = bracketMatchesByDivision.all.length > 0
+      ? getBracketPodium(bracketMatchesByDivision.all, tournament.match_play_type)
+      : getStandingsPodium('all');
+    return { title: tx('All Results'), ...allBracketPodium };
+  })();
+
+  const firstPlace = winnersPodium.first;
+  const secondPlace = winnersPodium.second;
+  const thirdPlace = winnersPodium.third;
 
   const teamMembersByTeamName = new Map<string, string[]>();
   if (isTeamTournament) {
@@ -9498,8 +9580,30 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <div className="p-6 border-b border-black/5">
-              <h4 className="font-bold">{tx('Tournament Winners')}</h4>
-              <p className="text-sm text-black/40">{tx('Final winners only')}</p>
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <h4 className="font-bold">{tx('Tournament Winners')}</h4>
+                  <p className="text-sm text-black/40">{tx('Final winners only')} • {winnersPodium.title}</p>
+                </div>
+                {!isTeamTournament && (
+                  <div className="inline-flex rounded-lg border border-black/10 overflow-hidden bg-white">
+                    {[
+                      { value: 'all', label: 'All' },
+                      { value: 'female', label: 'F' },
+                      { value: 'male', label: 'M' },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setWinnersViewMode(option.value as 'all' | 'female' | 'male')}
+                        className={`px-3 py-1.5 text-xs font-bold uppercase tracking-widest border-r last:border-r-0 border-black/10 ${winnersViewMode === option.value ? 'bg-black text-white' : 'bg-white text-black/65 hover:bg-black/[0.04]'}`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="px-6 py-5">
               <div className="rounded-lg border border-black/10 overflow-hidden">
