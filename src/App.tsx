@@ -52,11 +52,28 @@ type SponsorInfo = {
   url: string;
 };
 
+type DashboardPromo = {
+  enabled: boolean;
+  title: string;
+  subtitle: string;
+  image: string;
+  link: string;
+};
+
 type SponsorsConfig = {
   global: SponsorInfo[];
   tournaments: Record<string, SponsorInfo[]>;
   globalSponsorEnabled: boolean;
   globalSponsor: SponsorInfo | null;
+  dashboardPromo: DashboardPromo;
+};
+
+const DEFAULT_DASHBOARD_PROMO: DashboardPromo = {
+  enabled: true,
+  title: 'Advertise Here',
+  subtitle: 'Promote your brand with a dashboard promo image.',
+  image: '',
+  link: '',
 };
 
 const GLOBAL_SPONSORS: SponsorInfo[] = [
@@ -85,6 +102,7 @@ const DEFAULT_SPONSORS_CONFIG: SponsorsConfig = {
   tournaments: {},
   globalSponsorEnabled: false,
   globalSponsor: null,
+  dashboardPromo: DEFAULT_DASHBOARD_PROMO,
 };
 
 const SPONSORS_CONFIG_OVERRIDE_KEY = 'btm_sponsors_config_override';
@@ -117,11 +135,24 @@ const normalizeSponsorsConfig = (value: any): SponsorsConfig => {
     tournaments[String(key)] = normalizeSponsorInfoList(list);
   }
 
+  const rawDashboardPromo = value?.dashboardPromo && typeof value.dashboardPromo === 'object'
+    ? value.dashboardPromo
+    : {};
+
+  const dashboardPromo: DashboardPromo = {
+    enabled: rawDashboardPromo?.enabled !== false,
+    title: String(rawDashboardPromo?.title || DEFAULT_DASHBOARD_PROMO.title),
+    subtitle: String(rawDashboardPromo?.subtitle || DEFAULT_DASHBOARD_PROMO.subtitle),
+    image: String(rawDashboardPromo?.image || ''),
+    link: String(rawDashboardPromo?.link || ''),
+  };
+
   return {
     global: global.length > 0 ? global : DEFAULT_SPONSORS_CONFIG.global,
     tournaments,
     globalSponsorEnabled: Boolean(value?.globalSponsorEnabled),
     globalSponsor: globalSponsorList[0] || null,
+    dashboardPromo,
   };
 };
 
@@ -435,6 +466,7 @@ export default function App() {
   const lockedRole = parseRole((import.meta as any).env?.VITE_LOCK_ROLE);
   const originalFetchRef = useRef<typeof window.fetch | null>(null);
   const sponsorsImportInputRef = useRef<HTMLInputElement | null>(null);
+  const dashboardPromoImageInputRef = useRef<HTMLInputElement | null>(null);
   const tournamentsImportInputRef = useRef<HTMLInputElement | null>(null);
   const [authToken, setAuthToken] = useState<string>(() => localStorage.getItem('btm_auth_token') || '');
   const [currentRole, setCurrentRole] = useState<UserRole>(() => lockedRole || 'public');
@@ -1135,6 +1167,30 @@ export default function App() {
     });
   };
 
+  const updateDraftDashboardPromoField = (field: keyof DashboardPromo, value: string | boolean) => {
+    setSponsorsConfigDraft((prev) => ({
+      ...prev,
+      dashboardPromo: {
+        ...prev.dashboardPromo,
+        [field]: value,
+      },
+    }));
+  };
+
+  const onDashboardPromoImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = String(event.target?.result || '');
+      if (!result) return;
+      updateDraftDashboardPromoField('image', result);
+      if (dashboardPromoImageInputRef.current) dashboardPromoImageInputRef.current.value = '';
+    };
+    reader.readAsDataURL(file);
+  };
+
   const openSponsorsConfigEditor = () => {
     setSponsorsConfigError('');
     setSponsorsConfigDraft(normalizeSponsorsConfig(sponsorsConfig));
@@ -1302,6 +1358,8 @@ export default function App() {
   const scopedDraftSponsors = sponsorsConfigScope === 'global'
     ? sponsorsConfigDraft.global
     : (sponsorsConfigDraft.tournaments[sponsorsConfigScope] || []);
+  const dashboardSponsors = sponsorsConfig.global.slice(0, 2);
+  const dashboardPromo = sponsorsConfig.dashboardPromo;
   const appGlobalSponsor = sponsorsConfig.globalSponsorEnabled ? sponsorsConfig.globalSponsor : null;
 
   const activeSponsors = selectedTournament
@@ -1518,92 +1576,130 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_0.9fr] gap-4">
-                <Card className="border border-emerald-200 bg-gradient-to-br from-white via-emerald-50/70 to-[#AFDDE5]/35 overflow-hidden">
-                  <div className="p-5 flex flex-col md:flex-row md:items-center gap-4">
-                    <div className="w-24 h-24 rounded-xl border border-black/10 bg-white p-3 flex items-center justify-center shrink-0">
-                      <img
-                        src={appGlobalSponsor?.logo || '/logo.png'}
-                        alt={appGlobalSponsor?.name || 'BTM App Sponsor'}
-                        className="w-full h-full object-contain"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src = '/logo.png';
-                        }}
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-emerald-700">{t('app.powered_by', 'BTM Powered by')}</p>
-                      <h3 className="text-2xl font-bold tracking-tight text-black">
-                        {appGlobalSponsor?.name || t('app.unnamed_sponsor', 'Your App Sponsor Here')}
-                      </h3>
-                      {currentRole !== 'public' && (
-                        <p className="text-sm text-black/65 max-w-2xl">
-                          {appGlobalSponsor?.description || 'Feature the brand behind the BTM app here with logo, contacts, and a direct link.'}
-                        </p>
-                      )}
-                      <div className="flex flex-wrap gap-2 pt-1">
+              <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-4">
+                <Card className="border border-emerald-200 bg-white overflow-hidden">
+                  <div className="p-4">
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700">Dashboard Sponsors (up to 2)</p>
+                      {isAdmin && (
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => setShowGlobalSponsorModal(true)}
-                          className="px-3"
-                          title={t('sponsors.view_details', 'View details')}
-                          ariaLabel={t('sponsors.view_details', 'View details')}
+                          onClick={openSponsorsConfigEditor}
+                          className="px-2"
+                          title={t('sponsors.manager_title', 'Sponsors and Partners Manager')}
+                          ariaLabel={t('sponsors.manager_title', 'Sponsors and Partners Manager')}
                         >
-                          <Eye size={14} />
+                          <Edit size={13} />
                         </Button>
-                        {isAdmin && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={openSponsorsConfigEditor}
-                            className="px-3"
-                            title={t('sponsors.manager_title', 'Sponsors and Partners Manager')}
-                            ariaLabel={t('sponsors.manager_title', 'Sponsors and Partners Manager')}
-                          >
-                            <Edit size={14} />
-                          </Button>
-                        )}
-                      </div>
+                      )}
                     </div>
-                  </div>
-                </Card>
 
-                <Card className="border border-orange-200 bg-[radial-gradient(circle_at_top_left,_rgba(255,196,120,0.35),_rgba(255,255,255,0.95)_42%,_rgba(255,241,214,0.95)_100%)] overflow-hidden">
-                  <div className="p-5 h-full flex flex-col justify-between gap-4">
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-orange-700">Dashboard Ad Slot</p>
-                      <h3 className="text-2xl font-bold tracking-tight text-black">Advertise Here</h3>
-                      {currentRole !== 'public' && (
-                        <p className="text-sm text-black/65">
-                          Use this space to sell banner placement, promote equipment, announce upcoming events, or highlight special offers.
-                        </p>
-                      )}
-                    </div>
-                    <div className="rounded-xl border border-dashed border-orange-300 bg-white/75 p-4">
-                      <p className="text-sm font-semibold text-black/80">BTM dashboard promotion block</p>
-                      {currentRole !== 'public' && (
-                        <p className="text-xs text-black/55 mt-1">
-                          Ideal for sponsor campaigns, pro shop sales, coaching ads, event countdowns, or partner promotions.
-                        </p>
-                      )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {dashboardSponsors.length === 0 ? (
+                        <div className="sm:col-span-2 rounded-lg border border-dashed border-black/20 bg-black/[0.02] py-8 text-center text-sm text-black/45">
+                          No dashboard sponsors configured.
+                        </div>
+                      ) : dashboardSponsors.map((sponsor) => (
+                        <button
+                          key={sponsor.id}
+                          type="button"
+                          onClick={() => { setSelectedSponsor(sponsor); setShowSponsorsModal(true); }}
+                          className="rounded-lg border border-black/10 bg-white p-3 text-left hover:border-emerald-300 transition-colors"
+                        >
+                          <div className="w-full h-24 rounded-md border border-black/10 bg-white p-2 flex items-center justify-center">
+                            <img
+                              src={sponsor.logo || '/logo.png'}
+                              alt={sponsor.name}
+                              className="w-full h-full object-contain"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                              }}
+                            />
+                          </div>
+                          <p className="mt-2 text-sm font-semibold text-black/85 truncate">{sponsor.name || 'Unnamed sponsor'}</p>
+                        </button>
+                      ))}
                     </div>
                     {isAdmin && (
-                      <div className="flex justify-start">
+                      <div className="pt-3">
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={openSponsorsConfigEditor}
                           className="px-3"
-                          title={t('sponsors.manager_title', 'Sponsors and Partners Manager')}
-                          ariaLabel={t('sponsors.manager_title', 'Sponsors and Partners Manager')}
+                          title="Manage Sponsors"
+                          ariaLabel="Manage Sponsors"
                         >
-                          <Plus size={14} />
+                          Manage Sponsors
                         </Button>
                       </div>
                     )}
                   </div>
                 </Card>
+
+                {dashboardPromo.enabled && (
+                  <Card className="border border-orange-200 bg-white overflow-hidden">
+                    <div className="p-4 h-full flex flex-col gap-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-orange-700">Dashboard Ad Slot</p>
+                        {isAdmin && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={openSponsorsConfigEditor}
+                            className="px-2"
+                            title={t('sponsors.manager_title', 'Sponsors and Partners Manager')}
+                            ariaLabel={t('sponsors.manager_title', 'Sponsors and Partners Manager')}
+                          >
+                            <Edit size={13} />
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="rounded-lg border border-black/10 bg-white overflow-hidden">
+                        {dashboardPromo.image ? (
+                          <img
+                            src={dashboardPromo.image}
+                            alt={dashboardPromo.title || 'Dashboard promo image'}
+                            className="w-full h-44 object-cover"
+                          />
+                        ) : (
+                          <div className="h-44 flex items-center justify-center text-sm text-black/45 bg-black/[0.02]">
+                            Upload promo image
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <p className="text-sm font-semibold text-black/85">{dashboardPromo.title || 'Advertise Here'}</p>
+                        {currentRole !== 'public' && dashboardPromo.subtitle && (
+                          <p className="text-xs text-black/55 mt-1">{dashboardPromo.subtitle}</p>
+                        )}
+                        {dashboardPromo.link && (
+                          <a href={dashboardPromo.link} target="_blank" rel="noreferrer" className="text-xs text-emerald-700 underline break-all mt-1 inline-block">
+                            {dashboardPromo.link}
+                          </a>
+                        )}
+                      </div>
+
+                      {isAdmin && (
+                        <div className="pt-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={openSponsorsConfigEditor}
+                            className="px-3"
+                            title="Manage Ad Block"
+                            ariaLabel="Manage Ad Block"
+                          >
+                            Manage Ad Block
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2273,6 +2369,80 @@ export default function App() {
                         <Download size={14} />
                       </Button>
                     </div>
+                  </div>
+                </Card>
+
+                <Card className="p-3 border border-black/10 lg:col-span-2">
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-black/60 mb-2">Dashboard Ad Block</h4>
+                  <label className="flex items-center gap-2 text-sm font-semibold mb-3">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(sponsorsConfigDraft.dashboardPromo?.enabled)}
+                      onChange={(e) => updateDraftDashboardPromoField('enabled', e.target.checked)}
+                    />
+                    Show dashboard ad block
+                  </label>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                    <Input
+                      label="Ad Title"
+                      value={sponsorsConfigDraft.dashboardPromo?.title || ''}
+                      onChange={(e: any) => updateDraftDashboardPromoField('title', e.target.value)}
+                    />
+                    <Input
+                      label="Ad Subtitle"
+                      value={sponsorsConfigDraft.dashboardPromo?.subtitle || ''}
+                      onChange={(e: any) => updateDraftDashboardPromoField('subtitle', e.target.value)}
+                    />
+                    <Input
+                      label="Promo Link"
+                      value={sponsorsConfigDraft.dashboardPromo?.link || ''}
+                      onChange={(e: any) => updateDraftDashboardPromoField('link', e.target.value)}
+                    />
+                    <Input
+                      label="Promo Image URL"
+                      value={sponsorsConfigDraft.dashboardPromo?.image || ''}
+                      onChange={(e: any) => updateDraftDashboardPromoField('image', e.target.value)}
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <div className="relative">
+                      <input
+                        ref={dashboardPromoImageInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                        onChange={onDashboardPromoImageUpload}
+                      />
+                      <Button size="sm" variant="outline" className="px-3" title="Upload promo image" ariaLabel="Upload promo image">
+                        <Upload size={14} />
+                      </Button>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="px-3"
+                      onClick={() => updateDraftDashboardPromoField('image', '')}
+                      title="Clear promo image"
+                      ariaLabel="Clear promo image"
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+
+                  <div className="w-full h-40 rounded-md border border-black/10 bg-white overflow-hidden">
+                    {sponsorsConfigDraft.dashboardPromo?.image ? (
+                      <img
+                        src={sponsorsConfigDraft.dashboardPromo.image}
+                        alt="Dashboard promo preview"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-sm text-black/45 bg-black/[0.02]">
+                        Promo image preview
+                      </div>
+                    )}
                   </div>
                 </Card>
               </div>
