@@ -1581,9 +1581,9 @@ export default function App() {
               <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-4">
                 <Card className="border border-emerald-200 bg-white overflow-hidden">
                   <div className="p-4">
-                    <div className="flex items-center justify-between gap-2 mb-3">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700">Dashboard Sponsors (up to 2)</p>
-                      {isAdmin && (
+                    {isAdmin && (
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700">Dashboard Sponsors</p>
                         <Button
                           size="sm"
                           variant="outline"
@@ -1594,8 +1594,8 @@ export default function App() {
                         >
                           <Edit size={13} />
                         </Button>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {dashboardSponsors.length === 0 ? (
@@ -1643,9 +1643,9 @@ export default function App() {
                 {dashboardPromo.enabled && (
                   <Card className="border border-orange-200 bg-white overflow-hidden">
                     <div className="p-4 h-full flex flex-col gap-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-orange-700">Dashboard Ad Slot</p>
-                        {isAdmin && (
+                      {isAdmin && (
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-orange-700">Dashboard Ad Slot</p>
                           <Button
                             size="sm"
                             variant="outline"
@@ -1656,8 +1656,8 @@ export default function App() {
                           >
                             <Edit size={13} />
                           </Button>
-                        )}
-                      </div>
+                        </div>
+                      )}
 
                       <div className="rounded-lg border border-black/10 bg-white overflow-hidden">
                         {dashboardPromo.image ? (
