@@ -7759,7 +7759,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         <p className="text-xs text-black/50">{tx('1) Choose rules 2) Review top seeds 3) Generate.')}</p>
       </div>
 
-      <Card className="p-2 border border-black/10">
+      <Card className="p-2 border border-black/10 sticky top-[7.25rem] z-20 bg-white/95 backdrop-blur-sm">
         {canManageBrackets ? (
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-1.5">
@@ -9250,7 +9250,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
         </div>
 
         <Card className="overflow-visible">
-          <div className="p-6 border-b border-black/5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="p-6 border-b border-black/5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 sticky top-[7.25rem] z-30 bg-white/95 backdrop-blur-sm">
             <div>
               <h4 className="font-bold">{tx('Tournament Standings')}</h4>
               <p className="text-sm text-black/40">{tx('Rankings sorted from highest to lowest total score')}</p>
@@ -9293,7 +9293,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
               </Button>
             </div>
           </div>
-          <div className="sticky top-[7.25rem] z-30 px-6 py-2 border-b border-black/5 bg-white/95 backdrop-blur-sm">
+          <div className="px-6 py-2 border-b border-black/5 bg-white/95">
             <div className={`${segmentedTabContainerClass} w-fit`}>
               <button
                 onClick={() => setStandingsMode('players')}
