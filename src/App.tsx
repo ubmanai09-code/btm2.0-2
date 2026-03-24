@@ -33,7 +33,6 @@ import {
   Shield,
   Search
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser } from './services/api';
 
 type UserRole = 'admin' | 'moderator' | 'public';
@@ -1472,15 +1471,8 @@ export default function App() {
       </nav>
 
       <main className="pt-24 pb-12 px-6 max-w-7xl mx-auto">
-        <AnimatePresence mode="wait">
-          {view === 'list' && (
-            <motion.div 
-              key="list"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-8"
-            >
+        {view === 'list' && (
+            <div className="space-y-8">
               <div className="flex items-end justify-between gap-3">
                 <div>
                   <h1 className="text-4xl font-bold tracking-tight">{t('app.tournaments', 'Tournaments')}</h1>
@@ -1524,6 +1516,88 @@ export default function App() {
                     </Button>
                   )}
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_0.9fr] gap-4">
+                <Card className="border border-emerald-200 bg-gradient-to-br from-white via-emerald-50/70 to-[#AFDDE5]/35 overflow-hidden">
+                  <div className="p-5 flex flex-col md:flex-row md:items-center gap-4">
+                    <div className="w-24 h-24 rounded-xl border border-black/10 bg-white p-3 flex items-center justify-center shrink-0">
+                      <img
+                        src={appGlobalSponsor?.logo || '/logo.png'}
+                        alt={appGlobalSponsor?.name || 'BTM App Sponsor'}
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                        }}
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-emerald-700">{t('app.powered_by', 'BTM Powered by')}</p>
+                      <h3 className="text-2xl font-bold tracking-tight text-black">
+                        {appGlobalSponsor?.name || t('app.unnamed_sponsor', 'Your App Sponsor Here')}
+                      </h3>
+                      <p className="text-sm text-black/65 max-w-2xl">
+                        {appGlobalSponsor?.description || 'Feature the brand behind the BTM app here with logo, contacts, and a direct link.'}
+                      </p>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setShowGlobalSponsorModal(true)}
+                          className="px-3"
+                          title={t('sponsors.view_details', 'View details')}
+                          ariaLabel={t('sponsors.view_details', 'View details')}
+                        >
+                          <Eye size={14} />
+                        </Button>
+                        {isAdmin && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={openSponsorsConfigEditor}
+                            className="px-3"
+                            title={t('sponsors.manager_title', 'Sponsors and Partners Manager')}
+                            ariaLabel={t('sponsors.manager_title', 'Sponsors and Partners Manager')}
+                          >
+                            <Edit size={14} />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card className="border border-orange-200 bg-[radial-gradient(circle_at_top_left,_rgba(255,196,120,0.35),_rgba(255,255,255,0.95)_42%,_rgba(255,241,214,0.95)_100%)] overflow-hidden">
+                  <div className="p-5 h-full flex flex-col justify-between gap-4">
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-orange-700">Dashboard Ad Slot</p>
+                      <h3 className="text-2xl font-bold tracking-tight text-black">Advertise Here</h3>
+                      <p className="text-sm text-black/65">
+                        Use this space to sell banner placement, promote equipment, announce upcoming events, or highlight special offers.
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-dashed border-orange-300 bg-white/75 p-4">
+                      <p className="text-sm font-semibold text-black/80">BTM dashboard promotion block</p>
+                      <p className="text-xs text-black/55 mt-1">
+                        Ideal for sponsor campaigns, pro shop sales, coaching ads, event countdowns, or partner promotions.
+                      </p>
+                    </div>
+                    {isAdmin && (
+                      <div className="flex justify-start">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={openSponsorsConfigEditor}
+                          className="px-3"
+                          title={t('sponsors.manager_title', 'Sponsors and Partners Manager')}
+                          ariaLabel={t('sponsors.manager_title', 'Sponsors and Partners Manager')}
+                        >
+                          <Plus size={14} />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </Card>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1636,17 +1710,11 @@ export default function App() {
                   )}
                 </div>
               )}
-            </motion.div>
+            </div>
           )}
 
           {(view === 'create' || view === 'edit') && (
-            <motion.div 
-              key={view === 'edit' ? `edit-${editingTournament?.id}` : 'create'}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="max-w-2xl mx-auto"
-            >
+            <div className="max-w-2xl mx-auto">
               <Button variant="ghost" onClick={() => { setView('list'); setEditingTournament(null); }} className="mb-6 -ml-2" title={t('app.back_to_list', 'Back to List')} ariaLabel={t('app.back_to_list', 'Back to List')}>
                 <ArrowLeft size={18} />
               </Button>
@@ -1923,7 +1991,7 @@ export default function App() {
                   </Card>
                 </div>
               )}
-            </motion.div>
+            </div>
           )}
 
           {view === 'detail' && selectedTournament && (
@@ -1939,7 +2007,6 @@ export default function App() {
               sponsorsConfig={sponsorsConfig}
             />
           )}
-        </AnimatePresence>
       </main>
 
       {showLogin && !lockedRole && (
@@ -2444,11 +2511,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
     ];
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="space-y-8"
-    >
+    <div className="space-y-8">
       <div className="space-y-4">
         <Button variant="ghost" onClick={onBack} className="-ml-2 text-black/40" title={tPublic('common.back_to_dashboard', 'Back to Dashboard')} ariaLabel={tPublic('common.back_to_dashboard', 'Back to Dashboard')}>
           <ArrowLeft size={18} />
@@ -2695,7 +2758,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
         {activeTab === 'brackets' && <BracketsView tournament={tournament} role={effectiveRole} onTournamentUpdated={onTournamentUpdated} />}
         {activeTab === 'standings' && <StandingsView tournament={tournament} role={effectiveRole} />}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -3450,6 +3513,36 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       teamCount: teamSet.size,
     }));
 
+  const expectedPlayersPerTeam = Math.max(1, Number(tournament.players_per_team) || 1);
+  const teamIntegrityIssues = new Map<number, { missingCount: number; duplicateNames: string[] }>();
+  teams.forEach((team) => {
+    const members = participants.filter((participant) => participant.team_id === team.id);
+    const missingCount = Math.max(0, expectedPlayersPerTeam - members.length);
+
+    const nameCount = new Map<string, { display: string; count: number }>();
+    members.forEach((member) => {
+      const firstName = (member.first_name || '').trim();
+      const lastName = (member.last_name || '').trim();
+      const display = `${firstName} ${lastName}`.trim() || `#${member.id}`;
+      const key = display.toLowerCase();
+      const current = nameCount.get(key);
+      if (current) {
+        current.count += 1;
+      } else {
+        nameCount.set(key, { display, count: 1 });
+      }
+    });
+
+    const duplicateNames = Array.from(nameCount.values())
+      .filter((item) => item.count > 1)
+      .map((item) => item.display);
+
+    if (missingCount > 0 || duplicateNames.length > 0) {
+      teamIntegrityIssues.set(team.id, { missingCount, duplicateNames });
+    }
+  });
+  const teamsWithIntegrityIssues = Array.from(teamIntegrityIssues.keys()).length;
+
   const togglePlayerSort = (key: 'club' | 'average') => {
     setPlayerSort((previous) => {
       if (previous.key === key) {
@@ -3689,6 +3782,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                   <div>
                     <h4 className="font-bold text-black/80 flex items-center gap-2"><Users size={16} className="text-emerald-700" />{tx('Teams')} ({teams.length})</h4>
+                    {teamsWithIntegrityIssues > 0 && (
+                      <p className="text-[11px] text-red-600 mt-1 font-semibold">
+                        {tx('Warning:')} {teamsWithIntegrityIssues} {tx('team(s) have missing or duplicated members.')}
+                      </p>
+                    )}
                     {multiTeamPlayers.length > 0 && (
                       <p className="text-[11px] text-red-600 mt-1 font-semibold">
                         {tx('Warning:')} {multiTeamPlayers.length} {tx('player(s) appear in more than one team')} ({multiTeamPlayers.slice(0, 3).map((player) => player.name).join(', ')}{multiTeamPlayers.length > 3 ? ', ...' : ''}).
@@ -3795,6 +3893,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   ) : (
                     filteredTeams.map((team, index) => {
                       const teamMembers = participants.filter(p => p.team_id === team.id);
+                      const integrityIssue = teamIntegrityIssues.get(team.id);
                       return (
                         <tr key={team.id} className="hover:bg-[#AFDDE5]/20 transition-colors align-top">
                           <td className="px-3 py-2 font-mono text-[10px] text-black/60 sticky left-0 z-[2] bg-white">{index + 1}</td>
@@ -3810,6 +3909,20 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                                   </span>
                                 )) : <span className="text-xs text-black/40 italic">{tx('No members')}</span>}
                               </div>
+                              {integrityIssue && (
+                                <div className="text-[11px] text-red-600 font-semibold mt-1">
+                                  {integrityIssue.missingCount > 0 && (
+                                    <p>
+                                      {tx('Missing members:')} {integrityIssue.missingCount} ({tx('expected')} {expectedPlayersPerTeam})
+                                    </p>
+                                  )}
+                                  {integrityIssue.duplicateNames.length > 0 && (
+                                    <p>
+                                      {tx('Duplicated members:')} {integrityIssue.duplicateNames.join(', ')}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </td>
                           {canManageParticipants && (
@@ -3846,22 +3959,13 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       </div>
 
       {/* Modals */}
-      <AnimatePresence>
-        {canManageParticipants && showAddPlayer && (
+      {canManageParticipants && showAddPlayer && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }}
+            <div
               className="absolute inset-0 bg-emerald-950/35 backdrop-blur-sm"
               onClick={() => { setShowAddPlayer(false); setEditingPlayer(null); }}
             />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-lg"
-            >
+            <div className="relative w-full max-w-lg">
               <Card className="p-8 border-emerald-200 bg-gradient-to-b from-white to-emerald-50/40 shadow-md">
                 <h3 className="text-2xl font-bold text-emerald-800 mb-2">{editingPlayer ? tx('Edit Player') : tx('Add New Player')}</h3>
                 <p className="text-xs text-black/50 mb-5">{tx('Enter participant details and assign a team if needed.')}</p>
@@ -3907,25 +4011,17 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   </div>
                 </form>
               </Card>
-            </motion.div>
+            </div>
           </div>
         )}
 
         {canManageParticipants && showAddTeam && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }}
+            <div
               className="absolute inset-0 bg-emerald-950/35 backdrop-blur-sm"
               onClick={() => { setShowAddTeam(false); setEditingTeam(null); setSelectedTeamMemberIds([]); setTeamMemberSearchQuery(''); }}
             />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-md"
-            >
+            <div className="relative w-full max-w-md">
               <Card className="p-8 border-emerald-200 bg-gradient-to-b from-white to-emerald-50/40 shadow-md">
                 <h3 className="text-2xl font-bold text-emerald-800 mb-2">{editingTeam ? tx('Edit Team') : tx('Create New Team')}</h3>
                 <p className="text-xs text-black/50 mb-5">{tx('Create a team or rename an existing one.')}</p>
@@ -3998,10 +4094,9 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   </div>
                 </form>
               </Card>
-            </motion.div>
+            </div>
           </div>
         )}
-      </AnimatePresence>
     </div>
   );
 }
