@@ -306,7 +306,7 @@ const api = {
     return data;
   },
   async getSponsorsConfig(): Promise<any> {
-    const res = await fetch('/sponsors-config.json', { cache: 'no-store' });
+    const res = await fetch('/api/sponsors-config', { cache: 'no-store' });
     const data = await this.safeJson(res);
     if (!res.ok) {
       throw new Error(data?.error || 'Failed to load sponsors config');

@@ -733,6 +733,26 @@ async function startServer() {
     return next();
   };
 
+  app.get('/api/sponsors-config', (req, res) => {
+    try {
+      const source = fs.existsSync(persistentSponsorsConfig)
+        ? persistentSponsorsConfig
+        : (fs.existsSync(publicSponsorsConfig) ? publicSponsorsConfig : distSponsorsConfig);
+      if (!fs.existsSync(source)) {
+        return res.status(404).json({ error: 'sponsors config not found' });
+      }
+
+      const raw = fs.readFileSync(source, 'utf8');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      return res.type('application/json').send(raw);
+    } catch (err: any) {
+      console.error('Failed to load sponsors config:', err);
+      return res.status(500).json({ error: err.message || 'Failed to load sponsors config' });
+    }
+  });
+
   app.put('/api/sponsors-config', requireAdmin, (req, res) => {
     try {
       fs.mkdirSync(path.dirname(persistentSponsorsConfig), { recursive: true });
