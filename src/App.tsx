@@ -1536,9 +1536,11 @@ export default function App() {
                       <h3 className="text-2xl font-bold tracking-tight text-black">
                         {appGlobalSponsor?.name || t('app.unnamed_sponsor', 'Your App Sponsor Here')}
                       </h3>
-                      <p className="text-sm text-black/65 max-w-2xl">
-                        {appGlobalSponsor?.description || 'Feature the brand behind the BTM app here with logo, contacts, and a direct link.'}
-                      </p>
+                      {currentRole !== 'public' && (
+                        <p className="text-sm text-black/65 max-w-2xl">
+                          {appGlobalSponsor?.description || 'Feature the brand behind the BTM app here with logo, contacts, and a direct link.'}
+                        </p>
+                      )}
                       <div className="flex flex-wrap gap-2 pt-1">
                         <Button
                           size="sm"
@@ -1572,15 +1574,19 @@ export default function App() {
                     <div className="space-y-2">
                       <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-orange-700">Dashboard Ad Slot</p>
                       <h3 className="text-2xl font-bold tracking-tight text-black">Advertise Here</h3>
-                      <p className="text-sm text-black/65">
-                        Use this space to sell banner placement, promote equipment, announce upcoming events, or highlight special offers.
-                      </p>
+                      {currentRole !== 'public' && (
+                        <p className="text-sm text-black/65">
+                          Use this space to sell banner placement, promote equipment, announce upcoming events, or highlight special offers.
+                        </p>
+                      )}
                     </div>
                     <div className="rounded-xl border border-dashed border-orange-300 bg-white/75 p-4">
                       <p className="text-sm font-semibold text-black/80">BTM dashboard promotion block</p>
-                      <p className="text-xs text-black/55 mt-1">
-                        Ideal for sponsor campaigns, pro shop sales, coaching ads, event countdowns, or partner promotions.
-                      </p>
+                      {currentRole !== 'public' && (
+                        <p className="text-xs text-black/55 mt-1">
+                          Ideal for sponsor campaigns, pro shop sales, coaching ads, event countdowns, or partner promotions.
+                        </p>
+                      )}
                     </div>
                     {isAdmin && (
                       <div className="flex justify-start">
