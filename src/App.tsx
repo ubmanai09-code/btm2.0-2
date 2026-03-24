@@ -89,6 +89,7 @@ const DEFAULT_SPONSORS_CONFIG: SponsorsConfig = {
 };
 
 const SPONSORS_CONFIG_OVERRIDE_KEY = 'btm_sponsors_config_override';
+const SPONSORS_CONFIG_CACHE_KEY = 'btm_sponsors_config_cache';
 
 const normalizeSponsorInfoList = (value: any): SponsorInfo[] => {
   if (!Array.isArray(value)) return [];
@@ -535,17 +536,25 @@ export default function App() {
 
     const loadSponsorsConfig = async () => {
       try {
-        const response = await fetch('/sponsors-config.json', { cache: 'no-store' });
-        if (!response.ok) throw new Error(`Failed to load sponsors config: ${response.status}`);
-        const parsed = await response.json();
+        const parsed = await api.getSponsorsConfig();
         if (isCancelled) return;
 
-        setSponsorsConfig(normalizeSponsorsConfig(parsed));
+        const normalized = normalizeSponsorsConfig(parsed);
+        setSponsorsConfig(normalized);
+        localStorage.setItem(SPONSORS_CONFIG_CACHE_KEY, JSON.stringify(normalized));
       } catch (err) {
-        console.warn('Using default sponsors config due to load failure:', err);
-        if (!isCancelled) {
-          setSponsorsConfig(DEFAULT_SPONSORS_CONFIG);
+        console.warn('Failed to load sponsors config from API, trying local cache:', err);
+        const cachedRaw = localStorage.getItem(SPONSORS_CONFIG_CACHE_KEY);
+        if (cachedRaw && !isCancelled) {
+          try {
+            const cached = normalizeSponsorsConfig(JSON.parse(cachedRaw));
+            setSponsorsConfig(cached);
+            return;
+          } catch (cacheErr) {
+            console.warn('Ignoring invalid cached sponsors config:', cacheErr);
+          }
         }
+        if (!isCancelled) setSponsorsConfig(DEFAULT_SPONSORS_CONFIG);
       }
     };
 
@@ -1135,6 +1144,7 @@ export default function App() {
     try {
       await api.saveSponsorsConfig(normalized);
       setSponsorsConfig(normalized);
+      localStorage.setItem(SPONSORS_CONFIG_CACHE_KEY, JSON.stringify(normalized));
       localStorage.removeItem(SPONSORS_CONFIG_OVERRIDE_KEY);
       setShowSponsorsConfigEditor(false);
       setSponsorsConfigError('');
@@ -1178,17 +1188,17 @@ export default function App() {
   const resetSponsorsConfigEditor = async () => {
     try {
       await api.resetSponsorsConfig();
-      const response = await fetch('/sponsors-config.json', { cache: 'no-store' });
-      if (!response.ok) throw new Error(`Failed to load sponsors config: ${response.status}`);
-      const parsed = await response.json();
+      const parsed = await api.getSponsorsConfig();
       const normalized = normalizeSponsorsConfig(parsed);
       setSponsorsConfig(normalized);
       setSponsorsConfigDraft(normalized);
+      localStorage.setItem(SPONSORS_CONFIG_CACHE_KEY, JSON.stringify(normalized));
       localStorage.removeItem(SPONSORS_CONFIG_OVERRIDE_KEY);
       setSponsorsConfigError('');
     } catch {
       setSponsorsConfig(DEFAULT_SPONSORS_CONFIG);
       setSponsorsConfigDraft(DEFAULT_SPONSORS_CONFIG);
+      localStorage.setItem(SPONSORS_CONFIG_CACHE_KEY, JSON.stringify(DEFAULT_SPONSORS_CONFIG));
       setSponsorsConfigError('Config reset to built-in defaults.');
     }
   };
@@ -1246,6 +1256,7 @@ export default function App() {
 
     await api.saveSponsorsConfig(nextConfig);
     setSponsorsConfig(nextConfig);
+    localStorage.setItem(SPONSORS_CONFIG_CACHE_KEY, JSON.stringify(nextConfig));
   };
 
   const updateFormSponsorField = (sponsorId: string, field: keyof SponsorInfo, value: string) => {

@@ -35,6 +35,46 @@ const copyDirMissingFiles = (fromDir: string, toDir: string) => {
   }
 };
 
+const copyIfNewerOrMissing = (fromPath: string, toPath: string): boolean => {
+  if (!fs.existsSync(fromPath)) return false;
+  fs.mkdirSync(path.dirname(toPath), { recursive: true });
+
+  if (!fs.existsSync(toPath)) {
+    fs.copyFileSync(fromPath, toPath);
+    return true;
+  }
+
+  const sourceStat = fs.statSync(fromPath);
+  const targetStat = fs.statSync(toPath);
+  if (sourceStat.mtimeMs > targetStat.mtimeMs || sourceStat.size !== targetStat.size) {
+    fs.copyFileSync(fromPath, toPath);
+    return true;
+  }
+
+  return false;
+};
+
+const syncTopLevelLogoAssets = (fromDir: string, toDir: string): string[] => {
+  if (!fs.existsSync(fromDir)) return [];
+  const entries = fs.readdirSync(fromDir, { withFileTypes: true });
+  const logoFilePattern = /logo|sponsor|partner/i;
+  const imageExtPattern = /\.(png|jpe?g|webp|svg|gif|ico)$/i;
+  const synced: string[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const fileName = entry.name;
+    if (!imageExtPattern.test(fileName) || !logoFilePattern.test(fileName)) continue;
+    const sourcePath = path.join(fromDir, fileName);
+    const targetPath = path.join(toDir, fileName);
+    if (copyIfNewerOrMissing(sourcePath, targetPath)) {
+      synced.push(fileName);
+    }
+  }
+
+  return synced;
+};
+
 const resolveDbPath = (): string => {
   const configuredDbPath = (process.env.BTM_DB_PATH || '').trim();
   if (configuredDbPath) return path.resolve(configuredDbPath);
@@ -497,11 +537,27 @@ async function startServer() {
   const persistentDataDir = path.dirname(dbPath);
   const persistentSponsorsDir = path.join(persistentDataDir, "sponsors");
   const persistentSponsorsConfig = path.join(persistentDataDir, "sponsors-config.json");
+  const persistentRootAssetsDir = path.join(persistentDataDir, "root-assets");
 
   fs.mkdirSync(persistentSponsorsDir, { recursive: true });
+  fs.mkdirSync(persistentRootAssetsDir, { recursive: true });
   // Keep user-uploaded files in persistent storage and only copy missing packaged assets.
   copyDirMissingFiles(publicSponsorsDir, persistentSponsorsDir);
   copyDirMissingFiles(distSponsorsDir, persistentSponsorsDir);
+  const syncedFromRoot = syncTopLevelLogoAssets(rootDir, persistentRootAssetsDir);
+  const syncedFromPublic = syncTopLevelLogoAssets(path.join(rootDir, "public"), persistentRootAssetsDir);
+  const syncedFromDist = syncTopLevelLogoAssets(clientDist, persistentRootAssetsDir);
+  const syncedSummary = Array.from(new Set([
+    ...syncedFromRoot,
+    ...syncedFromPublic,
+    ...syncedFromDist,
+  ])).sort();
+
+  if (syncedSummary.length > 0) {
+    console.log(`Synced root logo assets (${syncedSummary.length}): ${syncedSummary.join(', ')}`);
+  } else {
+    console.log('Root logo assets are up to date (no file changes).');
+  }
   if (!fs.existsSync(persistentSponsorsConfig)) {
     const initialSponsorsConfig = fs.existsSync(publicSponsorsConfig) ? publicSponsorsConfig : distSponsorsConfig;
     copyIfExists(initialSponsorsConfig, persistentSponsorsConfig);
@@ -513,6 +569,8 @@ async function startServer() {
   app.use('/sponsors', express.static(persistentSponsorsDir));
   app.use('/sponsors', express.static(publicSponsorsDir));
   app.use('/sponsors', express.static(distSponsorsDir));
+  // Serve root-level logos (e.g., /logo.png, /MBA_logo.png) from persistent storage.
+  app.use('/', express.static(persistentRootAssetsDir));
 
   // Serve sponsor config directly from public so config-only updates do not require a rebuild.
   app.get('/sponsors-config.json', (req, res) => {
