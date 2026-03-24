@@ -2822,7 +2822,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    link.remove();
   };
 
   const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -3066,7 +3066,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    link.remove();
   };
 
   const handleSaveTeams = async () => {
@@ -4010,6 +4010,8 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   const [currentShift, setCurrentShift] = useState(1);
   const [selectedItem, setSelectedItem] = useState<{ id: number, type: 'assignment' | 'waiting' } | null>(null);
   const [outOfOperationLanes, setOutOfOperationLanes] = useState<number[]>([]);
+  const [lanePickerLaneNumber, setLanePickerLaneNumber] = useState<number | null>(null);
+  const [lanePickerSearchQuery, setLanePickerSearchQuery] = useState('');
   const say = (message: string) => alert(tx(message));
   const ask = (message: string) => confirm(tx(message));
 
@@ -4154,6 +4156,49 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       loadData();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleAssignWaitingItemToLane = async (waitingItemId: number, laneNumber: number) => {
+    if (!canManageLanes) return;
+
+    const currentLaneAssignments = lanes.filter(
+      (lane) => lane.lane_number === laneNumber && lane.shift_number === currentShift
+    );
+    if (currentLaneAssignments.length >= tournament.players_per_lane) {
+      say('This lane is already full for the selected shift.');
+      return;
+    }
+
+    try {
+      const payload: Partial<LaneAssignment> = {
+        lane_number: laneNumber,
+        shift_number: currentShift,
+      };
+
+      if (tournament.type === 'individual') {
+        const player = participants.find((p) => p.id === waitingItemId);
+        if (!player) {
+          say('Selected player not found.');
+          return;
+        }
+        if (!isParticipantAllowedByRule(player)) {
+          alert(`${tx('This player cannot be assigned because tournament gender rule is')} ${tournament.genders_rule}.`);
+          return;
+        }
+        payload.participant_id = waitingItemId;
+      } else {
+        payload.team_id = waitingItemId;
+      }
+
+      await api.addLaneAssignment(tournament.id, payload);
+      setLanePickerLaneNumber(null);
+      setLanePickerSearchQuery('');
+      setSelectedItem(null);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      say('Failed to assign to lane.');
     }
   };
 
@@ -4479,6 +4524,19 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     ? eligibleParticipants.filter(p => !assignedIds.has(p.id))
     : teams.filter(t => !assignedIds.has(t.id));
 
+  const normalizedLanePickerSearch = lanePickerSearchQuery.trim().toLowerCase();
+  const filteredLanePickerQueue = waitingQueue.filter((item) => {
+    if (!normalizedLanePickerSearch) return true;
+    if (tournament.type === 'individual') {
+      const participant = item as Participant;
+      const fullName = `${participant.first_name || ''} ${participant.last_name || ''}`.trim().toLowerCase();
+      const club = (participant.club || '').trim().toLowerCase();
+      return fullName.includes(normalizedLanePickerSearch) || club.includes(normalizedLanePickerSearch);
+    }
+    const teamName = ((item as Team).name || '').trim().toLowerCase();
+    return teamName.includes(normalizedLanePickerSearch);
+  });
+
   const groupedLanes: Record<number, LaneAssignment[]> = {};
   for (let i = 1; i <= tournament.lanes_count; i++) {
     groupedLanes[i] = lanes.filter(l => l.lane_number === i && l.shift_number === currentShift);
@@ -4587,7 +4645,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
         {/* Lanes Grid */}
         <div className="lg:col-span-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <div className="sticky top-[7.25rem] z-20 bg-white/95 backdrop-blur-sm border border-[#AFDDE5]/50 rounded-md px-2 py-1.5 flex flex-wrap items-center justify-between gap-2 mb-2">
             <div className="flex flex-wrap items-center gap-1.5">
               <Button size="sm" variant="manage" onClick={loadData} title="Refresh" ariaLabel="Refresh" className="px-2">
                 <RefreshCw size={14} />
@@ -4635,7 +4693,17 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                 className={`flex flex-col h-full min-h-[160px] transition-all border-2 ${
                   selectedItem ? 'border-emerald-300 bg-emerald-50/20 cursor-pointer hover:border-emerald-500' : 'border-[#AFDDE5]/70 bg-white'
                 }`}
-                onClick={() => selectedItem && handleMoveToLane(laneNumber)}
+                onClick={() => {
+                  if (!canManageLanes) return;
+                  if (selectedItem) {
+                    handleMoveToLane(laneNumber);
+                    return;
+                  }
+                  if (isLaneOutOfOperation) return;
+                  if (assignments.length >= tournament.players_per_lane) return;
+                  if (waitingQueue.length === 0) return;
+                  setLanePickerLaneNumber(laneNumber);
+                }}
               >
                 <div className="bg-[#AFDDE5]/45 text-emerald-900 px-2.5 py-1.5 flex justify-between items-center group/header border-b border-[#AFDDE5]/70">
                   <div className="flex items-center gap-2">
@@ -4694,8 +4762,8 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                           onClick={(e) => { e.stopPropagation(); setSelectedItem({ id: a.id, type: 'assignment' }); }}
                           className={`text-[10px] p-1.5 rounded border font-bold uppercase tracking-wide flex justify-between items-start group cursor-pointer transition-all ${
                             selectedItem?.id === a.id && selectedItem.type === 'assignment'
-                            ? 'bg-emerald-700 text-white border-emerald-700'
-                            : 'bg-[#AFDDE5]/20 border-transparent hover:border-emerald-200'
+                            ? 'bg-transparent text-emerald-800 border-emerald-500'
+                            : 'bg-transparent border-transparent hover:border-emerald-200'
                           }`}
                         >
                           <div className="flex-1">
@@ -4737,12 +4805,68 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                       <span className="text-[8px] font-bold text-emerald-600 uppercase tracking-widest">Click to place here</span>
                     </div>
                   )}
+                  {!selectedItem && canManageLanes && !isLaneOutOfOperation && assignments.length < tournament.players_per_lane && waitingQueue.length > 0 && (
+                    <div className="mt-auto pt-2 border-t border-dashed border-emerald-500/20 text-center">
+                      <span className="text-[8px] font-bold text-emerald-600 uppercase tracking-widest">Click lane to pick from queue</span>
+                    </div>
+                  )}
                 </div>
               </Card>
             )})}
           </div>
         </div>
       </div>
+
+      {lanePickerLaneNumber !== null && (
+        <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center p-4" onClick={() => { setLanePickerLaneNumber(null); setLanePickerSearchQuery(''); }}>
+          <div className="w-full max-w-lg bg-white rounded-lg border border-[#AFDDE5]/70 shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b border-[#AFDDE5]/70 bg-[#eaf7fa] flex items-center justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-bold text-emerald-800 uppercase tracking-wide">Assign to Lane {lanePickerLaneNumber}</h4>
+                <p className="text-[11px] text-black/55">Pick a {tournament.type === 'individual' ? 'player' : 'team'} from waiting queue</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => { setLanePickerLaneNumber(null); setLanePickerSearchQuery(''); }} title="Close" ariaLabel="Close">
+                <X size={14} />
+              </Button>
+            </div>
+            <div className="p-3 border-b border-black/10">
+              <div className="relative">
+                <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-black/40 pointer-events-none" />
+                <input
+                  type="text"
+                  value={lanePickerSearchQuery}
+                  onChange={(e) => setLanePickerSearchQuery(e.target.value)}
+                  placeholder={tournament.type === 'individual' ? 'Search player or club' : 'Search team'}
+                  className="h-8 w-full rounded-md border border-black/15 bg-white pl-7 pr-2 text-xs text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-[#AFDDE5]"
+                />
+              </div>
+            </div>
+            <div className="max-h-[360px] overflow-y-auto p-3 space-y-2">
+              {filteredLanePickerQueue.length === 0 ? (
+                <p className="text-xs text-black/40 italic text-center py-6">No matching queue items.</p>
+              ) : (
+                filteredLanePickerQueue.map((item) => {
+                  const label = tournament.type === 'individual'
+                    ? `${(item as Participant).first_name || ''} ${(item as Participant).last_name || ''}`.trim()
+                    : ((item as Team).name || '').trim();
+                  const secondary = tournament.type === 'individual' ? ((item as Participant).club || '').trim() : '';
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => handleAssignWaitingItemToLane(item.id, lanePickerLaneNumber)}
+                      className="w-full text-left px-3 py-2 rounded border border-black/10 hover:border-emerald-300 hover:bg-emerald-50/40 transition-colors"
+                    >
+                      <p className="text-sm font-semibold text-black uppercase tracking-wide">{label || '-'}</p>
+                      {secondary && <p className="text-[11px] text-black/50">{secondary}</p>}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -5196,7 +5320,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     link.setAttribute('download', `${tournament.name}_scores_shift_${currentShift}.csv`);
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    link.remove();
   };
 
   const handleImportScores = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -8945,7 +9069,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
     link.setAttribute('download', `${tournament.name}_standings.csv`);
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    link.remove();
   };
 
   const handleImportStandings = (e: React.ChangeEvent<HTMLInputElement>) => {
