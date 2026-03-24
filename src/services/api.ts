@@ -617,14 +617,26 @@ const api = {
     }
     return res.json();
   },
-  async getBrackets(tournamentId: number): Promise<any[]> {
-    const res = await fetch(`/api/tournaments/${tournamentId}/brackets`);
+  async getBrackets(tournamentId: number, options?: { division?: 'all' | 'male' | 'female' }): Promise<any[]> {
+    const params = new URLSearchParams();
+    if (options?.division && options.division !== 'all') {
+      params.set('division', options.division);
+    }
+    const query = params.toString();
+    const res = await fetch(`/api/tournaments/${tournamentId}/brackets${query ? `?${query}` : ''}`);
     return res.json();
   },
-  async getSeeds(tournamentId: number, qualifiedCount: number): Promise<{ type: 'team' | 'individual'; qualified_count: number; seeds: SeedItem[] }> {
+  async getSeeds(
+    tournamentId: number,
+    qualifiedCount: number,
+    options?: { gender?: 'male' | 'female' }
+  ): Promise<{ type: 'team' | 'individual'; qualified_count: number; seeds: SeedItem[] }> {
     const params = new URLSearchParams();
     if (qualifiedCount > 0) {
       params.set('qualified_count', String(qualifiedCount));
+    }
+    if (options?.gender) {
+      params.set('gender', options.gender);
     }
     const query = params.toString();
     const res = await fetch(`/api/tournaments/${tournamentId}/seeds${query ? `?${query}` : ''}`);
@@ -634,8 +646,13 @@ const api = {
     }
     return res.json();
   },
-  async clearBrackets(tournamentId: number): Promise<{ success: boolean; deleted: number }> {
-    const res = await fetch(`/api/tournaments/${tournamentId}/brackets`, {
+  async clearBrackets(tournamentId: number, options?: { division?: 'all' | 'male' | 'female' }): Promise<{ success: boolean; deleted: number }> {
+    const params = new URLSearchParams();
+    if (options?.division && options.division !== 'all') {
+      params.set('division', options.division);
+    }
+    const query = params.toString();
+    const res = await fetch(`/api/tournaments/${tournamentId}/brackets${query ? `?${query}` : ''}`, {
       method: 'DELETE',
     });
     if (!res.ok) {
@@ -671,6 +688,7 @@ const api = {
       playoff_winners_count?: number;
       seed_ids?: number[];
       seed_kind?: 'team' | 'participant';
+      division?: 'all' | 'male' | 'female';
       team_selection_draft?: {
         seed1_opponent_seed: number;
         seed2_opponent_seed: number;
@@ -695,6 +713,7 @@ const api = {
       rounds_count: number;
       round1_matches: number;
       winners_mode: '1' | '3';
+      division?: 'all' | 'male' | 'female';
       links?: Array<{
         from_round: number;
         from_match_index: number;

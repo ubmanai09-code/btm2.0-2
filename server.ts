@@ -214,6 +214,7 @@ function initDb() {
     CREATE TABLE IF NOT EXISTS brackets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tournament_id INTEGER NOT NULL,
+      division TEXT NOT NULL DEFAULT 'all',
       round INTEGER NOT NULL,
       match_index INTEGER NOT NULL,
       participant1_id INTEGER,
@@ -343,6 +344,7 @@ function initDb() {
   const bTableInfo = db.prepare("PRAGMA table_info(brackets)").all();
   const bColumns = bTableInfo.map((c: any) => c.name);
   const bracketMigrations = [
+    { name: 'division', type: "TEXT NOT NULL DEFAULT 'all'" },
     { name: 'participant1_seed', type: 'INTEGER' },
     { name: 'participant2_seed', type: 'INTEGER' },
     { name: 'participant3_id', type: 'INTEGER' },
@@ -841,6 +843,27 @@ async function startServer() {
     return result;
   };
 
+  const parseBracketDivision = (value: any): 'all' | 'male' | 'female' => {
+    const raw = String(value || '').trim().toLowerCase();
+    if (raw === 'male' || raw === 'm') return 'male';
+    if (raw === 'female' || raw === 'f') return 'female';
+    return 'all';
+  };
+
+  const divisionGenderFilter = (division: 'all' | 'male' | 'female'): 'male' | 'female' | null => {
+    if (division === 'male') return 'male';
+    if (division === 'female') return 'female';
+    return null;
+  };
+
+  const sqlGenderExpr = `
+    CASE
+      WHEN LOWER(COALESCE(p.gender, '')) IN ('m','male','men','man','boy') THEN 'male'
+      WHEN LOWER(COALESCE(p.gender, '')) IN ('f','female','women','woman','girl') THEN 'female'
+      ELSE ''
+    END
+  `;
+
   const syncPlayoffBronzeSlot = (tournamentId: string, match: any, winnerId: number) => {
     const tournament = db.prepare(`
       SELECT match_play_type
@@ -852,15 +875,15 @@ async function startServer() {
     const roundMatchCount = db.prepare(`
       SELECT COUNT(*) as count
       FROM brackets
-      WHERE tournament_id = ? AND round = ?
-    `).get(tournamentId, match.round) as any;
+      WHERE tournament_id = ? AND division = ? AND round = ?
+    `).get(tournamentId, String(match.division || 'all'), match.round) as any;
     if ((roundMatchCount?.count || 0) !== 2) return;
 
     const bronzeMatch = db.prepare(`
       SELECT id, participant1_id, participant2_id, winner_id
       FROM brackets
-      WHERE tournament_id = ? AND round = ? AND match_index = 1
-    `).get(tournamentId, match.round + 1) as any;
+      WHERE tournament_id = ? AND division = ? AND round = ? AND match_index = 1
+    `).get(tournamentId, String(match.division || 'all'), match.round + 1) as any;
     if (!bronzeMatch) return;
 
     const loserId = winnerId === match.participant1_id
@@ -888,7 +911,7 @@ async function startServer() {
 
   const advanceWinnerToNextRound = (tournamentId: string, matchId: number, winnerId: number) => {
     const match = db.prepare(`
-      SELECT id, round, match_index, participant1_id, participant2_id
+      SELECT id, division, round, match_index, participant1_id, participant2_id
       FROM brackets
       WHERE id = ? AND tournament_id = ?
     `).get(matchId, tournamentId) as any;
@@ -911,11 +934,12 @@ async function startServer() {
         participant2_source_outcome
       FROM brackets
       WHERE tournament_id = ?
+        AND division = ?
         AND (
           participant1_source_match_id = ?
           OR participant2_source_match_id = ?
         )
-    `).all(tournamentId, matchId, matchId) as any[];
+    `).all(tournamentId, String(match.division || 'all'), matchId, matchId) as any[];
 
     if (linkedMatches.length > 0) {
       for (const linked of linkedMatches) {
@@ -965,8 +989,8 @@ async function startServer() {
     const nextMatch = db.prepare(`
       SELECT id, participant1_id, participant2_id, winner_id
       FROM brackets
-      WHERE tournament_id = ? AND round = ? AND match_index = ?
-    `).get(tournamentId, match.round + 1, Math.floor(match.match_index / 2)) as any;
+      WHERE tournament_id = ? AND division = ? AND round = ? AND match_index = ?
+    `).get(tournamentId, String(match.division || 'all'), match.round + 1, Math.floor(match.match_index / 2)) as any;
 
     if (!nextMatch) return;
 
@@ -995,18 +1019,19 @@ async function startServer() {
     if (refreshedNext.winner_id) return;
   };
 
-  const sanitizeBracketStateForDisplay = (tournamentId: string, matchPlayType: string | null | undefined) => {
+  const sanitizeBracketStateForDisplay = (tournamentId: string, matchPlayType: string | null | undefined, division: 'all' | 'male' | 'female' = 'all') => {
     const matches = db.prepare(`
-      SELECT id, round, match_index, participant1_id, participant2_id, participant3_id, winner_id
+      SELECT id, division, round, match_index, participant1_id, participant2_id, participant3_id, winner_id
       FROM brackets
       WHERE tournament_id = ?
+        AND (? = 'all' OR division = ?)
       ORDER BY round ASC, match_index ASC
-    `).all(tournamentId) as any[];
+    `).all(tournamentId, division, division) as any[];
     if (!matches.length) return;
 
-    const keyFor = (round: number, matchIndex: number) => `${round}:${matchIndex}`;
+    const keyFor = (div: string, round: number, matchIndex: number) => `${div}:${round}:${matchIndex}`;
     const byKey = new Map<string, any>();
-    matches.forEach((m) => byKey.set(keyFor(Number(m.round) || 0, Number(m.match_index) || 0), m));
+    matches.forEach((m) => byKey.set(keyFor(String(m.division || 'all'), Number(m.round) || 0, Number(m.match_index) || 0), m));
 
     const clearInvalidWinnerIfNeeded = (m: any) => {
       const p1 = Number(m.participant1_id) || 0;
@@ -1050,8 +1075,9 @@ async function startServer() {
           continue;
         }
 
-        const prevLeft = byKey.get(keyFor(round - 1, matchIndex * 2));
-        const prevRight = byKey.get(keyFor(round - 1, matchIndex * 2 + 1));
+        const div = String(m.division || 'all');
+        const prevLeft = byKey.get(keyFor(div, round - 1, matchIndex * 2));
+        const prevRight = byKey.get(keyFor(div, round - 1, matchIndex * 2 + 1));
         if (!prevLeft && !prevRight) continue;
 
         const expectedP1 = Number(prevLeft?.winner_id) > 0 ? Number(prevLeft.winner_id) : null;
@@ -1087,7 +1113,7 @@ async function startServer() {
         }
 
         clearInvalidWinnerIfNeeded(m);
-        byKey.set(keyFor(round, matchIndex), m);
+        byKey.set(keyFor(div, round, matchIndex), m);
       }
     }
   };
@@ -2138,13 +2164,14 @@ const existing = db
   // Brackets
   app.get("/api/tournaments/:id/brackets", (req, res) => {
     const tournamentId = req.params.id;
+    const division = parseBracketDivision(req.query.division);
     const tournament = db.prepare("SELECT match_play_type FROM tournaments WHERE id = ?").get(tournamentId) as any;
 
     // Backfill missing rounds for legacy Team Selection Playoff brackets created before full flow support.
     if (tournament?.match_play_type === 'team_selection_playoff') {
-      const hasSemi0 = db.prepare("SELECT id FROM brackets WHERE tournament_id = ? AND round = 2 AND match_index = 0 LIMIT 1").get(tournamentId) as any;
-      const hasSemi1 = db.prepare("SELECT id FROM brackets WHERE tournament_id = ? AND round = 2 AND match_index = 1 LIMIT 1").get(tournamentId) as any;
-      const hasFinal = db.prepare("SELECT id FROM brackets WHERE tournament_id = ? AND round = 3 AND match_index = 0 LIMIT 1").get(tournamentId) as any;
+      const hasSemi0 = db.prepare("SELECT id FROM brackets WHERE tournament_id = ? AND division = 'all' AND round = 2 AND match_index = 0 LIMIT 1").get(tournamentId) as any;
+      const hasSemi1 = db.prepare("SELECT id FROM brackets WHERE tournament_id = ? AND division = 'all' AND round = 2 AND match_index = 1 LIMIT 1").get(tournamentId) as any;
+      const hasFinal = db.prepare("SELECT id FROM brackets WHERE tournament_id = ? AND division = 'all' AND round = 3 AND match_index = 0 LIMIT 1").get(tournamentId) as any;
 
       if (!hasSemi0) {
         db.prepare(`
@@ -2166,7 +2193,7 @@ const existing = db
       }
     }
 
-    sanitizeBracketStateForDisplay(tournamentId, tournament?.match_play_type);
+    sanitizeBracketStateForDisplay(tournamentId, tournament?.match_play_type, division);
 
     const rows = db.prepare(`
       SELECT b.*, 
@@ -2188,8 +2215,9 @@ const existing = db
       LEFT JOIN teams t3 ON p3.team_id = t3.id
       LEFT JOIN teams tw ON w.team_id = tw.id
       WHERE b.tournament_id = ?
+        AND (? = 'all' OR b.division = ?)
       ORDER BY b.round ASC, b.match_index ASC
-    `).all(tournamentId);
+    `).all(tournamentId, division, division);
     res.json(rows);
   });
 
@@ -2200,6 +2228,10 @@ const existing = db
 
     const parsedQualified = Number.parseInt(String(req.query.qualified_count || ''), 10);
     const requestedQualified = Number.isFinite(parsedQualified) ? Math.max(0, parsedQualified) : 0;
+    const requestedGenderFilterRaw = String(req.query.gender || req.query.gender_filter || '').trim().toLowerCase();
+    const requestedGenderFilter = requestedGenderFilterRaw === 'male' || requestedGenderFilterRaw === 'female'
+      ? requestedGenderFilterRaw
+      : '';
 
     if (tournament.type === 'team') {
       const rankedTeams = db.prepare(`
@@ -2238,13 +2270,19 @@ const existing = db
       SELECT
         p.id as id,
         (p.first_name || CASE WHEN p.last_name IS NOT NULL AND p.last_name != '' THEN (' ' || UPPER(SUBSTR(p.last_name,1,1)) || '.') ELSE '' END || CASE WHEN p.hands IS NOT NULL AND p.hands != '' THEN (' (' || p.hands || ')') ELSE '' END) as name,
-        COALESCE(SUM(s.score), 0) as total_score
+        COALESCE(SUM(s.score), 0) + COALESCE(extra.additional_score, 0) as total_score,
+        ${sqlGenderExpr} as normalized_gender
       FROM participants p
       LEFT JOIN scores s ON s.participant_id = p.id
+      LEFT JOIN standings_additional_scores extra
+        ON extra.tournament_id = p.tournament_id
+        AND extra.target_kind = 'participant'
+        AND extra.target_id = p.id
       WHERE p.tournament_id = ?
+        AND (? = '' OR ${sqlGenderExpr} = ?)
       GROUP BY p.id
       ORDER BY total_score DESC, p.id ASC
-    `).all(tournamentId) as any[];
+    `).all(tournamentId, requestedGenderFilter, requestedGenderFilter) as any[];
 
     const effectiveQualified = requestedQualified > 0
       ? Math.min(requestedQualified, rankedParticipants.length)
@@ -2293,7 +2331,12 @@ const existing = db
   });
 
   app.delete("/api/tournaments/:id/brackets", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
-    const info = db.prepare("DELETE FROM brackets WHERE tournament_id = ?").run(req.params.id);
+    const division = parseBracketDivision(req.query.division);
+    const info = db.prepare(`
+      DELETE FROM brackets
+      WHERE tournament_id = ?
+        AND (? = 'all' OR division = ?)
+    `).run(req.params.id, division, division);
     res.json({ success: true, deleted: info.changes || 0 });
   });
 
@@ -2301,6 +2344,8 @@ const existing = db
     const tournamentId = req.params.id;
     const tournament = db.prepare("SELECT type, match_play_type, qualified_count, playoff_winners_count FROM tournaments WHERE id = ?").get(tournamentId) as any;
     if (!tournament) return res.status(404).json({ error: "Tournament not found" });
+    const division = parseBracketDivision(req.body?.division);
+    const requestedGenderFilter = divisionGenderFilter(division);
 
     const requestedMatchPlayType = (req.body?.match_play_type || tournament.match_play_type || 'single_elimination').toString();
     const parsedRequestedQualified = Number.parseInt(req.body?.qualified_count, 10);
@@ -2405,13 +2450,18 @@ const existing = db
       qualifiedEntries = rankedTeams;
     } else if (qualifiedEntries.length === 0) {
       const rankedParticipants = db.prepare(`
-        SELECT p.id as participant_id, COALESCE(SUM(s.score), 0) as total_score
+        SELECT p.id as participant_id, COALESCE(SUM(s.score), 0) + COALESCE(extra.additional_score, 0) as total_score
         FROM participants p
         LEFT JOIN scores s ON s.participant_id = p.id
+        LEFT JOIN standings_additional_scores extra
+          ON extra.tournament_id = p.tournament_id
+          AND extra.target_kind = 'participant'
+          AND extra.target_id = p.id
         WHERE p.tournament_id = ?
+          AND (? IS NULL OR ${sqlGenderExpr} = ?)
         GROUP BY p.id
         ORDER BY total_score DESC, p.id ASC
-      `).all(tournamentId) as any[];
+      `).all(tournamentId, requestedGenderFilter, requestedGenderFilter) as any[];
       qualifiedEntries = rankedParticipants;
     }
 
@@ -2429,68 +2479,112 @@ const existing = db
     
     if (participants.length < 2) return res.status(400).json({ error: "Need at least 2 participants" });
 
-    db.prepare("DELETE FROM brackets WHERE tournament_id = ?").run(tournamentId);
+    db.prepare(`
+      DELETE FROM brackets
+      WHERE tournament_id = ?
+        AND (? = 'all' OR division = ?)
+    `).run(tournamentId, division, division);
 
     if (requestedMatchPlayType === 'stepladder') {
-      const stepladderSeeds = participants.slice(0, 6);
-      if (stepladderSeeds.length < 6) {
-        return res.status(400).json({ error: 'Stepladder requires at least 6 qualified participants (seeds 1-6)' });
+      const stepladderSeeds = participants.slice(0, Math.max(0, effectiveQualifiedCount));
+      if (stepladderSeeds.length < 3) {
+        return res.status(400).json({ error: 'Stepladder requires at least 3 qualified participants' });
       }
 
-      const seed1 = stepladderSeeds[0];
-      const seed2 = stepladderSeeds[1];
-      const seed3 = stepladderSeeds[2];
-      const seed4 = stepladderSeeds[3];
-      const seed5 = stepladderSeeds[4];
-      const seed6 = stepladderSeeds[5];
+      if (stepladderSeeds.length >= 6) {
+        const seed1 = stepladderSeeds[0];
+        const seed2 = stepladderSeeds[1];
+        const seed3 = stepladderSeeds[2];
+        const seed4 = stepladderSeeds[3];
+        const seed5 = stepladderSeeds[4];
+        const seed6 = stepladderSeeds[5];
 
+        db.prepare(`
+          INSERT INTO brackets (
+            tournament_id, division, round, match_index,
+            participant1_id, participant2_id, participant3_id,
+            participant1_seed, participant2_seed, participant3_seed,
+            winner_id
+          )
+          VALUES (?, ?, 1, 0, ?, ?, ?, ?, ?, ?, NULL)
+        `).run(tournamentId, division, seed4.id, seed5.id, seed6.id, seed4.seed, seed5.seed, seed6.seed);
+
+        db.prepare(`
+          INSERT INTO brackets (
+            tournament_id, division, round, match_index,
+            participant1_id, participant2_id,
+            participant1_seed, participant2_seed,
+            winner_id
+          )
+          VALUES (?, ?, 2, 0, NULL, ?, NULL, ?, NULL)
+        `).run(tournamentId, division, seed3.id, seed3.seed);
+
+        db.prepare(`
+          INSERT INTO brackets (
+            tournament_id, division, round, match_index,
+            participant1_id, participant2_id,
+            participant1_seed, participant2_seed,
+            winner_id
+          )
+          VALUES (?, ?, 3, 0, NULL, ?, NULL, ?, NULL)
+        `).run(tournamentId, division, seed2.id, seed2.seed);
+
+        db.prepare(`
+          INSERT INTO brackets (
+            tournament_id, division, round, match_index,
+            participant1_id, participant2_id,
+            participant1_seed, participant2_seed,
+            winner_id
+          )
+          VALUES (?, ?, 4, 0, NULL, ?, NULL, ?, NULL)
+        `).run(tournamentId, division, seed1.id, seed1.seed);
+
+        const generatedMatches = db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ? AND division = ?").get(tournamentId, division) as any;
+        return res.json({
+          success: true,
+          division,
+          match_play_type: requestedMatchPlayType,
+          qualified_count: 6,
+          rounds_count: 4,
+          generated_matches: generatedMatches?.count || 4,
+        });
+      }
+
+      const first = stepladderSeeds[stepladderSeeds.length - 2];
+      const second = stepladderSeeds[stepladderSeeds.length - 1];
       db.prepare(`
         INSERT INTO brackets (
-          tournament_id, round, match_index,
-          participant1_id, participant2_id, participant3_id,
-          participant1_seed, participant2_seed, participant3_seed,
-          winner_id
-        )
-        VALUES (?, 1, 0, ?, ?, ?, ?, ?, ?, NULL)
-      `).run(tournamentId, seed4.id, seed5.id, seed6.id, seed4.seed, seed5.seed, seed6.seed);
-
-      db.prepare(`
-        INSERT INTO brackets (
-          tournament_id, round, match_index,
+          tournament_id, division, round, match_index,
           participant1_id, participant2_id,
           participant1_seed, participant2_seed,
           winner_id
         )
-        VALUES (?, 2, 0, NULL, ?, NULL, ?, NULL)
-      `).run(tournamentId, seed3.id, seed3.seed);
+        VALUES (?, ?, 1, 0, ?, ?, ?, ?, NULL)
+      `).run(tournamentId, division, first.id, second.id, first.seed, second.seed);
 
-      db.prepare(`
-        INSERT INTO brackets (
-          tournament_id, round, match_index,
-          participant1_id, participant2_id,
-          participant1_seed, participant2_seed,
-          winner_id
-        )
-        VALUES (?, 3, 0, NULL, ?, NULL, ?, NULL)
-      `).run(tournamentId, seed2.id, seed2.seed);
+      let round = 2;
+      for (let i = stepladderSeeds.length - 3; i >= 0; i -= 1) {
+        const seed = stepladderSeeds[i];
+        db.prepare(`
+          INSERT INTO brackets (
+            tournament_id, division, round, match_index,
+            participant1_id, participant2_id,
+            participant1_seed, participant2_seed,
+            winner_id
+          )
+          VALUES (?, ?, ?, 0, NULL, ?, NULL, ?, NULL)
+        `).run(tournamentId, division, round, seed.id, seed.seed);
+        round += 1;
+      }
 
-      db.prepare(`
-        INSERT INTO brackets (
-          tournament_id, round, match_index,
-          participant1_id, participant2_id,
-          participant1_seed, participant2_seed,
-          winner_id
-        )
-        VALUES (?, 4, 0, NULL, ?, NULL, ?, NULL)
-      `).run(tournamentId, seed1.id, seed1.seed);
-
-      const generatedMatches = db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ?").get(tournamentId) as any;
+      const generatedMatches = db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ? AND division = ?").get(tournamentId, division) as any;
       return res.json({
         success: true,
+        division,
         match_play_type: requestedMatchPlayType,
         qualified_count: stepladderSeeds.length,
-        rounds_count: 4,
-        generated_matches: generatedMatches?.count || 4,
+        rounds_count: stepladderSeeds.length - 1,
+        generated_matches: generatedMatches?.count || (stepladderSeeds.length - 1),
       });
     }
 
@@ -2544,29 +2638,30 @@ const existing = db
         }
 
         db.prepare(`
-          INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
-          VALUES (?, 1, ?, ?, ?, ?, ?, NULL)
-        `).run(tournamentId, i, left.id, right.id, left.seed, right.seed);
+          INSERT INTO brackets (tournament_id, division, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
+          VALUES (?, ?, 1, ?, ?, ?, ?, ?, NULL)
+        `).run(tournamentId, division, i, left.id, right.id, left.seed, right.seed);
       }
 
       db.prepare(`
-        INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
-        VALUES (?, 2, 0, NULL, NULL, NULL, NULL, NULL)
-      `).run(tournamentId);
+        INSERT INTO brackets (tournament_id, division, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
+        VALUES (?, ?, 2, 0, NULL, NULL, NULL, NULL, NULL)
+      `).run(tournamentId, division);
 
       db.prepare(`
-        INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
-        VALUES (?, 2, 1, NULL, NULL, NULL, NULL, NULL)
-      `).run(tournamentId);
+        INSERT INTO brackets (tournament_id, division, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
+        VALUES (?, ?, 2, 1, NULL, NULL, NULL, NULL, NULL)
+      `).run(tournamentId, division);
 
       db.prepare(`
-        INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
-        VALUES (?, 3, 0, NULL, NULL, NULL, NULL, NULL)
-      `).run(tournamentId);
+        INSERT INTO brackets (tournament_id, division, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
+        VALUES (?, ?, 3, 0, NULL, NULL, NULL, NULL, NULL)
+      `).run(tournamentId, division);
 
-      const generatedMatches = db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ?").get(tournamentId) as any;
+      const generatedMatches = db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ? AND division = ?").get(tournamentId, division) as any;
       return res.json({
         success: true,
+        division,
         match_play_type: requestedMatchPlayType,
         qualified_count: 8,
         seeds_count: 8,
@@ -2599,9 +2694,9 @@ const existing = db
             : null;
 
           db.prepare(`
-            INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(tournamentId, round, i, p1?.id || null, p2?.id || null, p1Seed || null, p2Seed || null, winnerId);
+            INSERT INTO brackets (tournament_id, division, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(tournamentId, division, round, i, p1?.id || null, p2?.id || null, p1Seed || null, p2Seed || null, winnerId);
         }
         round += 1;
         roundMatches = Math.floor(roundMatches / 2);
@@ -2609,24 +2704,25 @@ const existing = db
 
       if (bracketSize >= 4) {
         db.prepare(`
-          INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(tournamentId, roundsToFinal, 1, null, null, null, null, null);
+          INSERT INTO brackets (tournament_id, division, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(tournamentId, division, roundsToFinal, 1, null, null, null, null, null);
       }
 
       const autoWinnerMatches = db.prepare(`
         SELECT id, winner_id
         FROM brackets
-        WHERE tournament_id = ? AND round = 1 AND winner_id IS NOT NULL
-      `).all(tournamentId) as any[];
+        WHERE tournament_id = ? AND division = ? AND round = 1 AND winner_id IS NOT NULL
+      `).all(tournamentId, division) as any[];
 
       for (const m of autoWinnerMatches) {
         advanceWinnerToNextRound(tournamentId, m.id, m.winner_id);
       }
 
-      const generatedMatches = db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ?").get(tournamentId) as any;
+      const generatedMatches = db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ? AND division = ?").get(tournamentId, division) as any;
       return res.json({
         success: true,
+        division,
         match_play_type: requestedMatchPlayType,
         qualified_count: effectiveQualifiedCount,
         seeds_count: bracketSize,
@@ -2670,39 +2766,39 @@ const existing = db
       const g2Pairs = makeQFPairs(group2);
 
       const ins = db.prepare(`
-        INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO brackets (tournament_id, division, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       // Round 1: Group QFs (G1 first, then G2)
       for (let i = 0; i < g1Pairs.length; i++) {
         const [p1, p2] = g1Pairs[i];
-        ins.run(tournamentId, 1, i, p1.id, p2.id, p1.seed, p2.seed);
+        ins.run(tournamentId, division, 1, i, p1.id, p2.id, p1.seed, p2.seed);
       }
       for (let i = 0; i < g2Pairs.length; i++) {
         const [p1, p2] = g2Pairs[i];
-        ins.run(tournamentId, 1, g1Pairs.length + i, p1.id, p2.id, p1.seed, p2.seed);
+        ins.run(tournamentId, division, 1, g1Pairs.length + i, p1.id, p2.id, p1.seed, p2.seed);
       }
 
       // Round 2: Group SFs
       const g1SFCount = Math.ceil(g1Pairs.length / 2);
       const g2SFCount = Math.ceil(g2Pairs.length / 2);
       for (let i = 0; i < g1SFCount + g2SFCount; i++) {
-        ins.run(tournamentId, 2, i, null, null, null, null);
+        ins.run(tournamentId, division, 2, i, null, null, null, null);
       }
 
       // Round 3: Cross Semi-Finals
-      ins.run(tournamentId, 3, 0, null, null, null, null); // G1W1 vs G2W1
-      ins.run(tournamentId, 3, 1, null, null, null, null); // G1W2 vs G2W2
+      ins.run(tournamentId, division, 3, 0, null, null, null, null); // G1W1 vs G2W1
+      ins.run(tournamentId, division, 3, 1, null, null, null, null); // G1W2 vs G2W2
 
       // Round 4: Finals
-      ins.run(tournamentId, 4, 0, null, null, null, null); // Championship
-      ins.run(tournamentId, 4, 1, null, null, null, null); // 3rd Place
+      ins.run(tournamentId, division, 4, 0, null, null, null, null); // Championship
+      ins.run(tournamentId, division, 4, 1, null, null, null, null); // 3rd Place
 
       // Build match ID lookup
       const allBracketRows = db.prepare(
-        `SELECT id, round, match_index FROM brackets WHERE tournament_id = ? ORDER BY round, match_index`
-      ).all(tournamentId) as any[];
+        `SELECT id, round, match_index FROM brackets WHERE tournament_id = ? AND division = ? ORDER BY round, match_index`
+      ).all(tournamentId, division) as any[];
       const gid = (round: number, idx: number): number | null =>
         (allBracketRows.find((r: any) => Number(r.round) === round && Number(r.match_index) === idx) as any)?.id ?? null;
 
@@ -2747,9 +2843,10 @@ const existing = db
           .run(r3m1Id, 'loser', r4m1Id);
       }
 
-      const genCount = (db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ?").get(tournamentId) as any)?.count || 0;
+      const genCount = (db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ? AND division = ?").get(tournamentId, division) as any)?.count || 0;
       return res.json({
         success: true,
+        division,
         match_play_type: requestedMatchPlayType,
         qualified_count: participants.length,
         seeds_count: participants.length,
@@ -2769,9 +2866,9 @@ const existing = db
         const p2 = currentRoundParticipants[i * 2 + 1];
         
         db.prepare(`
-          INSERT INTO brackets (tournament_id, round, match_index, participant1_id, participant2_id)
-          VALUES (?, ?, ?, ?, ?)
-        `).run(tournamentId, round, i, p1?.id || null, p2?.id || null);
+          INSERT INTO brackets (tournament_id, division, round, match_index, participant1_id, participant2_id)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(tournamentId, division, round, i, p1?.id || null, p2?.id || null);
       }
       
       // For simplicity, we just create the first round for now
@@ -2781,6 +2878,7 @@ const existing = db
     
     res.json({
       success: true,
+      division,
       match_play_type: requestedMatchPlayType,
       qualified_count: effectiveQualifiedCount,
       generated_matches: Math.ceil(participants.length / 2)
@@ -2790,6 +2888,7 @@ const existing = db
   app.post("/api/tournaments/:id/brackets/generate-manual", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
     try {
       const tournamentId = req.params.id;
+      const division = parseBracketDivision(req.body?.division);
       const tournament = db.prepare("SELECT id FROM tournaments WHERE id = ?").get(tournamentId) as any;
       if (!tournament) return res.status(404).json({ error: "Tournament not found" });
 
@@ -2801,7 +2900,11 @@ const existing = db
       const roundsCount = Number.isFinite(parsedRounds) ? Math.max(1, parsedRounds) : 3;
       const round1Matches = Number.isFinite(parsedRound1Matches) ? Math.max(1, parsedRound1Matches) : 4;
 
-      db.prepare("DELETE FROM brackets WHERE tournament_id = ?").run(tournamentId);
+      db.prepare(`
+        DELETE FROM brackets
+        WHERE tournament_id = ?
+          AND (? = 'all' OR division = ?)
+      `).run(tournamentId, division, division);
 
       let round = 1;
       let matchesInRound = round1Matches;
@@ -2811,6 +2914,7 @@ const existing = db
           db.prepare(`
             INSERT INTO brackets (
               tournament_id,
+              division,
               round,
               match_index,
               participant1_id,
@@ -2823,8 +2927,8 @@ const existing = db
               participant2_source_outcome,
               winner_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(tournamentId, round, i, null, null, null, null, null, null, null, null, null);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(tournamentId, division, round, i, null, null, null, null, null, null, null, null, null);
         }
         round += 1;
         matchesInRound = Math.floor(matchesInRound / 2);
@@ -2835,6 +2939,7 @@ const existing = db
         db.prepare(`
           INSERT INTO brackets (
             tournament_id,
+            division,
             round,
             match_index,
             participant1_id,
@@ -2847,16 +2952,16 @@ const existing = db
             participant2_source_outcome,
             winner_id
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(tournamentId, roundsCount, 1, null, null, null, null, null, null, null, null, null);
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(tournamentId, division, roundsCount, 1, null, null, null, null, null, null, null, null, null);
       }
 
       if (rawLinks.length > 0) {
         const rows = db.prepare(`
           SELECT id, round, match_index
           FROM brackets
-          WHERE tournament_id = ?
-        `).all(tournamentId) as any[];
+          WHERE tournament_id = ? AND division = ?
+        `).all(tournamentId, division) as any[];
 
         const idByRoundMatch = new Map<string, number>();
         for (const row of rows) {
@@ -2886,8 +2991,8 @@ const existing = db
         }
       }
 
-      const generated = db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ?").get(tournamentId) as any;
-      res.json({ success: true, generated_matches: generated?.count || 0, rounds_count: roundsCount, round1_matches: round1Matches, winners_mode: winnersMode });
+      const generated = db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ? AND division = ?").get(tournamentId, division) as any;
+      res.json({ success: true, division, generated_matches: generated?.count || 0, rounds_count: roundsCount, round1_matches: round1Matches, winners_mode: winnersMode });
     } catch (err: any) {
       console.error('Failed to generate manual brackets:', err);
       res.status(500).json({ error: err?.message || 'Failed to generate manual brackets' });

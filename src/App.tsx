@@ -5953,6 +5953,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const bracketViewStorageKey = `btm_bracket_view_mode_${tournament.id}`;
   const bracketScoreDraftsStorageKey = `btm_bracket_score_drafts_${tournament.id}`;
   const bracketSeedOverridesStorageKey = `btm_bracket_seed_overrides_${tournament.id}`;
+  const bracketDivisionStorageKey = `btm_bracket_division_${tournament.id}`;
   const [matches, setMatches] = useState<any[]>([]);
   const [seeds, setSeeds] = useState<any[]>([]);
   const [bracketParticipants, setBracketParticipants] = useState<Participant[]>([]);
@@ -5971,6 +5972,10 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     tournament.match_play_type || 'single_elimination'
   );
   const [publicPreviewMatchPlayType, setPublicPreviewMatchPlayType] = useState<Tournament['match_play_type'] | null>(null);
+  const [bracketDivision, setBracketDivision] = useState<'all' | 'male' | 'female'>(() => {
+    const stored = localStorage.getItem(`btm_bracket_division_${tournament.id}`);
+    return stored === 'male' || stored === 'female' ? stored : 'all';
+  });
   const [qualifiedCount, setQualifiedCount] = useState<number>(
     Number.isFinite(Number.parseInt(String(tournament.qualified_count), 10))
       ? Number.parseInt(String(tournament.qualified_count), 10)
@@ -6000,6 +6005,12 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     const stored = localStorage.getItem(`btm_bracket_view_mode_${tournament.id}`);
     return stored === 'visual' ? 'visual' : 'cards';
   });
+
+  const supportsDivisionBrackets = tournament.type === 'individual';
+  const bracketDivisionForApi: 'all' | 'male' | 'female' = supportsDivisionBrackets ? bracketDivision : 'all';
+  const bracketGenderFilter: 'male' | 'female' | undefined = bracketDivisionForApi === 'male' || bracketDivisionForApi === 'female'
+    ? bracketDivisionForApi
+    : undefined;
 
   const getNormalizedBracketSettings = () => ({
     match_play_type: matchPlayType,
@@ -6174,11 +6185,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 
   useEffect(() => {
     loadBrackets();
-  }, [tournament.id]);
+  }, [tournament.id, bracketDivisionForApi]);
 
   useEffect(() => {
     loadSeeds();
-  }, [tournament.id, qualifiedCount]);
+  }, [tournament.id, qualifiedCount, bracketDivisionForApi]);
 
   useEffect(() => {
     setSettingsHydrated(false);
@@ -6269,7 +6280,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     setLoading(true);
     try {
       const [bracketsData, participantsData, teamsData] = await Promise.all([
-        api.getBrackets(tournament.id),
+        api.getBrackets(tournament.id, { division: bracketDivisionForApi }),
         api.getParticipants(tournament.id),
         tournament.type === 'team' ? api.getTeams(tournament.id) : Promise.resolve([] as Team[]),
       ]);
@@ -6414,7 +6425,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const loadSeeds = async () => {
     try {
       try {
-        const data = await api.getSeeds(tournament.id, qualifiedCount);
+        const data = await api.getSeeds(tournament.id, qualifiedCount, { gender: bracketGenderFilter });
         if (Array.isArray(data.seeds) && data.seeds.length > 0) {
           setSeeds(data.seeds);
           return data.seeds;
@@ -6466,8 +6477,12 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         return computedSeeds;
       }
 
+      const eligibleParticipants = bracketGenderFilter
+        ? participantsData.filter((participant) => String(participant.gender || '').toLowerCase().startsWith(bracketGenderFilter.charAt(0)))
+        : participantsData;
+
       const playerInfo = new Map<number, { id: number; name: string; total_score: number }>();
-      for (const participant of participantsData) {
+      for (const participant of eligibleParticipants) {
         playerInfo.set(participant.id, {
           id: participant.id,
           name: `${participant.first_name || ''} ${participant.last_name || ''}`.trim() || 'Unknown Player',
@@ -6677,7 +6692,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         }
       }
 
-      await api.clearBrackets(tournament.id);
+      await api.clearBrackets(tournament.id, { division: bracketDivisionForApi });
       setMatches([]);
       setMatchScoreDrafts({});
       persistMatchScoreDraftsToStorage({});
@@ -6778,13 +6793,14 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         }
 
         await api.generateManualBrackets(tournament.id, {
+          division: bracketDivisionForApi,
           rounds_count: roundsToFinal,
           round1_matches: round1Matches,
           winners_mode: Math.min(3, Math.max(1, Number(playoffWinnersCount) || 1)) > 1 ? '3' : '1',
           links: customLinks,
         });
 
-        const freshMatches = await api.getBrackets(tournament.id);
+        const freshMatches = await api.getBrackets(tournament.id, { division: bracketDivisionForApi });
         const roundOneMatches = freshMatches
           .filter((m: any) => Number(m.round) === 1)
           .sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
@@ -6817,6 +6833,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         setCustomRuleTableLocked(true);
       } else {
         await api.generateBrackets(tournament.id, {
+          division: bracketDivisionForApi,
           match_play_type: matchPlayType,
           qualified_count: orderedSeedIds.length,
           playoff_winners_count: Math.min(3, Math.max(1, Number(playoffWinnersCount) || 1)),
@@ -6857,6 +6874,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const handleExportBrackets = () => {
     const payload = {
       tournament_id: tournament.id,
+      division: bracketDivisionForApi,
       match_play_type: matchPlayType,
       qualified_count: qualifiedCount,
       playoff_winners_count: playoffWinnersCount,
@@ -6951,7 +6969,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           }
         }
 
-        const refreshedMatches = await api.getBrackets(tournament.id);
+        const refreshedMatches = await api.getBrackets(tournament.id, { division: bracketDivisionForApi });
         setMatches(refreshedMatches);
 
         const refreshedByKey = new Map<string, any>();
@@ -6991,7 +7009,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const handleClearBrackets = async () => {
     if (!confirm('Clear all generated brackets for this tournament?')) return;
     try {
-      await api.clearBrackets(tournament.id);
+      await api.clearBrackets(tournament.id, { division: bracketDivisionForApi });
       setCustomRuleTableLocked(false);
       setMatchScoreDrafts({});
       persistMatchScoreDraftsToStorage({});
@@ -7540,8 +7558,17 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   }, [bracketViewStorageKey]);
 
   useEffect(() => {
+    const stored = localStorage.getItem(bracketDivisionStorageKey);
+    setBracketDivision(stored === 'male' || stored === 'female' ? stored : 'all');
+  }, [bracketDivisionStorageKey]);
+
+  useEffect(() => {
     localStorage.setItem(bracketViewStorageKey, bracketViewMode);
   }, [bracketViewMode, bracketViewStorageKey]);
+
+  useEffect(() => {
+    localStorage.setItem(bracketDivisionStorageKey, bracketDivision);
+  }, [bracketDivision, bracketDivisionStorageKey]);
 
   useEffect(() => {
     if (bracketViewMode !== 'visual' || matches.length === 0) {
@@ -8117,6 +8144,22 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 <option value="team_selection_playoff">Team Selection Playoff</option>
               </select>
             </div>
+
+            {supportsDivisionBrackets && (
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">Division</label>
+                <select
+                  value={bracketDivision}
+                  onChange={(e: any) => setBracketDivision((e.target.value || 'all') as 'all' | 'male' | 'female')}
+                  className="w-full h-8 px-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 bg-white text-[13px]"
+                >
+                  <option value="all">All</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+                <p className="text-[10px] text-black/45 mt-1">Generate and manage brackets per selected division without deleting the other division.</p>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-2">
               <div>
