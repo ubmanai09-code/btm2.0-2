@@ -1,0 +1,32 @@
+{
+  "global": [
+    {
+      "id": "sponsor-1",
+      "kind": "sponsor",
+      "name": "General Sponsor",
+      "logo": "/logo.png",
+      "description": "Primary supporter for tournament operations and event logistics.",
+      "contacts": "info@generalsponsor.com | +1 000 000 0000",
+      "url": "https://example.com"
+    },
+    {
+      "id": "partner-1",
+      "kind": "partner",
+      "name": "Official Partner",
+      "logo": "/logo.png",
+      "description": "Technology and media partner supporting tournament coverage.",
+      "contacts": "support@officialpartner.com | +1 000 000 0001",
+      "url": "https://example.org"
+    }
+  ],
+  "tournaments": {},
+  "globalSponsorEnabled": false,
+  "globalSponsor": null,
+  "dashboardPromo": {
+    "enabled": true,
+    "title": "Advertise Here",
+    "subtitle": "Promote your brand with a dashboard promo image.",
+    "image": "",
+    "link": ""
+  }
+}

@@ -6,9 +6,10 @@ export interface Tournament {
   format: string;
   organizer: string;
   logo: string;
-  match_play_type: 'single_elimination' | 'double_elimination' | 'ladder' | 'stepladder' | 'playoff' | 'team_selection_playoff';
+  match_play_type: 'single_elimination' | 'double_elimination' | 'ladder' | 'stepladder' | 'playoff' | 'team_selection_playoff' | 'survivor_elimination';
   qualified_count: number;
   playoff_winners_count: number;
+  known_bracket_format_id?: string | null;
   type: 'individual' | 'team';
   games_count: number;
   genders_rule: string;
@@ -96,6 +97,40 @@ export interface SeedItem {
   total_score: number;
   kind: 'team' | 'participant';
 }
+
+export interface KnownBracketFormat {
+  id: string;
+  name: string;
+  match_play_type: Tournament['match_play_type'];
+  round_match_counts: number[];
+  round_rules: Array<'duel' | 'survivor_cut'>;
+  placement_rules?: {
+    first?: string;
+    second?: string;
+    third?: string;
+  };
+  description?: string;
+  min_qualified_count?: number;
+  recommended_qualified_count?: number;
+}
+
+export type KnownBracketFormatInput = {
+  id: string;
+  name: string;
+  match_play_type: Tournament['match_play_type'];
+  round_match_counts: number[];
+  round_rules: Array<'duel' | 'survivor_cut'>;
+  placement_rules?: {
+    first?: string;
+    second?: string;
+    third?: string;
+  };
+  description?: string;
+  min_qualified_count?: number;
+  recommended_qualified_count?: number;
+};
+
+
 
 export interface AuthSession {
   token: string;
@@ -667,8 +702,9 @@ const api = {
       match_play_type: Tournament['match_play_type'];
       qualified_count: number;
       playoff_winners_count: number;
+      known_bracket_format_id?: string | null;
     }
-  ): Promise<{ success: boolean; settings?: { match_play_type: Tournament['match_play_type']; qualified_count: number; playoff_winners_count: number } }> {
+  ): Promise<{ success: boolean; settings?: { match_play_type: Tournament['match_play_type']; qualified_count: number; playoff_winners_count: number; known_bracket_format_id?: string | null } }> {
     const res = await fetch(`/api/tournaments/${tournamentId}/bracket-settings`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -677,6 +713,48 @@ const api = {
     const data = await api.safeJson(res);
     if (!res.ok) {
       throw new Error(data.error || 'Failed to update bracket settings');
+    }
+    return data;
+  },
+  async getKnownBracketFormats(): Promise<KnownBracketFormat[]> {
+    const res = await fetch('/api/bracket-known-formats');
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to load bracket formats');
+    }
+    return Array.isArray(data?.formats) ? data.formats : [];
+  },
+  async createKnownBracketFormat(payload: KnownBracketFormatInput): Promise<{ success: boolean; format?: KnownBracketFormat }> {
+    const res = await fetch('/api/bracket-known-formats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to create preset');
+    }
+    return data;
+  },
+  async updateKnownBracketFormat(id: string, payload: KnownBracketFormatInput): Promise<{ success: boolean; format?: KnownBracketFormat }> {
+    const res = await fetch(`/api/bracket-known-formats/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to update preset');
+    }
+    return data;
+  },
+  async deleteKnownBracketFormat(id: string): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/bracket-known-formats/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to delete preset');
     }
     return data;
   },
@@ -712,6 +790,13 @@ const api = {
     options: {
       rounds_count: number;
       round1_matches: number;
+      round_match_counts: number[];
+      round_rules?: string[];
+      placement_rules?: {
+        first?: string;
+        second?: string;
+        third?: string;
+      };
       winners_mode: '1' | '3';
       division?: 'all' | 'male' | 'female';
       links?: Array<{
