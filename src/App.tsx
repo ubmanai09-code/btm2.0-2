@@ -2966,9 +2966,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const canManageParticipants = role === 'admin' || role === 'moderator';
   const tx = React.useContext(UiTranslationContext);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState<number[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [mobileRosterTab, setMobileRosterTab] = useState<'players' | 'teams'>('players');
   const [loading, setLoading] = useState(true);
+  // ...existing code...
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showAddTeam, setShowAddTeam] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
@@ -3658,6 +3660,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const activePlayerSearch = normalizedPlayerSearch.length >= 3 ? normalizedPlayerSearch : '';
 
   const filteredParticipants = sortedParticipants.filter((participant) => {
+      // --- Bulk selection logic (must be after filteredParticipants is declared) ---
+      // (removed duplicate bulk selection logic; only keep after filteredParticipants)
     if (!activePlayerSearch) return true;
     const fullName = `${participant.first_name || ''} ${participant.last_name || ''}`.trim().toLowerCase();
     const club = (participant.club || '').trim().toLowerCase();
@@ -3668,6 +3672,26 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       || email.includes(activePlayerSearch)
       || teamName.includes(activePlayerSearch);
   });
+
+  // --- Bulk selection logic (must be after filteredParticipants is declared) ---
+  const allFilteredIds = filteredParticipants.map(p => p.id);
+  const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedParticipantIds.includes(id));
+  const toggleSelectAll = () => {
+    if (allSelected) setSelectedParticipantIds(ids => ids.filter(id => !allFilteredIds.includes(id)));
+    else setSelectedParticipantIds(ids => Array.from(new Set([...ids, ...allFilteredIds])));
+  };
+  const toggleSelectOne = (id: number) => {
+    setSelectedParticipantIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
+  };
+  const handleDeleteSelected = async () => {
+    if (selectedParticipantIds.length === 0) return;
+    if (!confirm(`Are you sure you want to delete ${selectedParticipantIds.length} participant(s)?`)) return;
+    for (const id of selectedParticipantIds) {
+      await api.deleteParticipant(id);
+    }
+    setSelectedParticipantIds([]);
+    loadData();
+  };
 
   const filteredTeams = teams.filter((team) => {
     if (!activePlayerSearch) return true;
@@ -3869,9 +3893,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         <Save size={14} />
                       </Button>
                     )}
-                    <Button size="sm" variant="outline" onClick={handleExportCSV} title="Export Players" ariaLabel="Export Players" className="px-2">
-                      <Upload size={14} />
-                    </Button>
+                    {canManageParticipants && (
+                      <Button size="sm" variant="outline" onClick={handleExportCSV} title="Export Players" ariaLabel="Export Players" className="px-2">
+                        <Upload size={14} />
+                      </Button>
+                    )}
                     {canManageParticipants && (
                       <div className="relative">
                         <input 
@@ -3893,6 +3919,13 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               </div>
             </div>
             <div className="overflow-x-auto">
+            {canManageParticipants && selectedParticipantIds.length > 0 && (
+              <div className="mb-2 flex gap-2 items-center">
+                <Button size="sm" variant="outline" onClick={handleDeleteSelected} title="Delete Selected" ariaLabel="Delete Selected" className="px-2 text-red-700 border-red-300">
+                  <Trash2 size={14} className="mr-1" /> Delete Selected ({selectedParticipantIds.length})
+                </Button>
+              </div>
+            )}
             <table
               ref={playersTableRef}
               className="w-max min-w-[760px] text-left border-collapse"
@@ -3900,8 +3933,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               <thead className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
                 <tr className="text-left">
                   <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 w-10 sticky left-0 z-[3] bg-[#e3f3f6]">#</th>
-                  <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 sticky left-10 z-[3] bg-[#e3f3f6]">{tx('First Name')}</th>
-                  <th className="pl-2 pr-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">{tx('Family Name')}</th>
+                  <th className="px-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 sticky left-10 z-[3] bg-[#e3f3f6]">{tx('First Name')}</th>
+                  <th className="px-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">{tx('Family Name')}</th>
                   <th className="pl-1 pr-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">{tx('Gender')}</th>
                   <th className="pl-2 pr-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">{tx('Hands')}</th>
                   <th className="pl-2 pr-0.5 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">
@@ -3916,7 +3949,10 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     </button>
                   </th>
                   {canManageParticipants && (
-                    <th className="pl-0.5 pr-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right sticky right-0 z-[3] bg-[#e3f3f6]">Actions</th>
+                    <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 w-8 sticky right-0 z-[4] bg-[#e3f3f6]">
+                      <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} style={{ transform: 'scale(0.6)', width: 16, height: 16 }} />
+                      <span className="sr-only">{tx('Select')}</span>
+                    </th>
                   )}
                 </tr>
               </thead>
@@ -3937,33 +3973,37 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   filteredParticipants.map((p, index) => (
                     <tr key={p.id} className={`${participantIssues.has(p.id) ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-[#AFDDE5]/20'} transition-colors`}>
                       <td className={`px-2 py-1.5 font-mono text-[10px] sticky left-0 z-[2] ${participantIssues.has(p.id) ? 'text-red-700 bg-red-50' : 'text-black/60 bg-white'}`}>{index + 1}</td>
-                      <td className={`px-2 py-1.5 uppercase text-xs sticky left-10 z-[2] ${participantIssues.has(p.id) ? 'text-red-700 bg-red-50' : 'text-black bg-white'}`}>
+                      <td
+                        className={`px-1 py-1.5 uppercase text-xs sticky left-10 z-[2] ${participantIssues.has(p.id) ? 'text-red-700 bg-red-50' : 'text-black bg-white'}`}
+                        onDoubleClick={() => { if (canManageParticipants) { setEditingPlayer(p); setShowAddPlayer(true); } }}
+                        style={{ cursor: canManageParticipants ? 'pointer' : undefined }}
+                        title={canManageParticipants ? 'Double-click to edit participant' : undefined}
+                      >
                         <span className="inline-flex items-center gap-1">
                           {renderNameWithFemaleSpotAfter(p, { includeLastName: false })}
                         </span>
                       </td>
-                      <td className={`pl-2 pr-1 py-1.5 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>{p.last_name || '-'}</td>
+                      <td className={`px-1 py-1.5 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>{p.last_name || '-'}</td>
                       <td className={`pl-1 pr-2 py-1.5 text-[10px] uppercase text-center ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{(p.gender || '').toLowerCase().startsWith('f') ? 'F' : (p.gender || '').toLowerCase().startsWith('m') ? 'M' : '-'}</td>
                       <td className={`pl-2 pr-1 py-1.5 text-[10px] uppercase text-center ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{normalizeHandsStyle(p.hands)}</td>
                       <td className={`pl-2 pr-0.5 py-1.5 text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`} title={p.club || ''}>{p.club || '-'}</td>
                       {canManageParticipants && (
-                        <td className={`pl-0.5 pr-2 py-1.5 text-right sticky right-0 z-[2] ${participantIssues.has(p.id) ? 'bg-red-50' : 'bg-white'}`}>
-                          <div className="flex justify-end gap-1.5" title={participantIssues.has(p.id) ? participantIssues.get(p.id)?.join(' • ') : undefined}>
-                            <button 
-                              onClick={() => { setEditingPlayer(p); setShowAddPlayer(true); }}
-                              className="p-1 rounded hover:bg-emerald-50 text-black/40 hover:text-emerald-700 transition-all"
-                              title="Edit Player"
-                            >
-                              <Edit size={12} />
-                            </button>
-                            <button 
-                              onClick={() => handleDeletePlayer(p.id)}
-                              className="p-1 rounded hover:bg-red-50 text-black/40 hover:text-red-500 transition-all"
-                              title="Delete Player"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
+                        <td className={`px-2 py-1.5 sticky right-0 z-[3] bg-white flex items-center gap-1`}>
+                          <input
+                            type="checkbox"
+                            checked={selectedParticipantIds.includes(p.id)}
+                            onChange={() => toggleSelectOne(p.id)}
+                            style={{ transform: 'scale(0.6)', width: 16, height: 16 }}
+                          />
+                          <button
+                            type="button"
+                            className="p-0.5 ml-1 text-emerald-700 hover:text-emerald-900"
+                            title="Edit participant"
+                            onClick={() => { setEditingPlayer(p); setShowAddPlayer(true); }}
+                            style={{ transform: 'scale(0.6)' }}
+                          >
+                            <Edit size={16} />
+                          </button>
                         </td>
                       )}
                     </tr>
@@ -4050,9 +4090,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                           <Save size={14} />
                         </Button>
                       )}
-                      <Button size="sm" variant="outline" onClick={handleExportTeams} title="Export Teams" className="px-2">
-                        <Upload size={14} />
-                      </Button>
+                      {canManageParticipants && (
+                        <Button size="sm" variant="outline" onClick={handleExportTeams} title="Export Teams" className="px-2">
+                          <Upload size={14} />
+                        </Button>
+                      )}
                       {canManageParticipants && (
                         <div className="relative">
                           <input type="file" accept=".csv" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportTeams} />
@@ -4302,7 +4344,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 }
 
 function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole }) {
-  const canManageLanes = role === 'admin';
+  const canManageLanes = role === 'admin' || role === 'moderator';
+  const isPublic = role === 'public';
   const tx = React.useContext(UiTranslationContext);
   const [lanes, setLanes] = useState<LaneAssignment[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -4848,12 +4891,16 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div>
           <h3 className="text-xl font-bold text-emerald-800">{tx('Lane Assignments')}</h3>
-          <p className="text-[10px] text-black/50 font-bold uppercase tracking-widest">
-            {tournament.lanes_count} {tx('Lanes')} • {tournament.shifts_count} {tx('Shifts')} • {tournament.players_per_lane} {tournament.type === 'team' ? tx('Teams') : tx('Players')} / {tx('Lane')}
-          </p>
-          <p className="text-[10px] text-black/50 mt-0.5">
-            {tx('Auto assigns randomly by tournament rules; Manual assigns from Waiting Queue to a selected lane.')}
-          </p>
+          {!isPublic && (
+            <>
+              <p className="text-[10px] text-black/50 font-bold uppercase tracking-widest">
+                {tournament.lanes_count} {tx('Lanes')} • {tournament.shifts_count} {tx('Shifts')} • {tournament.players_per_lane} {tournament.type === 'team' ? tx('Teams') : tx('Players')} / {tx('Lane')}
+              </p>
+              <p className="text-[10px] text-black/50 mt-0.5">
+                {tx('Auto assigns randomly by tournament rules; Manual assigns from Waiting Queue to a selected lane.')}
+              </p>
+            </>
+          )}
         </div>
       </div>
 
@@ -4968,9 +5015,11 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                   <Save size={14} />
                 </Button>
               )}
-              <Button size="sm" variant="outline" onClick={handleExportLanes} title="Export" ariaLabel="Export" className="px-2">
-                <Upload size={14} />
-              </Button>
+              {canManageLanes && (
+                <Button size="sm" variant="outline" onClick={handleExportLanes} title="Export" ariaLabel="Export" className="px-2">
+                  <Upload size={14} />
+                </Button>
+              )}
               {canManageLanes && (
                 <div className="relative">
                   <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportLanes} accept=".csv" />
@@ -5790,9 +5839,11 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
               <Save size={14} />
             </Button>
           )}
-          <Button size="sm" variant="outline" onClick={handleExportScores} title="Export" ariaLabel="Export" className="px-2">
-            <Upload size={14} />
-          </Button>
+          {canManageScores && (
+            <Button size="sm" variant="outline" onClick={handleExportScores} title="Export" ariaLabel="Export" className="px-2">
+              <Upload size={14} />
+            </Button>
+          )}
           {canManageScores && (
             <>
               <input
@@ -5920,8 +5971,10 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                         : (scoreMap.get(scoreKey) ?? '');
                       return (
                         <td key={gameNumber} className="px-3 py-3 text-center">
-                          <input 
-                            type="number"
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
                             min="0"
                             max="300"
                             value={currentScore}
@@ -6004,9 +6057,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const [publicPreviewMatchPlayType, setPublicPreviewMatchPlayType] = useState<Tournament['match_play_type'] | null>(null);
   const [bracketDivision, setBracketDivision] = useState<'male' | 'female'>(() => {
     const stored = localStorage.getItem(`btm_bracket_division_${tournament.id}`);
-    if (tournament.type === 'mixed') {
-      return stored === 'female' ? 'female' : 'male';
-    }
+    // Removed 'mixed' type check as only 'individual' and 'team' are valid
     // For non-mixed, fallback to 'male' if 'all' is present
     return stored === 'female' ? 'female' : 'male';
   });
@@ -6064,8 +6115,8 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     return stored === 'visual' ? 'visual' : 'cards';
   });
 
-  const supportsDivisionBrackets = tournament.type === 'individual' || tournament.type === 'mixed';
-  const bracketDivisionForApi: 'all' | 'male' | 'female' = (tournament.type === 'mixed' || tournament.type === 'individual') ? bracketDivision : 'all';
+  const supportsDivisionBrackets = tournament.type === 'individual';
+  const bracketDivisionForApi: 'all' | 'male' | 'female' = tournament.type === 'individual' ? bracketDivision : 'all';
   const bracketGenderFilter: 'male' | 'female' | undefined = bracketDivisionForApi === 'male' || bracketDivisionForApi === 'female'
     ? bracketDivisionForApi
     : undefined;
@@ -7631,8 +7682,8 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const isFirstPlaceFemale = tournament.type === 'individual' && isFemalePlacement(firstPlaceParticipantId);
   const isSecondPlaceFemale = tournament.type === 'individual' && isFemalePlacement(secondPlaceParticipantId);
   const isThirdPlaceFemale = tournament.type === 'individual' && isFemalePlacement(thirdPlaceParticipantId);
-  // Hide podium for division 'all' in mixed tournaments
-  const showBracketPodium = matches.length > 0 && !(tournament.type === 'mixed' && bracketDivision === 'all');
+  // Show podium if there are matches
+  const showBracketPodium = matches.length > 0;
   const hasBracketWinners = Boolean(bracketFinalMatch?.winner_id || bracketBronzeMatch?.winner_id);
   // Strict gender and count filtering for visible seeds
   let filteredSeeds = seeds;
