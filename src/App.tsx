@@ -6490,17 +6490,10 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     setMatchScoreDrafts(readStoredMatchScoreDrafts());
     setCustomRuleTableLocked(false);
     setUseManualSeedMatchups(false);
-<<<<<<< HEAD
     applyKnownBracketFormatById(preferredKnownFormatId, preferredSettings.match_play_type, preferredSettings.qualified_count, preferredSettings.playoff_winners_count);
     setCustomSurvivorScoresByRound({});
     setCustomSeedMatchups([]);
     setCustomRoundLinkSelections({});
-=======
-    applyKnownBracketFormatById(preferredKnownFormatId, preferredSettings.match_play_type, preferredSettings.qualified_count, preferredSettings.playoff_winners_count);
-    setCustomSurvivorScoresByRound({});
-    setCustomSeedMatchups([]);
-    setCustomRoundLinkSelections({});
->>>>>>> ad0827d (Fix: standings ranking uses only official games; table rendering stable for additional games)
     setTeamSelectionDraft({ seed1: null, seed2: null, seed3: null });
     setSettingsHydrated(true);
     // Pass the freshly-read qualifiedCount directly to avoid using the stale state value
@@ -6755,11 +6748,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 
     const applySeeds = (nextSeeds: any[]) => {
       // Discard if a newer loadSeeds call has already started
-<<<<<<< HEAD
       if (seedLoadVersionRef.current !== myVersion) return [] as any[];
-=======
-      if (seedLoadVersionRef.current !== myVersion) return [] as any[];
->>>>>>> ad0827d (Fix: standings ranking uses only official games; table rendering stable for additional games)
       // Safety: enforce gender filter on whatever the server returned
       if (tournament.type === 'individual' && capturedGenderFilter) {
         const allowedIds = new Set(
@@ -6772,11 +6761,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         }
       }
       setSeeds(nextSeeds);
-<<<<<<< HEAD
       return nextSeeds;
-=======
-      return nextSeeds;
->>>>>>> ad0827d (Fix: standings ranking uses only official games; table rendering stable for additional games)
     };
 
     try {
@@ -6828,11 +6813,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
             total_score: team.total_score,
             kind: 'team',
           }));
-<<<<<<< HEAD
-      return applySeeds(computedSeeds);
-=======
         return applySeeds(computedSeeds);
->>>>>>> ad0827d (Fix: standings ranking uses only official games; table rendering stable for additional games)
       }
 
       const eligibleParticipants = capturedGenderFilter
@@ -6868,11 +6849,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           total_score: player.total_score,
           kind: 'participant',
         }));
-<<<<<<< HEAD
       return applySeeds(computedSeeds);
-=======
-      return applySeeds(computedSeeds);
->>>>>>> ad0827d (Fix: standings ranking uses only official games; table rendering stable for additional games)
     } catch (err) {
       console.error(err);
       if (seedLoadVersionRef.current === myVersion) setSeeds([]);
