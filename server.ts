@@ -131,6 +131,7 @@ function initDb() {
       match_play_type TEXT DEFAULT 'single_elimination',
       qualified_count INTEGER DEFAULT 0,
       playoff_winners_count INTEGER DEFAULT 1,
+      known_bracket_format_id TEXT,
       type TEXT CHECK(type IN ('individual', 'team')) NOT NULL,
       games_count INTEGER DEFAULT 3,
       genders_rule TEXT,
@@ -264,6 +265,20 @@ function initDb() {
       expires_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS bracket_presets (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      match_play_type TEXT NOT NULL,
+      round_match_counts TEXT NOT NULL,
+      round_rules TEXT NOT NULL,
+      placement_rules TEXT,
+      description TEXT,
+      min_qualified_count INTEGER,
+      recommended_qualified_count INTEGER,
+      is_system INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   const accessTableInfo = db.prepare("PRAGMA table_info(moderator_tournament_access)").all() as any[];
@@ -306,6 +321,7 @@ function initDb() {
     { name: 'match_play_type', type: "TEXT DEFAULT 'single_elimination'" },
     { name: 'qualified_count', type: 'INTEGER DEFAULT 0' },
     { name: 'playoff_winners_count', type: 'INTEGER DEFAULT 1' },
+    { name: 'known_bracket_format_id', type: 'TEXT' },
     { name: 'games_count', type: 'INTEGER DEFAULT 3' },
     { name: 'genders_rule', type: 'TEXT' },
     { name: 'lanes_count', type: 'INTEGER DEFAULT 10' },
@@ -321,6 +337,23 @@ function initDb() {
     if (!columns.includes(m.name)) {
       try {
         db.exec(`ALTER TABLE tournaments ADD COLUMN ${m.name} ${m.type}`);
+      } catch (e) {}
+    }
+  });
+
+  const presetTableInfo = db.prepare("PRAGMA table_info(bracket_presets)").all() as any[];
+  const presetColumns = presetTableInfo.map((c: any) => c.name);
+  const presetMigrations = [
+    { name: 'description', type: 'TEXT' },
+    { name: 'min_qualified_count', type: 'INTEGER' },
+    { name: 'recommended_qualified_count', type: 'INTEGER' },
+    { name: 'is_system', type: 'INTEGER NOT NULL DEFAULT 0' },
+    { name: 'created_at', type: 'DATETIME DEFAULT CURRENT_TIMESTAMP' },
+  ];
+  presetMigrations.forEach(m => {
+    if (!presetColumns.includes(m.name)) {
+      try {
+        db.exec(`ALTER TABLE bracket_presets ADD COLUMN ${m.name} ${m.type}`);
       } catch (e) {}
     }
   });
@@ -843,6 +876,252 @@ async function startServer() {
     return result;
   };
 
+  const KNOWN_BRACKET_FORMAT_DEFAULTS = [
+    {
+      id: 'single-elimination-8',
+      name: 'Single Elimination (8)',
+      match_play_type: 'single_elimination',
+      round_match_counts: [4, 2, 1],
+      round_rules: ['duel', 'duel', 'duel'],
+      description: 'Classic 8-seed single elimination.',
+      min_qualified_count: 8,
+      recommended_qualified_count: 8,
+    },
+    {
+      id: 'single-elimination-16',
+      name: 'Single Elimination (16)',
+      match_play_type: 'single_elimination',
+      round_match_counts: [8, 4, 2, 1],
+      round_rules: ['duel', 'duel', 'duel', 'duel'],
+      description: 'Classic 16-seed single elimination.',
+      min_qualified_count: 16,
+      recommended_qualified_count: 16,
+    },
+    {
+      id: 'double-elimination-8',
+      name: 'Double Elimination (8)',
+      match_play_type: 'double_elimination',
+      round_match_counts: [4, 2, 1],
+      round_rules: ['duel', 'duel', 'duel'],
+      description: 'Base 8-seed bracket using double elimination mode.',
+      min_qualified_count: 8,
+      recommended_qualified_count: 8,
+    },
+    {
+      id: 'playoff-8-bronze',
+      name: 'Playoff (8 + Bronze)',
+      match_play_type: 'playoff',
+      round_match_counts: [4, 2, 2],
+      round_rules: ['duel', 'duel', 'duel'],
+      placement_rules: {
+        first: 'winner:3:0',
+        second: 'loser:3:0',
+        third: 'winner:3:1',
+      },
+      description: '8-player playoff with final and bronze match.',
+      min_qualified_count: 8,
+      recommended_qualified_count: 8,
+    },
+    {
+      id: 'team-selection-8',
+      name: 'Team Selection Playoff (8)',
+      match_play_type: 'team_selection_playoff',
+      round_match_counts: [4, 2, 1],
+      round_rules: ['duel', 'duel', 'duel'],
+      description: '8-player team selection playoff tree.',
+      min_qualified_count: 8,
+      recommended_qualified_count: 8,
+    },
+    {
+      id: 'stepladder-6',
+      name: 'Stepladder (6)',
+      match_play_type: 'stepladder',
+      round_match_counts: [1, 1, 1, 1, 1],
+      round_rules: ['duel', 'duel', 'duel', 'duel', 'duel'],
+      description: 'Stepladder progression from seed 6 to seed 1.',
+      min_qualified_count: 6,
+      recommended_qualified_count: 6,
+    },
+    {
+      id: 'ladder-6',
+      name: 'Ladder (6)',
+      match_play_type: 'ladder',
+      round_match_counts: [1, 1, 1, 1, 1],
+      round_rules: ['duel', 'duel', 'duel', 'duel', 'duel'],
+      description: 'Ladder progression with one match per round.',
+      min_qualified_count: 6,
+      recommended_qualified_count: 6,
+    },
+    {
+      id: 'survivor-8-cut',
+      name: 'Survivor Elimination (8)',
+      match_play_type: 'survivor_elimination',
+      round_match_counts: [1, 1, 1, 1, 1, 1, 1],
+      round_rules: ['survivor_cut', 'survivor_cut', 'survivor_cut', 'survivor_cut', 'survivor_cut', 'survivor_cut', 'survivor_cut'],
+      description: 'One elimination per round until a winner remains.',
+      min_qualified_count: 8,
+      recommended_qualified_count: 8,
+    },
+    {
+      id: 'b-pro-male',
+      name: 'B Pro League Male',
+      match_play_type: 'stepladder',
+      round_match_counts: [1, 1, 1],
+      round_rules: ['duel', 'duel', 'duel'],
+      description: 'Top 4 male seeds after Game 6 cut. Stepladder: 4v3, winner v2, winner v1.',
+      min_qualified_count: 4,
+      recommended_qualified_count: 4,
+    },
+    {
+      id: 'b-pro-female',
+      name: 'B Pro League Female',
+      match_play_type: 'stepladder',
+      round_match_counts: [1, 1],
+      round_rules: ['duel', 'duel'],
+      description: 'Top 3 female seeds after Game 6 cut. Stepladder: 3v2, winner v1.',
+      min_qualified_count: 3,
+      recommended_qualified_count: 3,
+    },
+  ] as const;
+
+  type KnownBracketFormatRule = 'duel' | 'survivor_cut';
+  type KnownBracketFormatModel = {
+    id: string;
+    name: string;
+    match_play_type: string;
+    round_match_counts: number[];
+    round_rules: KnownBracketFormatRule[];
+    placement_rules?: {
+      first?: string;
+      second?: string;
+      third?: string;
+    };
+    description?: string;
+    min_qualified_count?: number;
+    recommended_qualified_count?: number;
+    is_system?: number;
+  };
+
+  const normalizeKnownBracketFormatPayload = (raw: any, fallbackId: string | null = null): KnownBracketFormatModel | null => {
+    const id = String(raw?.id ?? fallbackId ?? '').trim();
+    const name = String(raw?.name || '').trim();
+    const matchPlayType = String(raw?.match_play_type || '').trim();
+    if (!id || !name || !matchPlayType) return null;
+
+    const roundMatchCountsInput = Array.isArray(raw?.round_match_counts) ? raw.round_match_counts : [];
+    const roundMatchCounts = roundMatchCountsInput
+      .map((value: any) => Number.parseInt(String(value), 10))
+      .filter((value: number) => Number.isFinite(value) && value > 0)
+      .map((value: number) => Math.max(1, value));
+    if (roundMatchCounts.length === 0) return null;
+
+    const roundRulesInput = Array.isArray(raw?.round_rules) ? raw.round_rules : [];
+    const roundRules = roundRulesInput
+      .map((rule: any) => String(rule || '').trim())
+      .map((rule: string) => (rule === 'survivor_cut' ? 'survivor_cut' : 'duel'));
+    const effectiveRoundRules = roundRules.length > 0
+      ? roundRules
+      : Array.from({ length: roundMatchCounts.length }, () => 'duel' as const);
+
+    const placementRulesRaw = raw?.placement_rules && typeof raw.placement_rules === 'object'
+      ? raw.placement_rules
+      : null;
+    const placementRules = placementRulesRaw
+      ? {
+          first: String(placementRulesRaw.first || ''),
+          second: String(placementRulesRaw.second || ''),
+          third: String(placementRulesRaw.third || ''),
+        }
+      : undefined;
+
+    const minQualifiedCount = Number.parseInt(String(raw?.min_qualified_count ?? ''), 10);
+    const recommendedQualifiedCount = Number.parseInt(String(raw?.recommended_qualified_count ?? ''), 10);
+
+    return {
+      id,
+      name,
+      match_play_type: matchPlayType,
+      round_match_counts: roundMatchCounts,
+      round_rules: effectiveRoundRules,
+      placement_rules: placementRules,
+      description: String(raw?.description || '').trim() || undefined,
+      min_qualified_count: Number.isFinite(minQualifiedCount) && minQualifiedCount > 0 ? minQualifiedCount : undefined,
+      recommended_qualified_count: Number.isFinite(recommendedQualifiedCount) && recommendedQualifiedCount > 0 ? recommendedQualifiedCount : undefined,
+    };
+  };
+
+  const mapKnownBracketFormatRow = (row: any): KnownBracketFormatModel | null => {
+    try {
+      const roundMatchCountsParsed = JSON.parse(String(row?.round_match_counts || '[]'));
+      const roundRulesParsed = JSON.parse(String(row?.round_rules || '[]'));
+      const placementRulesParsed = row?.placement_rules ? JSON.parse(String(row.placement_rules)) : undefined;
+      return normalizeKnownBracketFormatPayload({
+        id: row?.id,
+        name: row?.name,
+        match_play_type: row?.match_play_type,
+        round_match_counts: roundMatchCountsParsed,
+        round_rules: roundRulesParsed,
+        placement_rules: placementRulesParsed,
+        description: row?.description,
+        min_qualified_count: row?.min_qualified_count,
+        recommended_qualified_count: row?.recommended_qualified_count,
+      }, String(row?.id || '').trim());
+    } catch {
+      return null;
+    }
+  };
+
+  const listKnownBracketFormats = (matchPlayType?: string): KnownBracketFormatModel[] => {
+    const rows = matchPlayType
+      ? db.prepare("SELECT * FROM bracket_presets WHERE match_play_type = ? ORDER BY name ASC").all(matchPlayType)
+      : db.prepare("SELECT * FROM bracket_presets ORDER BY match_play_type ASC, name ASC").all();
+    return rows
+      .map((row: any) => mapKnownBracketFormatRow(row))
+      .filter((item: KnownBracketFormatModel | null): item is KnownBracketFormatModel => item !== null);
+  };
+
+  const getKnownBracketFormatById = (id: string): KnownBracketFormatModel | null => {
+    const row = db.prepare("SELECT * FROM bracket_presets WHERE id = ?").get(id) as any;
+    if (!row) return null;
+    return mapKnownBracketFormatRow(row);
+  };
+
+  const seedKnownBracketFormatsIfEmpty = () => {
+    const row = db.prepare("SELECT COUNT(*) as count FROM bracket_presets").get() as any;
+    if ((row?.count || 0) > 0) return;
+
+    const insert = db.prepare(`
+      INSERT INTO bracket_presets (
+        id, name, match_play_type, round_match_counts, round_rules, placement_rules,
+        description, min_qualified_count, recommended_qualified_count, is_system
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    `);
+
+    db.transaction(() => {
+      for (const preset of KNOWN_BRACKET_FORMAT_DEFAULTS) {
+        insert.run(
+          preset.id,
+          preset.name,
+          preset.match_play_type,
+          JSON.stringify(preset.round_match_counts || []),
+          JSON.stringify(preset.round_rules || []),
+          JSON.stringify(('placement_rules' in preset && preset.placement_rules) ? preset.placement_rules : {}),
+          preset.description || null,
+          Number.isFinite(Number.parseInt(String(preset.min_qualified_count), 10)) ? Number.parseInt(String(preset.min_qualified_count), 10) : null,
+          Number.isFinite(Number.parseInt(String(preset.recommended_qualified_count), 10)) ? Number.parseInt(String(preset.recommended_qualified_count), 10) : null,
+        );
+      }
+    })();
+  };
+
+  seedKnownBracketFormatsIfEmpty();
+
+  const normalizeKnownBracketFormatId = (value: any): string | null => {
+    if (typeof value !== 'string') return null;
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : null;
+  };
+
   const parseBracketDivision = (value: any): 'all' | 'male' | 'female' => {
     const raw = String(value || '').trim().toLowerCase();
     if (raw === 'male' || raw === 'm') return 'male';
@@ -1342,6 +1621,101 @@ async function startServer() {
   });
   
   // Tournaments
+  app.get('/api/bracket-known-formats', (_req, res) => {
+    const requestedType = String(_req.query?.match_play_type || '').trim();
+    const formats = listKnownBracketFormats(requestedType || undefined);
+    res.json({ formats });
+  });
+
+  app.post('/api/bracket-known-formats', requireAdmin, (req, res) => {
+    const payload = normalizeKnownBracketFormatPayload(req.body);
+    if (!payload) {
+      return res.status(400).json({ error: 'Invalid preset payload' });
+    }
+
+    const exists = db.prepare('SELECT id FROM bracket_presets WHERE id = ?').get(payload.id) as any;
+    if (exists) {
+      return res.status(409).json({ error: 'Preset id already exists' });
+    }
+
+    db.prepare(`
+      INSERT INTO bracket_presets (
+        id, name, match_play_type, round_match_counts, round_rules, placement_rules,
+        description, min_qualified_count, recommended_qualified_count, is_system
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+    `).run(
+      payload.id,
+      payload.name,
+      payload.match_play_type,
+      JSON.stringify(payload.round_match_counts),
+      JSON.stringify(payload.round_rules),
+      JSON.stringify(payload.placement_rules || {}),
+      payload.description || null,
+      payload.min_qualified_count ?? null,
+      payload.recommended_qualified_count ?? null,
+    );
+
+    return res.json({ success: true, format: getKnownBracketFormatById(payload.id) });
+  });
+
+  app.put('/api/bracket-known-formats/:id', requireAdmin, (req, res) => {
+    const presetId = String(req.params.id || '').trim();
+    if (!presetId) return res.status(400).json({ error: 'Invalid preset id' });
+
+    const existingRow = db.prepare('SELECT id, is_system FROM bracket_presets WHERE id = ?').get(presetId) as any;
+    if (!existingRow) return res.status(404).json({ error: 'Preset not found' });
+
+    const payload = normalizeKnownBracketFormatPayload(req.body, presetId);
+    if (!payload) {
+      return res.status(400).json({ error: 'Invalid preset payload' });
+    }
+
+    const targetId = payload.id;
+    if (targetId !== presetId) {
+      const duplicate = db.prepare('SELECT id FROM bracket_presets WHERE id = ?').get(targetId) as any;
+      if (duplicate) {
+        return res.status(409).json({ error: 'Preset id already exists' });
+      }
+      db.prepare('UPDATE tournaments SET known_bracket_format_id = ? WHERE known_bracket_format_id = ?').run(targetId, presetId);
+    }
+
+    db.prepare(`
+      UPDATE bracket_presets
+      SET id = ?, name = ?, match_play_type = ?, round_match_counts = ?, round_rules = ?, placement_rules = ?,
+          description = ?, min_qualified_count = ?, recommended_qualified_count = ?
+      WHERE id = ?
+    `).run(
+      targetId,
+      payload.name,
+      payload.match_play_type,
+      JSON.stringify(payload.round_match_counts),
+      JSON.stringify(payload.round_rules),
+      JSON.stringify(payload.placement_rules || {}),
+      payload.description || null,
+      payload.min_qualified_count ?? null,
+      payload.recommended_qualified_count ?? null,
+      presetId,
+    );
+
+    return res.json({ success: true, format: getKnownBracketFormatById(targetId) });
+  });
+
+  app.delete('/api/bracket-known-formats/:id', requireAdmin, (req, res) => {
+    const presetId = String(req.params.id || '').trim();
+    if (!presetId) return res.status(400).json({ error: 'Invalid preset id' });
+
+    const existingRow = db.prepare('SELECT id, is_system FROM bracket_presets WHERE id = ?').get(presetId) as any;
+    if (!existingRow) return res.status(404).json({ error: 'Preset not found' });
+
+    const inUse = db.prepare('SELECT COUNT(*) as count FROM tournaments WHERE known_bracket_format_id = ?').get(presetId) as any;
+    if ((inUse?.count || 0) > 0) {
+      return res.status(400).json({ error: 'Preset is used by one or more tournaments' });
+    }
+
+    db.prepare('DELETE FROM bracket_presets WHERE id = ?').run(presetId);
+    return res.json({ success: true });
+  });
+
   app.get("/api/tournaments", (req, res) => {
     db.prepare(`
       UPDATE tournaments
@@ -2305,20 +2679,32 @@ const existing = db
 
   app.put("/api/tournaments/:id/bracket-settings", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
     const tournamentId = req.params.id;
-    const tournament = db.prepare("SELECT id, match_play_type, qualified_count, playoff_winners_count FROM tournaments WHERE id = ?").get(tournamentId) as any;
+    const tournament = db.prepare("SELECT id, match_play_type, qualified_count, playoff_winners_count, known_bracket_format_id FROM tournaments WHERE id = ?").get(tournamentId) as any;
     if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
 
     const requestedMatchPlayType = String(req.body?.match_play_type || tournament.match_play_type || 'single_elimination');
     const parsedQualifiedCount = Number.parseInt(String(req.body?.qualified_count ?? tournament.qualified_count ?? 0), 10);
     const parsedWinnersCount = Number.parseInt(String(req.body?.playoff_winners_count ?? tournament.playoff_winners_count ?? 1), 10);
+    const hasKnownFormatInput = Object.prototype.hasOwnProperty.call(req.body || {}, 'known_bracket_format_id');
+    const requestedKnownFormatId = hasKnownFormatInput
+      ? normalizeKnownBracketFormatId(req.body?.known_bracket_format_id)
+      : normalizeKnownBracketFormatId(tournament.known_bracket_format_id);
 
     const effectiveQualifiedCount = Number.isFinite(parsedQualifiedCount) ? Math.max(0, parsedQualifiedCount) : 0;
     const effectiveWinnersCount = Number.isFinite(parsedWinnersCount)
       ? Math.min(3, Math.max(1, parsedWinnersCount))
       : 1;
+    let effectiveKnownFormatId = requestedKnownFormatId;
 
-    db.prepare("UPDATE tournaments SET match_play_type = ?, qualified_count = ?, playoff_winners_count = ? WHERE id = ?")
-      .run(requestedMatchPlayType, effectiveQualifiedCount, effectiveWinnersCount, tournamentId);
+    if (effectiveKnownFormatId) {
+      const selectedFormat = getKnownBracketFormatById(effectiveKnownFormatId);
+      if (!selectedFormat || selectedFormat.match_play_type !== requestedMatchPlayType) {
+        effectiveKnownFormatId = null;
+      }
+    }
+
+    db.prepare("UPDATE tournaments SET match_play_type = ?, qualified_count = ?, playoff_winners_count = ?, known_bracket_format_id = ? WHERE id = ?")
+      .run(requestedMatchPlayType, effectiveQualifiedCount, effectiveWinnersCount, effectiveKnownFormatId, tournamentId);
 
     res.json({
       success: true,
@@ -2326,9 +2712,12 @@ const existing = db
         match_play_type: requestedMatchPlayType,
         qualified_count: effectiveQualifiedCount,
         playoff_winners_count: effectiveWinnersCount,
+        known_bracket_format_id: effectiveKnownFormatId,
       },
     });
   });
+
+
 
   app.delete("/api/tournaments/:id/brackets", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
     const division = parseBracketDivision(req.query.division);
@@ -2855,6 +3244,12 @@ const existing = db
       });
     }
 
+    if (requestedMatchPlayType === 'survivor_elimination') {
+      return res.status(400).json({
+        error: 'Survivor Elimination bracket type is available for setup, but dedicated execution is not enabled yet. Use Custom Scheme with Survivor round rules for generation.',
+      });
+    }
+
     // Simple single elimination bracket generation
     let currentRoundParticipants = [...participants];
     let round = 1;
@@ -2899,6 +3294,13 @@ const existing = db
 
       const roundsCount = Number.isFinite(parsedRounds) ? Math.max(1, parsedRounds) : 3;
       const round1Matches = Number.isFinite(parsedRound1Matches) ? Math.max(1, parsedRound1Matches) : 4;
+      const requestedRoundMatchCounts = Array.isArray(req.body?.round_match_counts)
+        ? req.body.round_match_counts.map((value: any) => Math.max(1, Number.parseInt(String(value), 10) || 1))
+        : [];
+      const roundMatchCounts: number[] = [];
+      for (let index = 0; index < roundsCount; index += 1) {
+        roundMatchCounts.push(requestedRoundMatchCounts[index] || (index === 0 ? round1Matches : 1));
+      }
 
       db.prepare(`
         DELETE FROM brackets
@@ -2906,10 +3308,8 @@ const existing = db
           AND (? = 'all' OR division = ?)
       `).run(tournamentId, division, division);
 
-      let round = 1;
-      let matchesInRound = round1Matches;
-
-      while (round <= roundsCount && matchesInRound >= 1) {
+      for (let round = 1; round <= roundsCount; round += 1) {
+        const matchesInRound = Math.max(1, roundMatchCounts[round - 1] || 1);
         for (let i = 0; i < matchesInRound; i++) {
           db.prepare(`
             INSERT INTO brackets (
@@ -2930,30 +3330,6 @@ const existing = db
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(tournamentId, division, round, i, null, null, null, null, null, null, null, null, null);
         }
-        round += 1;
-        matchesInRound = Math.floor(matchesInRound / 2);
-        if (matchesInRound < 1 && round <= roundsCount) matchesInRound = 1;
-      }
-
-      if (winnersMode === '3' && roundsCount >= 2) {
-        db.prepare(`
-          INSERT INTO brackets (
-            tournament_id,
-            division,
-            round,
-            match_index,
-            participant1_id,
-            participant2_id,
-            participant1_seed,
-            participant2_seed,
-            participant1_source_match_id,
-            participant1_source_outcome,
-            participant2_source_match_id,
-            participant2_source_outcome,
-            winner_id
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(tournamentId, division, roundsCount, 1, null, null, null, null, null, null, null, null, null);
       }
 
       if (rawLinks.length > 0) {
@@ -2992,7 +3368,7 @@ const existing = db
       }
 
       const generated = db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ? AND division = ?").get(tournamentId, division) as any;
-      res.json({ success: true, division, generated_matches: generated?.count || 0, rounds_count: roundsCount, round1_matches: round1Matches, winners_mode: winnersMode });
+      res.json({ success: true, division, generated_matches: generated?.count || 0, rounds_count: roundsCount, round1_matches: round1Matches, round_match_counts: roundMatchCounts, winners_mode: winnersMode });
     } catch (err: any) {
       console.error('Failed to generate manual brackets:', err);
       res.status(500).json({ error: err?.message || 'Failed to generate manual brackets' });

@@ -33,7 +33,8 @@ import {
   Shield,
   Search
 } from 'lucide-react';
-import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser } from './services/api';
+import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput } from './services/api';
+import { buildKnownBracketTemplateDefaults } from './utils/bracketTemplates';
 
 type UserRole = 'admin' | 'moderator' | 'public';
 
@@ -188,6 +189,8 @@ const getMatchPlayTypeLabel = (value: Tournament['match_play_type'] | string | u
       return 'Playoff';
     case 'team_selection_playoff':
       return 'Team Selection Playoff';
+    case 'survivor_elimination':
+      return 'Survivor Elimination';
     default:
       return 'Single Elimination';
   }
@@ -1400,6 +1403,8 @@ export default function App() {
         return t('bracket.playoff', 'Playoff');
       case 'team_selection_playoff':
         return t('bracket.team_selection_playoff', 'Team Selection Playoff');
+      case 'survivor_elimination':
+        return t('bracket.survivor_elimination', 'Survivor Elimination');
       default:
         return t('bracket.single_elimination', 'Single Elimination');
     }
@@ -1863,7 +1868,8 @@ export default function App() {
                         { value: 'ladder', label: t('bracket.ladder', 'Ladder') },
                         { value: 'stepladder', label: t('bracket.stepladder', 'Stepladder') },
                         { value: 'playoff', label: t('bracket.playoff', 'Playoff') },
-                        { value: 'team_selection_playoff', label: t('bracket.team_selection_playoff', 'Team Selection Playoff') }
+                        { value: 'team_selection_playoff', label: t('bracket.team_selection_playoff', 'Team Selection Playoff') },
+                        { value: 'survivor_elimination', label: t('bracket.survivor_elimination', 'Survivor Elimination') }
                       ]}
                     />
                     <Select 
@@ -2687,6 +2693,11 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       { id: 'brackets', label: 'Brackets', icon: GitBranch },
       { id: 'standings', label: 'Tournament Result', icon: BarChart3 },
     ];
+
+  useEffect(() => {
+    if (visibleTabs.some((tab) => tab.id === activeTab)) return;
+    setActiveTab(visibleTabs[0]?.id || 'participants');
+  }, [activeTab, visibleTabs, setActiveTab]);
 
   return (
     <div className="space-y-8">
@@ -5941,14 +5952,24 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
 
 function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: Tournament; role: UserRole; onTournamentUpdated?: (t: Tournament) => void }) {
   type SeedOverrideEntry = { id: number; kind: 'team' | 'participant'; replaced_from_participant_id?: number };
+  type BracketSettingsState = {
+    match_play_type: Tournament['match_play_type'];
+    qualified_count: number;
+    playoff_winners_count: number;
+    known_bracket_format_id: string | null;
+  };
   const tx = React.useContext(UiTranslationContext);
   const canManageBrackets = role === 'admin' || role === 'moderator';
   const isPublicBracketView = !canManageBrackets;
   const canEditTopSeeds = role === 'admin';
   const importBracketsInputRef = useRef<HTMLInputElement | null>(null);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestCurrentSettingsRef = useRef<{ match_play_type: Tournament['match_play_type']; qualified_count: number; playoff_winners_count: number } | null>(null);
-  const latestPersistedSettingsRef = useRef<{ match_play_type: Tournament['match_play_type']; qualified_count: number; playoff_winners_count: number } | null>(null);
+  // Use the more specific type for settings refs, but allow for extra fields if needed
+  const latestCurrentSettingsRef = useRef<BracketSettingsState | { match_play_type: Tournament['match_play_type']; qualified_count: number; playoff_winners_count: number } | null>(null);
+  const latestPersistedSettingsRef = useRef<BracketSettingsState | { match_play_type: Tournament['match_play_type']; qualified_count: number; playoff_winners_count: number } | null>(null);
+  // Monotonically-increasing counter: each loadSeeds call captures its version at start and
+  // discards its result if a newer call has already started, preventing stale async overwrites.
+  const seedLoadVersionRef = useRef(0);
   const bracketViewStorageKey = `btm_bracket_view_mode_${tournament.id}`;
   const bracketScoreDraftsStorageKey = `btm_bracket_score_drafts_${tournament.id}`;
   const bracketDivisionStorageKey = `btm_bracket_division_${tournament.id}`;
@@ -5984,7 +6005,31 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       ? Number.parseInt(String(tournament.playoff_winners_count), 10)
       : 1
   );
+  const [knownBracketFormats, setKnownBracketFormats] = useState<KnownBracketFormat[]>([]);
+  const [selectedKnownBracketFormatId, setSelectedKnownBracketFormatId] = useState<string>(
+    typeof tournament.known_bracket_format_id === 'string' ? tournament.known_bracket_format_id : ''
+  );
+  const [showPresetManager, setShowPresetManager] = useState(false);
+  const [editingPresetId, setEditingPresetId] = useState<string | null>(null);
+  const [presetSaving, setPresetSaving] = useState(false);
+  const [presetDraft, setPresetDraft] = useState({
+    id: '',
+    name: '',
+    match_play_type: 'single_elimination' as Tournament['match_play_type'],
+    round_match_counts_text: '4,2,1',
+    round_rules_text: 'duel,duel,duel',
+    placement_first: '',
+    placement_second: '',
+    placement_third: '',
+    description: '',
+    min_qualified_count: '',
+    recommended_qualified_count: '',
+  });
   const [useManualSeedMatchups, setUseManualSeedMatchups] = useState(false);
+  const [customRoundMatchCounts, setCustomRoundMatchCounts] = useState<number[]>([1]);
+  const [customRoundRules, setCustomRoundRules] = useState<Array<'duel' | 'survivor_cut'>>(['duel']);
+  const [customPlacementRules, setCustomPlacementRules] = useState<{ first: string; second: string; third: string }>({ first: '', second: '', third: '' });
+  const [customSurvivorScoresByRound, setCustomSurvivorScoresByRound] = useState<Record<number, Record<number, string>>>({});
   const [customSeedMatchups, setCustomSeedMatchups] = useState<Array<{ p1: number | null; p2: number | null }>>([]);
   const [customRoundLinkSelections, setCustomRoundLinkSelections] = useState<Record<number, Array<{ p1: string; p2: string }>>>({});
   const [customRuleTableLocked, setCustomRuleTableLocked] = useState(false);
@@ -6023,6 +6068,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     match_play_type: matchPlayType,
     qualified_count: Math.max(0, Number(qualifiedCount) || 0),
     playoff_winners_count: Math.min(3, Math.max(1, Number(playoffWinnersCount) || 1)),
+    known_bracket_format_id: selectedKnownBracketFormatId || null,
   });
 
   const readStoredBracketSettings = () => {
@@ -6033,17 +6079,21 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       const matchPlayTypeFromStorage = String(parsed?.match_play_type || 'single_elimination') as Tournament['match_play_type'];
       const qualifiedCountFromStorage = Number.parseInt(String(parsed?.qualified_count ?? 0), 10);
       const winnersCountFromStorage = Number.parseInt(String(parsed?.playoff_winners_count ?? 1), 10);
+      const knownBracketFormatIdFromStorage = typeof parsed?.known_bracket_format_id === 'string'
+        ? parsed.known_bracket_format_id.trim()
+        : '';
       return {
         match_play_type: matchPlayTypeFromStorage,
         qualified_count: Number.isFinite(qualifiedCountFromStorage) ? Math.max(0, qualifiedCountFromStorage) : 0,
         playoff_winners_count: Number.isFinite(winnersCountFromStorage) ? Math.min(3, Math.max(1, winnersCountFromStorage)) : 1,
+        known_bracket_format_id: knownBracketFormatIdFromStorage || null,
       };
     } catch {
       return null;
     }
   };
 
-  const persistBracketSettingsToStorage = (settings: { match_play_type: Tournament['match_play_type']; qualified_count: number; playoff_winners_count: number }) => {
+  const persistBracketSettingsToStorage = (settings: BracketSettingsState) => {
     try {
       localStorage.setItem(bracketSettingsStorageKey, JSON.stringify(settings));
     } catch {
@@ -6138,8 +6188,211 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       playoff_winners_count: Number.isFinite(Number.parseInt(String(tournament.playoff_winners_count), 10))
         ? Math.min(3, Math.max(1, Number.parseInt(String(tournament.playoff_winners_count), 10)))
         : 1,
+      known_bracket_format_id: typeof tournament.known_bracket_format_id === 'string' && tournament.known_bracket_format_id.trim().length > 0
+        ? tournament.known_bracket_format_id.trim()
+        : null,
     }),
   });
+
+  const applyFallbackBracketDefaults = (
+    type: Tournament['match_play_type'],
+    nextQualifiedCount: number,
+    nextPlayoffWinnersCount: number,
+  ) => {
+    const defaults = buildKnownBracketTemplateDefaults({
+      matchPlayType: type,
+      qualifiedCount: nextQualifiedCount,
+      playoffWinnersCount: nextPlayoffWinnersCount,
+    });
+    setCustomRoundMatchCounts(defaults.roundMatchCounts);
+    setCustomRoundRules(defaults.roundRules);
+    setCustomPlacementRules(defaults.placementRules);
+  };
+
+  const applyKnownBracketFormatById = (
+    formatId: string | null,
+    type: Tournament['match_play_type'],
+    nextQualifiedCount: number,
+    nextPlayoffWinnersCount: number,
+  ) => {
+    if (!formatId) {
+      applyFallbackBracketDefaults(type, nextQualifiedCount, nextPlayoffWinnersCount);
+      return;
+    }
+
+    const selectedFormat = knownBracketFormats.find((format) => format.id === formatId && format.match_play_type === type);
+    if (!selectedFormat) {
+      applyFallbackBracketDefaults(type, nextQualifiedCount, nextPlayoffWinnersCount);
+      return;
+    }
+
+    const roundMatchCounts = Array.isArray(selectedFormat.round_match_counts) && selectedFormat.round_match_counts.length > 0
+      ? selectedFormat.round_match_counts.map((count) => Math.max(1, Number.parseInt(String(count), 10) || 1))
+      : [1];
+    const roundRules = Array.isArray(selectedFormat.round_rules) && selectedFormat.round_rules.length > 0
+      ? selectedFormat.round_rules.map((rule) => (rule === 'survivor_cut' ? 'survivor_cut' : 'duel')) as Array<'duel' | 'survivor_cut'>
+      : Array.from({ length: roundMatchCounts.length }, () => 'duel' as const);
+
+    setCustomRoundMatchCounts(roundMatchCounts);
+    setCustomRoundRules(roundRules);
+    setCustomPlacementRules({
+      first: selectedFormat.placement_rules?.first || '',
+      second: selectedFormat.placement_rules?.second || '',
+      third: selectedFormat.placement_rules?.third || '',
+    });
+  };
+
+  const getKnownFormatOptionsForType = (type: Tournament['match_play_type']) => (
+    knownBracketFormats.filter((format) => format.match_play_type === type)
+  );
+
+  const loadKnownBracketFormats = async () => {
+    try {
+      const formats = await api.getKnownBracketFormats();
+      setKnownBracketFormats(Array.isArray(formats) ? formats : []);
+    } catch (err) {
+      console.error('Failed to load known bracket formats:', err);
+    }
+  };
+
+  const normalizePresetId = (value: string) => (
+    String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+  );
+
+  const parseRoundMatchCountsFromText = (input: string): number[] => {
+    const values = String(input || '')
+      .split(',')
+      .map((part) => Number.parseInt(part.trim(), 10))
+      .filter((value) => Number.isFinite(value) && value > 0)
+      .map((value) => Math.max(1, value));
+    return values;
+  };
+
+  const parseRoundRulesFromText = (input: string, fallbackCount: number): Array<'duel' | 'survivor_cut'> => {
+    const values = String(input || '')
+      .split(',')
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0)
+      .map((part) => (part === 'survivor_cut' ? 'survivor_cut' : 'duel'));
+    if (values.length > 0) return values;
+    return Array.from({ length: Math.max(1, fallbackCount) }, () => 'duel' as const);
+  };
+
+  const openCreatePresetEditor = () => {
+    setEditingPresetId(null);
+    setPresetDraft({
+      id: '',
+      name: '',
+      match_play_type: matchPlayType,
+      round_match_counts_text: '4,2,1',
+      round_rules_text: 'duel,duel,duel',
+      placement_first: '',
+      placement_second: '',
+      placement_third: '',
+      description: '',
+      min_qualified_count: '',
+      recommended_qualified_count: '',
+    });
+    setShowPresetManager(true);
+  };
+
+  const openEditPresetEditor = (format: KnownBracketFormat) => {
+    setEditingPresetId(format.id);
+    setPresetDraft({
+      id: format.id,
+      name: format.name,
+      match_play_type: format.match_play_type,
+      round_match_counts_text: Array.isArray(format.round_match_counts) ? format.round_match_counts.join(',') : '1',
+      round_rules_text: Array.isArray(format.round_rules) ? format.round_rules.join(',') : 'duel',
+      placement_first: format.placement_rules?.first || '',
+      placement_second: format.placement_rules?.second || '',
+      placement_third: format.placement_rules?.third || '',
+      description: format.description || '',
+      min_qualified_count: Number.isFinite(Number(format.min_qualified_count)) ? String(format.min_qualified_count) : '',
+      recommended_qualified_count: Number.isFinite(Number(format.recommended_qualified_count)) ? String(format.recommended_qualified_count) : '',
+    });
+    setShowPresetManager(true);
+  };
+
+  const handleSavePreset = async () => {
+    const normalizedId = normalizePresetId(presetDraft.id || presetDraft.name);
+    const roundMatchCounts = parseRoundMatchCountsFromText(presetDraft.round_match_counts_text);
+    if (!normalizedId || !presetDraft.name.trim()) {
+      alert('Preset id and name are required.');
+      return;
+    }
+    if (roundMatchCounts.length === 0) {
+      alert('At least one round match count is required.');
+      return;
+    }
+
+    const payload: KnownBracketFormatInput = {
+      id: normalizedId,
+      name: presetDraft.name.trim(),
+      match_play_type: presetDraft.match_play_type,
+      round_match_counts: roundMatchCounts,
+      round_rules: parseRoundRulesFromText(presetDraft.round_rules_text, roundMatchCounts.length),
+      placement_rules: {
+        first: presetDraft.placement_first.trim(),
+        second: presetDraft.placement_second.trim(),
+        third: presetDraft.placement_third.trim(),
+      },
+      description: presetDraft.description.trim() || undefined,
+      min_qualified_count: Number.isFinite(Number.parseInt(presetDraft.min_qualified_count, 10))
+        ? Math.max(1, Number.parseInt(presetDraft.min_qualified_count, 10))
+        : undefined,
+      recommended_qualified_count: Number.isFinite(Number.parseInt(presetDraft.recommended_qualified_count, 10))
+        ? Math.max(1, Number.parseInt(presetDraft.recommended_qualified_count, 10))
+        : undefined,
+    };
+
+    setPresetSaving(true);
+    try {
+      if (editingPresetId) {
+        await api.updateKnownBracketFormat(editingPresetId, payload);
+      } else {
+        await api.createKnownBracketFormat(payload);
+      }
+      await loadKnownBracketFormats();
+      setSelectedKnownBracketFormatId(payload.id);
+      if (payload.match_play_type === matchPlayType) {
+        applyKnownBracketFormatById(payload.id, payload.match_play_type, qualifiedCount, playoffWinnersCount);
+      }
+      setShowPresetManager(false);
+    } catch (err: any) {
+      alert(String(err?.message || 'Failed to save preset'));
+    } finally {
+      setPresetSaving(false);
+    }
+  };
+
+  const handleDeletePreset = async (presetId: string) => {
+    if (!confirm('Delete this preset?')) return;
+    try {
+      await api.deleteKnownBracketFormat(presetId);
+      if (selectedKnownBracketFormatId === presetId) {
+        setSelectedKnownBracketFormatId('');
+      }
+      await loadKnownBracketFormats();
+    } catch (err: any) {
+      alert(String(err?.message || 'Failed to delete preset'));
+    }
+  };
+
+  useEffect(() => {
+    let isActive = true;
+    loadKnownBracketFormats().then(() => {
+      if (!isActive) return;
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [tournament.id]);
 
   const saveBracketSettings = async ({ silent }: { silent: boolean }) => {
     const normalizedSettings = getNormalizedBracketSettings();
@@ -6169,6 +6422,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         match_play_type: normalizedSettings.match_play_type,
         qualified_count: normalizedSettings.qualified_count,
         playoff_winners_count: normalizedSettings.playoff_winners_count,
+        known_bracket_format_id: normalizedSettings.known_bracket_format_id,
         type: tournament.type,
         games_count: tournament.games_count,
         genders_rule: tournament.genders_rule,
@@ -6197,46 +6451,101 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   useEffect(() => {
     latestCurrentSettingsRef.current = getNormalizedBracketSettings();
     latestPersistedSettingsRef.current = getNormalizedTournamentSettings();
-  }, [matchPlayType, qualifiedCount, playoffWinnersCount, tournament.match_play_type, tournament.qualified_count, tournament.playoff_winners_count]);
+  }, [matchPlayType, qualifiedCount, playoffWinnersCount, selectedKnownBracketFormatId, tournament.match_play_type, tournament.qualified_count, tournament.playoff_winners_count, tournament.known_bracket_format_id]);
 
   useEffect(() => {
     loadBrackets();
   }, [tournament.id, bracketDivisionForApi]);
 
-  useEffect(() => {
-    loadSeeds();
-  }, [tournament.id, qualifiedCount, bracketDivisionForApi]);
-
+  // Settings hydration runs BEFORE seeds so it sets the correct qualifiedCount for the new
+  // division first, then drives a single seed load with the right count.
   useEffect(() => {
     setSettingsHydrated(false);
+    // Reset bracket division to 'all' when tournament changes
+    setBracketDivision('all');
     const preferredSettings = getNormalizedTournamentSettings();
+    const formatCandidates = getKnownFormatOptionsForType(preferredSettings.match_play_type);
+    const hasKnownFormatCatalog = knownBracketFormats.length > 0;
+    const preferredKnownFormatId = hasKnownFormatCatalog
+      ? (
+        preferredSettings.known_bracket_format_id
+        && formatCandidates.some((format) => format.id === preferredSettings.known_bracket_format_id)
+          ? preferredSettings.known_bracket_format_id
+          : (formatCandidates[0]?.id || null)
+      )
+      : (preferredSettings.known_bracket_format_id || null);
+    const hydratedSettings = {
+      ...preferredSettings,
+      known_bracket_format_id: preferredKnownFormatId,
+    };
+
     setMatchPlayType(preferredSettings.match_play_type);
     setQualifiedCount(preferredSettings.qualified_count);
     setPlayoffWinnersCount(preferredSettings.playoff_winners_count);
-    latestPersistedSettingsRef.current = preferredSettings;
-    persistBracketSettingsToStorage(preferredSettings);
+    setSelectedKnownBracketFormatId(preferredKnownFormatId || '');
+    latestPersistedSettingsRef.current = hydratedSettings;
+    persistBracketSettingsToStorage(hydratedSettings);
     setSeeds([]);
     setSelectedSeed(null);
     setMatchScoreDrafts(readStoredMatchScoreDrafts());
     setCustomRuleTableLocked(false);
+    setUseManualSeedMatchups(false);
+<<<<<<< HEAD
+    applyKnownBracketFormatById(preferredKnownFormatId, preferredSettings.match_play_type, preferredSettings.qualified_count, preferredSettings.playoff_winners_count);
+    setCustomSurvivorScoresByRound({});
+    setCustomSeedMatchups([]);
+    setCustomRoundLinkSelections({});
+=======
+    applyKnownBracketFormatById(preferredKnownFormatId, preferredSettings.match_play_type, preferredSettings.qualified_count, preferredSettings.playoff_winners_count);
+    setCustomSurvivorScoresByRound({});
+    setCustomSeedMatchups([]);
+    setCustomRoundLinkSelections({});
+>>>>>>> ad0827d (Fix: standings ranking uses only official games; table rendering stable for additional games)
     setTeamSelectionDraft({ seed1: null, seed2: null, seed3: null });
     setSettingsHydrated(true);
-  }, [tournament.id, bracketDivisionForApi]);
+    // Pass the freshly-read qualifiedCount directly to avoid using the stale state value
+    loadSeeds(preferredSettings.qualified_count);
+  }, [tournament.id, knownBracketFormats]);
 
+  // When division changes, load that division's saved setup (preset/qualified count/etc)
+  // so male/female can run different structures in one tournament.
   useEffect(() => {
-    if (matchPlayType !== 'team_selection_playoff') return;
-    if (qualifiedCount !== 8) setQualifiedCount(8);
-    if (playoffWinnersCount !== 1) setPlayoffWinnersCount(1);
-    if (useManualSeedMatchups) setUseManualSeedMatchups(false);
-  }, [matchPlayType, qualifiedCount, playoffWinnersCount, useManualSeedMatchups]);
+    if (!settingsHydrated) return;
 
-  useEffect(() => {
-    setSeedOverridesBySeedNumber(readStoredSeedOverrides());
-    setEditingSeedNumber(null);
-    setSeedEditDraftKind(tournament.type === 'team' ? 'team' : 'participant');
-    setSeedEditDraftReplaceFromId('');
-    setSeedEditDraftId('');
-  }, [tournament.id, bracketDivisionForApi]);
+    const preferredSettings = getNormalizedTournamentSettings();
+    const formatCandidates = getKnownFormatOptionsForType(preferredSettings.match_play_type);
+    const hasKnownFormatCatalog = knownBracketFormats.length > 0;
+    const preferredKnownFormatId = hasKnownFormatCatalog
+      ? (
+        preferredSettings.known_bracket_format_id
+        && formatCandidates.some((format) => format.id === preferredSettings.known_bracket_format_id)
+          ? preferredSettings.known_bracket_format_id
+          : (formatCandidates[0]?.id || null)
+      )
+      : (preferredSettings.known_bracket_format_id || null);
+    const hydratedSettings = {
+      ...preferredSettings,
+      known_bracket_format_id: preferredKnownFormatId,
+    };
+
+    setMatchPlayType(preferredSettings.match_play_type);
+    setQualifiedCount(preferredSettings.qualified_count);
+    setPlayoffWinnersCount(preferredSettings.playoff_winners_count);
+    setSelectedKnownBracketFormatId(preferredKnownFormatId || '');
+    latestPersistedSettingsRef.current = hydratedSettings;
+    persistBracketSettingsToStorage(hydratedSettings);
+    setSeeds([]);
+    setSelectedSeed(null);
+    setCustomRuleTableLocked(false);
+    setUseManualSeedMatchups(false);
+    applyKnownBracketFormatById(preferredKnownFormatId, preferredSettings.match_play_type, preferredSettings.qualified_count, preferredSettings.playoff_winners_count);
+    setCustomSurvivorScoresByRound({});
+    setCustomSeedMatchups([]);
+    setCustomRoundLinkSelections({});
+    setTeamSelectionDraft({ seed1: null, seed2: null, seed3: null });
+    loadBrackets();
+    loadSeeds(preferredSettings.qualified_count);
+  }, [bracketDivisionForApi, knownBracketFormats]);
 
   useEffect(() => {
     persistSeedOverrides(seedOverridesBySeedNumber);
@@ -6249,7 +6558,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   useEffect(() => {
     if (!settingsHydrated) return;
     persistBracketSettingsToStorage(getNormalizedBracketSettings());
-  }, [matchPlayType, qualifiedCount, playoffWinnersCount, tournament.id, settingsHydrated]);
+  }, [matchPlayType, qualifiedCount, playoffWinnersCount, selectedKnownBracketFormatId, tournament.id, settingsHydrated]);
 
   useEffect(() => {
     if (!settingsHydrated) return;
@@ -6273,7 +6582,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [matchPlayType, qualifiedCount, playoffWinnersCount, tournament.id, canManageBrackets, settingsHydrated, bracketDivisionForApi]);
+  }, [matchPlayType, qualifiedCount, playoffWinnersCount, selectedKnownBracketFormatId, tournament.id, canManageBrackets, settingsHydrated, bracketDivisionForApi]);
 
   useEffect(() => {
     return () => {
@@ -6317,7 +6626,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     if (participant.team_id && participant.team_name) {
       participantTeamNameMap.set(participant.id, participant.team_name);
     }
-    participantGenderById.set(participant.id, String(participant.gender || '').toLowerCase());
+    participantGenderById.set(participant.id, normalizeGender(participant.gender));
   }
 
   const teamNameById = new Map<number, string>();
@@ -6439,24 +6748,42 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     return match[`${slot}_name`] || 'TBD';
   };
 
-  const loadSeeds = async () => {
+  const loadSeeds = async (overrideQualifiedCount?: number) => {
+    const myVersion = ++seedLoadVersionRef.current;
+    const capturedGenderFilter = bracketGenderFilter; // freeze at call time — guards against closure staleness
+    const effectiveQualifiedCount = overrideQualifiedCount !== undefined ? overrideQualifiedCount : qualifiedCount;
+
+    const applySeeds = (nextSeeds: any[]) => {
+      // Discard if a newer loadSeeds call has already started
+<<<<<<< HEAD
+      if (seedLoadVersionRef.current !== myVersion) return [] as any[];
+=======
+      if (seedLoadVersionRef.current !== myVersion) return [] as any[];
+>>>>>>> ad0827d (Fix: standings ranking uses only official games; table rendering stable for additional games)
+      // Safety: enforce gender filter on whatever the server returned
+      if (tournament.type === 'individual' && capturedGenderFilter) {
+        const allowedIds = new Set(
+          bracketParticipants
+            .filter((p) => normalizeGender(p.gender) === capturedGenderFilter)
+            .map((p) => Number(p.id))
+        );
+        if (allowedIds.size > 0) {
+          nextSeeds = nextSeeds.filter((seed) => allowedIds.has(Number(seed.id)));
+        }
+      }
+      setSeeds(nextSeeds);
+<<<<<<< HEAD
+      return nextSeeds;
+=======
+      return nextSeeds;
+>>>>>>> ad0827d (Fix: standings ranking uses only official games; table rendering stable for additional games)
+    };
+
     try {
       try {
-        const data = await api.getSeeds(tournament.id, qualifiedCount, { gender: bracketGenderFilter });
+        const data = await api.getSeeds(tournament.id, effectiveQualifiedCount, { gender: capturedGenderFilter });
         if (Array.isArray(data.seeds) && data.seeds.length > 0) {
-          let nextSeeds = data.seeds;
-          if (tournament.type === 'individual' && bracketGenderFilter) {
-            const participantsData = await api.getParticipants(tournament.id);
-            const allowedIds = new Set(
-              participantsData
-                .filter((p) => normalizeGender(p.gender) === bracketGenderFilter)
-                .map((p) => Number(p.id))
-                .filter((id) => Number.isFinite(id) && id > 0)
-            );
-            nextSeeds = nextSeeds.filter((seed) => allowedIds.has(Number(seed.id)));
-          }
-          setSeeds(nextSeeds);
-          return nextSeeds;
+          return applySeeds(data.seeds);
         }
       } catch (err) {
         console.warn('Falling back to local seed calculation:', err);
@@ -6490,8 +6817,8 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         const rankedTeams = Array.from(teamTotals.values())
           .sort((a, b) => (b.total_score - a.total_score) || (a.id - b.id));
 
-        const effectiveQualified = qualifiedCount > 0
-          ? Math.min(qualifiedCount, rankedTeams.length)
+        const effectiveQualified = effectiveQualifiedCount > 0
+          ? Math.min(effectiveQualifiedCount, rankedTeams.length)
           : rankedTeams.length;
 
         const computedSeeds = rankedTeams.slice(0, effectiveQualified).map((team, index) => ({
@@ -6501,12 +6828,15 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
             total_score: team.total_score,
             kind: 'team',
           }));
-        setSeeds(computedSeeds);
-        return computedSeeds;
+<<<<<<< HEAD
+      return applySeeds(computedSeeds);
+=======
+        return applySeeds(computedSeeds);
+>>>>>>> ad0827d (Fix: standings ranking uses only official games; table rendering stable for additional games)
       }
 
-      const eligibleParticipants = bracketGenderFilter
-        ? participantsData.filter((participant) => normalizeGender(participant.gender) === bracketGenderFilter)
+      const eligibleParticipants = capturedGenderFilter
+        ? participantsData.filter((participant) => normalizeGender(participant.gender) === capturedGenderFilter)
         : participantsData;
 
       const playerInfo = new Map<number, { id: number; name: string; total_score: number }>();
@@ -6527,8 +6857,8 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       const rankedPlayers = Array.from(playerInfo.values())
         .sort((a, b) => (b.total_score - a.total_score) || (a.id - b.id));
 
-      const effectiveQualified = qualifiedCount > 0
-        ? Math.min(qualifiedCount, rankedPlayers.length)
+      const effectiveQualified = effectiveQualifiedCount > 0
+        ? Math.min(effectiveQualifiedCount, rankedPlayers.length)
         : rankedPlayers.length;
 
       const computedSeeds = rankedPlayers.slice(0, effectiveQualified).map((player, index) => ({
@@ -6538,15 +6868,17 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           total_score: player.total_score,
           kind: 'participant',
         }));
-      setSeeds(computedSeeds);
-      return computedSeeds;
+<<<<<<< HEAD
+      return applySeeds(computedSeeds);
+=======
+      return applySeeds(computedSeeds);
+>>>>>>> ad0827d (Fix: standings ranking uses only official games; table rendering stable for additional games)
     } catch (err) {
       console.error(err);
-      setSeeds([]);
+      if (seedLoadVersionRef.current === myVersion) setSeeds([]);
       return [];
     }
   };
-
   const handleGenerate = async () => {
     try {
       let orderedSeedIds: number[] = [];
@@ -6671,7 +7003,14 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         }
         seedKind = 'participant';
       } else {
-        const sourceSeeds = getEffectiveSeeds(await loadSeeds());
+        const initialSourceSeeds = (visibleSeeds && visibleSeeds.length > 0)
+          ? visibleSeeds
+          : getEffectiveSeeds(await loadSeeds());
+
+        const sourceSeeds = (tournament.type === 'individual' && bracketGenderFilter)
+          ? (initialSourceSeeds || []).filter((seed: any) => normalizeGender(participantGenderById.get(Number(seed.id))) === bracketGenderFilter)
+          : initialSourceSeeds;
+
         const seedIdBySeedNumber = new Map<number, number>();
         for (const seed of (sourceSeeds || [])) {
           seedIdBySeedNumber.set(Number(seed.seed), Number(seed.id));
@@ -6701,6 +7040,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         return;
       }
 
+      if (matchPlayType === 'stepladder' && orderedSeedIds.length < 3) {
+        alert('Stepladder requires at least 3 valid seeds in the selected division.');
+        return;
+      }
+
       if (matchPlayType === 'team_selection_playoff') {
         if (orderedSeedIds.length < 8) {
           alert('Team Selection Playoff requires 8 qualified teams/seeds.');
@@ -6726,34 +7070,55 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       persistMatchScoreDraftsToStorage({});
 
       if (useManualSeedMatchups) {
-        const roundsToFinal = Math.max(1, Math.ceil(Math.log2(Math.max(2, orderedSeedIds.length))));
-        const round1Matches = Math.max(1, Math.ceil(Math.pow(2, roundsToFinal) / 2));
+        const roundMatchCounts = normalizedCustomRoundMatchCounts;
+        const roundRules = customRoundRules.length > 0
+          ? customRoundRules
+          : Array.from({ length: roundMatchCounts.length }, () => 'duel' as const);
+        const roundsToFinal = Math.max(1, roundMatchCounts.length);
+        const round1Matches = Math.max(1, roundMatchCounts[0] || 1);
+        const round1Rule: 'duel' | 'survivor_cut' = roundRules[0] === 'survivor_cut' ? 'survivor_cut' : 'duel';
         const matchupRows = customSeedMatchups.slice(0, round1Matches);
 
-        if (matchupRows.length < round1Matches) {
-          alert('Complete all custom rule rows before generating brackets.');
-          return;
-        }
-
-        const pickedSeeds: number[] = [];
-        for (const row of matchupRows) {
-          const p1 = Number(row.p1);
-          const p2 = Number(row.p2);
-          if (!Number.isFinite(p1) || p1 <= 0 || !Number.isFinite(p2) || p2 <= 0 || p1 === p2) {
-            alert('Each custom match row must contain two different seeds.');
+        if (round1Rule === 'duel') {
+          if (matchupRows.length < round1Matches) {
+            alert('Complete all custom rule rows before generating brackets.');
             return;
           }
-          if (!seedParticipantIdBySeedNumber.has(p1) || !seedParticipantIdBySeedNumber.has(p2)) {
-            alert('Custom rule table includes a seed that is not in current Top Seeds.');
+
+          const pickedSeeds: number[] = [];
+          for (const row of matchupRows) {
+            const p1 = Number(row.p1);
+            const p2 = Number(row.p2);
+            if (!Number.isFinite(p1) || p1 <= 0 || !Number.isFinite(p2) || p2 <= 0 || p1 === p2) {
+              alert('Each custom match row must contain two different seeds.');
+              return;
+            }
+            if (!seedParticipantIdBySeedNumber.has(p1) || !seedParticipantIdBySeedNumber.has(p2)) {
+              alert('Custom rule table includes a seed that is not in current Top Seeds.');
+              return;
+            }
+            pickedSeeds.push(p1, p2);
+          }
+
+          const duplicateSeed = pickedSeeds.find((seedNo, idx) => pickedSeeds.indexOf(seedNo) !== idx);
+          if (duplicateSeed) {
+            alert(`Seed #${duplicateSeed} is used more than once. Each seed can only appear once.`);
             return;
           }
-          pickedSeeds.push(p1, p2);
-        }
-
-        const duplicateSeed = pickedSeeds.find((seedNo, idx) => pickedSeeds.indexOf(seedNo) !== idx);
-        if (duplicateSeed) {
-          alert(`Seed #${duplicateSeed} is used more than once. Each seed can only appear once.`);
-          return;
+        } else {
+          const roundOneCandidates = survivorCandidateSeedsByRound[1] || [];
+          if (roundOneCandidates.length < 2) {
+            alert('Survivor Round 1 needs at least 2 seeds.');
+            return;
+          }
+          if (survivorTieByRound[1]) {
+            alert('Round 1 survivor elimination has a lowest-score tie. Resolve tie-break first.');
+            return;
+          }
+          if (!survivorEliminatedSeedByRound[1]) {
+            alert('Enter all Round 1 survivor scores to identify the eliminated seed.');
+            return;
+          }
         }
 
         const customLinks: Array<{
@@ -6765,11 +7130,35 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           to_slot: 'p1' | 'p2';
         }> = [];
 
+        const customSeedSlotAssignments: Array<{
+          to_round: number;
+          to_match_index: number;
+          to_slot: 'p1' | 'p2';
+          seed_number: number;
+        }> = [];
+
         for (let round = 2; round <= roundsToFinal; round += 1) {
+          const currentRoundRule: 'duel' | 'survivor_cut' = roundRules[round - 1] === 'survivor_cut' ? 'survivor_cut' : 'duel';
+          const previousRoundRule: 'duel' | 'survivor_cut' = roundRules[round - 2] === 'survivor_cut' ? 'survivor_cut' : 'duel';
+          if (currentRoundRule === 'survivor_cut') {
+            const candidates = survivorCandidateSeedsByRound[round] || [];
+            if (candidates.length < 2) {
+              alert(`Round ${round} survivor mode needs at least 2 seeds.`);
+              return;
+            }
+            if (survivorTieByRound[round]) {
+              alert(`Round ${round} survivor elimination has a lowest-score tie. Resolve tie-break first.`);
+              return;
+            }
+            if (!survivorEliminatedSeedByRound[round]) {
+              alert(`Enter all Round ${round} survivor scores to identify the eliminated seed.`);
+              return;
+            }
+            continue;
+          }
+
           const previousCount = customRoundCounts[round - 1] || 0;
-          const championshipMatches = Math.max(1, Math.floor(previousCount / 2));
-          const placementExtra = (round === roundsToFinal && Math.min(3, Math.max(1, Number(playoffWinnersCount) || 1)) > 1) ? 1 : 0;
-          const expectedRows = championshipMatches + placementExtra;
+          const expectedRows = Math.max(1, customRoundCounts[round] || 1);
           const rows = customRoundLinkSelections[round] || [];
 
           if (rows.length < expectedRows) {
@@ -6779,35 +7168,49 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 
           for (let matchIndex = 0; matchIndex < expectedRows; matchIndex += 1) {
             const row = rows[matchIndex] || { p1: '', p2: '' };
-            const isPlacementRow = placementExtra === 1 && matchIndex === expectedRows - 1;
-
-            if (isPlacementRow) {
-              const [p1OutcomeRaw, p1IndexRaw] = String(row.p1 || '').split(':');
-              const [p2OutcomeRaw, p2IndexRaw] = String(row.p2 || '').split(':');
-              const p1Outcome = p1OutcomeRaw === 'loser' ? 'loser' : (p1OutcomeRaw === 'winner' ? 'winner' : '');
-              const p2Outcome = p2OutcomeRaw === 'loser' ? 'loser' : (p2OutcomeRaw === 'winner' ? 'winner' : '');
-              const p1Index = Number.parseInt(String(p1IndexRaw || ''), 10);
-              const p2Index = Number.parseInt(String(p2IndexRaw || ''), 10);
-
-              if (p1Outcome !== 'loser' || p2Outcome !== 'loser') {
-                alert('3rd Place Match must be between two losers (Loser vs Loser).');
-                return;
-              }
-              if (!Number.isFinite(p1Index) || !Number.isFinite(p2Index) || p1Index < 0 || p2Index < 0 || p1Index >= previousCount || p2Index >= previousCount || p1Index === p2Index) {
-                alert('3rd Place Match must use two different semi-final losers.');
-                return;
-              }
-            }
 
             for (const slot of ['p1', 'p2'] as const) {
               const raw = String(slot === 'p1' ? row.p1 : row.p2 || '');
               const [outcomeRaw, indexRaw] = raw.split(':');
-              const sourceOutcome = outcomeRaw === 'loser' ? 'loser' : (outcomeRaw === 'winner' ? 'winner' : '');
+              const sourceOutcome = outcomeRaw === 'loser'
+                ? 'loser'
+                : (outcomeRaw === 'winner' ? 'winner' : (outcomeRaw === 'seed' ? 'seed' : ''));
               const sourceIndex = Number.parseInt(String(indexRaw || ''), 10);
-              if (!sourceOutcome || !Number.isFinite(sourceIndex) || sourceIndex < 0 || sourceIndex >= previousCount) {
+              if (!sourceOutcome || !Number.isFinite(sourceIndex) || sourceIndex < 0) {
                 alert(`Invalid source in Round ${round} Match ${matchIndex + 1}.`);
                 return;
               }
+
+              if (sourceOutcome === 'seed') {
+                if (previousRoundRule === 'survivor_cut') {
+                  const allowedSeeds = survivorAdvancingSeedsByRound[round - 1] || [];
+                  if (!allowedSeeds.includes(sourceIndex)) {
+                    alert(`Seed #${sourceIndex} is not advancing from survivor Round ${round - 1}.`);
+                    return;
+                  }
+                } else if (!seedParticipantIdBySeedNumber.has(sourceIndex)) {
+                  alert(`Seed #${sourceIndex} is not available in current Top Seeds.`);
+                  return;
+                }
+                customSeedSlotAssignments.push({
+                  to_round: round,
+                  to_match_index: matchIndex,
+                  to_slot: slot,
+                  seed_number: sourceIndex,
+                });
+                continue;
+              }
+
+              if (previousRoundRule === 'survivor_cut') {
+                alert(`Round ${round} Match ${matchIndex + 1} must use Seed sources because Round ${round - 1} is survivor mode.`);
+                return;
+              }
+
+              if (sourceIndex >= previousCount) {
+                alert(`Invalid source in Round ${round} Match ${matchIndex + 1}.`);
+                return;
+              }
+
               customLinks.push({
                 from_round: round - 1,
                 from_match_index: sourceIndex,
@@ -6817,6 +7220,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 to_slot: slot,
               });
             }
+
+            if (String(row.p1 || '') === String(row.p2 || '')) {
+              alert(`Round ${round} Match ${matchIndex + 1} cannot use the same source twice.`);
+              return;
+            }
           }
         }
 
@@ -6824,6 +7232,8 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           division: bracketDivisionForApi,
           rounds_count: roundsToFinal,
           round1_matches: round1Matches,
+          round_match_counts: roundMatchCounts,
+          round_rules: roundRules,
           winners_mode: Math.min(3, Math.max(1, Number(playoffWinnersCount) || 1)) > 1 ? '3' : '1',
           links: customLinks,
         });
@@ -6832,30 +7242,49 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
         const roundOneMatches = freshMatches
           .filter((m: any) => Number(m.round) === 1)
           .sort((a: any, b: any) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
+        const matchByRoundIndex = new Map<string, any>();
+        for (const m of freshMatches) {
+          matchByRoundIndex.set(`${Number(m.round)}-${Number(m.match_index)}`, m);
+        }
 
-        for (let i = 0; i < round1Matches; i += 1) {
-          const match = roundOneMatches[i];
-          const row = matchupRows[i];
-          if (!match || !row) continue;
+        if (round1Rule === 'duel') {
+          for (let i = 0; i < round1Matches; i += 1) {
+            const match = roundOneMatches[i];
+            const row = matchupRows[i];
+            if (!match || !row) continue;
 
-          const p1 = Number(row.p1);
-          const p2 = Number(row.p2);
-          const p1ParticipantId = seedParticipantIdBySeedNumber.get(p1);
-          const p2ParticipantId = seedParticipantIdBySeedNumber.get(p2);
-          if (!p1ParticipantId || !p2ParticipantId) continue;
+            const p1 = Number(row.p1);
+            const p2 = Number(row.p2);
+            const p1ParticipantId = seedParticipantIdBySeedNumber.get(p1);
+            const p2ParticipantId = seedParticipantIdBySeedNumber.get(p2);
+            if (!p1ParticipantId || !p2ParticipantId) continue;
 
-          await api.assignBracketSeed(tournament.id, match.id, {
-            slot: 'p1',
-            seed_id: p1ParticipantId,
+            await api.assignBracketSeed(tournament.id, match.id, {
+              slot: 'p1',
+              seed_id: p1ParticipantId,
+              seed_kind: 'participant',
+              seed: p1,
+            });
+
+            await api.assignBracketSeed(tournament.id, match.id, {
+              slot: 'p2',
+              seed_id: p2ParticipantId,
+              seed_kind: 'participant',
+              seed: p2,
+            });
+          }
+        }
+
+        for (const assignment of customSeedSlotAssignments) {
+          const targetMatch = matchByRoundIndex.get(`${assignment.to_round}-${assignment.to_match_index}`);
+          if (!targetMatch) continue;
+          const participantId = seedParticipantIdBySeedNumber.get(assignment.seed_number);
+          if (!participantId) continue;
+          await api.assignBracketSeed(tournament.id, targetMatch.id, {
+            slot: assignment.to_slot,
+            seed_id: participantId,
             seed_kind: 'participant',
-            seed: p1,
-          });
-
-          await api.assignBracketSeed(tournament.id, match.id, {
-            slot: 'p2',
-            seed_id: p2ParticipantId,
-            seed_kind: 'participant',
-            seed: p2,
+            seed: assignment.seed_number,
           });
         }
         setCustomRuleTableLocked(true);
@@ -7142,6 +7571,8 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const matchPlayTypeForRules: Tournament['match_play_type'] = isPublicBracketView
     ? (publicPreviewMatchPlayType || matchPlayType)
     : matchPlayType;
+  const selectedBracketTypeValue = matchPlayTypeForRules;
+  const knownBracketFormatOptions = getKnownFormatOptionsForType(matchPlayType);
   const effectiveQualified = qualifiedCount > 0 ? qualifiedCount : 0;
   const normalizedSeedsBase = effectiveQualified > 1 ? effectiveQualified : 2;
   let seedsCount = 1;
@@ -7151,6 +7582,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     : Math.max(1, Math.round(Math.log2(seedsCount)));
   const roundOneMatchesPreview = Math.floor(seedsCount / 2);
   const winnersCountPreview = Math.min(3, Math.max(1, Number(playoffWinnersCount) || 1));
+  const bracketRenderKey = `${tournament.id}-${bracketDivisionForApi}-${matchPlayType}-${qualifiedCount}`;
   const bracketFinalRoundNumber = matches.reduce((max: number, m: any) => Math.max(max, Number(m.round) || 0), 0);
   const bracketFinalMatch = matches.find((m: any) => Number(m.round) === bracketFinalRoundNumber && Number(m.match_index) === 0);
   const bracketBronzeMatch = matches.find((m: any) => Number(m.round) === bracketFinalRoundNumber && Number(m.match_index) === 1);
@@ -7347,34 +7779,72 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const teamSelectionSeed3Options = teamSelectionSeed2Options.filter((seedNo: number) => seedNo !== Number(teamSelectionDraft.seed2));
   const teamSelectionRemainingForSeed4 = teamSelectionSeed3Options.filter((seedNo: number) => seedNo !== Number(teamSelectionDraft.seed3));
   const lockCustomSeedEditing = useManualSeedMatchups && customRuleTableLocked;
-  const customRoundCounts: number[] = [];
-  customRoundCounts[1] = Math.max(1, roundOneMatchesPreview);
-  for (let round = 2; round <= roundsCountPreview; round += 1) {
-    const previousCount = customRoundCounts[round - 1] || 1;
-    const championshipMatches = Math.max(1, Math.floor(previousCount / 2));
-    const placementExtra = (round === roundsCountPreview && winnersCountPreview > 1) ? 1 : 0;
-    customRoundCounts[round] = championshipMatches + placementExtra;
+  const normalizedCustomRoundMatchCounts = (customRoundMatchCounts.length > 0 ? customRoundMatchCounts : [1])
+    .map((value) => Math.max(1, Number(value) || 1));
+  const customRoundCounts: number[] = [0, ...normalizedCustomRoundMatchCounts];
+  const customRoundsCount = normalizedCustomRoundMatchCounts.length;
+  const normalizedCustomRoundRules = Array.from({ length: customRoundsCount }, (_, index) => (
+    customRoundRules[index] === 'survivor_cut' ? 'survivor_cut' : 'duel'
+  ));
+  const survivorCandidateSeedsByRound: Record<number, number[]> = {};
+  const survivorAdvancingSeedsByRound: Record<number, number[]> = {};
+  const survivorEliminatedSeedByRound: Record<number, number | null> = {};
+  const survivorTieByRound: Record<number, boolean> = {};
+  for (let round = 1; round <= customRoundsCount; round += 1) {
+    const currentRule = normalizedCustomRoundRules[round - 1] || 'duel';
+    if (currentRule !== 'survivor_cut') continue;
+
+    const previousRule = round > 1 ? (normalizedCustomRoundRules[round - 2] || 'duel') : 'duel';
+    const candidateSeeds = round === 1
+      ? [...availableSeedNumbersForCustom]
+      : (previousRule === 'survivor_cut'
+        ? [...(survivorAdvancingSeedsByRound[round - 1] || [])]
+        : [...availableSeedNumbersForCustom]);
+
+    survivorCandidateSeedsByRound[round] = candidateSeeds;
+
+    const scoreMap = customSurvivorScoresByRound[round] || {};
+    const parsedScores = candidateSeeds.map((seedNo) => ({
+      seedNo,
+      score: Number.parseInt(String(scoreMap[seedNo] || ''), 10),
+    }));
+    const allScoresEntered = parsedScores.length > 1 && parsedScores.every((item) => Number.isFinite(item.score));
+
+    let eliminatedSeed: number | null = null;
+    let hasTieForLowest = false;
+    if (allScoresEntered) {
+      const minimumScore = Math.min(...parsedScores.map((item) => Number(item.score)));
+      const lowest = parsedScores.filter((item) => Number(item.score) === minimumScore);
+      if (lowest.length === 1) {
+        eliminatedSeed = lowest[0].seedNo;
+      } else {
+        hasTieForLowest = true;
+      }
+    }
+
+    survivorEliminatedSeedByRound[round] = eliminatedSeed;
+    survivorTieByRound[round] = hasTieForLowest;
+    survivorAdvancingSeedsByRound[round] = eliminatedSeed
+      ? candidateSeeds.filter((seedNo) => seedNo !== eliminatedSeed)
+      : [...candidateSeeds];
   }
 
   const roundStartMatchNumber: Record<number, number> = {};
   let runningMatchNumber = 1;
-  for (let round = 1; round <= roundsCountPreview; round += 1) {
+  for (let round = 1; round <= customRoundsCount; round += 1) {
     roundStartMatchNumber[round] = runningMatchNumber;
     runningMatchNumber += customRoundCounts[round] || 0;
   }
 
   const toMatchLabel = (round: number, matchIndex: number) => `M${(roundStartMatchNumber[round] || 1) + matchIndex}`;
 
-  const customQuarterRuleRows = customSeedMatchups.slice(0, roundOneMatchesPreview).map((row, index) => ({
+  const customQuarterRuleRows = customSeedMatchups.slice(0, customRoundCounts[1] || 1).map((row, index) => ({
     index,
     leftSeed: row.p1,
     rightSeed: row.p2,
     label: toMatchLabel(1, index),
   }));
-  const customRoundTwoTitle = isEightSeedPlayoffMode ? 'Semi-Finals' : 'Round 2';
-  const customFinalRoundTitle = 'Finals & Placement';
-  const customFinalRoundIndex = roundsCountPreview;
-  const customRoundOneTitle = isEightSeedPlayoffMode ? 'Quarter-Finals' : 'Round 1';
+  const customRoundOneTitle = 'Round 1';
 
   useEffect(() => {
     if (!isTeamSelectionPlayoffMode) return;
@@ -7390,12 +7860,12 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   useEffect(() => {
     setCustomSeedMatchups((prev) => {
       const next: Array<{ p1: number | null; p2: number | null }> = [];
-      for (let i = 0; i < roundOneMatchesPreview; i += 1) {
+      for (let i = 0; i < (customRoundCounts[1] || 1); i += 1) {
         next.push(prev[i] || { p1: null, p2: null });
       }
       return next;
     });
-  }, [roundOneMatchesPreview, tournament.id]);
+  }, [customRoundCounts[1], tournament.id]);
 
   useEffect(() => {
     setPublicPreviewMatchPlayType(null);
@@ -7410,11 +7880,8 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   useEffect(() => {
     setCustomRoundLinkSelections((prev) => {
       const next: Record<number, Array<{ p1: string; p2: string }>> = {};
-      for (let round = 2; round <= roundsCountPreview; round += 1) {
-        const previousCount = customRoundCounts[round - 1] || 1;
-        const championshipMatches = Math.max(1, Math.floor(previousCount / 2));
-        const placementExtra = (round === roundsCountPreview && winnersCountPreview > 1) ? 1 : 0;
-        const totalMatches = championshipMatches + placementExtra;
+      for (let round = 2; round <= customRoundsCount; round += 1) {
+        const totalMatches = Math.max(1, customRoundCounts[round] || 1);
 
         next[round] = [];
         for (let matchIndex = 0; matchIndex < totalMatches; matchIndex += 1) {
@@ -7423,28 +7890,46 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
             next[round].push(existing);
             continue;
           }
-
-          if (placementExtra === 1 && matchIndex === totalMatches - 1) {
-            const loserLeft = previousCount > 0 ? 0 : -1;
-            const loserRight = previousCount > 1 ? 1 : 0;
-            next[round].push({
-              p1: loserLeft >= 0 ? `loser:${loserLeft}` : '',
-              p2: loserRight >= 0 ? `loser:${loserRight}` : '',
-            });
-            continue;
-          }
-
-          const leftIndex = matchIndex * 2;
-          const rightIndex = Math.min((matchIndex * 2) + 1, Math.max(0, previousCount - 1));
           next[round].push({
-            p1: leftIndex < previousCount ? `winner:${leftIndex}` : '',
-            p2: rightIndex < previousCount ? `winner:${rightIndex}` : '',
+            p1: '',
+            p2: '',
           });
         }
       }
       return next;
     });
-  }, [roundsCountPreview, roundOneMatchesPreview, winnersCountPreview, tournament.id]);
+  }, [customRoundsCount, customRoundMatchCounts.join(','), tournament.id]);
+
+  useEffect(() => {
+    setCustomRoundRules((prev) => {
+      const next = Array.from({ length: customRoundsCount }, (_, index) => (
+        prev[index] === 'survivor_cut' ? 'survivor_cut' : 'duel'
+      ));
+      if (next.length === prev.length && next.every((value, index) => value === prev[index])) return prev;
+      return next;
+    });
+  }, [customRoundsCount, tournament.id]);
+
+  useEffect(() => {
+    setCustomSurvivorScoresByRound((prev) => {
+      const next: Record<number, Record<number, string>> = {};
+      for (let round = 1; round <= customRoundsCount; round += 1) {
+        if ((normalizedCustomRoundRules[round - 1] || 'duel') !== 'survivor_cut') continue;
+        const candidates = survivorCandidateSeedsByRound[round] || [];
+        const existingScores = prev[round] || {};
+        const filteredScores: Record<number, string> = {};
+        for (const seedNo of candidates) {
+          const raw = String(existingScores[seedNo] || '');
+          if (raw !== '') filteredScores[seedNo] = raw;
+        }
+        next[round] = filteredScores;
+      }
+
+      const prevKey = JSON.stringify(prev);
+      const nextKey = JSON.stringify(next);
+      return prevKey === nextKey ? prev : next;
+    });
+  }, [customRoundsCount, normalizedCustomRoundRules.join(','), availableSeedNumbersForCustom.join(',')]);
 
   const updateCustomSeedMatchup = (index: number, slot: 'p1' | 'p2', value: string) => {
     const numeric = Number.parseInt(String(value || ''), 10);
@@ -7466,10 +7951,20 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     });
   };
 
-  const getRoundSourceOptions = (round: number, includeLosers: boolean) => {
+  const getRoundSourceOptions = (round: number, includeLosers = true) => {
     const previousRound = round - 1;
     const previousCount = customRoundCounts[previousRound] || 0;
+    const previousRoundRule = normalizedCustomRoundRules[previousRound - 1] || 'duel';
     const options: Array<{ value: string; label: string }> = [];
+    const seedPool = previousRoundRule === 'survivor_cut'
+      ? (survivorAdvancingSeedsByRound[previousRound] || [])
+      : availableSeedNumbersForCustom;
+    for (const seedNo of seedPool) {
+      options.push({ value: `seed:${seedNo}`, label: `Seed #${seedNo}` });
+    }
+    if (previousRoundRule === 'survivor_cut') {
+      return options;
+    }
     for (let idx = 0; idx < previousCount; idx += 1) {
       const matchLabel = toMatchLabel(previousRound, idx);
       options.push({ value: `winner:${idx}`, label: `Winner ${matchLabel}` });
@@ -7482,6 +7977,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 
   const formatSourceToken = (round: number, token: string) => {
     const [outcomeRaw, indexRaw] = String(token || '').split(':');
+    if (outcomeRaw === 'seed') {
+      const seedNo = Number.parseInt(String(indexRaw || ''), 10);
+      if (!Number.isFinite(seedNo) || seedNo <= 0) return 'Seed ?';
+      return `Seed #${seedNo}`;
+    }
     const outcome = outcomeRaw === 'loser' ? 'Loser' : (outcomeRaw === 'winner' ? 'Winner' : '');
     const sourceIndex = Number.parseInt(String(indexRaw || ''), 10);
     if (!outcome || !Number.isFinite(sourceIndex) || sourceIndex < 0) return 'Source ?';
@@ -7491,19 +7991,80 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     return `${outcome} ${toMatchLabel(previousRound, sourceIndex)}`;
   };
 
-  const roundTwoRows = (customRoundLinkSelections[2] || []).map((row, index) => ({
-    index,
-    label: toMatchLabel(2, index),
-    p1: row.p1 || '',
-    p2: row.p2 || '',
-  }));
+  const customRoundRowsByRound: Record<number, Array<{ index: number; label: string; p1: string; p2: string }>> = {};
+  for (let round = 2; round <= customRoundsCount; round += 1) {
+    customRoundRowsByRound[round] = (customRoundLinkSelections[round] || []).map((row, index) => ({
+      index,
+      label: toMatchLabel(round, index),
+      p1: row.p1 || '',
+      p2: row.p2 || '',
+    }));
+  }
 
-  const finalRoundRows = (customRoundLinkSelections[customFinalRoundIndex] || []).map((row, index) => ({
-    index,
-    label: toMatchLabel(customFinalRoundIndex, index),
-    p1: row.p1 || '',
-    p2: row.p2 || '',
-  }));
+  const updateSurvivorScore = (round: number, seedNo: number, value: string) => {
+    const cleaned = String(value || '').replace(/[^0-9]/g, '');
+    setCustomSurvivorScoresByRound((prev) => ({
+      ...prev,
+      [round]: {
+        ...(prev[round] || {}),
+        [seedNo]: cleaned,
+      },
+    }));
+  };
+
+  const renderSurvivorRoundPanel = (round: number) => {
+    const candidates = survivorCandidateSeedsByRound[round] || [];
+    const eliminatedSeed = survivorEliminatedSeedByRound[round];
+    const hasTie = survivorTieByRound[round] === true;
+    const advancing = survivorAdvancingSeedsByRound[round] || [];
+    const scoreMap = customSurvivorScoresByRound[round] || {};
+
+    if (candidates.length === 0) {
+      return <p className="text-[11px] text-black/55">No seed pool is available for this survivor round yet.</p>;
+    }
+
+    return (
+      <div className="space-y-2">
+        <p className="text-[11px] text-black/65">All seeds below bowl one game in this round. Lowest score is eliminated.</p>
+        <div className="rounded border border-black/10 overflow-hidden">
+          <div className="grid grid-cols-[1fr_120px] bg-black/[0.03] text-[10px] font-bold uppercase tracking-widest text-black/55 px-2 py-1">
+            <span>Seed</span>
+            <span className="text-right">Score</span>
+          </div>
+          {candidates.map((seedNo) => {
+            const isEliminated = Number(eliminatedSeed) === Number(seedNo);
+            return (
+              <div
+                key={`survivor-round-${round}-seed-${seedNo}`}
+                className={`grid grid-cols-[1fr_120px] items-center px-2 py-1.5 border-t border-black/10 ${isEliminated ? 'bg-red-50' : 'bg-white'}`}
+              >
+                <span className={`text-[12px] font-semibold ${isEliminated ? 'text-red-700' : 'text-black/80'}`}>
+                  Seed #{seedNo}{isEliminated ? ' (eliminated)' : ''}
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  value={scoreMap[seedNo] ?? ''}
+                  disabled={lockCustomSeedEditing}
+                  onChange={(e: any) => updateSurvivorScore(round, seedNo, e.target.value)}
+                  className="h-7 px-2 rounded border border-black/15 bg-white text-[12px] text-right disabled:bg-black/5 disabled:text-black/40"
+                  placeholder="0"
+                />
+              </div>
+            );
+          })}
+        </div>
+        {hasTie ? (
+          <p className="text-[10px] text-amber-700">Lowest score is tied. Enter tie-break result to identify a single eliminated seed.</p>
+        ) : eliminatedSeed ? (
+          <p className="text-[10px] text-red-700">Eliminated this round: Seed #{eliminatedSeed}</p>
+        ) : (
+          <p className="text-[10px] text-black/50">Enter all scores to resolve elimination.</p>
+        )}
+        <p className="text-[10px] text-emerald-700">Advancing to next round: {advancing.length > 0 ? advancing.map((seedNo) => `#${seedNo}`).join(', ') : 'None yet'}</p>
+      </div>
+    );
+  };
 
   const getVisualRoundSpacingClass = (roundIndex: number) => (
     roundIndex === 0 ? 'space-y-3' : roundIndex === 1 ? 'space-y-8 pt-8' : 'space-y-14 pt-16'
@@ -8093,7 +8654,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   };
 
   return (
-    <div ref={printSectionRef} className="space-y-4">
+    <div key={bracketRenderKey} ref={printSectionRef} className="space-y-4">
       <div>
         <h3 className="text-lg font-bold">{tx('Bracket Setup')}</h3>
         <p className="text-xs text-black/50">{tx('1) Choose rules 2) Review top seeds 3) Generate.')}</p>
@@ -8159,14 +8720,22 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">{tx('Bracket Type')}</label>
               <select
-                value={matchPlayTypeForRules}
+                value={selectedBracketTypeValue}
                 onChange={(e: any) => {
-                  const nextType = e.target.value as Tournament['match_play_type'];
+                  const nextType = String(e.target.value || 'single_elimination') as Tournament['match_play_type'];
+                  const nextKnownFormatId = getKnownFormatOptionsForType(nextType)[0]?.id || '';
                   if (isPublicBracketView) {
                     setPublicPreviewMatchPlayType(nextType);
                     return;
                   }
                   setMatchPlayType(nextType);
+                  setSelectedKnownBracketFormatId(nextKnownFormatId);
+                  setUseManualSeedMatchups(false);
+                  setCustomRuleTableLocked(false);
+                  applyKnownBracketFormatById(nextKnownFormatId || null, nextType, qualifiedCount, playoffWinnersCount);
+                  setCustomSeedMatchups([]);
+                  setCustomRoundLinkSelections({});
+                  setCustomSurvivorScoresByRound({});
                 }}
                 className="w-full h-8 px-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 bg-white text-[13px]"
               >
@@ -8176,7 +8745,61 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 <option value="stepladder">Stepladder</option>
                 <option value="playoff">{tx('Play-Off')}</option>
                 <option value="team_selection_playoff">Team Selection Playoff</option>
+                <option value="survivor_elimination">Survivor Elimination</option>
               </select>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-0.5">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block">Preset Structure</label>
+                {role === 'admin' && (
+                  <div className="flex items-center gap-1">
+                    <Button size="sm" variant="outline" className="px-2 h-6" onClick={openCreatePresetEditor} title="New Preset" ariaLabel="New Preset">
+                      <Plus size={12} />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="px-2 h-6"
+                      onClick={() => {
+                        const selected = knownBracketFormats.find((item) => item.id === selectedKnownBracketFormatId);
+                        if (!selected) return;
+                        openEditPresetEditor(selected);
+                      }}
+                      disabled={!selectedKnownBracketFormatId}
+                      title="Edit Preset"
+                      ariaLabel="Edit Preset"
+                    >
+                      <Edit size={12} />
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <select
+                value={selectedKnownBracketFormatId}
+                onChange={(e: any) => {
+                  const nextFormatId = String(e.target.value || '');
+                  if (isPublicBracketView) return;
+                  setSelectedKnownBracketFormatId(nextFormatId);
+                  applyKnownBracketFormatById(nextFormatId || null, matchPlayType, qualifiedCount, playoffWinnersCount);
+                  setUseManualSeedMatchups(false);
+                  setCustomRuleTableLocked(false);
+                  setCustomSeedMatchups([]);
+                  setCustomRoundLinkSelections({});
+                  setCustomSurvivorScoresByRound({});
+                }}
+                disabled={isPublicBracketView || knownBracketFormatOptions.length === 0}
+                className="w-full h-8 px-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 bg-white text-[13px] disabled:bg-black/5"
+              >
+                {knownBracketFormatOptions.length === 0 ? (
+                  <option value="">No presets available</option>
+                ) : (
+                  knownBracketFormatOptions.map((format) => (
+                    <option key={format.id} value={format.id}>{format.name}</option>
+                  ))
+                )}
+              </select>
+              <p className="text-[10px] text-black/45 mt-1">Select a preset structure to auto-fill rounds and rules.</p>
             </div>
 
             {supportsDivisionBrackets && (
@@ -8191,7 +8814,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                   <option value="male">Male</option>
                   <option value="female">Female</option>
                 </select>
-                <p className="text-[10px] text-black/45 mt-1">Generate and manage brackets per selected division without deleting the other division.</p>
+                <p className="text-[10px] text-black/45 mt-1">Generate and manage brackets per selected division without deleting the other division. Each division keeps its own preset and qualified count.</p>
               </div>
             )}
 
@@ -8300,6 +8923,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                       const enabled = Boolean(e.target.checked);
                       setUseManualSeedMatchups(enabled);
                       if (enabled) {
+                        setCustomRoundMatchCounts((prev) => prev.length > 0 ? prev : [1]);
                         setCustomRuleTableLocked(false);
                       }
                     }}
@@ -8310,7 +8934,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 {useManualSeedMatchups && (
                   <div className="rounded-md border border-black/10 bg-black/[0.02] px-2 py-1.5">
                     <p className="text-[11px] text-black/55">
-                      Complete pairings in the Custom Matchup Rules table below before Generate. Seed slots are locked after Generate.
+                      Define the bracket structure first: rounds, matches per round, first-round seeds, then winner/loser routes for every later slot.
                     </p>
                   </div>
                 )}
@@ -8326,6 +8950,26 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
               <p className="text-[11px] text-black/45 leading-tight">
                 Top #{qualifiedCount > 0 ? qualifiedCount : 'all'} by total pinfall.
               </p>
+              {(() => {
+                if (!bracketGenderFilter) return null;
+                const poolCount = bracketParticipants.filter(p => normalizeGender(p.gender) === bracketGenderFilter).length;
+                const requested = qualifiedCount > 0 ? qualifiedCount : poolCount;
+                if (poolCount === 0) return (
+                  <p className="text-[10px] text-red-500 leading-tight mt-0.5">
+                    No {bracketGenderFilter} participants found — check gender data.
+                  </p>
+                );
+                if (poolCount < requested) return (
+                  <p className="text-[10px] text-amber-600 leading-tight mt-0.5">
+                    {poolCount} {bracketGenderFilter} participants available (requested {requested})
+                  </p>
+                );
+                return (
+                  <p className="text-[10px] text-black/40 leading-tight mt-0.5">
+                    {poolCount} {bracketGenderFilter} participants in pool
+                  </p>
+                );
+              })()}
               {canEditTopSeeds && (
                 <p className="text-[10px] text-black/45 leading-tight mt-0.5">Double-click a seed card, choose source (team/player), then pick replacement from all registered entries.</p>
               )}
@@ -8490,16 +9134,84 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
               <h4 className="text-sm font-bold text-emerald-800 uppercase tracking-widest">Custom Matchup Rules</h4>
-              <p className="text-xs text-black/60 mt-1">Editable before generate. Seed slots are locked after generate.</p>
+              <p className="text-xs text-black/60 mt-1">Build the bracket step by step: schema, entry matches, and routing. Editable before generate.</p>
             </div>
             <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded bg-emerald-100 text-emerald-800">Customized rule view</span>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-3 text-xs">
+          <div className="mt-3 rounded-md border border-emerald-200 bg-white px-3 py-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-800">Bracket Schema</p>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-2"
+                  onClick={() => setCustomRoundMatchCounts((prev) => [...prev, 1])}
+                  title="Add Round"
+                  ariaLabel="Add Round"
+                >
+                  <Plus size={13} />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-2"
+                  onClick={() => setCustomRoundMatchCounts((prev) => prev.length > 1 ? prev.slice(0, -1) : prev)}
+                  title="Remove Last Round"
+                  ariaLabel="Remove Last Round"
+                >
+                  <X size={13} />
+                </Button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
+              {normalizedCustomRoundMatchCounts.map((count, index) => (
+                <div key={`round-schema-${index + 1}`} className="rounded border border-black/10 px-2 py-2">
+                  <p className="text-[11px] font-bold text-black/75 mb-1">Round {index + 1}</p>
+                  <label className="text-[10px] uppercase tracking-widest text-black/45 block mb-1">Matches</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={count}
+                    disabled={lockCustomSeedEditing}
+                    onChange={(e: any) => {
+                      const numeric = Math.max(1, Number.parseInt(String(e.target.value || ''), 10) || 1);
+                      setCustomRoundMatchCounts((prev) => prev.map((value, valueIndex) => valueIndex === index ? numeric : value));
+                    }}
+                    className="w-full h-8 px-2 rounded border border-black/15 bg-white disabled:bg-black/5 disabled:text-black/40 text-[12px]"
+                  />
+                  <label className="text-[10px] uppercase tracking-widest text-black/45 block mt-2 mb-1">Round Mode</label>
+                  <select
+                    value={normalizedCustomRoundRules[index] || 'duel'}
+                    disabled={lockCustomSeedEditing}
+                    onChange={(e: any) => {
+                      const nextValue: 'duel' | 'survivor_cut' = String(e.target.value || '') === 'survivor_cut' ? 'survivor_cut' : 'duel';
+                      setCustomRoundRules((prev) => {
+                        const next = Array.from({ length: customRoundsCount }, (_, i) => (
+                          prev[i] === 'survivor_cut' ? 'survivor_cut' : 'duel'
+                        ));
+                        next[index] = nextValue;
+                        return next;
+                      });
+                    }}
+                    className="w-full h-8 px-2 rounded border border-black/15 bg-white disabled:bg-black/5 disabled:text-black/40 text-[12px]"
+                  >
+                    <option value="duel">Seed vs Seed / Winner-Loser routing</option>
+                    <option value="survivor_cut"># Seeds bowl one game at once (lowest eliminated)</option>
+                  </select>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-black/50 mt-2">Each round is explicit. No extra matches are auto-added by seed count.</p>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3 text-xs">
             <div className="rounded-md border border-black/10 bg-white p-3">
               <p className="font-bold text-black/80 mb-1">{customRoundOneTitle}</p>
-              <div className="space-y-1 text-black/60">
-                {customQuarterRuleRows.length > 0 ? customQuarterRuleRows.map((row) => (
-                  <div key={`custom-qf-${row.index}`} className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-1.5 text-[11px]">
+              <div className="space-y-2 text-black/60">
+                {normalizedCustomRoundRules[0] === 'survivor_cut' ? (
+                  renderSurvivorRoundPanel(1)
+                ) : customQuarterRuleRows.length > 0 ? customQuarterRuleRows.map((row) => (
+                  <div key={`custom-r1-${row.index}`} className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-1.5 text-[11px]">
                     <span className="font-semibold text-black/65">{row.label}:</span>
                     <select
                       value={row.leftSeed ?? ''}
@@ -8525,90 +9237,60 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                       ))}
                     </select>
                   </div>
-                )) : <p>M1: Seed ? vs Seed ?</p>}
+                )) : <p>Define at least one Round 1 match.</p>}
               </div>
             </div>
-            <div className="rounded-md border border-black/10 bg-white p-3">
-              <p className="font-bold text-black/80 mb-1">{customRoundTwoTitle}</p>
-              <div className="space-y-1 text-black/60">
-                {roundTwoRows.length > 0 ? roundTwoRows.map((row) => (
-                  <div key={`custom-r2-${row.index}`} className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-1.5 text-[11px]">
-                    <span className="font-semibold text-black/65">{row.label}:</span>
-                    <select
-                      value={row.p1}
-                      disabled={lockCustomSeedEditing}
-                      onChange={(e: any) => updateCustomRoundLink(2, row.index, 'p1', e.target.value)}
-                      className="h-7 px-1.5 rounded border border-black/15 bg-white disabled:bg-black/5 disabled:text-black/40"
-                    >
-                      <option value="">Source</option>
-                      {getRoundSourceOptions(2, false).map((option) => (
-                        <option key={`custom-r2-${row.index}-p1-${option.value}`} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
-                    <span className="text-black/40 font-bold uppercase">vs</span>
-                    <select
-                      value={row.p2}
-                      disabled={lockCustomSeedEditing}
-                      onChange={(e: any) => updateCustomRoundLink(2, row.index, 'p2', e.target.value)}
-                      className="h-7 px-1.5 rounded border border-black/15 bg-white disabled:bg-black/5 disabled:text-black/40"
-                    >
-                      <option value="">Source</option>
-                      {getRoundSourceOptions(2, false).map((option) => (
-                        <option key={`custom-r2-${row.index}-p2-${option.value}`} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
+
+            {Array.from({ length: Math.max(0, customRoundsCount - 1) }, (_, offset) => offset + 2).map((round) => {
+              const rows = customRoundRowsByRound[round] || [];
+              const roundRule = normalizedCustomRoundRules[round - 1] || 'duel';
+              return (
+                <div key={`custom-round-${round}`} className="rounded-md border border-black/10 bg-white p-3">
+                  <p className="font-bold text-black/80 mb-1">Round {round}</p>
+                  <div className="space-y-2 text-black/60">
+                    {roundRule === 'survivor_cut' ? (
+                      renderSurvivorRoundPanel(round)
+                    ) : rows.length > 0 ? rows.map((row) => {
+                      const options = getRoundSourceOptions(round, true);
+                      return (
+                        <div key={`custom-round-${round}-row-${row.index}`} className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-1.5 text-[11px]">
+                          <span className="font-semibold text-black/65">{row.label}:</span>
+                          <select
+                            value={row.p1}
+                            disabled={lockCustomSeedEditing}
+                            onChange={(e: any) => updateCustomRoundLink(round, row.index, 'p1', e.target.value)}
+                            className="h-7 px-1.5 rounded border border-black/15 bg-white disabled:bg-black/5 disabled:text-black/40"
+                          >
+                            <option value="">Source</option>
+                            {options.map((option) => (
+                              <option key={`custom-round-${round}-${row.index}-p1-${option.value}`} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                          <span className="text-black/40 font-bold uppercase">vs</span>
+                          <select
+                            value={row.p2}
+                            disabled={lockCustomSeedEditing}
+                            onChange={(e: any) => updateCustomRoundLink(round, row.index, 'p2', e.target.value)}
+                            className="h-7 px-1.5 rounded border border-black/15 bg-white disabled:bg-black/5 disabled:text-black/40"
+                          >
+                            <option value="">Source</option>
+                            {options.map((option) => (
+                              <option key={`custom-round-${round}-${row.index}-p2-${option.value}`} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                          <span className="col-span-4 text-[10px] text-black/45 mt-0.5">
+                            {formatSourceToken(round, row.p1)} vs {formatSourceToken(round, row.p2)}
+                          </span>
+                        </div>
+                      );
+                    }) : <p>No matches configured for Round {round}.</p>}
                   </div>
-                )) : <p>Round 2 links will appear after Round 1 setup.</p>}
-              </div>
-            </div>
-            <div className="rounded-md border border-black/10 bg-white p-3">
-              <p className="font-bold text-black/80 mb-1">{customFinalRoundTitle}</p>
-              <div className="space-y-1 text-black/60">
-                {finalRoundRows.length > 0 ? finalRoundRows.map((row) => {
-                  const includeLosers = winnersCountPreview > 1;
-                  const isLastPlacementRow = includeLosers && row.index === finalRoundRows.length - 1;
-                  const options = isLastPlacementRow
-                    ? getRoundSourceOptions(customFinalRoundIndex, true).filter((option) => option.value.startsWith('loser:'))
-                    : getRoundSourceOptions(customFinalRoundIndex, includeLosers);
-                  return (
-                    <div key={`custom-rf-${row.index}`} className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-1.5 text-[11px]">
-                      <span className="font-semibold text-black/65">{isLastPlacementRow ? '3rd Place Match:' : `${row.label}:`}</span>
-                      <select
-                        value={row.p1}
-                        disabled={lockCustomSeedEditing}
-                        onChange={(e: any) => updateCustomRoundLink(customFinalRoundIndex, row.index, 'p1', e.target.value)}
-                        className="h-7 px-1.5 rounded border border-black/15 bg-white disabled:bg-black/5 disabled:text-black/40"
-                      >
-                        <option value="">Source</option>
-                        {options.map((option) => (
-                          <option key={`custom-rf-${row.index}-p1-${option.value}`} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                      <span className="text-black/40 font-bold uppercase">vs</span>
-                      <select
-                        value={row.p2}
-                        disabled={lockCustomSeedEditing}
-                        onChange={(e: any) => updateCustomRoundLink(customFinalRoundIndex, row.index, 'p2', e.target.value)}
-                        className="h-7 px-1.5 rounded border border-black/15 bg-white disabled:bg-black/5 disabled:text-black/40"
-                      >
-                        <option value="">Source</option>
-                        {options.map((option) => (
-                          <option key={`custom-rf-${row.index}-p2-${option.value}`} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                      {isLastPlacementRow ? (
-                        <span className="col-span-4 text-[10px] text-black/45 mt-0.5">3rd place matchup: {formatSourceToken(customFinalRoundIndex, row.p1)} vs {formatSourceToken(customFinalRoundIndex, row.p2)}</span>
-                      ) : (
-                        <span className="col-span-4 text-[10px] text-black/45 mt-0.5">{formatSourceToken(customFinalRoundIndex, row.p1)} vs {formatSourceToken(customFinalRoundIndex, row.p2)}</span>
-                      )}
-                    </div>
-                  );
-                }) : <p>Final links will appear after Round 2 setup.</p>}
-              </div>
-            </div>
+                </div>
+              );
+            })}
           </div>
           <div className="mt-3 text-center border-t border-black/10 pt-3">
-            <p className="text-xs text-black/50">Complete this table first, then click Generate. You can still update winners/scores after generation.</p>
+            <p className="text-xs text-black/50">Set the exact structure you want, then Generate. Winners and losers only move where you explicitly route them.</p>
           </div>
         </Card>
       ) : (
@@ -8651,18 +9333,18 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 <>
                   <div className="rounded-md border border-black/10 bg-white p-3">
                     <p className="font-bold text-black/80 mb-1">Entry</p>
-                    <p className="text-black/60">Top #6 seeds are required for full stepladder.</p>
-                    <p className="text-black/60">Seeds #1-#3 receive step advantages.</p>
+                    <p className="text-black/60">Top #{qualifiedCount > 0 ? qualifiedCount : 'all'} seeds qualify.</p>
+                    <p className="text-black/60">Stepladder is flexible for 3 or more seeds in the current division.</p>
                   </div>
                   <div className="rounded-md border border-black/10 bg-white p-3">
                     <p className="font-bold text-black/80 mb-1">Flow</p>
-                    <p className="text-black/60">M1: Seed #4 vs #5 vs #6 (shootout).</p>
-                    <p className="text-black/60">M2: Winner M1 vs Seed #3.</p>
+                    <p className="text-black/60">Lowest available seeds play first and the winner climbs one step at a time.</p>
+                    <p className="text-black/60">For 6 seeds, Match 1 remains the 4 vs 5 vs 6 shootout.</p>
                   </div>
                   <div className="rounded-md border border-black/10 bg-white p-3">
                     <p className="font-bold text-black/80 mb-1">Final Steps</p>
-                    <p className="text-black/60">M3: Winner M2 vs Seed #2.</p>
-                    <p className="text-black/60">M4 Final: Winner M3 vs Seed #1.</p>
+                    <p className="text-black/60">Higher seeds join in later rounds based on the size of the qualified field.</p>
+                    <p className="text-black/60">Final match is always against the top remaining seed.</p>
                   </div>
                 </>
               ) : matchPlayTypeForRules === 'ladder' ? (
@@ -8717,6 +9399,24 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                     <p className="font-bold text-black/80 mb-1">Phase 3: Semi-Finals & Final</p>
                     <p className="text-black/60">SF1: Winner M1 vs Winner M2, SF2: Winner M3 vs Winner M4.</p>
                     <p className="text-black/60">Championship: Winner SF1 vs Winner SF2.</p>
+                  </div>
+                </>
+              ) : matchPlayTypeForRules === 'survivor_elimination' ? (
+                <>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Entry</p>
+                    <p className="text-black/60">Top #{qualifiedCount > 0 ? qualifiedCount : 'all'} seeds qualify.</p>
+                    <p className="text-black/60">All remaining seeds bowl each survivor round; the lowest score is eliminated.</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Flow</p>
+                    <p className="text-black/60">Field shrinks by one each round until two finalists remain.</p>
+                    <p className="text-black/60">Final round decides champion and runner-up.</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="font-bold text-black/80 mb-1">Current Engine</p>
+                    <p className="text-black/60">This type is available for tournament setup and planning.</p>
+                    <p className="text-black/60">Use Custom Scheme with Survivor round rules for execution until dedicated run engine is enabled.</p>
                   </div>
                 </>
               ) : matchPlayTypeForRules === 'playoff' ? (
@@ -8955,6 +9655,123 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
             </div>
           </div>
         )
+      )}
+
+      {showPresetManager && role === 'admin' && (
+        <div className="fixed inset-0 z-[100] bg-black/45 flex items-center justify-center p-4" onClick={() => setShowPresetManager(false)}>
+          <div className="w-full max-w-4xl bg-white rounded-xl border border-black/10 shadow-2xl p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-black/10">
+              <h4 className="text-sm font-bold uppercase tracking-widest text-black/75">{editingPresetId ? 'Edit Preset' : 'Create Preset'}</h4>
+              <Button size="sm" variant="outline" onClick={() => setShowPresetManager(false)} title="Close" ariaLabel="Close">
+                <X size={14} />
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">Preset ID</label>
+                  <input
+                    value={presetDraft.id}
+                    onChange={(e) => setPresetDraft((prev) => ({ ...prev, id: e.target.value }))}
+                    className="w-full h-8 px-2 rounded-md border border-black/15 text-[13px]"
+                    placeholder="single-elimination-8"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">Name</label>
+                  <input
+                    value={presetDraft.name}
+                    onChange={(e) => setPresetDraft((prev) => ({ ...prev, name: e.target.value }))}
+                    className="w-full h-8 px-2 rounded-md border border-black/15 text-[13px]"
+                    placeholder="Single Elimination (8)"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">Bracket Type</label>
+                  <select
+                    value={presetDraft.match_play_type}
+                    onChange={(e) => setPresetDraft((prev) => ({ ...prev, match_play_type: e.target.value as Tournament['match_play_type'] }))}
+                    className="w-full h-8 px-2 rounded-md border border-black/15 text-[13px]"
+                  >
+                    <option value="single_elimination">Single Elimination</option>
+                    <option value="double_elimination">Double Elimination</option>
+                    <option value="ladder">Ladder</option>
+                    <option value="stepladder">Stepladder</option>
+                    <option value="playoff">Play-Off</option>
+                    <option value="team_selection_playoff">Team Selection Playoff</option>
+                    <option value="survivor_elimination">Survivor Elimination</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">Round Match Counts (CSV)</label>
+                  <input
+                    value={presetDraft.round_match_counts_text}
+                    onChange={(e) => setPresetDraft((prev) => ({ ...prev, round_match_counts_text: e.target.value }))}
+                    className="w-full h-8 px-2 rounded-md border border-black/15 text-[13px]"
+                    placeholder="4,2,1"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">Round Rules (CSV)</label>
+                  <input
+                    value={presetDraft.round_rules_text}
+                    onChange={(e) => setPresetDraft((prev) => ({ ...prev, round_rules_text: e.target.value }))}
+                    className="w-full h-8 px-2 rounded-md border border-black/15 text-[13px]"
+                    placeholder="duel,duel,duel"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">Placement First</label>
+                  <input value={presetDraft.placement_first} onChange={(e) => setPresetDraft((prev) => ({ ...prev, placement_first: e.target.value }))} className="w-full h-8 px-2 rounded-md border border-black/15 text-[13px]" placeholder="winner:3:0" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">Placement Second</label>
+                  <input value={presetDraft.placement_second} onChange={(e) => setPresetDraft((prev) => ({ ...prev, placement_second: e.target.value }))} className="w-full h-8 px-2 rounded-md border border-black/15 text-[13px]" placeholder="loser:3:0" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">Placement Third</label>
+                  <input value={presetDraft.placement_third} onChange={(e) => setPresetDraft((prev) => ({ ...prev, placement_third: e.target.value }))} className="w-full h-8 px-2 rounded-md border border-black/15 text-[13px]" placeholder="winner:3:1" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">Min Seeds</label>
+                    <input value={presetDraft.min_qualified_count} onChange={(e) => setPresetDraft((prev) => ({ ...prev, min_qualified_count: e.target.value }))} className="w-full h-8 px-2 rounded-md border border-black/15 text-[13px]" placeholder="8" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">Recommended Seeds</label>
+                    <input value={presetDraft.recommended_qualified_count} onChange={(e) => setPresetDraft((prev) => ({ ...prev, recommended_qualified_count: e.target.value }))} className="w-full h-8 px-2 rounded-md border border-black/15 text-[13px]" placeholder="16" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-0.5">Description</label>
+                  <textarea value={presetDraft.description} onChange={(e) => setPresetDraft((prev) => ({ ...prev, description: e.target.value }))} rows={3} className="w-full px-2 py-1.5 rounded-md border border-black/15 text-[13px]" placeholder="Optional description" />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-black/10">
+              {editingPresetId && (
+                <Button
+                  variant="outline"
+                  onClick={() => handleDeletePreset(editingPresetId)}
+                  title="Delete Preset"
+                  ariaLabel="Delete Preset"
+                  className="px-3"
+                >
+                  <Trash2 size={14} />
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => setShowPresetManager(false)} title="Cancel" ariaLabel="Cancel" className="px-3">Cancel</Button>
+              <Button onClick={handleSavePreset} disabled={presetSaving} title="Save Preset" ariaLabel="Save Preset" className="px-3">
+                <Save size={14} />
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -9201,8 +10018,10 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
   }
 
   const maxGameFromScores = scores.reduce((max, s) => Math.max(max, Number(s.game_number) || 0), 0);
-  const gameCount = Math.max(1, Number(tournament.games_count) || 0, maxGameFromScores);
-  const gameNumbers = Array.from({ length: gameCount }, (_, i) => i + 1);
+  const officialGameCount = Math.max(1, Number(tournament.games_count) || 0);
+  const allGameCount = Math.max(officialGameCount, maxGameFromScores);
+  const gameNumbers = Array.from({ length: allGameCount }, (_, i) => i + 1);
+  const officialGameNumbers = Array.from({ length: officialGameCount }, (_, i) => i + 1);
 
   const scoreByParticipantGame = new Map<string, number>();
   for (const s of scores) {
@@ -9211,13 +10030,15 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
 
   const playerStandingsRows = participants
     .map((p) => {
-      const games = gameNumbers.map((gameNumber) => scoreByParticipantGame.get(`${p.id}-${gameNumber}`) ?? 0);
-      const total = games.reduce((sum, value) => sum + value, 0);
+      const allGames = gameNumbers.map((gameNumber) => scoreByParticipantGame.get(`${p.id}-${gameNumber}`) ?? 0);
+      const officialGames = officialGameNumbers.map((gameNumber) => scoreByParticipantGame.get(`${p.id}-${gameNumber}`) ?? 0);
+      const total = officialGames.reduce((sum, value) => sum + value, 0);
       const additional = getAdditional('participant', p.id);
       const bonus = hasBonus ? getBonus('participant', p.id) : 0;
       const visibleAdditional = hasAdditionalScores ? additional : 0;
+      // Grand total includes additional for seeding, but ranking is by total (first N games)
       const grandTotal = total + visibleAdditional + bonus;
-      const gamesPlayed = games.filter((value) => value > 0).length;
+      const gamesPlayed = officialGames.filter((value) => value > 0).length;
       const average = gamesPlayed > 0 ? Number((total / gamesPlayed).toFixed(1)) : 0;
       return {
         participant_id: p.id,
@@ -9225,15 +10046,16 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
         team_name: p.team_name || '-',
         club: p.club || '-',
         hands: (participantInfoMap.get(p.id)?.hands || '').trim() || null,
-        games,
+        games: allGames, // for display, show all games
         additional: visibleAdditional,
         bonus,
-        total,
+        total, // only first N games
         grand_total: grandTotal,
         average,
       };
     })
-    .sort((a, b) => (b.grand_total - a.grand_total) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name));
+    // Sort by total (first N games), then average, then name
+    .sort((a, b) => (b.total - a.total) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name));
 
   const formatTeamMemberCompact = (participant: Participant) => {
     const firstName = (participant.first_name || '').trim().toLowerCase() || 'unknown';
@@ -9270,8 +10092,9 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
     }
     const entry = teamMap.get(key)!;
     entry.members.push(formatTeamMemberCompact(p));
-    for (let index = 0; index < gameNumbers.length; index++) {
-      const value = scoreByParticipantGame.get(`${p.id}-${gameNumbers[index]}`) ?? 0;
+    // Only sum official games for team total
+    for (let index = 0; index < officialGameNumbers.length; index++) {
+      const value = scoreByParticipantGame.get(`${p.id}-${officialGameNumbers[index]}`) ?? 0;
       entry.games[index] += value;
       entry.total += value;
     }
@@ -9290,7 +10113,8 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
         grand_total: grandTotal,
       };
     })
-    .sort((a, b) => (b.grand_total - a.grand_total) || a.team_name.localeCompare(b.team_name));
+    // Sort by total (first N games), then name
+    .sort((a, b) => (b.total - a.total) || a.team_name.localeCompare(b.team_name));
   const registeredPlayersCount = participants.length;
   const assignedPlayersCount = participants.filter((p) => p.team_id !== null).length;
   const unassignedPlayersCount = Math.max(0, registeredPlayersCount - assignedPlayersCount);
@@ -9388,6 +10212,17 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
     };
   };
 
+  const getTeamStandingsPodium = () => ({
+    first: teamStandingsRows[0]?.team_name || 'TBD',
+    second: teamStandingsRows[1]?.team_name || 'TBD',
+    third: teamStandingsRows[2]?.team_name || 'TBD',
+  });
+
+  const getEmptyPodium = () => ({ first: 'TBD', second: 'TBD', third: 'TBD' });
+
+  const tournamentFormat = String(tournament.format || '').trim();
+  const usesBracketWinnersOnly = tournamentFormat === 'Pre-Qualification & Bracket';
+
   const bracketMatchesByDivision = {
     all: bracketMatches.filter((m: any) => String(m.division || 'all') === 'all'),
     female: bracketMatches.filter((m: any) => String(m.division || 'all') === 'female'),
@@ -9396,32 +10231,71 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
 
   const winnersPodium = (() => {
     if (isTeamTournament) {
-      const podium = getBracketPodium(bracketMatches, tournament.match_play_type);
+      const podium = usesBracketWinnersOnly
+        ? (bracketMatches.length > 0 ? getBracketPodium(bracketMatches, tournament.match_play_type) : getEmptyPodium())
+        : getTeamStandingsPodium();
       return {
-        title: tx('All Teams'),
+        title: usesBracketWinnersOnly ? tx('Bracket Results') : tx('All Teams'),
         ...podium,
       };
     }
 
+    if (usesBracketWinnersOnly) {
+      if (winnersViewMode === 'female') {
+        return {
+          title: tx('Female Bracket Results'),
+          ...(bracketMatchesByDivision.female.length > 0
+            ? getBracketPodium(bracketMatchesByDivision.female, 'stepladder')
+            : getEmptyPodium()),
+        };
+      }
+
+      if (winnersViewMode === 'male') {
+        return {
+          title: tx('Male Bracket Results'),
+          ...(bracketMatchesByDivision.male.length > 0
+            ? getBracketPodium(bracketMatchesByDivision.male, 'stepladder')
+            : getEmptyPodium()),
+        };
+      }
+
+      return {
+        title: tx('All Bracket Results'),
+        ...(bracketMatchesByDivision.all.length > 0
+          ? getBracketPodium(bracketMatchesByDivision.all, tournament.match_play_type)
+          : getEmptyPodium()),
+      };
+    }
+
     if (winnersViewMode === 'female') {
-      const femaleBracketPodium = bracketMatchesByDivision.female.length > 0
-        ? getBracketPodium(bracketMatchesByDivision.female, 'stepladder')
-        : getStandingsPodium('female');
-      return { title: tx('Female Results'), ...femaleBracketPodium };
+      return { title: tx('Female Results'), ...getStandingsPodium('female') };
     }
 
     if (winnersViewMode === 'male') {
-      const maleBracketPodium = bracketMatchesByDivision.male.length > 0
-        ? getBracketPodium(bracketMatchesByDivision.male, 'stepladder')
-        : getStandingsPodium('male');
-      return { title: tx('Male Results'), ...maleBracketPodium };
+      return { title: tx('Male Results'), ...getStandingsPodium('male') };
     }
 
-    const allBracketPodium = bracketMatchesByDivision.all.length > 0
-      ? getBracketPodium(bracketMatchesByDivision.all, tournament.match_play_type)
-      : getStandingsPodium('all');
-    return { title: tx('All Results'), ...allBracketPodium };
+    return { title: tx('All Results'), ...getStandingsPodium('all') };
   })();
+
+  const combinedDivisionWinnersRows = (!isTeamTournament && usesBracketWinnersOnly && winnersViewMode === 'all' && (
+    bracketMatchesByDivision.female.length > 0 || bracketMatchesByDivision.male.length > 0
+  ))
+    ? [
+        { place: 'F 1st', winner: getBracketPodium(bracketMatchesByDivision.female, 'stepladder').first, tone: 'emerald' },
+        { place: 'F 2nd', winner: getBracketPodium(bracketMatchesByDivision.female, 'stepladder').second, tone: 'slate' },
+        { place: 'F 3rd', winner: getBracketPodium(bracketMatchesByDivision.female, 'stepladder').third, tone: 'amber' },
+        { place: 'M 1st', winner: getBracketPodium(bracketMatchesByDivision.male, 'stepladder').first, tone: 'emerald' },
+        { place: 'M 2nd', winner: getBracketPodium(bracketMatchesByDivision.male, 'stepladder').second, tone: 'slate' },
+        { place: 'M 3rd', winner: getBracketPodium(bracketMatchesByDivision.male, 'stepladder').third, tone: 'amber' },
+      ]
+    : null;
+
+  const winnersRows = combinedDivisionWinnersRows || [
+    { place: '1st', winner: winnersPodium.first, tone: 'emerald' },
+    { place: '2nd', winner: winnersPodium.second, tone: 'slate' },
+    { place: '3rd', winner: winnersPodium.third, tone: 'amber' },
+  ];
 
   const firstPlace = winnersPodium.first;
   const secondPlace = winnersPodium.second;
@@ -9614,27 +10488,37 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                     <div className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-black/40">{tx('Team Members')}</div>
                   )}
                 </div>
-                <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} border-b border-black/5 bg-emerald-50/70`}>
-                  <div className="px-4 py-3 font-bold text-emerald-700">1st</div>
-                  <div className="px-4 py-3 font-bold text-emerald-700">{firstPlace}</div>
-                  {isTeamTournament && (
-                    <div className="px-4 py-3 text-emerald-800 text-sm">{getWinnerMembersLabel(firstPlace)}</div>
-                  )}
-                </div>
-                <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} border-b border-black/5 bg-slate-100/80`}>
-                  <div className="px-4 py-3 font-bold text-slate-700">2nd</div>
-                  <div className="px-4 py-3 font-bold text-slate-700">{secondPlace}</div>
-                  {isTeamTournament && (
-                    <div className="px-4 py-3 text-slate-700 text-sm">{getWinnerMembersLabel(secondPlace)}</div>
-                  )}
-                </div>
-                <div className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} bg-amber-50/70`}>
-                  <div className="px-4 py-3 font-bold text-amber-700">3rd</div>
-                  <div className="px-4 py-3 font-bold text-amber-700">{thirdPlace}</div>
-                  {isTeamTournament && (
-                    <div className="px-4 py-3 text-amber-800 text-sm">{getWinnerMembersLabel(thirdPlace)}</div>
-                  )}
-                </div>
+                {winnersRows.map((row, index) => {
+                  const isLast = index === winnersRows.length - 1;
+                  const rowClass = row.tone === 'emerald'
+                    ? 'bg-emerald-50/70'
+                    : row.tone === 'amber'
+                      ? 'bg-amber-50/70'
+                      : 'bg-slate-100/80';
+                  const textClass = row.tone === 'emerald'
+                    ? 'text-emerald-700'
+                    : row.tone === 'amber'
+                      ? 'text-amber-700'
+                      : 'text-slate-700';
+                  const memberTextClass = row.tone === 'emerald'
+                    ? 'text-emerald-800'
+                    : row.tone === 'amber'
+                      ? 'text-amber-800'
+                      : 'text-slate-700';
+
+                  return (
+                    <div
+                      key={`${row.place}-${index}`}
+                      className={`grid ${isTeamTournament ? 'grid-cols-3' : 'grid-cols-2'} ${rowClass} ${isLast ? '' : 'border-b border-black/5'}`}
+                    >
+                      <div className={`px-4 py-3 font-bold ${textClass}`}>{row.place}</div>
+                      <div className={`px-4 py-3 font-bold ${textClass}`}>{row.winner}</div>
+                      {isTeamTournament && (
+                        <div className={`px-4 py-3 text-sm ${memberTextClass}`}>{getWinnerMembersLabel(row.winner)}</div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </Card>
@@ -9766,16 +10650,24 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Team</th>
                 )}
                 {gameNumbers.map((gameNumber) => (
-                  <th key={gameNumber} className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">
+                  <th key={`game-th-${gameNumber}`} className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">
                     Game {gameNumber}
                   </th>
                 ))}
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Total</th>
-                {hasAdditionalScores && <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-violet-700 text-center">Score++</th>}
-                {hasBonus && <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-emerald-700 text-center">Bonus</th>}
+                {hasAdditionalScores && (
+                  <th key="additional-th" className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-violet-700 text-center">
+                    Additional
+                  </th>
+                )}
+                {hasBonus && (
+                  <th key="bonus-th" className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-emerald-700 text-center">
+                    Bonus
+                  </th>
+                )}
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Grand Total</th>
                 {standingsMode === 'players' && (
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">Avg</th>
+                  <th key="avg-th" className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">Avg</th>
                 )}
               </tr>
             </thead>
@@ -9799,9 +10691,9 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                   {isTeamTournament && (
                     <td className="px-6 py-4 text-black/40 text-sm">{s.team_name}</td>
                   )}
-                  {s.games.map((value, gameIndex) => {
-                    const gameNo = gameNumbers[gameIndex] || (gameIndex + 1);
-                    const cellKey = `${s.participant_id}-${gameNo}`;
+                  {gameNumbers.map((gameNumber, gameIndex) => {
+                    const value = s.games[gameIndex] ?? 0;
+                    const cellKey = `${s.participant_id}-${gameNumber}`;
                     const isMaleLeaderCell = maleLeaderCellKey === cellKey;
                     const isFemaleLeaderCell = femaleLeaderCellKey === cellKey;
                     const cellClass = isMaleLeaderCell
@@ -9809,9 +10701,8 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                       : isFemaleLeaderCell
                         ? 'bg-rose-50 text-rose-700 font-bold ring-1 ring-rose-200'
                         : '';
-
                     return (
-                      <td key={gameIndex} className={`px-6 py-4 text-center font-mono ${cellClass}`}>
+                      <td key={`game-td-${s.participant_id}-${gameNumber}`} className={`px-6 py-4 text-center font-mono ${cellClass}`}>
                         {value}
                       </td>
                     );
@@ -9884,9 +10775,12 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                       {s.members.length > 0 ? s.members.join(', ') : 'no members'}
                     </div>
                   </td>
-                  {s.games.map((value, gameIndex) => (
-                    <td key={gameIndex} className="px-6 py-4 text-center font-mono">{value}</td>
-                  ))}
+                  {gameNumbers.map((gameNumber, gameIndex) => {
+                    const value = s.games[gameIndex] ?? 0;
+                    return (
+                      <td key={`game-td-${s.key}-${gameNumber}`} className="px-6 py-4 text-center font-mono">{value}</td>
+                    );
+                  })}
                   <td className="px-6 py-4 text-right font-mono text-black/50">{s.total}</td>
                   {hasAdditionalScores && <td className="px-6 py-4 text-center font-mono text-violet-700">
                     {(() => {
