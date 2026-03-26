@@ -1460,7 +1460,14 @@ export default function App() {
       {/* Sidebar / Nav */}
       <nav className="fixed top-0 left-0 right-0 h-16 bg-black/95 backdrop-blur-sm border-b border-white/10 z-50 px-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-16 h-12 rounded-md overflow-hidden border-2 border-white/30 flex items-center justify-center bg-white">
+          <div
+            className="w-16 h-12 rounded-md overflow-hidden border-2 border-white/30 flex items-center justify-center bg-white cursor-pointer hover:shadow-lg transition"
+            onClick={() => window.location.href = '/'}
+            title="Go to Home Page"
+            tabIndex={0}
+            role="button"
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') window.location.href = '/'; }}
+          >
             <img
               src="/logo.png"
               alt="BTM Logo"
