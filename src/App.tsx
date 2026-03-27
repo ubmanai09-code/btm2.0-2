@@ -272,7 +272,7 @@ const buildPrintDocument = ({
         <title>${escapePrintHtml(pageTitle)}</title>
         ${injectedHeadHtml}
         <style>
-          body { font-family: Arial, sans-serif; padding: 20px; color: #111827; }
+          body { font-family: 'Roboto Condensed', 'Roboto', ui-sans-serif, system-ui, sans-serif; padding: 20px; color: #111827; }
           .app-header { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; padding-bottom: 10px; border-bottom: 1px solid #d1d5db; }
           .app-logo { width: 28px; height: 28px; object-fit: contain; }
           .app-title-wrap { display: flex; flex-direction: column; line-height: 1.1; }
@@ -1461,7 +1461,7 @@ export default function App() {
 
   return (
     <UiTranslationContext.Provider value={translateUiText}>
-    <div className="min-h-screen bg-gradient-to-b from-white to-emerald-50/30 text-black font-sans">
+    <div className="min-h-screen bg-gradient-to-b from-white to-emerald-50/30 text-black">
       {/* Sidebar / Nav */}
       <nav className="fixed top-0 left-0 right-0 h-16 bg-black/95 backdrop-blur-sm border-b border-white/10 z-50 px-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -4025,7 +4025,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 ) : (
                   filteredParticipants.map((p, index) => (
                     <tr key={p.id} className={`${participantIssues.has(p.id) ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-[#AFDDE5]/20'} transition-colors`}>
-                      <td className={`px-2 py-1.5 font-mono text-[10px] sticky left-0 z-[2] ${participantIssues.has(p.id) ? 'text-red-700 bg-red-50' : 'text-black/60 bg-white'}`}>{index + 1}</td>
+                      <td className={`px-2 py-1.5 text-[10px] sticky left-0 z-[2] ${participantIssues.has(p.id) ? 'text-red-700 bg-red-50' : 'text-black/60 bg-white'}`}>{index + 1}</td>
                       <td
                         className={`px-1 py-1.5 uppercase text-xs sticky left-10 z-[2] ${participantIssues.has(p.id) ? 'text-red-700 bg-red-50' : 'text-black bg-white'}`}
                         onDoubleClick={() => { if (canManageParticipants) { setEditingPlayer(p); setShowAddPlayer(true); } }}
@@ -4191,7 +4191,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       const integrityIssue = teamIntegrityIssues.get(team.id);
                       return (
                         <tr key={team.id} className="hover:bg-[#AFDDE5]/20 transition-colors align-top">
-                          <td className="px-3 py-2 font-mono text-[10px] text-black/60 sticky left-0 z-[2] bg-white">{index + 1}</td>
+                          <td className="px-3 py-2 text-[10px] text-black/60 sticky left-0 z-[2] bg-white">{index + 1}</td>
                           <td className="px-3 py-2 uppercase text-xs text-black sticky left-12 z-[2] bg-white">{team.name}</td>
                           <td className="px-3 py-2">
                             <div className="space-y-1">
@@ -6039,7 +6039,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                               }
                             }}
                             disabled={!canManageScores}
-                            className="w-20 px-2 py-1.5 rounded-lg border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 font-mono font-bold text-center"
+                            className="w-20 px-2 py-1.5 rounded-lg border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 font-bold text-center"
                             placeholder="0"
                           />
                         </td>
@@ -9193,7 +9193,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                           )}
                           <div className="flex items-start justify-between gap-2">
                             <p className="font-bold text-black/75">#{seed.seed}</p>
-                            <p className="font-mono font-bold text-black/70">{seed.total_score || 0}</p>
+                            <p className="font-bold text-black/70">{seed.total_score || 0}</p>
                           </div>
                           <p className="truncate text-black/80 inline-flex items-center gap-1" title={seed.name}>
                             {renderFemaleInitialUnderline(seedDisplayName || seed.name, Boolean(isFemaleSeedParticipant))}
@@ -10819,13 +10819,13 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                         ? 'bg-rose-50 text-rose-700 font-bold ring-1 ring-rose-200'
                         : '';
                     return (
-                      <td key={`game-td-${s.participant_id}-${gameNumber}`} className={`px-6 py-4 text-center font-mono ${cellClass}`}>
+                      <td key={`game-td-${s.participant_id}-${gameNumber}`} className={`px-6 py-4 text-center ${cellClass}`}> 
                         {value}
                       </td>
                     );
                   })}
-                  <td className="px-6 py-4 text-right font-mono text-black/50">{s.total}</td>
-                  {hasAdditionalScores && <td className="px-6 py-4 text-center font-mono text-violet-700">
+                  <td className="px-6 py-4 text-right text-black/50">{s.total}</td>
+                  {hasAdditionalScores && <td className="px-6 py-4 text-center text-violet-700">
                     {(() => {
                       const aKey = toBonusKey('participant', s.participant_id);
                       const liveValue = additionalDrafts[aKey] !== undefined ? additionalDrafts[aKey] : String(s.additional);
@@ -10842,7 +10842,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                       ) : s.additional;
                     })()}
                   </td>}
-                  {hasBonus && <td className="px-6 py-4 text-center font-mono text-emerald-700">
+                  {hasBonus && <td className="px-6 py-4 text-center text-emerald-700">
                     {(() => {
                       const bonusKey = toBonusKey('participant', s.participant_id);
                       const liveValue = bonusDrafts[bonusKey] !== undefined ? bonusDrafts[bonusKey] : String(s.bonus);
@@ -10871,7 +10871,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                       {s.grand_total}
                     </td>
                   <td
-                    className={`px-6 py-4 text-center font-mono text-black/60 ${
+                    className={`px-6 py-4 text-center text-black/60 ${
                       maleTopAvgIds.has(s.participant_id)
                         ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200 font-bold'
                         : femaleTopAvgIds.has(s.participant_id)
@@ -10895,11 +10895,11 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                   {gameNumbers.map((gameNumber, gameIndex) => {
                     const value = s.games[gameIndex] ?? 0;
                     return (
-                      <td key={`game-td-${s.key}-${gameNumber}`} className="px-6 py-4 text-center font-mono">{value}</td>
+                      <td key={`game-td-${s.key}-${gameNumber}`} className="px-6 py-4 text-center">{value}</td>
                     );
                   })}
-                  <td className="px-6 py-4 text-right font-mono text-black/50">{s.total}</td>
-                  {hasAdditionalScores && <td className="px-6 py-4 text-center font-mono text-violet-700">
+                  <td className="px-6 py-4 text-right text-black/50">{s.total}</td>
+                  {hasAdditionalScores && <td className="px-6 py-4 text-center text-violet-700">
                     {(() => {
                       if (!s.team_id) return s.additional;
                       const aKey = toBonusKey('team', s.team_id);
@@ -10917,7 +10917,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                       ) : s.additional;
                     })()}
                   </td>}
-                  {hasBonus && <td className="px-6 py-4 text-center font-mono text-emerald-700">
+                  {hasBonus && <td className="px-6 py-4 text-center text-emerald-700">
                     {(() => {
                       if (!s.team_id) return s.bonus;
                       const bonusKey = toBonusKey('team', s.team_id);

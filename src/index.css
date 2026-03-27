@@ -16,5 +16,10 @@
 }
 
 body {
+  font-family: 'Roboto Condensed', 'Roboto', ui-sans-serif, system-ui, sans-serif !important;
   @apply antialiased;
+}
+
+* {
+  font-family: 'Roboto Condensed', 'Roboto', ui-sans-serif, system-ui, sans-serif !important;
 }
