@@ -3654,19 +3654,30 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const sortedParticipants = playerSort.key === 'none'
     ? [...participants].sort((left, right) => left.id - right.id)
     : [...participants].sort((left, right) => {
-
-    if (playerSort.key === 'average') {
-      const leftAverage = Number.isFinite(Number(left.average)) ? Number(left.average) : 0;
-      const rightAverage = Number.isFinite(Number(right.average)) ? Number(right.average) : 0;
-      const comparison = leftAverage - rightAverage;
+      let comparison = 0;
+      if (playerSort.key === 'first_name') {
+        const leftName = (left.first_name || '').trim().toLowerCase();
+        const rightName = (right.first_name || '').trim().toLowerCase();
+        comparison = leftName.localeCompare(rightName);
+      } else if (playerSort.key === 'gender') {
+        const leftGender = (left.gender || '').trim().toLowerCase();
+        const rightGender = (right.gender || '').trim().toLowerCase();
+        comparison = leftGender.localeCompare(rightGender);
+      } else if (playerSort.key === 'hand') {
+        const leftHand = normalizeHandsStyle(left.hands);
+        const rightHand = normalizeHandsStyle(right.hands);
+        comparison = leftHand.localeCompare(rightHand);
+      } else if (playerSort.key === 'average') {
+        const leftAverage = Number.isFinite(Number(left.average)) ? Number(left.average) : 0;
+        const rightAverage = Number.isFinite(Number(right.average)) ? Number(right.average) : 0;
+        comparison = leftAverage - rightAverage;
+      } else if (playerSort.key === 'club') {
+        const leftClub = (left.club || '').trim().toLowerCase();
+        const rightClub = (right.club || '').trim().toLowerCase();
+        comparison = leftClub.localeCompare(rightClub);
+      }
       return playerSort.direction === 'asc' ? comparison : -comparison;
-    }
-
-    const leftClub = (left.club || '').trim().toLowerCase();
-    const rightClub = (right.club || '').trim().toLowerCase();
-    const comparison = leftClub.localeCompare(rightClub);
-    return playerSort.direction === 'asc' ? comparison : -comparison;
-  });
+    });
 
   const normalizedPlayerSearch = playerSearchQuery.trim().toLowerCase();
   const activePlayerSearch = normalizedPlayerSearch.length >= 3 ? normalizedPlayerSearch : '';
@@ -3779,7 +3790,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   });
   const teamsWithIntegrityIssues = Array.from(teamIntegrityIssues.keys()).length;
 
-  const togglePlayerSort = (key: 'club' | 'average') => {
+  const togglePlayerSort = (key: 'club' | 'average' | 'first_name' | 'gender' | 'hand') => {
     setPlayerSort((previous) => {
       if (previous.key === key) {
         return {
@@ -3945,10 +3956,40 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               <thead className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
                 <tr className="text-left">
                   <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 w-10 sticky left-0 z-[3] bg-[#e3f3f6]">#</th>
-                  <th className="px-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 sticky left-10 z-[3] bg-[#e3f3f6]">{tx('First Name')}</th>
+                  <th className="px-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 sticky left-10 z-[3] bg-[#e3f3f6]">
+                    <button
+                      type="button"
+                      onClick={() => togglePlayerSort('first_name')}
+                      className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-black/70 hover:text-emerald-700 transition-colors"
+                      title="Sort by first name"
+                    >
+                      {tx('First Name')}
+                      <span>{playerSort.key === 'first_name' ? (playerSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
+                    </button>
+                  </th>
                   <th className="px-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">{tx('Family Name')}</th>
-                  <th className="pl-1 pr-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">{tx('Gender')}</th>
-                  <th className="pl-2 pr-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">{tx('Hands')}</th>
+                  <th className="pl-1 pr-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">
+                    <button
+                      type="button"
+                      onClick={() => togglePlayerSort('gender')}
+                      className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-black/70 hover:text-emerald-700 transition-colors"
+                      title="Sort by gender"
+                    >
+                      {tx('Gender')}
+                      <span>{playerSort.key === 'gender' ? (playerSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
+                    </button>
+                  </th>
+                  <th className="pl-2 pr-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">
+                    <button
+                      type="button"
+                      onClick={() => togglePlayerSort('hand')}
+                      className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-black/70 hover:text-emerald-700 transition-colors"
+                      title="Sort by hand (H1/H2)"
+                    >
+                      {tx('Hands')}
+                      <span>{playerSort.key === 'hand' ? (playerSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
+                    </button>
+                  </th>
                   <th className="pl-2 pr-0.5 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">
                     <button
                       type="button"
