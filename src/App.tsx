@@ -2693,18 +2693,18 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
 
   const visibleTabs = effectiveRole === 'public'
     ? [
-      { id: 'participants', label: 'Participants', icon: Users },
+      { id: 'participants', label: tPublic('public.tab.participants', 'Participants'), icon: Users },
       { id: 'lanes', label: tPublic('public.tab.lane_assignments', 'Lane Assignments'), icon: Columns4 },
       { id: 'scoring', label: tPublic('public.tab.scoring', 'Scoring'), icon: ClipboardList },
       { id: 'brackets', label: tPublic('public.tab.brackets', 'Brackets'), icon: GitBranch },
       { id: 'standings', label: tPublic('public.tab.tournament_result', 'Tournament Result'), icon: Trophy },
     ]
     : [
-      { id: 'participants', label: 'Participants', icon: Users },
-      { id: 'lanes', label: 'Lane Assignments', icon: Columns4 },
-      { id: 'scoring', label: 'Scoring', icon: ClipboardList },
-      { id: 'brackets', label: 'Brackets', icon: GitBranch },
-      { id: 'standings', label: 'Tournament Result', icon: Trophy },
+      { id: 'participants', label: t('tab.participants', 'Participants'), icon: Users },
+      { id: 'lanes', label: t('tab.lane_assignments', 'Lane Assignments'), icon: Columns4 },
+      { id: 'scoring', label: t('tab.scoring', 'Scoring'), icon: ClipboardList },
+      { id: 'brackets', label: t('tab.brackets', 'Brackets'), icon: GitBranch },
+      { id: 'standings', label: t('tab.tournament_result', 'Tournament Result'), icon: Trophy },
     ];
 
   useEffect(() => {
