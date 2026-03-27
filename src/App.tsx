@@ -10655,7 +10655,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                 {maleLeader ? (
                   <>
                     <p className="text-lg font-bold mt-1">{participantNameMap.get(maleLeader.participant_id) || maleLeader.participant_name || 'N/A'}</p>
-                    <p className="text-sm text-black/50">Game {maleLeader.game_number}: {maleLeader.score}</p>
+                    <p className="text-sm text-black/50">Game {maleLeader.game_number}: <span className="font-extrabold text-emerald-700 text-lg">{maleLeader.score}</span></p>
                   </>
                 ) : (
                   <p className="text-sm text-black/40 mt-1">No male result yet.</p>
@@ -10666,7 +10666,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                 {femaleLeader ? (
                   <>
                     <p className="text-lg font-bold mt-1">{participantNameMap.get(femaleLeader.participant_id) || femaleLeader.participant_name || 'N/A'}</p>
-                    <p className="text-sm text-black/50">Game {femaleLeader.game_number}: {femaleLeader.score}</p>
+                    <p className="text-sm text-black/50">Game {femaleLeader.game_number}: <span className="font-extrabold text-violet-700 text-lg">{femaleLeader.score}</span></p>
                   </>
                 ) : (
                   <p className="text-sm text-black/40 mt-1">No female result yet.</p>
@@ -10789,7 +10789,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                 )}
                 {gameNumbers.map((gameNumber) => (
                   <th key={`game-th-${gameNumber}`} className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">
-                    Game {gameNumber}
+                    {gameNumber}
                   </th>
                 ))}
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Total</th>
@@ -10837,9 +10837,9 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                     const isMaleLeaderCell = maleLeaderCellKey === cellKey;
                     const isFemaleLeaderCell = femaleLeaderCellKey === cellKey;
                     const cellClass = isMaleLeaderCell
-                      ? 'bg-sky-50 text-sky-700 font-bold ring-1 ring-sky-200'
+                      ? 'text-sky-700 font-bold'
                       : isFemaleLeaderCell
-                        ? 'bg-rose-50 text-rose-700 font-bold ring-1 ring-rose-200'
+                        ? 'text-rose-700 font-bold'
                         : '';
                     return (
                       <td key={`game-td-${s.participant_id}-${gameNumber}`} className={`px-6 py-4 text-center ${cellClass}`}> 
@@ -10883,13 +10883,7 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                     })()}
                   </td>}
                   <td
-                      className={`px-6 py-4 text-right font-bold ${
-                        maleTopTotalIds.has(s.participant_id)
-                          ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'
-                          : femaleTopTotalIds.has(s.participant_id)
-                            ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
-                            : ''
-                      }`}
+                      className="px-6 py-4 text-right font-bold"
                     >
                       {s.grand_total}
                     </td>
