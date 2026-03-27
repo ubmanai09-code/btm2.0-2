@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Trophy, 
+  Trophy, Medal, 
   Users, 
   User,
   Columns4, MapPin, 
@@ -9634,7 +9634,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
             {[
               {
                 place: 'Place 1',
-                medal: '🥇',
+                medal: <Medal size={32} className="text-yellow-400 drop-shadow medal-gold" title="1st place" />, 
                 team: tournament.type === 'team' ? bracketFirstPlace : bracketFirstPlace.baseName || bracketFirstPlace,
                 handInfo: tournament.type === 'individual' && bracketFirstPlace.handInfo ? bracketFirstPlace.handInfo : '',
                 members: firstPlaceMembers.short,
@@ -9643,7 +9643,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
               },
               {
                 place: 'Place 2',
-                medal: '🥈',
+                medal: <Medal size={32} className="text-gray-400 drop-shadow medal-silver" title="2nd place" />, 
                 team: tournament.type === 'team' ? bracketSecondPlace : bracketSecondPlace.baseName || bracketSecondPlace,
                 handInfo: tournament.type === 'individual' && bracketSecondPlace.handInfo ? bracketSecondPlace.handInfo : '',
                 members: secondPlaceMembers.short,
@@ -9652,7 +9652,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
               },
               {
                 place: 'Place 3',
-                medal: '🥉',
+                medal: <Medal size={32} className="text-amber-700 drop-shadow medal-bronze" title="3rd place" />, 
                 team: tournament.type === 'team' ? bracketThirdPlace : bracketThirdPlace.baseName || bracketThirdPlace,
                 handInfo: tournament.type === 'individual' && bracketThirdPlace.handInfo ? bracketThirdPlace.handInfo : '',
                 members: thirdPlaceMembers.short,
