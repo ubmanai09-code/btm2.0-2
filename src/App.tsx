@@ -3,7 +3,7 @@ import {
   Trophy, 
   Users, 
   User,
-  LayoutGrid, 
+  Columns4, MapPin, 
   ClipboardList, 
   BarChart3, 
   Plus, 
@@ -2694,17 +2694,17 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
   const visibleTabs = effectiveRole === 'public'
     ? [
       { id: 'participants', label: 'Participants', icon: Users },
-      { id: 'lanes', label: tPublic('public.tab.lane_assignments', 'Lane Assignments'), icon: LayoutGrid },
+      { id: 'lanes', label: tPublic('public.tab.lane_assignments', 'Lane Assignments'), icon: Columns4 },
       { id: 'scoring', label: tPublic('public.tab.scoring', 'Scoring'), icon: ClipboardList },
       { id: 'brackets', label: tPublic('public.tab.brackets', 'Brackets'), icon: GitBranch },
-      { id: 'standings', label: tPublic('public.tab.tournament_result', 'Tournament Result'), icon: BarChart3 },
+      { id: 'standings', label: tPublic('public.tab.tournament_result', 'Tournament Result'), icon: Trophy },
     ]
     : [
       { id: 'participants', label: 'Participants', icon: Users },
-      { id: 'lanes', label: 'Lane Assignments', icon: LayoutGrid },
+      { id: 'lanes', label: 'Lane Assignments', icon: Columns4 },
       { id: 'scoring', label: 'Scoring', icon: ClipboardList },
       { id: 'brackets', label: 'Brackets', icon: GitBranch },
-      { id: 'standings', label: 'Tournament Result', icon: BarChart3 },
+      { id: 'standings', label: 'Tournament Result', icon: Trophy },
     ];
 
   useEffect(() => {
@@ -2779,7 +2779,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                   </span>
                   <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-black/10 bg-white/70">
                     <Users size={13} />
-                    <span className="capitalize">{tournament.type === 'team' ? tPublic('public.tournament.type.team', 'team') : tPublic('public.tournament.type.individual', 'individual')}</span>
+                    <span>{(tournament.type === 'team' ? tPublic('public.tournament.type.team', 'team') : tPublic('public.tournament.type.individual', 'individual')).replace(/^([a-z])/, (m) => m.toUpperCase())}</span>
                     {tournament.type === 'team' && <span>({tournament.players_per_team}/team)</span>}
                   </span>
                   <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-black/10 bg-white/70">
@@ -2795,12 +2795,12 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                     {tournament.games_count} {tPublic('public.tournament.games', 'Games')}
                   </span>
                   <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-black/10 bg-white/70">
-                    <LayoutGrid size={13} />
+                    <Columns4 size={13} />
                     {tournament.players_per_lane} {tournament.type === 'team' ? tPublic('public.tournament.teams', 'Teams') : tPublic('public.tournament.players', 'Players')} / {tPublic('lanes.lane', 'Lane')}
                   </span>
                   {tournament.location && (
                     <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-black/10 bg-white/70">
-                      <LayoutGrid size={13} />
+                      <MapPin size={13} />
                       {tournament.location}
                     </span>
                   )}
