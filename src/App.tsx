@@ -69,10 +69,15 @@ type SponsorsConfig = {
   dashboardPromo: DashboardPromo;
 };
 
+
+// --- Translation function must be defined before use ---
+// Temporary stub, will be reassigned after tPublic is defined
+let t = (key: string, fallback: string) => fallback;
+
 const DEFAULT_DASHBOARD_PROMO: DashboardPromo = {
   enabled: true,
-  title: 'Advertise Here',
-  subtitle: 'Promote your brand with a dashboard promo image.',
+  title: t('dashboard.advertise_here', 'Advertise Here'),
+  subtitle: t('dashboard.promo_subtitle', 'Promote your brand with a dashboard promo image.'),
   image: '',
   link: '',
 };
@@ -81,18 +86,18 @@ const GLOBAL_SPONSORS: SponsorInfo[] = [
   {
     id: 'sponsor-1',
     kind: 'sponsor',
-    name: 'General Sponsor',
+    name: t('sponsor.general', 'General Sponsor'),
     logo: '/logo.png',
-    description: 'Primary supporter for tournament operations and event logistics.',
+    description: t('sponsor.general_desc', 'Primary supporter for tournament operations and event logistics.'),
     contacts: 'info@generalsponsor.com | +1 000 000 0000',
     url: 'https://example.com',
   },
   {
     id: 'partner-1',
     kind: 'partner',
-    name: 'Official Partner',
+    name: t('sponsor.official_partner', 'Official Partner'),
     logo: '/logo.png',
-    description: 'Technology and media partner supporting tournament coverage.',
+    description: t('sponsor.official_partner_desc', 'Technology and media partner supporting tournament coverage.'),
     contacts: 'support@officialpartner.com | +1 000 000 0001',
     url: 'https://example.org',
   },
@@ -115,7 +120,7 @@ const normalizeSponsorInfoList = (value: any): SponsorInfo[] => {
     .map((item: any, index: number): SponsorInfo => ({
       id: String(item?.id || `sponsor-${index + 1}`),
       kind: item?.kind === 'partner' ? 'partner' : 'sponsor',
-      name: String(item?.name || 'Unnamed Sponsor'),
+      name: String(item?.name || t('sponsor.unnamed', 'Unnamed Sponsor')),
       logo: String(item?.logo || '/logo.png'),
       description: String(item?.description || ''),
       contacts: String(item?.contacts || ''),
@@ -165,34 +170,34 @@ const escapePrintHtml = (value: unknown) => String(value ?? '')
   .replace(/'/g, '&#39;');
 
 const getTournamentShortInfo = (tournament: Tournament) => {
-  const typeLabel = tournament.type === 'team' ? 'Team' : 'Individual';
-  const laneUnit = tournament.type === 'team' ? 'Teams/Lane' : 'Players/Lane';
-  return `${typeLabel} • ${tournament.lanes_count} Lanes • ${tournament.shifts_count} Shifts • ${tournament.players_per_lane} ${laneUnit} • ${tournament.games_count} Games`;
+  const typeLabel = tournament.type === 'team' ? t('tournament.type.team', 'Team') : t('tournament.type.individual', 'Individual');
+  const laneUnit = tournament.type === 'team' ? t('tournament.teams_per_lane', 'Teams/Lane') : t('tournament.players_per_lane', 'Players/Lane');
+  return `${typeLabel} • ${tournament.lanes_count} ${t('tournament.lanes', 'Lanes')} • ${tournament.shifts_count} ${t('tournament.shifts', 'Shifts')} • ${tournament.players_per_lane} ${laneUnit} • ${tournament.games_count} ${t('tournament.games', 'Games')}`;
 };
 
 const getTournamentFormatLabel = (value: string) => {
-  if (!value) return 'Standard format';
-  return value === 'Pre-Qualification' ? 'Total Pinfall' : value;
+  if (!value) return t('format.standard', 'Standard format');
+  return value === 'Pre-Qualification' ? t('format.total_pinfall', 'Total Pinfall') : value;
 };
 
 const getMatchPlayTypeLabel = (value: Tournament['match_play_type'] | string | undefined) => {
   switch (value) {
     case 'single_elimination':
-      return 'Single Elimination';
+      return t('bracket.single_elimination', 'Single Elimination');
     case 'double_elimination':
-      return 'Double Elimination';
+      return t('bracket.double_elimination', 'Double Elimination');
     case 'ladder':
-      return 'Ladder';
+      return t('bracket.ladder', 'Ladder');
     case 'stepladder':
-      return 'Stepladder';
+      return t('bracket.stepladder', 'Stepladder');
     case 'playoff':
-      return 'Playoff';
+      return t('bracket.playoff', 'Playoff');
     case 'team_selection_playoff':
-      return 'Team Selection Playoff';
+      return t('bracket.team_selection_playoff', 'Team Selection Playoff');
     case 'survivor_elimination':
-      return 'Survivor Elimination';
+      return t('bracket.survivor_elimination', 'Survivor Elimination');
     default:
-      return 'Single Elimination';
+      return t('bracket.single_elimination', 'Single Elimination');
   }
 };
 
@@ -536,7 +541,7 @@ export default function App() {
     }
     return String(row.en || '').trim() || fallback;
   };
-  const t = tPublic;
+  t = tPublic;
   const translateUiText = (text: string) => {
     const normalized = String(text || '').trim();
     if (!normalized || publicLanguage !== 'mn') return text;
@@ -669,7 +674,7 @@ export default function App() {
         setCurrentRole('public');
         setCurrentUser(null);
         localStorage.removeItem('btm_auth_token');
-        setAuthError('Session expired. Please login again.');
+        setAuthError(t('auth.session_expired', 'Session expired. Please login again.'));
         setShowLogin(true);
       }
     
@@ -850,8 +855,8 @@ export default function App() {
     if (!tournamentItem) return;
 
     const prompt = shouldArchive
-      ? 'Move this tournament to archive?'
-      : 'Restore this tournament from archive?';
+      ? t('tournament.archive_confirm', 'Move this tournament to archive?')
+      : t('tournament.restore_confirm', 'Restore this tournament from archive?');
 
     if (!window.confirm(prompt)) return;
 
@@ -866,7 +871,7 @@ export default function App() {
         setView('list');
       }
     } catch (err: any) {
-      alert(err?.message || 'Failed to update archive status.');
+      alert(err?.message || t('tournament.archive_failed', 'Failed to update archive status.'));
     }
   };
 
@@ -874,7 +879,7 @@ export default function App() {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(tournaments, null, 2));
     const downloadAnchorNode = document.createElement('a');
     downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", "tournaments_export.json");
+    downloadAnchorNode.setAttribute("download", t('tournament.export_filename', 'tournaments_export.json'));
     document.body.appendChild(downloadAnchorNode);
     downloadAnchorNode.click();
     downloadAnchorNode.remove();
@@ -882,7 +887,7 @@ export default function App() {
 
   const handleSaveData = async () => {
     await loadTournaments();
-    alert('Data synchronized.');
+    alert(t('data.synchronized', 'Data synchronized.'));
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -894,7 +899,7 @@ export default function App() {
       const parsed = JSON.parse(text);
       const items = Array.isArray(parsed) ? parsed : [parsed];
       if (items.length === 0) {
-        alert('Imported file is empty.');
+        alert(t('data.import_empty', 'Imported file is empty.'));
         return;
       }
 
