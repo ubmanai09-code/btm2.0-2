@@ -5925,7 +5925,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
               <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70">Lane</th>
               {gameNumbers.map(gameNumber => (
                 <th key={gameNumber} className="px-3 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70 text-center min-w-[110px]">
-                  Game {gameNumber}
+                  {gameNumber}
                 </th>
               ))}
               <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70 text-right">Total</th>
@@ -10581,12 +10581,35 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                       // Alternate row backgrounds and use original font classes
                       let rowBg = '';
                       let textClass = '';
-                      if (idx === 0) { rowBg = 'bg-emerald-50/70'; textClass = 'text-emerald-700'; }
-                      else if (idx === 1) { rowBg = 'bg-slate-100/80'; textClass = 'text-slate-700'; }
-                      else if (idx === 2) { rowBg = 'bg-amber-50/70'; textClass = 'text-amber-700'; }
+                      let medalIcon = null;
+                      if (idx === 0) {
+                        rowBg = 'bg-emerald-50/70'; textClass = 'text-emerald-700';
+                        medalIcon = (
+                          <span className="relative inline-block align-middle" title="1st place">
+                            <Medal size={24} className="text-yellow-400" />
+                            <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-yellow-900" style={{ pointerEvents: 'none' }}>1</span>
+                          </span>
+                        );
+                      } else if (idx === 1) {
+                        rowBg = 'bg-slate-100/80'; textClass = 'text-slate-700';
+                        medalIcon = (
+                          <span className="relative inline-block align-middle" title="2nd place">
+                            <Medal size={24} className="text-gray-400" />
+                            <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-gray-700" style={{ pointerEvents: 'none' }}>2</span>
+                          </span>
+                        );
+                      } else if (idx === 2) {
+                        rowBg = 'bg-amber-50/70'; textClass = 'text-amber-700';
+                        medalIcon = (
+                          <span className="relative inline-block align-middle" title="3rd place">
+                            <Medal size={24} className="text-amber-700" />
+                            <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-amber-900" style={{ pointerEvents: 'none' }}>3</span>
+                          </span>
+                        );
+                      }
                       return (
                         <React.Fragment key={place}>
-                          <div className={`px-4 py-3 font-bold border-b border-black/10 ${rowBg} ${textClass}`}>{place}</div>
+                          <div className={`px-4 py-3 font-bold border-b border-black/10 ${rowBg} ${textClass}`}>{medalIcon}</div>
                           <div className={`px-4 py-3 border-b border-black/10 ${rowBg} ${textClass}`}>{(getBracketPodium(bracketMatchesByDivision.female, tournament.match_play_type)[['first','second','third'][idx]] || 'TBD').replace(/\s*\([12]H\)$/, '')}</div>
                           <div className={`px-4 py-3 border-b border-black/10 ${rowBg} ${textClass}`}>{(getBracketPodium(bracketMatchesByDivision.male, tournament.match_play_type)[['first','second','third'][idx]] || 'TBD').replace(/\s*\([12]H\)$/, '')}</div>
                         </React.Fragment>
