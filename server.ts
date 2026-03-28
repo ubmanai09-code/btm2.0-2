@@ -792,18 +792,7 @@ async function startServer() {
         });
       }
 
-      if (role === 'moderator') {
-        const userId = readSessionUserId(req);
-        const tournamentId = tournamentResolver ? tournamentResolver(req) : null;
-        if (!userId || !tournamentId || !hasModeratorTournamentAccess(tournamentId, userId)) {
-          return res.status(403).json({
-            error: 'Forbidden: moderator does not have access to this tournament',
-            role,
-            required: permission,
-            tournament_id: tournamentId,
-          });
-        }
-      }
+      // Moderators now have global rights for all tournaments
 
       return next();
     };

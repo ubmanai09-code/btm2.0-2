@@ -477,7 +477,11 @@ export default function App() {
   const dashboardPromoImageInputRef = useRef<HTMLInputElement | null>(null);
   const tournamentsImportInputRef = useRef<HTMLInputElement | null>(null);
   const [authToken, setAuthToken] = useState<string>(() => localStorage.getItem('btm_auth_token') || '');
-  const [currentRole, setCurrentRole] = useState<UserRole>(() => lockedRole || 'public');
+  const [currentRole, setCurrentRole] = useState<UserRole>(() => {
+    if (lockedRole) return lockedRole;
+    const storedRole = localStorage.getItem('btm_role');
+    return storedRole === 'admin' || storedRole === 'moderator' ? storedRole : 'public';
+  });
   const [showLogin, setShowLogin] = useState(false);
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(true);
@@ -985,6 +989,7 @@ export default function App() {
       const session = await api.login(username, password);
       setAuthToken(session.token);
       setCurrentRole(session.role);
+      localStorage.setItem('btm_role', session.role);
       setCurrentUser({ id: session.id, username: session.username, role: session.role });
       setShowLogin(false);
     } catch (err: any) {
@@ -1002,6 +1007,7 @@ export default function App() {
     } finally {
       setAuthToken('');
       setCurrentRole(lockedRole || 'public');
+      localStorage.removeItem('btm_role');
       setCurrentUser(null);
       setShowLogin(false);
       setShowPasswordModal(false);
@@ -2687,7 +2693,8 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
     }
   };
 
-  const effectiveRole: UserRole = role === 'moderator' && !moderatorAccess?.can_manage ? 'public' : role;
+  // Moderators always have full rights (except for removing tournaments)
+  const effectiveRole: UserRole = role;
     const isPublicView = effectiveRole === 'public';
   const tournamentSponsors = (sponsorsConfig?.tournaments?.[String(tournament.id)] || []).filter((s) => s.logo);
 
