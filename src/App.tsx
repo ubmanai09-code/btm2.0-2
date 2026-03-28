@@ -6091,6 +6091,8 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const bracketScoreDraftsStorageKey = `btm_bracket_score_drafts_${tournament.id}`;
   const bracketDivisionStorageKey = `btm_bracket_division_${tournament.id}`;
   const [matches, setMatches] = useState<any[]>([]);
+
+  // Filter matches by bracketDivision (gender) before rendering
   const [seeds, setSeeds] = useState<any[]>([]);
   const [bracketParticipants, setBracketParticipants] = useState<Participant[]>([]);
   const [bracketTeams, setBracketTeams] = useState<Team[]>([]);
@@ -6110,10 +6112,27 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   const [publicPreviewMatchPlayType, setPublicPreviewMatchPlayType] = useState<Tournament['match_play_type'] | null>(null);
   const [bracketDivision, setBracketDivision] = useState<'male' | 'female'>(() => {
     const stored = localStorage.getItem(`btm_bracket_division_${tournament.id}`);
-    // Removed 'mixed' type check as only 'individual' and 'team' are valid
-    // For non-mixed, fallback to 'male' if 'all' is present
     return stored === 'female' ? 'female' : 'male';
   });
+
+  // Filter matches by bracketDivision (gender) after bracketDivision is initialized
+  const filteredMatches = React.useMemo(() => {
+    if (tournament.type !== 'individual') return matches;
+    // Only show matches for the selected gender division
+    return matches.filter((m) => {
+      // Try to infer gender from match participants if available
+      if (m.gender) return m.gender === bracketDivision;
+      // Fallback: check participant1_gender or similar fields
+      if (m.participant1_gender) return m.participant1_gender === bracketDivision;
+      // If no gender info, show all (should not happen)
+      return true;
+    });
+  }, [matches, bracketDivision, tournament.type]);
+
+  // Persist bracketDivision to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem(`btm_bracket_division_${tournament.id}`, bracketDivision);
+  }, [bracketDivision, tournament.id]);
   const [qualifiedCount, setQualifiedCount] = useState<number>(
     Number.isFinite(Number.parseInt(String(tournament.qualified_count), 10))
       ? Number.parseInt(String(tournament.qualified_count), 10)
@@ -8243,7 +8262,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     };
   };
 
-  const roundGroups = matches.reduce((acc: Record<number, any[]>, match: any) => {
+  const roundGroups = filteredMatches.reduce((acc: Record<number, any[]>, match: any) => {
     const round = Number(match.round) || 0;
     if (!acc[round]) acc[round] = [];
     acc[round].push(match);

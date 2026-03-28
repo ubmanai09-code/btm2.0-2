@@ -776,6 +776,7 @@ async function startServer() {
       'participants:manage',
       'scores:manage',
       'brackets:manage',
+      'lanes:manage',
     ]),
     public: new Set<Permission>([]),
   };
