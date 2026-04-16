@@ -1,0 +1,73 @@
+{
+  "id": "bowling-hybrid-10",
+  "name": "Shootx3(2out) + Stepladder x3",
+  "match_play_type": "bowling_hybrid",
+  "round_match_counts": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+  ],
+  "round_rules": [
+    "shootout",
+    "shootout",
+    "shootout",
+    "duel",
+    "duel",
+    "duel"
+  ],
+  "placement_rules": {
+    "hybrid": [
+      {
+        "type": "shootout",
+        "entering": [
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "eliminate": 2
+      },
+      {
+        "type": "shootout",
+        "entering": [],
+        "eliminate": 2
+      },
+      {
+        "type": "shootout",
+        "entering": [
+          4
+        ],
+        "eliminate": 2
+      },
+      {
+        "type": "duel",
+        "entering": [
+          3
+        ]
+      },
+      {
+        "type": "duel",
+        "entering": [
+          2
+        ]
+      },
+      {
+        "type": "duel",
+        "entering": [
+          1
+        ]
+      }
+    ],
+    "first": "winner:6:0",
+    "second": "loser:6:0",
+    "third": ""
+  },
+  "description": "10 seeds: R1 seeds 5-10 shootout (cut 2), R2 survivors shootout (cut 2), R3 survivors + seed 4 (cut 2), R4-R6 stepladder vs seeds 3, 2, 1.",
+  "min_qualified_count": 6,
+  "recommended_qualified_count": 10
+}

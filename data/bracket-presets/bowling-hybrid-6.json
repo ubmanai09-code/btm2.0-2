@@ -1,0 +1,26 @@
+{
+  "id": "bowling-hybrid-6",
+  "name": "Shoot(1out) + Stepladder x3",
+  "match_play_type": "bowling_hybrid",
+  "round_match_counts": [
+    1,
+    1,
+    1,
+    1
+  ],
+  "round_rules": [
+    "survivor_cut",
+    "duel",
+    "duel",
+    "duel",
+    "duel"
+  ],
+  "placement_rules": {
+    "first": "winner:4:0",
+    "second": "loser:4:0",
+    "third": ""
+  },
+  "description": "6 seeds: R1 seeds 4-6 bowl (bottom 2 out), R2 winner vs seed 3, R3 winner vs seed 2, R4 winner vs seed 1 (final).",
+  "min_qualified_count": 4,
+  "recommended_qualified_count": 6
+}

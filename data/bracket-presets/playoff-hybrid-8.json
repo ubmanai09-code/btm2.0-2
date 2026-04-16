@@ -1,0 +1,24 @@
+{
+  "id": "playoff-hybrid-8",
+  "name": "Shootout(-2)+Play-Off",
+  "match_play_type": "bowling_hybrid",
+  "round_match_counts": [
+    4,
+    1,
+    1
+  ],
+  "round_rules": [
+    "duel",
+    "duel",
+    "duel",
+    "duel"
+  ],
+  "placement_rules": {
+    "first": "",
+    "second": "",
+    "third": ""
+  },
+  "description": "6 seeds: R1 all seeds shootout (cut 2), R2 play-off seed 1 vs seed 4 R3: play-off seed 2 vs seed 3",
+  "min_qualified_count": 6,
+  "recommended_qualified_count": 6
+}
