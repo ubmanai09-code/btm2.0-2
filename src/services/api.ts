@@ -6,7 +6,7 @@ export interface Tournament {
   format: string;
   organizer: string;
   logo: string;
-  match_play_type: 'single_elimination' | 'double_elimination' | 'ladder' | 'stepladder' | 'playoff' | 'team_selection_playoff' | 'survivor_elimination';
+  match_play_type: 'single_elimination' | 'double_elimination' | 'ladder' | 'stepladder' | 'playoff' | 'team_selection_playoff' | 'survivor_elimination' | 'bowling_hybrid';
   qualified_count: number;
   playoff_winners_count: number;
   known_bracket_format_id?: string | null;
@@ -587,6 +587,18 @@ const api = {
     }
     return res.json();
   },
+  async saveShootoutResults(tournamentId: number, matchId: number, scores: Array<{ participant_id: number; score: number }>): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/brackets/${matchId}/shootout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scores }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data?.error || 'Failed to save shootout results');
+    }
+    return res.json();
+  },
   async getStandings(tournamentId: number): Promise<Standing[]> {
     const res = await fetch(`/api/tournaments/${tournamentId}/standings`);
     return res.json();
@@ -767,6 +779,7 @@ const api = {
       seed_ids?: number[];
       seed_kind?: 'team' | 'participant';
       division?: 'all' | 'male' | 'female';
+      known_bracket_format_id?: string | null;
       team_selection_draft?: {
         seed1_opponent_seed: number;
         seed2_opponent_seed: number;

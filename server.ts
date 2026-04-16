@@ -386,6 +386,9 @@ function initDb() {
     { name: 'participant1_source_outcome', type: 'TEXT' },
     { name: 'participant2_source_match_id', type: 'INTEGER' },
     { name: 'participant2_source_outcome', type: 'TEXT' },
+    { name: 'match_kind', type: "TEXT NOT NULL DEFAULT 'duel'" },
+    { name: 'participants_json', type: 'TEXT' },
+    { name: 'scores_json', type: 'TEXT' },
   ];
   bracketMigrations.forEach(m => {
     if (!bColumns.includes(m.name)) {
@@ -953,6 +956,63 @@ async function startServer() {
       recommended_qualified_count: 8,
     },
     {
+      id: 'bowling-hybrid-6',
+      name: 'Shoot(1out) + Stepladder ×3',
+      match_play_type: 'bowling_hybrid',
+      round_match_counts: [1, 1, 1, 1],
+      round_rules: ['shootout', 'duel', 'duel', 'duel'],
+      placement_rules: {
+        first:  'winner:4:0',
+        second: 'loser:4:0',
+        hybrid: [
+          { type: 'shootout', entering: [4, 5, 6], eliminate: 1 },
+          { type: 'duel',     entering: [3] },
+          { type: 'duel',     entering: [2] },
+          { type: 'duel',     entering: [1] },
+        ],
+      },
+      description: '6 seeds: R1 seeds 4-6 bowl (bottom 1 out), R2 winner vs seed 3, R3 winner vs seed 2, R4 winner vs seed 1 (final).',
+      min_qualified_count: 4,
+      recommended_qualified_count: 6,
+    },
+    {
+      id: 'bowling-hybrid-10',
+      name: 'Shoot×3(2out) + Stepladder ×3',
+      match_play_type: 'bowling_hybrid',
+      round_match_counts: [1, 1, 1, 1, 1, 1],
+      round_rules: ['shootout', 'shootout', 'shootout', 'duel', 'duel', 'duel'],
+      placement_rules: {
+        first:  'winner:6:0',
+        second: 'loser:6:0',
+        hybrid: [
+          { type: 'shootout', entering: [5, 6, 7, 8, 9, 10], eliminate: 2 },
+          { type: 'shootout', entering: [],                   eliminate: 2 },
+          { type: 'shootout', entering: [4],                  eliminate: 2 },
+          { type: 'duel',     entering: [3] },
+          { type: 'duel',     entering: [2] },
+          { type: 'duel',     entering: [1] },
+        ],
+      },
+      description: '10 seeds: R1 seeds 5-10 shootout (cut 2), R2 survivors shootout (cut 2), R3 survivors + seed 4 (cut 2), R4-R6 stepladder vs seeds 3, 2, 1.',
+      min_qualified_count: 6,
+      recommended_qualified_count: 10,
+    },
+    {
+      id: 'playoff-6-shootout-bronze',
+      name: 'Playoff 6 (Shootout + Bronze)',
+      match_play_type: 'playoff',
+      round_match_counts: [1, 2, 2],
+      round_rules: ['survivor_cut', 'duel', 'duel'],
+      placement_rules: {
+        first:  'winner:3:0',
+        second: 'loser:3:0',
+        third:  'winner:3:1',
+      },
+      description: '6 seeds: R1 all bowl (lowest 2 eliminated), R2 semifinals (1v4, 2v3), R3 bronze & final.',
+      min_qualified_count: 6,
+      recommended_qualified_count: 6,
+    },
+    {
       id: 'b-pro-male',
       name: 'B Pro League Male',
       match_play_type: 'stepladder',
@@ -1139,7 +1199,7 @@ async function startServer() {
       FROM tournaments
       WHERE id = ?
     `).get(tournamentId) as any;
-    if (!tournament || tournament.match_play_type !== 'playoff') return;
+    if (!tournament || (tournament.match_play_type !== 'playoff' && tournament.match_play_type !== 'bowling_hybrid')) return;
 
     const roundMatchCount = db.prepare(`
       SELECT COUNT(*) as count
@@ -3050,6 +3110,103 @@ const existing = db
       });
     }
 
+    if (requestedMatchPlayType === 'bowling_hybrid') {
+      if (participants.length < 2) {
+        return res.status(400).json({ error: 'Bowling Hybrid requires at least 2 participants' });
+      }
+
+      // Load hybrid config from known preset's placement_rules.hybrid
+      type HybridRound =
+        | { type: 'shootout'; entering: number[]; eliminate: number }
+        | { type: 'duel';     entering: number[] };
+
+      let hybridRounds: HybridRound[] | null = null;
+      const knownFormatId = (req.body?.known_bracket_format_id as string | undefined) ||
+        db.prepare("SELECT known_bracket_format_id FROM tournaments WHERE id = ?").get(tournamentId) as any;
+      const knownFormatIdStr = typeof knownFormatId === 'string'
+        ? knownFormatId
+        : (knownFormatId?.known_bracket_format_id ?? null);
+
+      if (knownFormatIdStr) {
+        const presetRow = db.prepare("SELECT placement_rules FROM bracket_presets WHERE id = ?").get(knownFormatIdStr) as any;
+        try {
+          const pr = JSON.parse(String(presetRow?.placement_rules || '{}'));
+          if (Array.isArray(pr?.hybrid)) hybridRounds = pr.hybrid as HybridRound[];
+        } catch {}
+      }
+
+      const insShootout = db.prepare(`
+        INSERT INTO brackets (tournament_id, division, round, match_index, match_kind, participants_json, winner_id)
+        VALUES (?, ?, ?, ?, 'shootout', ?, NULL)
+      `);
+      const insDuel = db.prepare(`
+        INSERT INTO brackets (tournament_id, division, round, match_index, match_kind, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
+        VALUES (?, ?, ?, ?, 'duel', ?, ?, ?, ?, NULL)
+      `);
+      const insDuelEmpty = db.prepare(`
+        INSERT INTO brackets (tournament_id, division, round, match_index, match_kind, winner_id)
+        VALUES (?, ?, ?, ?, 'duel', NULL)
+      `);
+
+      if (hybridRounds && hybridRounds.length > 0) {
+        // ── Preset-driven generation ────────────────────────────────────────
+        // Build seed→participant lookup
+        const bySeeed = new Map<number, typeof participants[0]>();
+        for (const p of participants) bySeeed.set(p.seed, p);
+
+        for (let ri = 0; ri < hybridRounds.length; ri++) {
+          const roundNo = ri + 1;
+          const rCfg = hybridRounds[ri];
+          const enteringSeeds = (rCfg.entering || []).filter(s => bySeeed.has(s));
+          const enteringPs = enteringSeeds.map(s => bySeeed.get(s)!);
+
+          if (rCfg.type === 'shootout') {
+            let psJson: Array<{ id: number; seed: number }>;
+            if (ri === 0) {
+              // R1: if entering is explicit, use it directly; otherwise auto-detect (all - waiting seeds)
+              if (enteringPs.length > 0) {
+                psJson = enteringPs.map(p => ({ id: p.id, seed: p.seed }));
+              } else {
+                const waitingSeeds = new Set(hybridRounds!.flatMap((r2, i2) => i2 > 0 ? (r2.entering || []) : []));
+                psJson = participants.filter(p => !waitingSeeds.has(p.seed)).map(p => ({ id: p.id, seed: p.seed }));
+              }
+            } else {
+              // Later shootout rounds: pre-seed entering seeds only; survivors injected at runtime by shootout-advance endpoint
+              psJson = enteringPs.map(p => ({ id: p.id, seed: p.seed }));
+            }
+            insShootout.run(tournamentId, division, roundNo, 0, JSON.stringify(psJson));
+          } else {
+            // duel: entering seed waits in p2; p1 = surviving winner from previous round (null for now)
+            const waitingP = enteringPs.length > 0 ? enteringPs[0] : null;
+            if (waitingP) {
+              insDuel.run(tournamentId, division, roundNo, 0, null, waitingP.id, null, waitingP.seed);
+            } else {
+              insDuelEmpty.run(tournamentId, division, roundNo, 0);
+            }
+          }
+        }
+      } else {
+        // ── Legacy fallback: all-play shootout → 2 semis → bronze + final ──
+        const shootoutParticipants = participants.map(p => ({ id: p.id, seed: p.seed }));
+        insShootout.run(tournamentId, division, 1, 0, JSON.stringify(shootoutParticipants));
+        insDuelEmpty.run(tournamentId, division, 2, 0);
+        insDuelEmpty.run(tournamentId, division, 2, 1);
+        insDuelEmpty.run(tournamentId, division, 3, 0);
+        insDuelEmpty.run(tournamentId, division, 3, 1);
+      }
+
+      const generatedMatches = db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ? AND division = ?").get(tournamentId, division) as any;
+      const roundsCount = db.prepare("SELECT MAX(round) as r FROM brackets WHERE tournament_id = ? AND division = ?").get(tournamentId, division) as any;
+      return res.json({
+        success: true,
+        division,
+        match_play_type: requestedMatchPlayType,
+        qualified_count: effectiveQualifiedCount,
+        rounds_count: roundsCount?.r || 1,
+        generated_matches: generatedMatches?.count || 0,
+      });
+    }
+
     if (requestedMatchPlayType === 'playoff') {
       const bracketSize = nextPowerOfTwo(participants.length);
       const seedOrder = buildSeedOrder(bracketSize);
@@ -3457,6 +3614,136 @@ const existing = db
 
     db.prepare("UPDATE brackets SET winner_id = ? WHERE id = ?").run(numericWinnerId, numericMatchId);
     advanceWinnerToNextRound(req.params.id, numericMatchId, numericWinnerId);
+    res.json({ success: true });
+  });
+
+  // ── Bowling Hybrid: submit shootout scores ────────────────────────────────
+  app.post("/api/tournaments/:id/brackets/:matchId/shootout", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
+    const tournamentId = req.params.id;
+    const numericMatchId = Number.parseInt(req.params.matchId, 10);
+    if (!Number.isFinite(numericMatchId)) return res.status(400).json({ error: 'Invalid match id' });
+
+    const match = db.prepare(`
+      SELECT id, round, match_index, match_kind, participants_json, division
+      FROM brackets WHERE id = ? AND tournament_id = ?
+    `).get(numericMatchId, tournamentId) as any;
+    if (!match) return res.status(404).json({ error: 'Match not found' });
+    if (String(match.match_kind) !== 'shootout') return res.status(400).json({ error: 'Not a shootout match' });
+
+    const scoreInputs: Array<{ participant_id: number; score: number }> = Array.isArray(req.body?.scores)
+      ? req.body.scores
+          .map((s: any) => ({ participant_id: Number.parseInt(s.participant_id, 10), score: Number.parseInt(s.score, 10) }))
+          .filter((s: any) => Number.isFinite(s.participant_id) && Number.isFinite(s.score))
+      : [];
+
+    let participants: Array<{ id: number; seed: number }> = [];
+    try { participants = JSON.parse(String(match.participants_json || '[]')); } catch {}
+
+    if (scoreInputs.length < participants.length) {
+      return res.status(400).json({ error: `Need scores for all ${participants.length} participants` });
+    }
+
+    // Load hybrid config
+    type HybridRound =
+      | { type: 'shootout'; entering: number[]; eliminate: number }
+      | { type: 'duel';     entering: number[] };
+    let hybridRounds: HybridRound[] | null = null;
+    const tournamentRow = db.prepare("SELECT known_bracket_format_id FROM tournaments WHERE id = ?").get(tournamentId) as any;
+    if (tournamentRow?.known_bracket_format_id) {
+      const presetRow = db.prepare("SELECT placement_rules FROM bracket_presets WHERE id = ?").get(tournamentRow.known_bracket_format_id) as any;
+      try {
+        const pr = JSON.parse(String(presetRow?.placement_rules || '{}'));
+        if (Array.isArray(pr?.hybrid)) hybridRounds = pr.hybrid as HybridRound[];
+      } catch {}
+    }
+
+    const currentRoundNo: number = Number(match.round);
+    const currentRoundIdx = currentRoundNo - 1;
+    const currentCfg = hybridRounds?.[currentRoundIdx] as (HybridRound & { type: 'shootout' }) | undefined;
+    const eliminateCount: number = currentCfg?.eliminate ?? Math.max(1, participants.length - 4);
+
+    // Rank participants descending by score
+    const ranked = participants.map(p => {
+      const scoreEntry = scoreInputs.find(s => s.participant_id === p.id);
+      return { id: p.id, seed: p.seed, score: scoreEntry?.score ?? 0 };
+    }).sort((a, b) => b.score - a.score || a.seed - b.seed);
+
+    const advancing = ranked.slice(0, ranked.length - eliminateCount);
+    const eliminated = ranked.slice(ranked.length - eliminateCount);
+    const eliminatedIds = eliminated.map(p => p.id);
+
+    // Persist scores and winner (top scorer)
+    db.prepare("UPDATE brackets SET scores_json = ?, winner_id = ? WHERE id = ?")
+      .run(
+        JSON.stringify(ranked.map(p => ({ id: p.id, seed: p.seed, score: p.score, eliminated: eliminatedIds.includes(p.id) }))),
+        advancing[0]?.id ?? null,
+        numericMatchId,
+      );
+
+    // Populate next round
+    const division = String(match.division || 'all');
+    const nextRoundNo = currentRoundNo + 1;
+    const nextCfg = hybridRounds?.[nextRoundNo - 1];
+
+    if (!nextCfg) {
+      // No more rounds configured — done
+    } else if (nextCfg.type === 'shootout') {
+      // Build participant_ids for the next shootout: surviving advancers + new entering seeds
+      // Build seed→participant map from existing brackets (participants table has no seed column)
+      const seedMap = new Map<number, { id: number; seed: number }>();
+      (db.prepare("SELECT participants_json FROM brackets WHERE tournament_id = ? AND match_kind = 'shootout'").all(tournamentId) as any[])
+        .forEach(row => { try { (JSON.parse(row.participants_json || '[]') as Array<{ id: number; seed: number }>).forEach(p => { if (p.id && p.seed) seedMap.set(p.seed, p); }); } catch {} });
+      (db.prepare("SELECT participant1_id, participant1_seed, participant2_id, participant2_seed FROM brackets WHERE tournament_id = ? AND match_kind = 'duel'").all(tournamentId) as any[])
+        .forEach(row => {
+          if (row.participant1_id && row.participant1_seed) seedMap.set(row.participant1_seed, { id: row.participant1_id, seed: row.participant1_seed });
+          if (row.participant2_id && row.participant2_seed) seedMap.set(row.participant2_seed, { id: row.participant2_id, seed: row.participant2_seed });
+        });
+      const joiningSeeds = (nextCfg.entering || []).map(s => seedMap.get(s)).filter(Boolean) as Array<{ id: number; seed: number }>;
+      const nextPs = [...advancing.map(p => ({ id: p.id, seed: p.seed })), ...joiningSeeds];
+
+      const nextMatch = db.prepare(
+        "SELECT id FROM brackets WHERE tournament_id = ? AND division = ? AND round = ? AND match_index = 0 AND match_kind = 'shootout'"
+      ).get(tournamentId, division, nextRoundNo) as any;
+      if (nextMatch) {
+        db.prepare("UPDATE brackets SET participants_json = ? WHERE id = ?")
+          .run(JSON.stringify(nextPs), nextMatch.id);
+      }
+    } else if (nextCfg.type === 'duel') {
+      // Top scorer from advancing goes into participant1_id of the next duel (stepladder winner slot)
+      const nextMatch = db.prepare(
+        "SELECT id FROM brackets WHERE tournament_id = ? AND division = ? AND round = ? AND match_index = 0"
+      ).get(tournamentId, division, nextRoundNo) as any;
+      if (nextMatch && advancing[0]) {
+        db.prepare("UPDATE brackets SET participant1_id = ?, participant1_seed = ? WHERE id = ?")
+          .run(advancing[0].id, advancing[0].seed, nextMatch.id);
+      }
+    }
+
+    res.json({ success: true, advancing: advancing.map(p => p.id), eliminated: eliminatedIds });
+  });
+
+  // ── Reset shootout results ─────────────────────────────────────────────────
+  app.post("/api/tournaments/:id/brackets/:matchId/shootout-reset", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
+    const tournamentId = req.params.id;
+    const numericMatchId = Number.parseInt(req.params.matchId, 10);
+    if (!Number.isFinite(numericMatchId)) return res.status(400).json({ error: 'Invalid match id' });
+
+    const match = db.prepare("SELECT id, round, division, match_kind FROM brackets WHERE id = ? AND tournament_id = ?").get(numericMatchId, tournamentId) as any;
+    if (!match) return res.status(404).json({ error: 'Match not found' });
+    if (String(match.match_kind) !== 'shootout') return res.status(400).json({ error: 'Not a shootout match' });
+
+    const division = String(match.division || 'all');
+    const currentRoundNo = Number(match.round);
+    db.prepare("UPDATE brackets SET scores_json = NULL, winner_id = NULL WHERE id = ?").run(numericMatchId);
+
+    // Clear all downstream rounds
+    db.prepare(`
+      UPDATE brackets
+      SET participant1_id = NULL, participant2_id = NULL, participant1_seed = NULL, participant2_seed = NULL,
+          winner_id = NULL, scores_json = NULL, participants_json = CASE match_kind WHEN 'shootout' THEN '[]' ELSE participants_json END
+      WHERE tournament_id = ? AND division = ? AND round > ?
+    `).run(tournamentId, division, currentRoundNo);
+
     res.json({ success: true });
   });
 

@@ -1,0 +1,8 @@
+{
+  "id": "preset-stepladder-A",
+  "name": "Stepladder Bracket A",
+  "match_play_type": "stepladder",
+  "round_match_counts": [1, 1, 1, 1],
+  "round_rules": ["duel", "duel", "duel", "duel"],
+  "description": "Stepladder bracket preset for 5 participants. Each round is a single match, winner advances to next round."
+}

@@ -1,0 +1,13 @@
+{
+  "matches": [
+    { "id": 1, "round": 1, "match_index": 1, "participant1_id": 1, "participant2_id": 2, "participant1_seed": 1, "participant2_seed": 2, "winner_id": 1 },
+    { "id": 2, "round": 2, "match_index": 1, "participant1_id": 1, "participant2_id": 3, "participant1_seed": 1, "participant2_seed": 3, "winner_id": 1 },
+    { "id": 3, "round": 3, "match_index": 1, "participant1_id": 1, "participant2_id": 4, "participant1_seed": 1, "participant2_seed": 4, "winner_id": 1 },
+    { "id": 4, "round": 4, "match_index": 1, "participant1_id": 1, "participant2_id": 5, "participant1_seed": 1, "participant2_seed": 5, "winner_id": 1 },
+    { "id": 5, "round": 5, "match_index": 1, "participant1_id": 1, "participant2_id": 6, "participant1_seed": 1, "participant2_seed": 6, "winner_id": 1 },
+    { "id": 6, "round": 6, "match_index": 1, "participant1_id": 1, "participant2_id": 7, "participant1_seed": 1, "participant2_seed": 7, "winner_id": 1 },
+    { "id": 7, "round": 7, "match_index": 1, "participant1_id": 1, "participant2_id": 8, "participant1_seed": 1, "participant2_seed": 8, "winner_id": 1 },
+    { "id": 8, "round": 8, "match_index": 1, "participant1_id": 1, "participant2_id": 9, "participant1_seed": 1, "participant2_seed": 9, "winner_id": 1 },
+    { "id": 9, "round": 9, "match_index": 1, "participant1_id": 1, "participant2_id": 10, "participant1_seed": 1, "participant2_seed": 10, "winner_id": 1 }
+  ]
+}

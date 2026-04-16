@@ -1,0 +1,10 @@
+{
+  "id": "stepladder-10",
+  "name": "Stepladder Bracket (10)",
+  "match_play_type": "stepladder",
+  "round_match_counts": [1,1,1,1,1,1,1,1,1],
+  "round_rules": ["duel","duel","duel","duel","duel","duel","duel","duel","duel"],
+  "description": "Stepladder bracket preset for 10 participants. Each round is a single match, winner advances to next round.",
+  "min_qualified_count": 10,
+  "recommended_qualified_count": 10
+}

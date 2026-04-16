@@ -1,0 +1,10 @@
+{
+  "id": "stepladder-10",
+  "name": "Stepladder (10)",
+  "match_play_type": "stepladder",
+  "round_match_counts": [1, 1, 1, 1, 1],
+  "round_rules": ["duel", "duel", "duel", "duel", "duel"],
+  "description": "10-seed stepladder: 4-player, 4-player, 3-player, then two head-to-head rounds.",
+  "min_qualified_count": 10,
+  "recommended_qualified_count": 10
+}

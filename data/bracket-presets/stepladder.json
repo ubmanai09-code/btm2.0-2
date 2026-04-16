@@ -1,0 +1,32 @@
+[
+  {
+    "round": "Round 1",
+    "participants": ["Seed 7", "Seed 8", "Seed 9", "Seed 10"],
+    "format": "4-Player Match",
+    "outcome": "Top 2 scorers advance"
+  },
+  {
+    "round": "Round 2",
+    "participants": ["Seed 5", "Seed 6", "R1 Winner 1", "R1 Winner 2"],
+    "format": "4-Player Match",
+    "outcome": "Top 2 scorers advance"
+  },
+  {
+    "round": "Round 3",
+    "participants": ["Seed 3", "R2 Winner 1", "R2 Winner 2"],
+    "format": "3-Player Match",
+    "outcome": "Top 1 (Winner) advances"
+  },
+  {
+    "round": "Semi-Final",
+    "participants": ["Seed 2", "R3 Winner"],
+    "format": "Head-to-Head",
+    "outcome": "Winner advances to Final"
+  },
+  {
+    "round": "Final",
+    "participants": ["Seed 1", "Semi-Final Winner"],
+    "format": "Head-to-Head",
+    "outcome": "Tournament Champion"
+  }
+]
