@@ -8540,14 +8540,30 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       try { shootoutScores = JSON.parse(String(m.scores_json || '[]')); } catch {}
 
       const isRoundOneShootout = Number(m.round) === 1;
-      const activeIds = new Set(shootoutParticipants.map((p) => Number(p.id)));
-      const allSeedParticipants: Array<{ id: number; seed: number }> = isRoundOneShootout
+      const activeParticipantIdBySeed = new Map<number, number>(
+        shootoutParticipants
+          .map((p) => [Number(p.seed), Number(p.id)] as const)
+          .filter(([seed, id]) => Number.isFinite(seed) && seed > 0 && Number.isFinite(id) && id > 0)
+      );
+      const allSeedParticipants: Array<{ seed: number; entrantId: number | null; fallbackId: number | null; label?: string }> = isRoundOneShootout
         ? [...seeds]
-            .map((s: any) => ({ id: Number(s.id), seed: Number(s.seed) }))
-            .filter((s: { id: number; seed: number }) => Number.isFinite(s.id) && s.id > 0 && Number.isFinite(s.seed) && s.seed > 0)
-            .sort((a: { id: number; seed: number }, b: { id: number; seed: number }) => a.seed - b.seed)
-        : shootoutParticipants;
-      const displayParticipants = allSeedParticipants.length > 0 ? allSeedParticipants : shootoutParticipants;
+            .map((s: any) => {
+              const seed = Number(s.seed);
+              const fallbackId = Number(s.id);
+              const entrantId = activeParticipantIdBySeed.get(seed) ?? null;
+              return {
+                seed,
+                entrantId,
+                fallbackId: Number.isFinite(fallbackId) && fallbackId > 0 ? fallbackId : null,
+                label: String(s.name || '').trim() || undefined,
+              };
+            })
+            .filter((s: { seed: number }) => Number.isFinite(s.seed) && s.seed > 0)
+            .sort((a: { seed: number }, b: { seed: number }) => a.seed - b.seed)
+        : shootoutParticipants.map((p) => ({ seed: Number(p.seed), entrantId: Number(p.id), fallbackId: Number(p.id), label: undefined }));
+      const displayParticipants = allSeedParticipants.length > 0
+        ? allSeedParticipants
+        : shootoutParticipants.map((p) => ({ seed: Number(p.seed), entrantId: Number(p.id), fallbackId: Number(p.id), label: undefined }));
 
       const scoredMap = new Map(shootoutScores.map(s => [s.id, s]));
       const hasResults = shootoutScores.length > 0;
@@ -8576,17 +8592,19 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 
           <div className="space-y-1.5 mb-3">
             {displayParticipants.map((p) => {
-              const scored = scoredMap.get(p.id);
-              const isActiveEntrant = activeIds.has(Number(p.id));
+              const entrantId = Number(p.entrantId || 0);
+              const isActiveEntrant = Number.isFinite(entrantId) && entrantId > 0;
+              const scored = isActiveEntrant ? scoredMap.get(entrantId) : undefined;
               const isEliminated = scored?.eliminated === true;
               const isTop = hasResults && isActiveEntrant && !isEliminated;
+              const displayName = p.label || getName(isActiveEntrant ? entrantId : Number(p.fallbackId || 0));
               return (
-                <div key={p.id}
+                <div key={`${p.seed}-${entrantId || Number(p.fallbackId || 0)}`}
                   className={`flex items-center gap-2 px-2 py-1.5 rounded-md border text-sm
                     ${isTop ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-white border-black/10 text-black/80'}`}
                 >
                   <span className="text-[11px] font-bold text-black/30 w-5 text-right">#{p.seed}</span>
-                  <span className="flex-1 font-medium">{getName(p.id)}</span>
+                  <span className="flex-1 font-medium">{displayName}</span>
                   {hasResults && scored ? (
                     <span className="font-bold tabular-nums">{scored.score}</span>
                   ) : isRoundOneShootout && !isActiveEntrant ? (
@@ -8596,10 +8614,10 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                       type="number"
                       min={0}
                       placeholder="Score"
-                      value={shootoutDrafts[p.id] ?? ''}
+                      value={isActiveEntrant ? (shootoutDrafts[entrantId] ?? '') : ''}
                       onChange={e => setMatchScoreDrafts(prev => ({
                         ...prev,
-                        [draftKey]: { ...(prev[draftKey] as any || {}), [p.id]: e.target.value },
+                        [draftKey]: { ...(prev[draftKey] as any || {}), [entrantId]: e.target.value },
                       }))}
                       className="w-20 h-7 px-2 rounded border border-black/15 text-sm text-right focus:outline-none focus:border-violet-400"
                     />
