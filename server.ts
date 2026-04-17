@@ -1013,6 +1013,21 @@ async function startServer() {
       recommended_qualified_count: 6,
     },
     {
+      id: 'playoff-hybrid-8',
+      name: 'Shootout(-2)+Play-Off',
+      match_play_type: 'bowling_hybrid',
+      round_match_counts: [4, 1, 1],
+      round_rules: ['duel', 'duel', 'duel', 'duel'],
+      placement_rules: {
+        first: '',
+        second: '',
+        third: '',
+      },
+      description: '6 seeds: R1 all seeds shootout (cut 2), R2 play-off seed 1 vs seed 4, R3 play-off seed 2 vs seed 3.',
+      min_qualified_count: 6,
+      recommended_qualified_count: 6,
+    },
+    {
       id: 'b-pro-male',
       name: 'B Pro League Male',
       match_play_type: 'stepladder',
@@ -1136,10 +1151,8 @@ async function startServer() {
     return mapKnownBracketFormatRow(row);
   };
 
-  const seedKnownBracketFormatsIfEmpty = () => {
-    const row = db.prepare("SELECT COUNT(*) as count FROM bracket_presets").get() as any;
-    if ((row?.count || 0) > 0) return;
-
+  const seedKnownBracketFormatsIfMissing = () => {
+    const existsById = db.prepare("SELECT id FROM bracket_presets WHERE id = ?");
     const insert = db.prepare(`
       INSERT INTO bracket_presets (
         id, name, match_play_type, round_match_counts, round_rules, placement_rules,
@@ -1149,6 +1162,8 @@ async function startServer() {
 
     db.transaction(() => {
       for (const preset of KNOWN_BRACKET_FORMAT_DEFAULTS) {
+        const existing = existsById.get(preset.id) as any;
+        if (existing) continue;
         insert.run(
           preset.id,
           preset.name,
@@ -1164,7 +1179,7 @@ async function startServer() {
     })();
   };
 
-  seedKnownBracketFormatsIfEmpty();
+  seedKnownBracketFormatsIfMissing();
 
   const normalizeKnownBracketFormatId = (value: any): string | null => {
     if (typeof value !== 'string') return null;
