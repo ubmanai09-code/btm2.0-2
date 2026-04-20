@@ -28,6 +28,7 @@ import {
   LogIn,
   LogOut,
   KeyRound,
+  Home,
   Eye,
   EyeOff,
   Shield,
@@ -486,6 +487,21 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const adminSettingsMenuRef = useRef<HTMLDivElement | null>(null);
+  const [showAdminSettingsMenu, setShowAdminSettingsMenu] = useState(false);
+  const [showModeratorAccessModal, setShowModeratorAccessModal] = useState(false);
+  const [moderatorAccessLoading, setModeratorAccessLoading] = useState(false);
+  const [moderatorAccessError, setModeratorAccessError] = useState('');
+  const [moderatorAccessData, setModeratorAccessData] = useState<ModeratorTournamentAccess | null>(null);
+  const [moderatorUsers, setModeratorUsers] = useState<UserAccount[]>([]);
+  const [moderatorUserId, setModeratorUserId] = useState<number | ''>('');
+  const [moderatorAccessHours, setModeratorAccessHours] = useState('24');
+  const [moderatorNewUsername, setModeratorNewUsername] = useState('');
+  const [moderatorNewPassword, setModeratorNewPassword] = useState('');
+  const [moderatorResetUserId, setModeratorResetUserId] = useState<number | ''>('');
+  const [moderatorResetPassword, setModeratorResetPassword] = useState('');
+  const [moderatorResetConfirmPassword, setModeratorResetConfirmPassword] = useState('');
+  const [moderatorResetSaving, setModeratorResetSaving] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
@@ -713,6 +729,21 @@ export default function App() {
       }
     };
   }, [authToken]);
+
+  useEffect(() => {
+    if (!showAdminSettingsMenu) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!adminSettingsMenuRef.current) return;
+      if (adminSettingsMenuRef.current.contains(event.target as Node)) return;
+      setShowAdminSettingsMenu(false);
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [showAdminSettingsMenu]);
 
   useEffect(() => {
     if (!isAdmin && (view === 'create' || view === 'edit')) {
@@ -1010,6 +1041,8 @@ export default function App() {
       localStorage.removeItem('btm_role');
       setCurrentUser(null);
       setShowLogin(false);
+      setShowAdminSettingsMenu(false);
+      setShowModeratorAccessModal(false);
       setShowPasswordModal(false);
       setView('list');
       setEditingTournament(null);
@@ -1050,6 +1083,134 @@ export default function App() {
       setPasswordError(err?.message || 'Failed to change password');
     } finally {
       setPasswordSaving(false);
+    }
+  };
+
+  const loadModeratorAccessModalData = async (tournamentId: number) => {
+    setModeratorAccessLoading(true);
+    try {
+      const [accessData, users] = await Promise.all([
+        api.getModeratorAccess(tournamentId),
+        api.getUsers('moderator')
+      ]);
+      setModeratorAccessData(accessData);
+      setModeratorUsers(users);
+      if (!moderatorUserId && users.length > 0) {
+        setModeratorUserId(users[0].id);
+      }
+      if (!moderatorResetUserId && users.length > 0) {
+        setModeratorResetUserId(users[0].id);
+      }
+      setModeratorAccessError('');
+    } catch (err: any) {
+      setModeratorAccessError(err?.message || 'Failed to load moderator access');
+    } finally {
+      setModeratorAccessLoading(false);
+    }
+  };
+
+  const openAdminModeratorManager = () => {
+    setShowAdminSettingsMenu(false);
+    setShowModeratorAccessModal(true);
+    if (selectedTournament?.id) {
+      loadModeratorAccessModalData(selectedTournament.id);
+    } else {
+      setModeratorAccessData(null);
+      setModeratorUsers([]);
+      setModeratorAccessError('Open a tournament first to manage moderator access.');
+    }
+  };
+
+  const handleModeratorGrant = async (expires: number | null) => {
+    if (!selectedTournament?.id) {
+      setModeratorAccessError('Open a tournament first to manage moderator access.');
+      return;
+    }
+    if (!moderatorUserId) {
+      setModeratorAccessError('Select a moderator first.');
+      return;
+    }
+    try {
+      setModeratorAccessLoading(true);
+      await api.setModeratorAccess(selectedTournament.id, {
+        moderator_user_id: Number(moderatorUserId),
+        enabled: true,
+        expires_in_hours: expires,
+      });
+      await loadModeratorAccessModalData(selectedTournament.id);
+      setModeratorAccessError('');
+    } catch (err: any) {
+      setModeratorAccessError(err?.message || 'Failed to grant moderator access');
+      setModeratorAccessLoading(false);
+    }
+  };
+
+  const handleModeratorRemove = async (userId: number) => {
+    if (!selectedTournament?.id) return;
+    try {
+      setModeratorAccessLoading(true);
+      await api.removeModeratorAccess(selectedTournament.id, userId);
+      await loadModeratorAccessModalData(selectedTournament.id);
+    } catch (err: any) {
+      setModeratorAccessError(err?.message || 'Failed to remove moderator access');
+      setModeratorAccessLoading(false);
+    }
+  };
+
+  const handleModeratorCreate = async () => {
+    const username = moderatorNewUsername.trim().toLowerCase();
+    const password = moderatorNewPassword;
+    if (!username || password.length < 6) {
+      setModeratorAccessError('Moderator username is required and password must be at least 6 characters.');
+      return;
+    }
+
+    try {
+      setModeratorAccessLoading(true);
+      const created = await api.createUser({ username, password, role: 'moderator' });
+      setModeratorNewUsername('');
+      setModeratorNewPassword('');
+      setModeratorUserId(created.id);
+      setModeratorResetUserId(created.id);
+      if (selectedTournament?.id) {
+        await loadModeratorAccessModalData(selectedTournament.id);
+      } else {
+        const users = await api.getUsers('moderator');
+        setModeratorUsers(users);
+        setModeratorAccessLoading(false);
+      }
+      setModeratorAccessError('');
+    } catch (err: any) {
+      setModeratorAccessError(err?.message || 'Failed to create moderator');
+      setModeratorAccessLoading(false);
+    }
+  };
+
+  const handleModeratorResetPassword = async () => {
+    if (!moderatorResetUserId) {
+      setModeratorAccessError('Select a moderator first.');
+      return;
+    }
+    if (moderatorResetPassword.length < 6) {
+      setModeratorAccessError('Password must be at least 6 characters.');
+      return;
+    }
+    if (moderatorResetPassword !== moderatorResetConfirmPassword) {
+      setModeratorAccessError('Passwords do not match.');
+      return;
+    }
+
+    try {
+      setModeratorResetSaving(true);
+      setModeratorAccessError('');
+      await api.changePassword(Number(moderatorResetUserId), moderatorResetPassword);
+      setModeratorResetPassword('');
+      setModeratorResetConfirmPassword('');
+      alert('Moderator password updated successfully.');
+    } catch (err: any) {
+      setModeratorAccessError(err?.message || 'Failed to reset moderator password');
+    } finally {
+      setModeratorResetSaving(false);
     }
   };
 
@@ -1524,19 +1685,43 @@ export default function App() {
                 {t(`role.${currentRole}`, currentRole)}
               </span>
               {currentRole === 'admin' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setPasswordError('');
-                    setShowPasswordModal(true);
-                  }}
-                  title={t('auth.change_password', 'Change Password')}
-                  ariaLabel={t('auth.change_password', 'Change Password')}
-                  className="text-white border-white/25 hover:bg-white/10 hover:border-white/40"
-                >
-                  <KeyRound size={14} />
-                </Button>
+                <div ref={adminSettingsMenuRef} className="relative">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAdminSettingsMenu((prev) => !prev)}
+                    title={t('app.nav.admin_settings', 'Admin Settings')}
+                    ariaLabel={t('app.nav.admin_settings', 'Admin Settings')}
+                    className="text-white border-white/25 hover:bg-white/10 hover:border-white/40"
+                  >
+                    <Shield size={14} />
+                  </Button>
+
+                  {showAdminSettingsMenu && (
+                    <Card className="absolute right-0 top-10 w-56 p-2 border border-black/15 shadow-xl z-[70]">
+                      <div className="space-y-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAdminSettingsMenu(false);
+                            setPasswordError('');
+                            setShowPasswordModal(true);
+                          }}
+                          className="w-full text-left px-3 py-2 rounded-md text-xs font-semibold uppercase tracking-wide text-black/75 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
+                        >
+                          Change Password
+                        </button>
+                        <button
+                          type="button"
+                          onClick={openAdminModeratorManager}
+                          className="w-full text-left px-3 py-2 rounded-md text-xs font-semibold uppercase tracking-wide text-black/75 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
+                        >
+                          Moderator Access
+                        </button>
+                      </div>
+                    </Card>
+                  )}
+                </div>
               )}
               <Button
                 variant="outline"
@@ -1761,6 +1946,13 @@ export default function App() {
                           </div>
                           {isAdmin && (
                             <div className="flex gap-1 shrink-0">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleEdit(tournamentItem); }}
+                                className="p-1 rounded hover:bg-emerald-50 text-black/35 hover:text-emerald-600 transition-all"
+                                title="Edit tournament"
+                              >
+                                <Edit size={13} />
+                              </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleArchiveToggle(tournamentItem.id, true); }}
                                 className="p-1 rounded hover:bg-slate-100 text-black/35 hover:text-slate-600 transition-all"
@@ -2181,6 +2373,129 @@ export default function App() {
         </div>
       )}
 
+      {showModeratorAccessModal && !lockedRole && currentRole === 'admin' && (
+        <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4" onClick={() => setShowModeratorAccessModal(false)}>
+          <Card className="w-full max-w-3xl max-h-[88vh] p-4 flex flex-col" onClick={(e: any) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 mb-3 shrink-0">
+              <div>
+                <h3 className="text-lg font-bold">Moderator Access</h3>
+                <p className="text-xs text-black/50 mt-0.5">
+                  {selectedTournament ? `Tournament: ${selectedTournament.name}` : 'Open a tournament to assign moderator access.'}
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => setShowModeratorAccessModal(false)} title={t('common.close', 'Close')} ariaLabel={t('common.close', 'Close')}>
+                <X size={14} />
+              </Button>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1">
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
+                <Select
+                  label={t('moderator.select', 'Select Moderator')}
+                  value={moderatorUserId === '' ? '' : String(moderatorUserId)}
+                  onChange={(e: any) => setModeratorUserId(e.target.value ? Number(e.target.value) : '')}
+                  options={[
+                    { value: '', label: moderatorUsers.length > 0 ? t('moderator.choose', 'Choose moderator') : t('moderator.none_available', 'No moderators available') },
+                    ...moderatorUsers.map((m) => ({ value: String(m.id), label: m.username })),
+                  ]}
+                />
+                <Input
+                  label={t('moderator.auto_remove_hours', 'Auto remove (hours)')}
+                  type="number"
+                  min="1"
+                  value={moderatorAccessHours}
+                  onChange={(e: any) => setModeratorAccessHours(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  disabled={moderatorAccessLoading || !selectedTournament}
+                  onClick={() => {
+                    const parsed = Number.parseInt(moderatorAccessHours, 10);
+                    handleModeratorGrant(Number.isFinite(parsed) && parsed > 0 ? parsed : 24);
+                  }}
+                  title={t('moderator.grant_timed', 'Grant Timed Access')}
+                  ariaLabel={t('moderator.grant_timed', 'Grant Timed Access')}
+                >
+                  <UserPlus size={14} />
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={moderatorAccessLoading || !selectedTournament}
+                  onClick={() => handleModeratorGrant(null)}
+                  title={t('moderator.grant_no_expiry', 'Grant No Expiry Access')}
+                  ariaLabel={t('moderator.grant_no_expiry', 'Grant No Expiry Access')}
+                >
+                  <Users size={14} />
+                </Button>
+              </div>
+
+              <div className="border border-black/10 rounded-md p-2 max-h-40 overflow-auto space-y-2">
+                {moderatorAccessData?.assignments?.length ? moderatorAccessData.assignments.map((assignment) => (
+                  <div key={assignment.user_id} className="flex items-center justify-between text-xs">
+                    <div>
+                      <span className="font-semibold">{assignment.username}</span>
+                      <span className="text-black/50"> - {assignment.active ? tPublic('common.active', 'Active').toLowerCase() : tPublic('common.inactive', 'Inactive').toLowerCase()}</span>
+                      {assignment.active && assignment.expires_at && (
+                        <span className="text-black/50"> ({t('moderator.expires', 'expires')} {new Date(assignment.expires_at).toLocaleString()})</span>
+                      )}
+                    </div>
+                    <Button variant="ghost" size="sm" disabled={moderatorAccessLoading || !selectedTournament} onClick={() => handleModeratorRemove(assignment.user_id)} title={t('moderator.remove_access', 'Remove Moderator Access')} ariaLabel={t('moderator.remove_access', 'Remove Moderator Access')}>
+                      <UserMinus size={14} />
+                    </Button>
+                  </div>
+                )) : <p className="text-xs text-black/50">{t('moderator.assignments_empty', 'No moderator assignments yet.')}</p>}
+              </div>
+
+              <div className="pt-2 border-t border-black/10">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-black/50 mb-2">{t('moderator.create_account', 'Create Moderator Account')}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <Input label={t('moderator.username', 'Username')} value={moderatorNewUsername} onChange={(e: any) => setModeratorNewUsername(e.target.value)} />
+                  <Input label={t('moderator.password', 'Password')} type="password" value={moderatorNewPassword} onChange={(e: any) => setModeratorNewPassword(e.target.value)} />
+                </div>
+                <div className="mt-2">
+                  <Button variant="outline" disabled={moderatorAccessLoading} onClick={handleModeratorCreate} title={t('moderator.create', 'Create Moderator')} ariaLabel={t('moderator.create', 'Create Moderator')}>
+                    <UserPlus size={14} />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-black/10">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-black/50 mb-2">{t('moderator.reset_password_title', 'Reset Moderator Password')}</p>
+                <div className="grid grid-cols-1 gap-2">
+                  <Select
+                    label={t('role.moderator', 'Moderator')}
+                    value={moderatorResetUserId === '' ? '' : String(moderatorResetUserId)}
+                    onChange={(e: any) => setModeratorResetUserId(e.target.value ? Number(e.target.value) : '')}
+                    options={[
+                      { value: '', label: moderatorUsers.length > 0 ? t('moderator.choose', 'Choose moderator') : t('moderator.none_available', 'No moderators available') },
+                      ...moderatorUsers.map((m) => ({ value: String(m.id), label: m.username })),
+                    ]}
+                  />
+                  <Input label={t('auth.new_password', 'New Password')} type="password" value={moderatorResetPassword} onChange={(e: any) => setModeratorResetPassword(e.target.value)} />
+                  <Input label={t('auth.confirm_password', 'Confirm Password')} type="password" value={moderatorResetConfirmPassword} onChange={(e: any) => setModeratorResetConfirmPassword(e.target.value)} />
+                </div>
+                <div className="mt-2">
+                  <Button
+                    variant="outline"
+                    disabled={moderatorResetSaving || !moderatorResetUserId}
+                    onClick={handleModeratorResetPassword}
+                    title={moderatorResetSaving ? t('auth.saving', 'Saving...') : t('moderator.reset_password', 'Reset Password')}
+                    ariaLabel={moderatorResetSaving ? t('auth.saving', 'Saving...') : t('moderator.reset_password', 'Reset Password')}
+                  >
+                    {moderatorResetSaving ? t('auth.saving', 'Saving...') : <KeyRound size={14} />}
+                  </Button>
+                </div>
+              </div>
+
+              {moderatorAccessError && <p className="text-xs text-red-600 font-semibold">{moderatorAccessError}</p>}
+            </div>
+          </Card>
+        </div>
+      )}
+
       {showSponsorsModal && (
         <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4" onClick={() => setShowSponsorsModal(false)}>
           <Card className="w-full max-w-2xl p-4" onClick={(e: any) => e.stopPropagation()}>
@@ -2571,6 +2886,8 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
   const [accessError, setAccessError] = useState('');
   const [expiresHours, setExpiresHours] = useState('24');
   const [showModeratorPanel, setShowModeratorPanel] = useState(false);
+  const [isTournamentCardCollapsed, setIsTournamentCardCollapsed] = useState(true);
+  const [isDesktopTournamentHeader, setIsDesktopTournamentHeader] = useState(false);
 
   const loadAccessData = async () => {
     if (role !== 'admin' && role !== 'moderator') {
@@ -2701,17 +3018,17 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
   const visibleTabs = effectiveRole === 'public'
     ? [
       { id: 'participants', label: tPublic('public.tab.participants', 'Participants'), icon: Users },
-      { id: 'lanes', label: tPublic('public.tab.lane_assignments', 'Lane Assignments'), icon: Columns4 },
-      { id: 'scoring', label: tPublic('public.tab.scoring', 'Scoring'), icon: ClipboardList },
+      { id: 'lanes', label: tPublic('public.tab.lane_assignments', 'Lanes'), icon: Columns4 },
+      { id: 'scoring', label: tPublic('public.tab.scoring', 'Score'), icon: ClipboardList },
       { id: 'brackets', label: tPublic('public.tab.brackets', 'Brackets'), icon: GitBranch },
-      { id: 'standings', label: tPublic('public.tab.tournament_result', 'Tournament Result'), icon: Trophy },
+      { id: 'standings', label: tPublic('public.tab.tournament_result', 'Standing'), icon: Trophy },
     ]
     : [
       { id: 'participants', label: t('tab.participants', 'Participants'), icon: Users },
-      { id: 'lanes', label: t('tab.lane_assignments', 'Lane Assignments'), icon: Columns4 },
-      { id: 'scoring', label: t('tab.scoring', 'Scoring'), icon: ClipboardList },
+      { id: 'lanes', label: t('tab.lane_assignments', 'Lanes'), icon: Columns4 },
+      { id: 'scoring', label: t('tab.scoring', 'Score'), icon: ClipboardList },
       { id: 'brackets', label: t('tab.brackets', 'Brackets'), icon: GitBranch },
-      { id: 'standings', label: t('tab.tournament_result', 'Tournament Result'), icon: Trophy },
+      { id: 'standings', label: t('tab.tournament_result', 'Standing'), icon: Trophy },
     ];
 
   useEffect(() => {
@@ -2719,254 +3036,154 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
     setActiveTab(visibleTabs[0]?.id || 'participants');
   }, [activeTab, visibleTabs, setActiveTab]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(min-width: 1280px)');
+    const applyMode = () => {
+      const isDesktop = mediaQuery.matches;
+      setIsDesktopTournamentHeader(isDesktop);
+      setIsTournamentCardCollapsed(!isDesktop);
+    };
+
+    applyMode();
+    mediaQuery.addEventListener('change', applyMode);
+    return () => mediaQuery.removeEventListener('change', applyMode);
+  }, []);
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       <div className="space-y-4">
-        <Button variant="ghost" onClick={onBack} className="-ml-2 text-black/40" title={tPublic('common.back_to_dashboard', 'Back to Dashboard')} ariaLabel={tPublic('common.back_to_dashboard', 'Back to Dashboard')}>
-          <ArrowLeft size={18} />
-        </Button>
-
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_430px] gap-4">
-          <Card className="p-4 border border-emerald-200 bg-gradient-to-br from-white via-emerald-50/60 to-[#AFDDE5]/35 shadow-sm">
-            <div className="space-y-2.5">
-              <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-2.5 items-start">
-                <div className="min-w-0 flex items-start gap-2.5">
-                  <div className="w-[64px] h-[64px] rounded-lg border border-black/10 bg-white p-1.5 flex items-center justify-center shrink-0">
-                    <img
-                      src={tournament.logo || '/logo.png'}
-                      alt={tournament.name}
-                      className="w-full h-full object-contain"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).src = '/logo.png';
-                      }}
-                    />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
-                      <span className="px-2 py-0.5 rounded bg-black text-white text-[10px] font-bold uppercase tracking-widest">
-                        {tournament.status}
-                      </span>
-                    </div>
-
-                    <h1
-                      className={`text-2xl sm:text-3xl font-bold tracking-tight uppercase leading-tight transition-colors ${role === 'admin' ? 'cursor-pointer hover:text-emerald-600' : ''}`}
-                      onClick={() => {
-                        if (role === 'admin') onEdit(tournament);
-                      }}
-                      title={role === 'admin' ? 'Click to edit tournament' : undefined}
-                    >
-                      {tournament.name}
-                    </h1>
-                  </div>
-                </div>
-
-                {tournamentSponsors.length > 0 && (
-                  <div className="flex flex-wrap items-center justify-start lg:justify-end gap-1.5 shrink min-w-0 lg:max-w-[220px]">
-                    {tournamentSponsors.map((sponsor) => (
-                      <div
-                        key={sponsor.id}
-                        className="h-[64px] w-[64px] rounded-lg border border-black/10 bg-white p-1.5 flex items-center justify-center overflow-hidden shrink-0"
-                      >
+          <Card className="p-2 border border-emerald-200 bg-gradient-to-br from-white via-emerald-50/60 to-[#AFDDE5]/35 shadow-sm xl:col-span-2">
+            <div className="space-y-2">
+              <div className={`grid grid-cols-1 gap-2 ${!isTournamentCardCollapsed ? 'xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] xl:items-center' : ''}`}>
+                <div className="space-y-2 xl:self-center">
+                  <div
+                    className={isDesktopTournamentHeader ? '' : 'cursor-pointer'}
+                    onClick={() => {
+                      if (!isDesktopTournamentHeader) {
+                        setIsTournamentCardCollapsed((prev) => !prev);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (!isDesktopTournamentHeader && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault();
+                        setIsTournamentCardCollapsed((prev) => !prev);
+                      }
+                    }}
+                    role={isDesktopTournamentHeader ? undefined : 'button'}
+                    tabIndex={isDesktopTournamentHeader ? -1 : 0}
+                    aria-expanded={isDesktopTournamentHeader ? true : !isTournamentCardCollapsed}
+                  >
+                    <div className="min-w-0 flex items-start gap-2">
+                      <div className="w-[72px] h-[72px] rounded-lg border border-black/10 bg-white p-2 flex items-center justify-center shrink-0">
                         <img
-                          src={sponsor.logo}
-                          alt={sponsor.name}
+                          src={tournament.logo || '/logo.png'}
+                          alt={tournament.name}
                           className="w-full h-full object-contain"
                           onError={(e) => {
                             (e.currentTarget as HTMLImageElement).src = '/logo.png';
                           }}
                         />
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
 
-              <div className="mt-0.5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-black/60">
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0">
-                  <Calendar size={12} />
-                  {new Date(tournament.date).toLocaleDateString()}
-                </span>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0">
-                  <Users size={12} />
-                  <span>{(tournament.type === 'team' ? tPublic('public.tournament.type.team', 'team') : tPublic('public.tournament.type.individual', 'individual')).replace(/^([a-z])/, (m) => m.toUpperCase())}</span>
-                  {tournament.type === 'team' && <span>({tournament.players_per_team}/team)</span>}
-                </span>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0">
-                  <ClipboardList size={12} />
-                  {getTournamentFormatLabel(tournament.format)}
-                </span>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0">
-                  <GitBranch size={12} />
-                  {getMatchPlayTypeLabel(tournament.match_play_type)}
-                </span>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0">
-                  <Target size={12} />
-                  {tournament.games_count} {tPublic('public.tournament.games', 'Games')}
-                </span>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0">
-                  <Columns4 size={12} />
-                  {tournament.players_per_lane} {tournament.type === 'team' ? tPublic('public.tournament.teams', 'Teams') : tPublic('public.tournament.players', 'Players')} / {tPublic('lanes.lane', 'Lane')}
-                </span>
-                {tournament.location && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0 sm:col-span-2 xl:col-span-2">
-                    <MapPin size={12} />
-                    {tournament.location}
-                  </span>
+                      <div className="min-w-0 flex-1">
+                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight uppercase leading-tight">
+                          {tournament.name}
+                        </h1>
+                      </div>
+                    </div>
+                  </div>
+
+                  {!isTournamentCardCollapsed && tournamentSponsors.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {tournamentSponsors.map((sponsor) => (
+                        <div
+                          key={sponsor.id}
+                          className="h-[64px] w-[64px] rounded-lg border border-black/10 bg-white p-1.5 flex items-center justify-center overflow-hidden shrink-0"
+                        >
+                          <img
+                            src={sponsor.logo}
+                            alt={sponsor.name}
+                            className="w-full h-full object-contain"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {!isTournamentCardCollapsed && (
+                  <div className="mt-0.5 grid grid-cols-3 xl:auto-rows-fr gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-black/60">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0 h-full">
+                      <Calendar size={12} />
+                      {new Date(tournament.date).toLocaleDateString()}
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0 h-full">
+                      <Users size={12} />
+                      <span>{(tournament.type === 'team' ? tPublic('public.tournament.type.team', 'team') : tPublic('public.tournament.type.individual', 'individual')).replace(/^([a-z])/, (m) => m.toUpperCase())}</span>
+                      {tournament.type === 'team' && <span>({tournament.players_per_team}/team)</span>}
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0 h-full">
+                      <ClipboardList size={12} />
+                      {getTournamentFormatLabel(tournament.format)}
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0 h-full">
+                      <GitBranch size={12} />
+                      {getMatchPlayTypeLabel(tournament.match_play_type)}
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0 h-full">
+                      <Target size={12} />
+                      {tournament.games_count} {tPublic('public.tournament.games', 'Games')}
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0 h-full">
+                      <Columns4 size={12} />
+                      {tournament.players_per_lane} {tournament.type === 'team' ? tPublic('public.tournament.teams', 'Teams') : tPublic('public.tournament.players', 'Players')} / {tPublic('lanes.lane', 'Lane')}
+                    </span>
+                    {tournament.location && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0 col-span-3 h-full">
+                        <MapPin size={12} />
+                        {tournament.location}
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
           </Card>
 
-          <div className="w-full space-y-3">
-
-          {role === 'admin' && activeTab === 'participants' && (
-            <Card className="p-4">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-sm font-bold uppercase tracking-wider">{tPublic('moderator.access.title', 'Moderator Access')}</h4>
-                    <p className="text-xs text-black/50 mt-1">{tPublic('moderator.access.subtitle', 'Assign one or more moderator accounts to this tournament.')}</p>
-                  </div>
-                  {!isPublicView && (
-                    <Button variant="outline" size="sm" onClick={() => setShowModeratorPanel(v => !v)} title={showModeratorPanel ? tPublic('common.hide', 'Hide') : tPublic('common.show', 'Show')} ariaLabel={showModeratorPanel ? tPublic('common.hide', 'Hide') : tPublic('common.show', 'Show')}>
-                      {showModeratorPanel ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </Button>
-                  )}
-                </div>
-
-                {showModeratorPanel && (
-                  <>
-
-              <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
-                <Select
-                  label={t('moderator.select', 'Select Moderator')}
-                  value={selectedModeratorId === '' ? '' : String(selectedModeratorId)}
-                  onChange={(e: any) => setSelectedModeratorId(e.target.value ? Number(e.target.value) : '')}
-                  options={[
-                    { value: '', label: moderators.length > 0 ? t('moderator.choose', 'Choose moderator') : t('moderator.none_available', 'No moderators available') },
-                    ...moderators.map((m) => ({ value: String(m.id), label: m.username })),
-                  ]}
-                />
-                <Input
-                  label={t('moderator.auto_remove_hours', 'Auto remove (hours)')}
-                  type="number"
-                  min="1"
-                  value={expiresHours}
-                  onChange={(e: any) => setExpiresHours(e.target.value)}
-                />
-              </div>
-
-              <div className="flex gap-2">
-                {!isPublicView && (
-                  <>
-                    <Button
-                      variant="outline"
-                      disabled={accessLoading || !selectedModeratorId}
-                      onClick={() => {
-                        const parsed = Number.parseInt(expiresHours, 10);
-                        handleGrantModerator(Number.isFinite(parsed) && parsed > 0 ? parsed : 24);
-                      }}
-                      title={t('moderator.grant_timed', 'Grant Timed Access')}
-                      ariaLabel={t('moderator.grant_timed', 'Grant Timed Access')}
-                    >
-                      <UserPlus size={14} />
-                    </Button>
-                    <Button variant="outline" disabled={accessLoading || !selectedModeratorId} onClick={() => handleGrantModerator(null)} title={t('moderator.grant_no_expiry', 'Grant No Expiry Access')} ariaLabel={t('moderator.grant_no_expiry', 'Grant No Expiry Access')}>
-                      <Users size={14} />
-                    </Button>
-                  </>
-                )}
-              </div>
-
-              <div className="border border-black/10 rounded-md p-2 max-h-40 overflow-auto space-y-2">
-                {moderatorAccess?.assignments?.length ? moderatorAccess.assignments.map((assignment) => (
-                  <div key={assignment.user_id} className="flex items-center justify-between text-xs">
-                    <div>
-                      <span className="font-semibold">{assignment.username}</span>
-                      <span className="text-black/50"> — {assignment.active ? tPublic('common.active', 'Active').toLowerCase() : tPublic('common.inactive', 'Inactive').toLowerCase()}</span>
-                      {assignment.active && assignment.expires_at && (
-                        <span className="text-black/50"> ({t('moderator.expires', 'expires')} {new Date(assignment.expires_at).toLocaleString()})</span>
-                      )}
-                    </div>
-                    <Button variant="ghost" size="sm" disabled={accessLoading} onClick={() => handleRemoveModerator(assignment.user_id)} title={t('moderator.remove_access', 'Remove Moderator Access')} ariaLabel={t('moderator.remove_access', 'Remove Moderator Access')}>
-                      <UserMinus size={14} />
-                    </Button>
-                  </div>
-                )) : <p className="text-xs text-black/50">{t('moderator.assignments_empty', 'No moderator assignments yet.')}</p>}
-              </div>
-
-              <div className="pt-2 border-t border-black/10">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-black/50 mb-2">{t('moderator.create_account', 'Create Moderator Account')}</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <Input label={t('moderator.username', 'Username')} value={newModeratorUsername} onChange={(e: any) => setNewModeratorUsername(e.target.value)} />
-                  <Input label={t('moderator.password', 'Password')} type="password" value={newModeratorPassword} onChange={(e: any) => setNewModeratorPassword(e.target.value)} />
-                </div>
-                <div className="mt-2">
-                  {!isPublicView && (
-                    <Button variant="outline" disabled={accessLoading} onClick={handleCreateModerator} title={t('moderator.create', 'Create Moderator')} ariaLabel={t('moderator.create', 'Create Moderator')}><UserPlus size={14} /></Button>
-                  )}
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-black/10">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-black/50 mb-2">{t('moderator.reset_password_title', 'Reset Moderator Password')}</p>
-                <div className="grid grid-cols-1 gap-2">
-                  <Select
-                    label={t('role.moderator', 'Moderator')}
-                    value={resetPasswordUserId === '' ? '' : String(resetPasswordUserId)}
-                    onChange={(e: any) => setResetPasswordUserId(e.target.value ? Number(e.target.value) : '')}
-                    options={[
-                      { value: '', label: moderators.length > 0 ? t('moderator.choose', 'Choose moderator') : t('moderator.none_available', 'No moderators available') },
-                      ...moderators.map((m) => ({ value: String(m.id), label: m.username })),
-                    ]}
-                  />
-                  <Input label={t('auth.new_password', 'New Password')} type="password" value={resetPassword} onChange={(e: any) => setResetPassword(e.target.value)} />
-                  <Input label={t('auth.confirm_password', 'Confirm Password')} type="password" value={resetPasswordConfirm} onChange={(e: any) => setResetPasswordConfirm(e.target.value)} />
-                </div>
-                <div className="mt-2">
-                  {!isPublicView && (
-                    <Button
-                      variant="outline"
-                      disabled={resetPasswordSaving || !resetPasswordUserId}
-                      onClick={handleResetModeratorPassword}
-                      title={resetPasswordSaving ? t('auth.saving', 'Saving...') : t('moderator.reset_password', 'Reset Password')}
-                      ariaLabel={resetPasswordSaving ? t('auth.saving', 'Saving...') : t('moderator.reset_password', 'Reset Password')}
-                    >
-                      {resetPasswordSaving ? t('auth.saving', 'Saving...') : <KeyRound size={14} />}
-                    </Button>
-                  )}
-                </div>
-                {resetPasswordError && <p className="text-xs text-red-600 font-semibold mt-2">{resetPasswordError}</p>}
-              </div>
-
-              {accessError && <p className="text-xs text-red-600 font-semibold">{accessError}</p>}
-                  </>
-                )}
-              </div>
-            </Card>
-          )}
-        </div>
       </div>
       </div>
 
-      {role === 'moderator' && !accessLoading && effectiveRole === 'public' && (
-        <Card className="p-4 border border-amber-200 bg-amber-50/50">
-          <p className="text-sm font-semibold text-amber-800">Moderator access is not active for this tournament.</p>
-          <p className="text-xs text-amber-700 mt-1">Ask admin to grant access for this tournament, or wait for a new assignment.</p>
-        </Card>
-      )}
-
-      <div className="sticky top-16 z-40 bg-white/95 backdrop-blur-sm border-b border-orange-100 shadow-sm px-0 py-2 overflow-x-auto no-scrollbar">
-        <div className={`${segmentedTabContainerOrangeClass} min-w-max`}>
+      <div className="sticky top-16 z-40 bg-white/95 backdrop-blur-sm border-b border-orange-100 shadow-sm px-0 py-2">
+        <div className={`${segmentedTabContainerOrangeClass} w-full grid grid-cols-3 gap-1 justify-items-center sm:w-auto sm:inline-flex sm:min-w-max`}>
+          <button
+            onClick={onBack}
+            className={getSegmentedTabButtonClass(false, 'default', 'group relative flex items-center justify-center gap-2 min-w-0', 'orange')}
+            title={tPublic('common.back_to_dashboard', 'Back to Dashboard')}
+            aria-label={tPublic('common.back_to_dashboard', 'Back to Dashboard')}
+          >
+            <Home size={16} />
+            <span className="absolute -top-8 left-1/2 -translate-x-1/2 rounded bg-black px-2 py-1 text-[10px] font-semibold text-white opacity-0 transition-opacity pointer-events-none group-hover:opacity-100 group-focus-visible:opacity-100 sm:hidden">
+              {tPublic('common.back_to_dashboard', 'Back to Dashboard')}
+            </span>
+          </button>
           {visibleTabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={getSegmentedTabButtonClass(activeTab === tab.id, 'default', 'flex items-center gap-2 whitespace-nowrap', 'orange')}
+              className={getSegmentedTabButtonClass(activeTab === tab.id, 'default', 'group relative flex items-center justify-center gap-2 min-w-0', 'orange')}
+              title={tab.label}
+              aria-label={tab.label}
             >
               <tab.icon size={16} />
-              {tab.label}
+              <span className="hidden sm:inline truncate">{tab.label}</span>
+              <span className="absolute -top-8 left-1/2 -translate-x-1/2 rounded bg-black px-2 py-1 text-[10px] font-semibold text-white opacity-0 transition-opacity pointer-events-none group-hover:opacity-100 group-focus-visible:opacity-100 sm:hidden">
+                {tab.label}
+              </span>
             </button>
           ))}
         </div>
@@ -3001,6 +3218,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
   const [showPlayersSearch, setShowPlayersSearch] = useState(false);
   const [showTeamsSearch, setShowTeamsSearch] = useState(false);
+  const [showPlayersClearMenu, setShowPlayersClearMenu] = useState(false);
+  const [isPlayerSelectionMode, setIsPlayerSelectionMode] = useState(false);
   const [playerSort, setPlayerSort] = useState<{ key: 'none' | 'club' | 'average'; direction: 'asc' | 'desc' }>({
     key: 'none',
     direction: 'asc',
@@ -3023,6 +3242,9 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     setMobileRosterTab('players');
     setShowPlayersSearch(false);
     setShowTeamsSearch(false);
+    setShowPlayersClearMenu(false);
+    setIsPlayerSelectionMode(false);
+    setSelectedParticipantIds([]);
     setPlayerSearchQuery('');
   }, [tournament.id, tournament.type]);
 
@@ -3090,7 +3312,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   };
 
   const handleExportCSV = () => {
-    const headers = ['First Name', 'Last Name', 'Gender', 'Hands', 'Club', 'Average', 'Email'];
+    const headers = ['First Name', 'Last Name', 'Gender', 'Hands', 'Club', 'Average', 'Contact Details'];
     const rows = participants.map(p => [
       p.first_name,
       p.last_name,
@@ -3138,7 +3360,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       const handsIndex = hasHeader ? parsedHeaders.indexOf('hands') : -1;
       const clubIndex = hasHeader ? parsedHeaders.indexOf('club') : 3;
       const averageIndex = hasHeader ? parsedHeaders.indexOf('average') : 4;
-      const emailIndex = hasHeader ? parsedHeaders.indexOf('email') : 5;
+      const emailIndex = hasHeader
+        ? (() => {
+          const contactIndex = parsedHeaders.indexOf('contact details');
+          return contactIndex >= 0 ? contactIndex : parsedHeaders.indexOf('email');
+        })()
+        : 5;
       const dataLines = hasHeader ? lines.slice(1) : lines;
       
       const newParticipants = dataLines.filter(line => line.trim()).map(line => {
@@ -3717,11 +3944,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   };
   const handleDeleteSelected = async () => {
     if (selectedParticipantIds.length === 0) return;
-    if (!confirm(`Are you sure you want to delete ${selectedParticipantIds.length} participant(s)?`)) return;
+    if (!confirm(`Are you sure you want to clear ${selectedParticipantIds.length} participant(s)?`)) return;
     for (const id of selectedParticipantIds) {
       await api.deleteParticipant(id);
     }
     setSelectedParticipantIds([]);
+    setIsPlayerSelectionMode(false);
     loadData();
   };
 
@@ -3863,7 +4091,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
             <div className="p-3 border-b border-[#AFDDE5]/70 bg-white sticky top-[7.25rem] z-20">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div>
-                  <h4 className="font-bold text-black/80 flex items-center gap-2"><User size={16} className="text-emerald-700" />{tx('Players')} ({participants.length}) • M ({maleCount}) • F ({femaleCount})</h4>
+                  <h4 className="font-bold text-black/80 flex items-center gap-1.5 text-xs sm:text-sm"><User size={14} className="text-emerald-700" />{tx('Players')}({participants.length}) M({maleCount}) F({femaleCount})</h4>
                   {issueCount > 0 && (
                     <p className="text-[11px] text-red-600 mt-1 font-semibold">{issueCount} {tx('record(s) need review (highlighted in red).')}</p>
                   )}
@@ -3890,7 +4118,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                             onChange={(e) => setPlayerSearchQuery(e.target.value)}
                             placeholder={tx('Type at least 3 letters to search')}
                             className="h-8 w-[220px] rounded-md border border-black/15 bg-white pl-7 pr-2 text-xs text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-[#AFDDE5]"
-                            aria-label={tx('Search players, teams, club, email')}
+                            aria-label={tx('Search players, teams, club, contact details')}
                           />
                         </div>
                         <Button
@@ -3909,9 +4137,42 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       </>
                     )}
                     {canManageParticipants && (
-                      <Button size="sm" variant="manage" onClick={handleClearParticipants} title="Clear Players" ariaLabel="Clear Players" className="px-2">
-                        <BrushCleaning size={14} />
-                      </Button>
+                      <div className="relative">
+                        <Button
+                          size="sm"
+                          variant="manage"
+                          onClick={() => setShowPlayersClearMenu((prev) => !prev)}
+                          title="Clear Players"
+                          ariaLabel="Clear Players"
+                          className="px-2"
+                        >
+                          <BrushCleaning size={14} />
+                        </Button>
+                        {showPlayersClearMenu && (
+                          <div className="absolute left-0 mt-1 min-w-[150px] rounded-md border border-black/10 bg-white shadow-lg z-40 p-1">
+                            <button
+                              type="button"
+                              className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-[#AFDDE5]/30"
+                              onClick={() => {
+                                setIsPlayerSelectionMode(true);
+                                setShowPlayersClearMenu(false);
+                              }}
+                            >
+                              {tx('Clear Selected')}
+                            </button>
+                            <button
+                              type="button"
+                              className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-red-50 text-red-700"
+                              onClick={() => {
+                                setShowPlayersClearMenu(false);
+                                handleClearParticipants();
+                              }}
+                            >
+                              {tx('Clear All')}
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     )}
                     {canManageParticipants && (
                       <Button size="sm" variant="manage" onClick={() => { setEditingPlayer(null); setShowAddPlayer(true); }} title="Add Player" ariaLabel="Add Player" className="px-2">
@@ -3950,14 +4211,106 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 </div>
               </div>
             </div>
-            <div className="overflow-x-auto">
-            {canManageParticipants && selectedParticipantIds.length > 0 && (
+            <div className="space-y-2">
+            {canManageParticipants && isPlayerSelectionMode && (
               <div className="mb-2 flex gap-2 items-center">
-                <Button size="sm" variant="outline" onClick={handleDeleteSelected} title="Delete Selected" ariaLabel="Delete Selected" className="px-2 text-red-700 border-red-300">
-                  <Trash2 size={14} className="mr-1" /> Delete Selected ({selectedParticipantIds.length})
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleDeleteSelected}
+                  disabled={selectedParticipantIds.length === 0}
+                  title="Clear Selected"
+                  ariaLabel="Clear Selected"
+                  className="px-2 text-red-700 border-red-300 disabled:opacity-50"
+                >
+                  <Trash2 size={14} className="mr-1" /> Clear Selected ({selectedParticipantIds.length})
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setIsPlayerSelectionMode(false);
+                    setSelectedParticipantIds([]);
+                  }}
+                  title="Cancel"
+                  ariaLabel="Cancel"
+                  className="px-2"
+                >
+                  <X size={14} className="mr-1" /> Cancel
                 </Button>
               </div>
             )}
+            <div className="md:hidden space-y-2">
+              {participants.length === 0 ? (
+                <div className="px-4 py-8 text-center text-black/40 italic text-sm">
+                  {tx('No participants registered yet.')}
+                </div>
+              ) : filteredParticipants.length === 0 ? (
+                <div className="px-4 py-8 text-center text-black/40 italic text-sm">
+                  {tx('No players match your search.')}
+                </div>
+              ) : (
+                filteredParticipants.map((p, index) => (
+                  <div
+                    key={p.id}
+                    className={`rounded-lg border p-2 ${participantIssues.has(p.id) ? 'border-red-200 bg-red-50/40' : 'border-[#AFDDE5]/60 bg-white'}`}
+                  >
+                    <div className="grid grid-cols-2 gap-2 items-center">
+                      {/* Left: #id top, NAME FAMILYNAME below in caps */}
+                      <div className="flex flex-col items-start min-w-0">
+                        <span className={`text-[10px] font-mono ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/50'}`}>#{p.id}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!canManageParticipants) return;
+                            setEditingPlayer(p);
+                            setShowAddPlayer(true);
+                          }}
+                          className={`mt-0.5 text-left text-xs font-bold tracking-wide uppercase leading-tight ${canManageParticipants ? 'cursor-pointer hover:text-emerald-700' : ''} ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}
+                          title={canManageParticipants ? 'Tap to edit participant' : undefined}
+                        >
+                          {(p.first_name || '')} {(p.last_name || '')}
+                        </button>
+                      </div>
+                      {/* Right: F 1H Avg 170, below that CLUB / TEAM */}
+                      <div className="flex flex-col items-start min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold border ${
+                              (p.gender || '').toLowerCase().startsWith('f')
+                                ? 'bg-pink-100 text-pink-700 border-pink-200'
+                                : (p.gender || '').toLowerCase().startsWith('m')
+                                  ? 'bg-blue-100 text-blue-700 border-blue-200'
+                                  : 'bg-black/5 text-black/50 border-black/10'
+                            }`}
+                            title={(p.gender || '').toLowerCase().startsWith('f') ? 'Female' : (p.gender || '').toLowerCase().startsWith('m') ? 'Male' : '-'}
+                          >
+                            {(p.gender || '').toLowerCase().startsWith('f') ? 'F' : (p.gender || '').toLowerCase().startsWith('m') ? 'M' : '-'}
+                          </span>
+                          <span className="text-[10px] text-black/60 font-semibold">{normalizeHandsStyle(p.hands)}</span>
+                          <span className="text-[10px] text-black/60 font-semibold">Avg {Number.isFinite(Number(p.average)) ? Number(p.average) : 0}</span>
+                          {canManageParticipants && isPlayerSelectionMode && (
+                            <input
+                              type="checkbox"
+                              checked={selectedParticipantIds.includes(p.id)}
+                              onChange={() => toggleSelectOne(p.id)}
+                              className="ml-1"
+                              style={{ transform: 'scale(0.8)', width: 14, height: 14 }}
+                            />
+                          )}
+                        </div>
+                        {(p.club || p.team_name) ? (
+                          <div className="text-[10px] text-black/60 font-bold uppercase mt-0.5 truncate max-w-full text-left">
+                            {p.club || ''}{p.team_name ? `${p.club ? ' / ' : ''}${p.team_name}` : ''}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="hidden md:block overflow-x-auto">
             <table
               ref={playersTableRef}
               className="w-max min-w-[760px] text-left border-collapse"
@@ -4010,7 +4363,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       <span>{playerSort.key === 'club' ? (playerSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
                     </button>
                   </th>
-                  {canManageParticipants && (
+                  {canManageParticipants && isPlayerSelectionMode && (
                     <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 w-8 sticky right-0 z-[4] bg-[#e3f3f6]">
                       <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} style={{ transform: 'scale(0.6)', width: 16, height: 16 }} />
                       <span className="sr-only">{tx('Select')}</span>
@@ -4021,13 +4374,13 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               <tbody className="divide-y divide-black/10">
                 {participants.length === 0 ? (
                   <tr>
-                    <td colSpan={canManageParticipants ? 7 : 6} className="px-4 py-8 text-center text-black/40 italic text-sm">
+                    <td colSpan={canManageParticipants && isPlayerSelectionMode ? 7 : 6} className="px-4 py-8 text-center text-black/40 italic text-sm">
                       {tx('No participants registered yet.')}
                     </td>
                   </tr>
                 ) : filteredParticipants.length === 0 ? (
                   <tr>
-                    <td colSpan={canManageParticipants ? 7 : 6} className="px-4 py-8 text-center text-black/40 italic text-sm">
+                    <td colSpan={canManageParticipants && isPlayerSelectionMode ? 7 : 6} className="px-4 py-8 text-center text-black/40 italic text-sm">
                       {tx('No players match your search.')}
                     </td>
                   </tr>
@@ -4038,8 +4391,15 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       <td
                         className={`px-1 py-1.5 uppercase text-xs sticky left-10 z-[2] ${participantIssues.has(p.id) ? 'text-red-700 bg-red-50' : 'text-black bg-white'}`}
                         onDoubleClick={() => { if (canManageParticipants) { setEditingPlayer(p); setShowAddPlayer(true); } }}
+                        onClick={() => {
+                          if (!canManageParticipants || typeof window === 'undefined') return;
+                          if (window.matchMedia('(hover: none)').matches) {
+                            setEditingPlayer(p);
+                            setShowAddPlayer(true);
+                          }
+                        }}
                         style={{ cursor: canManageParticipants ? 'pointer' : undefined }}
-                        title={canManageParticipants ? 'Double-click to edit participant' : undefined}
+                        title={canManageParticipants ? 'Double-click or tap to edit participant' : undefined}
                       >
                         <span className="inline-flex items-center gap-1">
                           {renderNameWithFemaleSpotAfter(p, { includeLastName: false })}
@@ -4049,23 +4409,14 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       <td className={`pl-1 pr-2 py-1.5 text-[10px] uppercase text-center ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{(p.gender || '').toLowerCase().startsWith('f') ? 'F' : (p.gender || '').toLowerCase().startsWith('m') ? 'M' : '-'}</td>
                       <td className={`pl-2 pr-1 py-1.5 text-[10px] uppercase text-center ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{normalizeHandsStyle(p.hands)}</td>
                       <td className={`pl-2 pr-0.5 py-1.5 text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`} title={p.club || ''}>{p.club || '-'}</td>
-                      {canManageParticipants && (
-                        <td className={`px-2 py-1.5 sticky right-0 z-[3] bg-white flex items-center gap-1`}>
+                      {canManageParticipants && isPlayerSelectionMode && (
+                        <td className={`px-2 py-1.5 sticky right-0 z-[3] bg-white text-center`}>
                           <input
                             type="checkbox"
                             checked={selectedParticipantIds.includes(p.id)}
                             onChange={() => toggleSelectOne(p.id)}
                             style={{ transform: 'scale(0.6)', width: 16, height: 16 }}
                           />
-                          <button
-                            type="button"
-                            className="p-0.5 ml-1 text-emerald-700 hover:text-emerald-900"
-                            title="Edit participant"
-                            onClick={() => { setEditingPlayer(p); setShowAddPlayer(true); }}
-                            style={{ transform: 'scale(0.6)' }}
-                          >
-                            <Edit size={16} />
-                          </button>
                         </td>
                       )}
                     </tr>
@@ -4073,6 +4424,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 )}
               </tbody>
             </table>
+            </div>
             </div>
           </Card>
         </div>
@@ -4303,7 +4655,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   </div>
 
                   <Input label="Team/Club" name="club" defaultValue={editingPlayer?.club} placeholder="e.g. City Bowlers" />
-                  <Input label="Email Address" name="email" type="email" defaultValue={editingPlayer?.email} placeholder="john@example.com" />
+                  <Input label="Contact Details" name="email" type="text" defaultValue={editingPlayer?.email} placeholder="Phone or email" />
                   
                   <div className="pt-4 flex gap-3 border-t border-emerald-100/80">
                     <Button type="submit" className="flex-1 justify-center" title={editingPlayer ? 'Save Changes' : 'Add Player'} ariaLabel={editingPlayer ? 'Save Changes' : 'Add Player'}>
@@ -4337,7 +4689,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       type="text"
                       value={teamMemberSearchQuery}
                       onChange={(e) => setTeamMemberSearchQuery(e.target.value)}
-                      placeholder="Search by name, club, or email"
+                      placeholder="Search by name, club, or contact details"
                       className="w-full px-3 py-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 transition-all bg-white text-sm"
                     />
                   </div>

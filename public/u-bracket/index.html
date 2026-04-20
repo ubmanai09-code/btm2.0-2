@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>U-Bracket — Universal Tournament Bracket Generator</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* ── Embed mode: hide U-Bracket chrome, show only setup + bracket ── */
+    body.embed-mode .app-header { display: none !important; }
+    body.embed-mode .app-main   { padding-top: 0 !important; min-height: 100vh; }
+    body.embed-mode #view-home      { display: none !important; }
+    body.embed-mode #view-standings { display: none !important; }
+  body.embed-mode .embed-hide      { display: none !important; }
+  /* Readonly mode: hide all editing controls, show bracket only */
+  body.readonly-mode #view-setup   { display: none !important; }
+  body.readonly-mode .bracket-toolbar .btn { display: none !important; }
+  body.readonly-mode #btnReset     { display: none !important; }
+  body.readonly-mode #btnExportJSON{ display: none !important; }
+  body.readonly-mode #btnExportCSV { display: none !important; }
+  body.readonly-mode .match-card   { pointer-events: none !important; cursor: default !important; }
+  body.readonly-mode .shootout-block { pointer-events: none !important; }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <!-- ── HEADER ──────────────────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="logo" style="cursor:pointer" id="logoHome">
+        <span class="logo-icon">⟨U⟩</span>
+        <span class="logo-text">U-Bracket</span>
+      </div>
+      <nav class="header-nav">
+        <button class="nav-btn active" data-view="home">Home</button>
+        <button class="nav-btn" data-view="setup">Setup</button>
+        <button class="nav-btn" data-view="bracket">Bracket</button>
+        <button class="nav-btn" data-view="standings">Standings</button>
+      </nav>
+      <div class="header-actions">
+        <button class="btn btn-ghost" id="btnReset">Reset</button>
+        <button class="btn btn-ghost" id="btnExportJSON">📋 JSON</button>
+        <button class="btn btn-ghost" id="btnExportCSV">📊 CSV</button>
+        <button class="btn btn-primary" id="btnExport">Export PNG</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── MAIN ───────────────────────────────────────────────────── -->
+  <main class="app-main">
+
+    <!-- ════════════ VIEW: HOME ════════════ -->
+    <section class="view active" id="view-home">
+      <div class="home-container">
+        <div class="home-header">
+          <h2 class="home-title">My Tournaments</h2>
+          <button class="btn btn-primary" id="btnNewTournament">+ New Tournament</button>
+        </div>
+        <div class="tournament-list" id="tournamentList">
+          <!-- injected by JS -->
+        </div>
+        <div class="empty-state" id="homeEmpty">
+          <div class="empty-state-icon">🏆</div>
+          <div class="empty-state-title">No tournaments yet</div>
+          <div class="empty-state-desc">Create your first tournament to get started.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════ VIEW: SETUP ════════════ -->
+    <section class="view" id="view-setup">
+      <div class="setup-grid">
+
+        <!-- LEFT: Tournament Settings -->
+        <div class="setup-card">
+          <div class="card-title-row">
+            <h2 class="card-title">Tournament Settings</h2>
+            <button class="btn btn-ghost btn-sm" id="btnPresets">📄 Presets</button>
+          </div>
+
+          <div class="form-group embed-hide">
+            <label>Tournament Name</label>
+            <input type="text" id="tournamentName" placeholder="e.g. World Championship 2026" class="form-input" />
+          </div>
+
+          <div class="form-group">
+            <label>Gender</label>
+            <select id="tournamentGender" class="form-input">
+              <option value="">Not specified</option>
+              <option value="men">Men</option>
+              <option value="women">Women</option>
+              <option value="mixed">Mixed</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Format</label>
+            <div class="format-grid" id="formatGrid">
+              <!-- injected by JS -->
+            </div>
+          </div>
+
+          <!-- Hybrid format builder (shown only for hybrid) -->
+          <div class="form-group hidden" id="hybridBuilder">
+            <label>Hybrid Phases</label>
+            <div class="hybrid-phases" id="hybridPhases"></div>
+            <button class="btn btn-ghost btn-sm" id="btnAddPhase">+ Add Phase</button>
+          </div>
+
+          <div class="form-group">
+            <label>Number of Participants</label>
+            <div class="seed-row">
+              <input type="range" id="seedCount" min="2" max="128" value="8" class="range-input" />
+              <span class="seed-badge" id="seedBadge">8</span>
+            </div>
+            <div class="seed-presets">
+              <button class="seed-btn" data-n="4">4</button>
+              <button class="seed-btn" data-n="8">8</button>
+              <button class="seed-btn" data-n="16">16</button>
+              <button class="seed-btn" data-n="32">32</button>
+              <button class="seed-btn" data-n="64">64</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Third Place Match</label>
+            <label class="toggle">
+              <input type="checkbox" id="thirdPlace" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label>Seeding Method</label>
+            <select id="seedingMethod" class="form-input">
+              <option value="manual">Manual entry</option>
+              <option value="random">Random shuffle</option>
+              <option value="ranked">Ranked (1 vs last)</option>
+            </select>
+          </div>
+
+        </div>
+
+        <!-- RIGHT: Participants -->
+        <div class="setup-card">
+          <div class="card-title-row">
+            <h2 class="card-title">Participants</h2>
+            <div class="participant-actions">
+              <button class="btn btn-ghost btn-sm" id="btnShuffle">⇄ Shuffle</button>
+              <button class="btn btn-ghost btn-sm" id="btnImport">↑ Import</button>
+            </div>
+          </div>
+          <div class="participants-list" id="participantsList"></div>
+          <button class="btn btn-secondary btn-block" id="btnGenerate">Generate Bracket →</button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ════════════ VIEW: BRACKET ════════════ -->
+    <section class="view" id="view-bracket">
+      <div class="bracket-toolbar">
+        <div class="bracket-info">
+          <span id="bracketTitle" class="bracket-title-label">—</span>
+          <span id="bracketMeta" class="bracket-meta-label"></span>
+        </div>
+        <div class="bracket-controls">
+          <button class="btn btn-ghost btn-sm" id="btnZoomOut">−</button>
+          <span class="zoom-label" id="zoomLabel">100%</span>
+          <button class="btn btn-ghost btn-sm" id="btnZoomIn">+</button>
+          <button class="btn btn-ghost btn-sm" id="btnFit">Fit</button>
+        </div>
+      </div>
+      <!-- Winners Podium -->
+      <div class="winners-podium" id="podiumBar">
+        <div class="completion-banner hidden" id="completionBanner">
+          <span class="completion-icon">🏆</span>
+          <span class="completion-text" id="completionText">Tournament Complete!</span>
+        </div>
+        <div class="podium-place podium-silver">
+          <div class="podium-medal">🥈</div>
+          <div class="podium-block" style="height:56px">
+            <span class="podium-rank-label" id="podiumSilver">—</span>
+          </div>
+        </div>
+        <div class="podium-place podium-gold">
+          <div class="podium-medal">🥇</div>
+          <div class="podium-block" style="height:72px">
+            <span class="podium-rank-label" id="podiumGold">—</span>
+          </div>
+        </div>
+        <div class="podium-place podium-bronze">
+          <div class="podium-medal">🥉</div>
+          <div class="podium-block" style="height:40px">
+            <span class="podium-rank-label" id="podiumBronze">—</span>
+          </div>
+        </div>
+      </div>
+      <!-- Phase tabs (for hybrid) -->
+      <div class="phase-tabs" id="phaseTabs"></div>
+
+      <!-- Bracket canvas area -->
+      <div class="bracket-viewport" id="bracketViewport">
+        <div class="bracket-canvas" id="bracketCanvas">
+          <!-- SVG connectors -->
+          <svg class="connectors-svg" id="connectorsSvg"></svg>
+          <!-- Match cards injected here -->
+        </div>
+      </div>
+
+      <!-- Match result modal -->
+      <div class="modal-overlay hidden" id="matchModal">
+        <div class="modal">
+          <h3 class="modal-title">Enter Result</h3>
+          <div class="modal-match">
+            <div class="modal-team" id="modalTeam1">
+              <span class="modal-team-name" id="modalName1">—</span>
+              <input type="number" min="0" max="300" class="score-input" id="modalScore1" placeholder="0" />
+            </div>
+            <div class="modal-vs">VS</div>
+            <div class="modal-team" id="modalTeam2">
+              <span class="modal-team-name" id="modalName2">—</span>
+              <input type="number" min="0" max="300" class="score-input" id="modalScore2" placeholder="0" />
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-ghost" id="modalCancel">Cancel</button>
+            <button class="btn btn-danger btn-sm" id="modalClear" style="display:none">Clear Result</button>
+            <button class="btn btn-primary" id="modalConfirm">Confirm Result</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════ VIEW: STANDINGS ════════════ -->
+    <section class="view" id="view-standings">
+      <div class="standings-wrap">
+        <h2 class="standings-heading">Standings</h2>
+        <table class="standings-table" id="standingsTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Participant</th>
+              <th>W</th>
+              <th>L</th>
+              <th>Points</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="standingsBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── PRESET MODAL ───────────────────────────────────── -->
+  <div class="modal-overlay hidden" id="presetModal">
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <h3 class="modal-title">Tournament Presets</h3>
+        <button class="btn btn-ghost btn-sm" id="presetClose">✕</button>
+      </div>
+      <p class="modal-hint" style="margin-top:-8px">Select a preset to auto-configure format &amp; participants.</p>
+      <div class="preset-grid" id="presetGrid"></div>
+    </div>
+  </div>
+
+  <!-- ── IMPORT MODAL ────────────────────────────────────────── -->
+  <div class="modal-overlay hidden" id="importModal">
+    <div class="modal">
+      <h3 class="modal-title">Import Participants</h3>
+      <p class="modal-hint">Paste one name per line</p>
+      <textarea id="importText" class="form-textarea" rows="10" placeholder="Team Alpha&#10;Team Beta&#10;Team Gamma&#10;..."></textarea>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="importCancel">Cancel</button>
+        <button class="btn btn-primary" id="importConfirm">Import</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SHOOTOUT MODAL ──────────────────────────────────────── -->
+  <div class="modal-overlay hidden" id="shootoutModal">
+    <div class="modal" style="max-width:440px">
+      <h3 class="modal-title" id="shootoutTitle">Enter Pinfall Scores</h3>
+      <p class="modal-hint" id="shootoutHint">Top 2 advance to next round</p>
+      <div class="shootout-modal-entries" id="shootoutEntries"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="shootoutCancel">Cancel</button>
+        <button class="btn btn-primary" id="shootoutConfirm">Confirm Scores</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,9 +1,9 @@
 public.tab.participants,Participants,Тамирчид
 tab.participants,Participants,Тамирчид
-tab.lane_assignments,Lane Assignments,Зам хуваарилалт
-tab.scoring,Scoring,Оноо
+tab.lane_assignments,Lanes,Зам хуваарилалт
+tab.scoring,Score,Оноо
 tab.brackets,Brackets,Бракетууд
-tab.tournament_result,Tournament Result,Тэмцээний дүн
+tab.tournament_result,Standing,Тэмцээний дүн
 key,english,mongolian
 note,Edit the mongolian column manually. Keep key unchanged.,Монгол орчуулгын баганыг гараар засна. Түлхүүрийг өөрчлөхгүй.
 common.back_to_dashboard,Back to Dashboard,Удирдлагын самбар руу буцах
@@ -23,10 +23,10 @@ common.active,Active,Идэвхтэй
 common.inactive,Inactive,Идэвхгүй
 common.no_data,No data,Өгөгдөл алга
 common.no_results,No results yet,Одоогоор үр дүн алга
-public.tab.lane_assignments,Lane Assignments,Зам хуваарилалт
-public.tab.scoring,Scoring,Оноо
+public.tab.lane_assignments,Lanes,Зам хуваарилалт
+public.tab.scoring,Score,Оноо
 public.tab.brackets,Brackets,Бракетууд
-public.tab.tournament_result,Tournament Result,Тэмцээний дүн
+public.tab.tournament_result,Standing,Тэмцээний дүн
 public.status.draft,draft,Ноорог 
 public.status.active,active,Идэвхтэй
 public.status.finished,finished,Дууссан 
