@@ -926,6 +926,16 @@ async function startServer() {
       recommended_qualified_count: 8,
     },
     {
+      id: 'team-selection-16',
+      name: 'Team Selection Playoff (16)',
+      match_play_type: 'team_selection_playoff',
+      round_match_counts: [8, 4, 2, 1],
+      round_rules: ['duel', 'duel', 'duel', 'duel'],
+      description: '16-seed team selection playoff tree.',
+      min_qualified_count: 16,
+      recommended_qualified_count: 16,
+    },
+    {
       id: 'stepladder-6',
       name: 'Stepladder (6)',
       match_play_type: 'stepladder',
@@ -3043,10 +3053,13 @@ const existing = db
     }
 
     if (requestedMatchPlayType === 'team_selection_playoff') {
-      const teamSelectionSeeds = participants.slice(0, 8);
-      if (teamSelectionSeeds.length < 8) {
-        return res.status(400).json({ error: 'Team Selection Playoff requires exactly 8 qualified teams/seeds' });
+      const teamSelectionSeedCount = participants.length;
+      const isPowerOfTwo = teamSelectionSeedCount > 0 && (teamSelectionSeedCount & (teamSelectionSeedCount - 1)) === 0;
+      if (!isPowerOfTwo || teamSelectionSeedCount < 8 || teamSelectionSeedCount > 16) {
+        return res.status(400).json({ error: 'Team Selection Playoff requires 8 or 16 qualified teams/seeds' });
       }
+      const captainCount = teamSelectionSeedCount / 2;
+      const teamSelectionSeeds = participants.slice(0, teamSelectionSeedCount);
 
       const participantBySeed = new Map<number, { id: number; seed: number }>();
       for (const entry of teamSelectionSeeds) {
@@ -3054,11 +3067,7 @@ const existing = db
       }
 
       const requestedDraft = req.body?.team_selection_draft || {};
-      const requestedSeed1Opponent = Number.parseInt(String(requestedDraft.seed1_opponent_seed ?? ''), 10);
-      const requestedSeed2Opponent = Number.parseInt(String(requestedDraft.seed2_opponent_seed ?? ''), 10);
-      const requestedSeed3Opponent = Number.parseInt(String(requestedDraft.seed3_opponent_seed ?? ''), 10);
-
-      const availableOpponents = [5, 6, 7, 8];
+      const availableOpponents = Array.from({ length: captainCount }, (_, idx) => captainCount + idx + 1);
       const pickFromAvailable = (requestedSeed: number | null | undefined) => {
         if (Number.isFinite(requestedSeed) && availableOpponents.includes(Number(requestedSeed))) {
           const idx = availableOpponents.indexOf(Number(requestedSeed));
@@ -3067,24 +3076,18 @@ const existing = db
         return availableOpponents.shift() || null;
       };
 
-      const seed1OpponentSeed = pickFromAvailable(requestedSeed1Opponent);
-      const seed2OpponentSeed = pickFromAvailable(requestedSeed2Opponent);
-      const seed3OpponentSeed = pickFromAvailable(requestedSeed3Opponent);
-      const seed4OpponentSeed = availableOpponents.length > 0 ? availableOpponents[0] : null;
-
-      if (!seed1OpponentSeed || !seed2OpponentSeed || !seed3OpponentSeed || !seed4OpponentSeed) {
-        return res.status(400).json({ error: 'Unable to resolve Team Selection draft pairings' });
+      const roundOnePairings: Array<{ captainSeed: number; opponentSeed: number }> = [];
+      for (let captainSeed = 1; captainSeed <= captainCount; captainSeed += 1) {
+        const requestedOpponent = Number.parseInt(String(requestedDraft[`seed${captainSeed}_opponent_seed`] ?? ''), 10);
+        const opponentSeed = pickFromAvailable(requestedOpponent);
+        if (!opponentSeed) {
+          return res.status(400).json({ error: 'Unable to resolve Team Selection draft pairings' });
+        }
+        roundOnePairings.push({ captainSeed, opponentSeed });
       }
 
-      const quarterFinalPairings: Array<{ captainSeed: number; opponentSeed: number }> = [
-        { captainSeed: 1, opponentSeed: seed1OpponentSeed },
-        { captainSeed: 2, opponentSeed: seed2OpponentSeed },
-        { captainSeed: 3, opponentSeed: seed3OpponentSeed },
-        { captainSeed: 4, opponentSeed: seed4OpponentSeed },
-      ];
-
-      for (let i = 0; i < quarterFinalPairings.length; i += 1) {
-        const pair = quarterFinalPairings[i];
+      for (let i = 0; i < roundOnePairings.length; i += 1) {
+        const pair = roundOnePairings[i];
         const left = participantBySeed.get(pair.captainSeed);
         const right = participantBySeed.get(pair.opponentSeed);
         if (!left || !right) {
@@ -3097,31 +3100,30 @@ const existing = db
         `).run(tournamentId, division, i, left.id, right.id, left.seed, right.seed);
       }
 
-      db.prepare(`
-        INSERT INTO brackets (tournament_id, division, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
-        VALUES (?, ?, 2, 0, NULL, NULL, NULL, NULL, NULL)
-      `).run(tournamentId, division);
-
-      db.prepare(`
-        INSERT INTO brackets (tournament_id, division, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
-        VALUES (?, ?, 2, 1, NULL, NULL, NULL, NULL, NULL)
-      `).run(tournamentId, division);
-
-      db.prepare(`
-        INSERT INTO brackets (tournament_id, division, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
-        VALUES (?, ?, 3, 0, NULL, NULL, NULL, NULL, NULL)
-      `).run(tournamentId, division);
+      let nextRoundMatches = captainCount / 2;
+      let roundNo = 2;
+      while (nextRoundMatches >= 1) {
+        for (let matchIndex = 0; matchIndex < nextRoundMatches; matchIndex += 1) {
+          db.prepare(`
+            INSERT INTO brackets (tournament_id, division, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
+            VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL)
+          `).run(tournamentId, division, roundNo, matchIndex);
+        }
+        roundNo += 1;
+        nextRoundMatches = Math.floor(nextRoundMatches / 2);
+      }
 
       const generatedMatches = db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ? AND division = ?").get(tournamentId, division) as any;
+      const roundsCount = Math.max(1, Math.log2(teamSelectionSeedCount));
       return res.json({
         success: true,
         division,
         match_play_type: requestedMatchPlayType,
-        qualified_count: 8,
-        seeds_count: 8,
-        rounds_count: 3,
+        qualified_count: teamSelectionSeedCount,
+        seeds_count: teamSelectionSeedCount,
+        rounds_count: roundsCount,
         winners_count: 1,
-        generated_matches: generatedMatches?.count || 7,
+        generated_matches: generatedMatches?.count || (teamSelectionSeedCount - 1),
       });
     }
 

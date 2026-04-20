@@ -780,11 +780,7 @@ const api = {
       seed_kind?: 'team' | 'participant';
       division?: 'all' | 'male' | 'female';
       known_bracket_format_id?: string | null;
-      team_selection_draft?: {
-        seed1_opponent_seed: number;
-        seed2_opponent_seed: number;
-        seed3_opponent_seed: number;
-      };
+      team_selection_draft?: Record<string, number>;
     }
   ): Promise<{ success: boolean; error?: string }> {
     const res = await fetch(`/api/tournaments/${tournamentId}/brackets/generate`, {

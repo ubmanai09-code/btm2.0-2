@@ -7173,20 +7173,26 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       }
 
       if (matchPlayType === 'team_selection_playoff') {
-        if (orderedSeedIds.length < 8) {
-          alert('Team Selection Playoff requires 8 qualified teams/seeds.');
+        const isPowerOfTwo = orderedSeedIds.length > 0 && (orderedSeedIds.length & (orderedSeedIds.length - 1)) === 0;
+        if (!isPowerOfTwo || orderedSeedIds.length < 8 || orderedSeedIds.length > 16) {
+          alert('Team Selection Playoff requires 8 or 16 qualified teams/seeds.');
           return;
         }
 
-        const draftSeeds = [teamSelectionDraft.seed1, teamSelectionDraft.seed2, teamSelectionDraft.seed3].map((seedNo) => Number(seedNo));
-        if (draftSeeds.some((seedNo) => !Number.isFinite(seedNo) || seedNo < 5 || seedNo > 8)) {
-          alert('Complete draft selections for Seed #1, Seed #2, and Seed #3.');
+        const captainCount = Math.floor(orderedSeedIds.length / 2);
+        const minimumOpponentSeed = captainCount + 1;
+        const maximumOpponentSeed = orderedSeedIds.length;
+        const draftSeeds = [teamSelectionDraft.seed1, teamSelectionDraft.seed2, teamSelectionDraft.seed3]
+          .map((seedNo) => Number(seedNo))
+          .filter((seedNo) => Number.isFinite(seedNo));
+        if (draftSeeds.some((seedNo) => seedNo < minimumOpponentSeed || seedNo > maximumOpponentSeed)) {
+          alert(`Draft choices must be between Seed #${minimumOpponentSeed} and Seed #${maximumOpponentSeed}.`);
           return;
         }
 
         const uniqueDraftSeeds = new Set(draftSeeds);
-        if (uniqueDraftSeeds.size !== 3) {
-          alert('Each selected opponent must be unique.');
+        if (uniqueDraftSeeds.size !== draftSeeds.length) {
+          alert('Each selected draft opponent must be unique.');
           return;
         }
       }
@@ -7426,9 +7432,9 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
           known_bracket_format_id: selectedKnownBracketFormatId || null,
           team_selection_draft: matchPlayType === 'team_selection_playoff'
             ? {
-                seed1_opponent_seed: Number(teamSelectionDraft.seed1),
-                seed2_opponent_seed: Number(teamSelectionDraft.seed2),
-                seed3_opponent_seed: Number(teamSelectionDraft.seed3),
+                ...(Number.isFinite(Number(teamSelectionDraft.seed1)) ? { seed1_opponent_seed: Number(teamSelectionDraft.seed1) } : {}),
+                ...(Number.isFinite(Number(teamSelectionDraft.seed2)) ? { seed2_opponent_seed: Number(teamSelectionDraft.seed2) } : {}),
+                ...(Number.isFinite(Number(teamSelectionDraft.seed3)) ? { seed3_opponent_seed: Number(teamSelectionDraft.seed3) } : {}),
               }
             : undefined,
         });
@@ -7605,7 +7611,6 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   };
 
   const handleAssignSeedToSlot = async (matchId: number, slot: 'p1' | 'p2') => {
-    if (useManualSeedMatchups && matches.length > 0) return;
     if (!selectedSeed) return;
     try {
       await api.assignBracketSeed(tournament.id, matchId, {
@@ -7623,10 +7628,6 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 
   const handleAssignByName = async (match: any, slot: 'p1' | 'p2', rawValue: string) => {
     try {
-      if (useManualSeedMatchups && matches.length > 0) {
-        setEditingNameSlot(null);
-        return;
-      }
       const parsedValue = Number.parseInt(String(rawValue), 10);
       if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
         setEditingNameSlot(null);
@@ -7907,9 +7908,12 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     .filter((seedNo: number) => Number.isFinite(seedNo) && seedNo > 0);
   const isEightSeedPlayoffMode = matchPlayTypeForRules === 'playoff' && seedsCount === 8 && qualifiedCount === 8;
   const isTwoGroupPlayoffMode = matchPlayTypeForRules === 'double_elimination';
+  const maxVisibleSeedNumber = availableSeedNumbersForCustom.reduce((max: number, current: number) => Math.max(max, current), 0);
+  const teamSelectionSeedCount = Math.max(qualifiedCount || 0, maxVisibleSeedNumber) >= 16 ? 16 : 8;
+  const teamSelectionCaptainCount = Math.floor(teamSelectionSeedCount / 2);
   const teamSelectionPoolSeeds = visibleSeeds
     .map((seed: any) => Number(seed.seed))
-    .filter((seedNo: number) => Number.isFinite(seedNo) && seedNo >= 5 && seedNo <= 8)
+    .filter((seedNo: number) => Number.isFinite(seedNo) && seedNo > teamSelectionCaptainCount && seedNo <= teamSelectionSeedCount)
     .sort((a: number, b: number) => a - b);
   const teamSelectionSeed1Options = teamSelectionPoolSeeds;
   const teamSelectionSeed2Options = teamSelectionPoolSeeds.filter((seedNo: number) => seedNo !== Number(teamSelectionDraft.seed1));
@@ -8686,13 +8690,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 ? 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500/20'
                 : 'bg-black/[0.02] border-black/5 hover:border-black/10'
             } ${readOnlyMatchCard ? 'cursor-default' : 'cursor-pointer'}`}
-            onClick={() => canManageBrackets && !lockCustomSeedEditing && selectedSeed ? handleAssignSeedToSlot(m.id, 'p1') : undefined}
+            onClick={() => canManageBrackets && selectedSeed ? handleAssignSeedToSlot(m.id, 'p1') : undefined}
             onDoubleClick={() => canManageBrackets && !selectedSeed && hasRequiredScores && hasDistinctScores && m.participant1_id && handleSetWinner(m.id, m.participant1_id)}
             title={
               readOnlyMatchCard
                 ? 'Read-only in public view'
-                : lockCustomSeedEditing
-                ? 'Seed editing is locked in Custom Matchups after generate'
                 : selectedSeed
                   ? 'Click to place selected seed'
                   : hasRequiredScores && hasDistinctScores
@@ -8723,7 +8725,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 disabled={readOnlyMatchCard}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (canManageBrackets && !selectedSeed && !lockCustomSeedEditing) {
+                  if (canManageBrackets && !selectedSeed) {
                     setEditingNameSlot({ matchId: m.id, slot: 'p1' });
                   }
                 }}
@@ -8793,13 +8795,11 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 ? 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500/20'
                 : 'bg-black/[0.02] border-black/5 hover:border-black/10'
             } ${readOnlyMatchCard ? 'cursor-default' : 'cursor-pointer'}`}
-            onClick={() => canManageBrackets && !lockCustomSeedEditing && selectedSeed ? handleAssignSeedToSlot(m.id, 'p2') : undefined}
+            onClick={() => canManageBrackets && selectedSeed ? handleAssignSeedToSlot(m.id, 'p2') : undefined}
             onDoubleClick={() => canManageBrackets && !selectedSeed && hasRequiredScores && hasDistinctScores && m.participant2_id && handleSetWinner(m.id, m.participant2_id)}
             title={
               readOnlyMatchCard
                 ? 'Read-only in public view'
-                : lockCustomSeedEditing
-                ? 'Seed editing is locked in Custom Matchups after generate'
                 : selectedSeed
                   ? 'Click to place selected seed'
                   : hasRequiredScores && hasDistinctScores
@@ -8830,7 +8830,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 disabled={readOnlyMatchCard}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (canManageBrackets && !selectedSeed && !lockCustomSeedEditing) {
+                  if (canManageBrackets && !selectedSeed) {
                     setEditingNameSlot({ matchId: m.id, slot: 'p2' });
                   }
                 }}
@@ -9170,7 +9170,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 
             {isTeamSelectionPlayoffMode && (
               <div className="rounded-md border border-emerald-200 bg-emerald-50/40 px-2 py-2 space-y-1.5">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-800">{tx('Selection Draft (Top 8)')}</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-800">{tx(`Selection Draft (Top ${teamSelectionSeedCount})`)}</p>
                 <div className="grid grid-cols-1 gap-1 text-[11px]">
                   <div className="grid grid-cols-[auto_1fr] items-center gap-1.5">
                     <span className="font-semibold text-black/70">Seed #1 chooses:</span>
@@ -9211,7 +9211,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                       ))}
                     </select>
                   </div>
-                  <p className="text-black/55">Seed #4 auto-pairs with the final remaining opponent: {teamSelectionRemainingForSeed4[0] ? `Seed #${teamSelectionRemainingForSeed4[0]}` : 'TBD'}</p>
+                  <p className="text-black/55">Remaining opponent pool after these picks: {teamSelectionRemainingForSeed4.length > 0 ? teamSelectionRemainingForSeed4.map((seedNo: number) => `Seed #${seedNo}`).join(', ') : 'TBD'}</p>
                 </div>
               </div>
             )}
@@ -9316,10 +9316,10 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                 {visibleSeeds.map((seed) => (
                   <div
                     key={`seed-card-${seed.seed}`}
-                    onClick={() => canManageBrackets && !lockCustomSeedEditing && setSelectedSeed(seed)}
+                    onClick={() => canManageBrackets && setSelectedSeed(seed)}
                     onDoubleClick={() => startSeedEdit(seed)}
                     className={`print-keep-button relative rounded-md border px-2 py-1 text-xs text-left ${selectedSeed?.id === seed.id ? 'border-emerald-400 bg-emerald-50' : 'border-[#AFDDE5]/70 bg-[#AFDDE5]/12'} ${canEditTopSeeds && editingSeedNumber === Number(seed.seed) ? 'z-30 shadow-lg' : 'z-0'}`}
-                    title={lockCustomSeedEditing ? 'Seed editing is locked after generate in Custom Matchups mode' : 'Optional: select seed for manual slot replacement'}
+                    title={'Optional: select seed for manual slot replacement'}
                   >
                     {(() => {
                       const seedNo = Number(seed.seed);

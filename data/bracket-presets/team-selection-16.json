@@ -1,0 +1,20 @@
+{
+  "id": "team-selection-16",
+  "name": "Team Selection Playoff (16)",
+  "match_play_type": "team_selection_playoff",
+  "round_match_counts": [
+    8,
+    4,
+    2,
+    1
+  ],
+  "round_rules": [
+    "duel",
+    "duel",
+    "duel",
+    "duel"
+  ],
+  "description": "16-seed team selection playoff tree.",
+  "min_qualified_count": 16,
+  "recommended_qualified_count": 16
+}
