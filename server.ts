@@ -1224,7 +1224,7 @@ async function startServer() {
       FROM tournaments
       WHERE id = ?
     `).get(tournamentId) as any;
-    if (!tournament || (tournament.match_play_type !== 'playoff' && tournament.match_play_type !== 'bowling_hybrid')) return;
+    if (!tournament || (tournament.match_play_type !== 'playoff' && tournament.match_play_type !== 'bowling_hybrid' && tournament.match_play_type !== 'team_selection_playoff')) return;
 
     const roundMatchCount = db.prepare(`
       SELECT COUNT(*) as count
@@ -3101,6 +3101,9 @@ const existing = db
         `).run(tournamentId, division, i, left.id, right.id, left.seed, right.seed);
       }
 
+      const effectiveTeamSelectionWinners = Math.min(3, Math.max(1, Number.isFinite(requestedWinnersCount) ? requestedWinnersCount : 1));
+      const includeBronzeMatch = effectiveTeamSelectionWinners >= 3;
+
       let nextRoundMatches = captainCount / 2;
       let roundNo = 2;
       while (nextRoundMatches >= 1) {
@@ -3114,6 +3117,14 @@ const existing = db
         nextRoundMatches = Math.floor(nextRoundMatches / 2);
       }
 
+      const finalRound = Math.max(2, roundNo - 1);
+      if (includeBronzeMatch) {
+        db.prepare(`
+          INSERT INTO brackets (tournament_id, division, round, match_index, participant1_id, participant2_id, participant1_seed, participant2_seed, winner_id)
+          VALUES (?, ?, ?, 1, NULL, NULL, NULL, NULL, NULL)
+        `).run(tournamentId, division, finalRound);
+      }
+
       const generatedMatches = db.prepare("SELECT COUNT(*) as count FROM brackets WHERE tournament_id = ? AND division = ?").get(tournamentId, division) as any;
       const roundsCount = Math.max(1, Math.log2(teamSelectionSeedCount));
       return res.json({
@@ -3123,8 +3134,8 @@ const existing = db
         qualified_count: teamSelectionSeedCount,
         seeds_count: teamSelectionSeedCount,
         rounds_count: roundsCount,
-        winners_count: 1,
-        generated_matches: generatedMatches?.count || (teamSelectionSeedCount - 1),
+        winners_count: effectiveTeamSelectionWinners,
+        generated_matches: generatedMatches?.count || (teamSelectionSeedCount - 1 + (includeBronzeMatch ? 1 : 0)),
       });
     }
 

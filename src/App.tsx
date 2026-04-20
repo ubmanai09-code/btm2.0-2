@@ -9144,10 +9144,9 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                   min="0"
                   value={qualifiedCount}
                   onChange={(e: any) => {
-                    if (isTeamSelectionPlayoffMode) return;
                     setQualifiedCount(Math.max(0, Number.parseInt(e.target.value, 10) || 0));
                   }}
-                  disabled={isTeamSelectionPlayoffMode || isPublicBracketView}
+                  disabled={isPublicBracketView}
                   className="w-full h-8 px-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 bg-white text-[13px]"
                 />
               </div>
@@ -9159,10 +9158,9 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
                   max="3"
                   value={playoffWinnersCount}
                   onChange={(e: any) => {
-                    if (isTeamSelectionPlayoffMode) return;
                     setPlayoffWinnersCount(Math.min(3, Math.max(1, Number.parseInt(e.target.value, 10) || 1)));
                   }}
-                  disabled={isTeamSelectionPlayoffMode || isPublicBracketView}
+                  disabled={isPublicBracketView}
                   className="w-full h-8 px-2 rounded-md border border-black/15 focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 bg-white text-[13px]"
                 />
               </div>
