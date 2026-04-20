@@ -1375,7 +1375,9 @@ async function startServer() {
 
   const sanitizeBracketStateForDisplay = (tournamentId: string, matchPlayType: string | null | undefined, division: 'all' | 'male' | 'female' = 'all') => {
     const matches = db.prepare(`
-      SELECT id, division, round, match_index, participant1_id, participant2_id, participant3_id, winner_id
+      SELECT id, division, round, match_index, participant1_id, participant2_id, participant3_id, winner_id,
+             participant1_source_match_id, participant1_source_outcome,
+             participant2_source_match_id, participant2_source_outcome
       FROM brackets
       WHERE tournament_id = ?
         AND (? = 'all' OR division = ?)
@@ -1407,68 +1409,67 @@ async function startServer() {
     // Always remove winners that cannot be valid with current slots.
     matches.forEach((m) => clearInvalidWinnerIfNeeded(m));
 
-    // Rebuild downstream slots only for straightforward winner-progression bracket types.
-    const normalizedType = String(matchPlayType || '').toLowerCase();
-    const supportsSimpleProgression = normalizedType === 'playoff' || normalizedType === 'team_selection_playoff' || normalizedType === 'single_elimination';
-    if (!supportsSimpleProgression) return;
+    // Rebuild downstream slots only when explicit source links are present.
+    // This keeps manual slot edits persistent across all bracket types/presets.
+    for (const m of matches) {
+      const sourceP1Id = Number(m.participant1_source_match_id) || 0;
+      const sourceP2Id = Number(m.participant2_source_match_id) || 0;
+      if (!sourceP1Id && !sourceP2Id) continue;
 
-    const maxRound = matches.reduce((max, m) => Math.max(max, Number(m.round) || 0), 0);
-    if (maxRound <= 1) return;
+      let expectedP1: number | null = Number(m.participant1_id) > 0 ? Number(m.participant1_id) : null;
+      let expectedP2: number | null = Number(m.participant2_id) > 0 ? Number(m.participant2_id) : null;
 
-    for (let round = 2; round <= maxRound; round += 1) {
-      const roundMatches = matches
-        .filter((m) => Number(m.round) === round)
-        .sort((a, b) => (Number(a.match_index) || 0) - (Number(b.match_index) || 0));
-
-      for (const m of roundMatches) {
-        const matchIndex = Number(m.match_index) || 0;
-
-        // Playoff bronze match (final round, index 1) is fed by semifinal losers, not winners.
-        if (normalizedType === 'playoff' && round === maxRound && matchIndex === 1) {
-          clearInvalidWinnerIfNeeded(m);
-          continue;
-        }
-
-        const div = String(m.division || 'all');
-        const prevLeft = byKey.get(keyFor(div, round - 1, matchIndex * 2));
-        const prevRight = byKey.get(keyFor(div, round - 1, matchIndex * 2 + 1));
-        if (!prevLeft && !prevRight) continue;
-
-        const expectedP1 = Number(prevLeft?.winner_id) > 0 ? Number(prevLeft.winner_id) : null;
-        const expectedP2 = Number(prevRight?.winner_id) > 0 ? Number(prevRight.winner_id) : null;
-
-        const currentP1 = Number(m.participant1_id) > 0 ? Number(m.participant1_id) : null;
-        const currentP2 = Number(m.participant2_id) > 0 ? Number(m.participant2_id) : null;
-
-        if (currentP1 !== expectedP1 || currentP2 !== expectedP2) {
-          db.prepare(`
-            UPDATE brackets
-            SET participant1_id = ?, participant2_id = ?, winner_id = CASE
-              WHEN winner_id IN (?, ?) AND ? IS NOT NULL AND ? IS NOT NULL THEN winner_id
-              ELSE NULL
-            END
-            WHERE id = ?
-          `).run(
-            expectedP1,
-            expectedP2,
-            expectedP1,
-            expectedP2,
-            expectedP1,
-            expectedP2,
-            m.id
-          );
-
-          m.participant1_id = expectedP1;
-          m.participant2_id = expectedP2;
-          const currentWinner = Number(m.winner_id) || 0;
-          m.winner_id = (expectedP1 && expectedP2 && (currentWinner === expectedP1 || currentWinner === expectedP2))
-            ? currentWinner
-            : null;
-        }
-
-        clearInvalidWinnerIfNeeded(m);
-        byKey.set(keyFor(div, round, matchIndex), m);
+      if (sourceP1Id) {
+        const src = matches.find((item) => Number(item.id) === sourceP1Id);
+        const srcWinner = Number(src?.winner_id) || 0;
+        const srcP1 = Number(src?.participant1_id) || 0;
+        const srcP2 = Number(src?.participant2_id) || 0;
+        const sourceOutcome = String(m.participant1_source_outcome || 'winner').toLowerCase() === 'loser' ? 'loser' : 'winner';
+        expectedP1 = sourceOutcome === 'winner'
+          ? (srcWinner > 0 ? srcWinner : null)
+          : (srcWinner > 0
+              ? (srcWinner === srcP1 ? (srcP2 > 0 ? srcP2 : null) : (srcP1 > 0 ? srcP1 : null))
+              : null);
       }
+
+      if (sourceP2Id) {
+        const src = matches.find((item) => Number(item.id) === sourceP2Id);
+        const srcWinner = Number(src?.winner_id) || 0;
+        const srcP1 = Number(src?.participant1_id) || 0;
+        const srcP2 = Number(src?.participant2_id) || 0;
+        const sourceOutcome = String(m.participant2_source_outcome || 'winner').toLowerCase() === 'loser' ? 'loser' : 'winner';
+        expectedP2 = sourceOutcome === 'winner'
+          ? (srcWinner > 0 ? srcWinner : null)
+          : (srcWinner > 0
+              ? (srcWinner === srcP1 ? (srcP2 > 0 ? srcP2 : null) : (srcP1 > 0 ? srcP1 : null))
+              : null);
+      }
+
+      const currentP1 = Number(m.participant1_id) > 0 ? Number(m.participant1_id) : null;
+      const currentP2 = Number(m.participant2_id) > 0 ? Number(m.participant2_id) : null;
+      if (currentP1 !== expectedP1 || currentP2 !== expectedP2) {
+        db.prepare(`
+          UPDATE brackets
+          SET participant1_id = ?, participant2_id = ?, winner_id = CASE
+            WHEN winner_id IN (?, ?) AND ? IS NOT NULL AND ? IS NOT NULL THEN winner_id
+            ELSE NULL
+          END
+          WHERE id = ?
+        `).run(
+          expectedP1,
+          expectedP2,
+          expectedP1,
+          expectedP2,
+          expectedP1,
+          expectedP2,
+          m.id
+        );
+        m.participant1_id = expectedP1;
+        m.participant2_id = expectedP2;
+      }
+
+      clearInvalidWinnerIfNeeded(m);
+      byKey.set(keyFor(String(m.division || 'all'), Number(m.round) || 0, Number(m.match_index) || 0), m);
     }
   };
 
@@ -3582,7 +3583,9 @@ const existing = db
 
       const participantField = slot === 'p1' ? 'participant1_id' : 'participant2_id';
       const seedField = slot === 'p1' ? 'participant1_seed' : 'participant2_seed';
-      db.prepare(`UPDATE brackets SET ${participantField} = ?, ${seedField} = ? WHERE id = ?`).run(participantId, seedNumber, matchId);
+      const sourceField = slot === 'p1' ? 'participant1_source_match_id' : 'participant2_source_match_id';
+      const sourceOutcomeField = slot === 'p1' ? 'participant1_source_outcome' : 'participant2_source_outcome';
+      db.prepare(`UPDATE brackets SET ${participantField} = ?, ${seedField} = ?, ${sourceField} = NULL, ${sourceOutcomeField} = NULL WHERE id = ?`).run(participantId, seedNumber, matchId);
 
       const refreshed = db.prepare("SELECT participant1_id, participant2_id, participant3_id, winner_id FROM brackets WHERE id = ?").get(matchId) as any;
       if (
