@@ -63,12 +63,29 @@ type DashboardPromo = {
   link: string;
 };
 
+type PresentModeAdSlot = {
+  image: string;
+  link: string;
+};
+
+type PresentModeScreenAdBlock = {
+  enabled: boolean;
+  left: PresentModeAdSlot;
+  right: PresentModeAdSlot;
+};
+
+type PresentModeAdsConfig = {
+  standings: PresentModeScreenAdBlock;
+  scoring: PresentModeScreenAdBlock;
+};
+
 type SponsorsConfig = {
   global: SponsorInfo[];
   tournaments: Record<string, SponsorInfo[]>;
   globalSponsorEnabled: boolean;
   globalSponsor: SponsorInfo | null;
   dashboardPromo: DashboardPromo;
+  presentModeAds: PresentModeAdsConfig;
 };
 
 
@@ -82,6 +99,19 @@ const DEFAULT_DASHBOARD_PROMO: DashboardPromo = {
   subtitle: t('dashboard.promo_subtitle', 'Promote your brand with a dashboard promo image.'),
   image: '',
   link: '',
+};
+
+const DEFAULT_PRESENT_MODE_ADS: PresentModeAdsConfig = {
+  standings: {
+    enabled: true,
+    left: { image: '', link: '' },
+    right: { image: '', link: '' },
+  },
+  scoring: {
+    enabled: true,
+    left: { image: '', link: '' },
+    right: { image: '', link: '' },
+  },
 };
 
 const GLOBAL_SPONSORS: SponsorInfo[] = [
@@ -111,6 +141,7 @@ const DEFAULT_SPONSORS_CONFIG: SponsorsConfig = {
   globalSponsorEnabled: false,
   globalSponsor: null,
   dashboardPromo: DEFAULT_DASHBOARD_PROMO,
+  presentModeAds: DEFAULT_PRESENT_MODE_ADS,
 };
 
 const SPONSORS_CONFIG_OVERRIDE_KEY = 'btm_sponsors_config_override';
@@ -163,12 +194,34 @@ const normalizeSponsorsConfig = (value: any): SponsorsConfig => {
     link: normalizeWebUrl(rawDashboardPromo?.link || ''),
   };
 
+  const rawPresentModeAds = value?.presentModeAds && typeof value.presentModeAds === 'object'
+    ? value.presentModeAds
+    : {};
+
+  const normalizePresentModeScreenAdBlock = (raw: any, fallback: PresentModeScreenAdBlock): PresentModeScreenAdBlock => ({
+    enabled: raw?.enabled !== false,
+    left: {
+      image: normalizeWebUrl(raw?.left?.image || fallback.left.image || ''),
+      link: normalizeWebUrl(raw?.left?.link || fallback.left.link || ''),
+    },
+    right: {
+      image: normalizeWebUrl(raw?.right?.image || fallback.right.image || ''),
+      link: normalizeWebUrl(raw?.right?.link || fallback.right.link || ''),
+    },
+  });
+
+  const presentModeAds: PresentModeAdsConfig = {
+    standings: normalizePresentModeScreenAdBlock(rawPresentModeAds?.standings, DEFAULT_PRESENT_MODE_ADS.standings),
+    scoring: normalizePresentModeScreenAdBlock(rawPresentModeAds?.scoring, DEFAULT_PRESENT_MODE_ADS.scoring),
+  };
+
   return {
     global: global.length > 0 ? global : DEFAULT_SPONSORS_CONFIG.global,
     tournaments,
     globalSponsorEnabled: Boolean(value?.globalSponsorEnabled),
     globalSponsor: globalSponsorList[0] || null,
     dashboardPromo,
+    presentModeAds,
   };
 };
 
@@ -485,6 +538,10 @@ export default function App() {
   const originalFetchRef = useRef<typeof window.fetch | null>(null);
   const sponsorsImportInputRef = useRef<HTMLInputElement | null>(null);
   const dashboardPromoImageInputRef = useRef<HTMLInputElement | null>(null);
+  const standingsLeftAdImageInputRef = useRef<HTMLInputElement | null>(null);
+  const standingsRightAdImageInputRef = useRef<HTMLInputElement | null>(null);
+  const scoringLeftAdImageInputRef = useRef<HTMLInputElement | null>(null);
+  const scoringRightAdImageInputRef = useRef<HTMLInputElement | null>(null);
   const tournamentsImportInputRef = useRef<HTMLInputElement | null>(null);
   const [authToken, setAuthToken] = useState<string>(() => localStorage.getItem('btm_auth_token') || '');
   const [currentRole, setCurrentRole] = useState<UserRole>(() => {
@@ -531,7 +588,7 @@ export default function App() {
   const [showArchivedTournaments, setShowArchivedTournaments] = useState(false);
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
   const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
-  const [activeTab, setActiveTab] = useState<'participants' | 'lanes' | 'scoring' | 'brackets' | 'standings'>(() => {
+  const [activeTab, setActiveTab] = useState<'participants' | 'lanes' | 'scoring' | 'brackets' | 'brc' | 'standings'>(() => {
     return (localStorage.getItem('btm_tab') as any) || 'participants';
   });
   const [loading, setLoading] = useState(true);
@@ -549,7 +606,7 @@ export default function App() {
     if (typeof window === 'undefined') {
       return {
         tournamentId: null as number | null,
-        tab: null as 'participants' | 'lanes' | 'scoring' | 'brackets' | 'standings' | null,
+        tab: null as 'participants' | 'lanes' | 'scoring' | 'brackets' | 'brc' | 'standings' | null,
         forcePublic: false,
         scoreScreen: false,
         standingsScreen: false,
@@ -559,7 +616,7 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const tournamentIdRaw = Number.parseInt(String(params.get('tournament') || ''), 10);
     const tabRaw = String(params.get('tab') || '').trim().toLowerCase();
-    const tab = tabRaw === 'participants' || tabRaw === 'lanes' || tabRaw === 'scoring' || tabRaw === 'brackets' || tabRaw === 'standings'
+    const tab = tabRaw === 'participants' || tabRaw === 'lanes' || tabRaw === 'scoring' || tabRaw === 'brackets' || tabRaw === 'brc' || tabRaw === 'standings'
       ? tabRaw
       : null;
     const forcePublic = params.get('public') === '1';
@@ -1408,6 +1465,40 @@ export default function App() {
     }));
   };
 
+  const updateDraftPresentModeAdField = (
+    screen: 'standings' | 'scoring',
+    side: 'left' | 'right',
+    field: keyof PresentModeAdSlot,
+    value: string
+  ) => {
+    setSponsorsConfigDraft((prev) => ({
+      ...prev,
+      presentModeAds: {
+        ...prev.presentModeAds,
+        [screen]: {
+          ...prev.presentModeAds[screen],
+          [side]: {
+            ...prev.presentModeAds[screen][side],
+            [field]: value,
+          },
+        },
+      },
+    }));
+  };
+
+  const setDraftPresentModeScreenEnabled = (screen: 'standings' | 'scoring', enabled: boolean) => {
+    setSponsorsConfigDraft((prev) => ({
+      ...prev,
+      presentModeAds: {
+        ...prev.presentModeAds,
+        [screen]: {
+          ...prev.presentModeAds[screen],
+          enabled,
+        },
+      },
+    }));
+  };
+
   const onDashboardPromoImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1418,6 +1509,28 @@ export default function App() {
       if (!result) return;
       updateDraftDashboardPromoField('image', result);
       if (dashboardPromoImageInputRef.current) dashboardPromoImageInputRef.current.value = '';
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const onPresentModeAdImageUpload = (
+    screen: 'standings' | 'scoring',
+    side: 'left' | 'right',
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = String(event.target?.result || '');
+      if (!result) return;
+      updateDraftPresentModeAdField(screen, side, 'image', result);
+
+      const ref = screen === 'standings'
+        ? (side === 'left' ? standingsLeftAdImageInputRef : standingsRightAdImageInputRef)
+        : (side === 'left' ? scoringLeftAdImageInputRef : scoringRightAdImageInputRef);
+      if (ref.current) ref.current.value = '';
     };
     reader.readAsDataURL(file);
   };
@@ -2844,6 +2957,174 @@ export default function App() {
                       </div>
                     )}
                   </div>
+
+                  <div className="mt-4 pt-4 border-t border-black/10 space-y-4">
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-black/60">Present Mode Ad Rails</h4>
+
+                    <Card className="p-3 border border-black/10">
+                      <div className="flex items-center justify-between gap-3 mb-3">
+                        <p className="text-sm font-semibold">Standings Present Mode</p>
+                        <label className="flex items-center gap-2 text-xs font-semibold">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(sponsorsConfigDraft.presentModeAds?.standings?.enabled)}
+                            onChange={(e) => setDraftPresentModeScreenEnabled('standings', e.target.checked)}
+                          />
+                          Enabled
+                        </label>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <Input
+                          label="Standings Left Image URL"
+                          value={sponsorsConfigDraft.presentModeAds?.standings?.left?.image || ''}
+                          onChange={(e: any) => updateDraftPresentModeAdField('standings', 'left', 'image', e.target.value)}
+                        />
+                        <Input
+                          label="Standings Left Link"
+                          value={sponsorsConfigDraft.presentModeAds?.standings?.left?.link || ''}
+                          onChange={(e: any) => updateDraftPresentModeAdField('standings', 'left', 'link', e.target.value)}
+                        />
+                        <Input
+                          label="Standings Right Image URL"
+                          value={sponsorsConfigDraft.presentModeAds?.standings?.right?.image || ''}
+                          onChange={(e: any) => updateDraftPresentModeAdField('standings', 'right', 'image', e.target.value)}
+                        />
+                        <Input
+                          label="Standings Right Link"
+                          value={sponsorsConfigDraft.presentModeAds?.standings?.right?.link || ''}
+                          onChange={(e: any) => updateDraftPresentModeAdField('standings', 'right', 'link', e.target.value)}
+                        />
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <div className="relative">
+                          <input
+                            ref={standingsLeftAdImageInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                            onChange={(e) => onPresentModeAdImageUpload('standings', 'left', e)}
+                          />
+                          <Button size="sm" variant="outline" className="px-3" title="Upload standings left image" ariaLabel="Upload standings left image">
+                            <Upload size={14} />
+                          </Button>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="px-3"
+                          onClick={() => updateDraftPresentModeAdField('standings', 'left', 'image', '')}
+                          title="Clear standings left image"
+                          ariaLabel="Clear standings left image"
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                        <div className="relative">
+                          <input
+                            ref={standingsRightAdImageInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                            onChange={(e) => onPresentModeAdImageUpload('standings', 'right', e)}
+                          />
+                          <Button size="sm" variant="outline" className="px-3" title="Upload standings right image" ariaLabel="Upload standings right image">
+                            <Upload size={14} />
+                          </Button>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="px-3"
+                          onClick={() => updateDraftPresentModeAdField('standings', 'right', 'image', '')}
+                          title="Clear standings right image"
+                          ariaLabel="Clear standings right image"
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      </div>
+                    </Card>
+
+                    <Card className="p-3 border border-black/10">
+                      <div className="flex items-center justify-between gap-3 mb-3">
+                        <p className="text-sm font-semibold">Scoring Present Mode</p>
+                        <label className="flex items-center gap-2 text-xs font-semibold">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(sponsorsConfigDraft.presentModeAds?.scoring?.enabled)}
+                            onChange={(e) => setDraftPresentModeScreenEnabled('scoring', e.target.checked)}
+                          />
+                          Enabled
+                        </label>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <Input
+                          label="Scoring Left Image URL"
+                          value={sponsorsConfigDraft.presentModeAds?.scoring?.left?.image || ''}
+                          onChange={(e: any) => updateDraftPresentModeAdField('scoring', 'left', 'image', e.target.value)}
+                        />
+                        <Input
+                          label="Scoring Left Link"
+                          value={sponsorsConfigDraft.presentModeAds?.scoring?.left?.link || ''}
+                          onChange={(e: any) => updateDraftPresentModeAdField('scoring', 'left', 'link', e.target.value)}
+                        />
+                        <Input
+                          label="Scoring Right Image URL"
+                          value={sponsorsConfigDraft.presentModeAds?.scoring?.right?.image || ''}
+                          onChange={(e: any) => updateDraftPresentModeAdField('scoring', 'right', 'image', e.target.value)}
+                        />
+                        <Input
+                          label="Scoring Right Link"
+                          value={sponsorsConfigDraft.presentModeAds?.scoring?.right?.link || ''}
+                          onChange={(e: any) => updateDraftPresentModeAdField('scoring', 'right', 'link', e.target.value)}
+                        />
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <div className="relative">
+                          <input
+                            ref={scoringLeftAdImageInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                            onChange={(e) => onPresentModeAdImageUpload('scoring', 'left', e)}
+                          />
+                          <Button size="sm" variant="outline" className="px-3" title="Upload scoring left image" ariaLabel="Upload scoring left image">
+                            <Upload size={14} />
+                          </Button>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="px-3"
+                          onClick={() => updateDraftPresentModeAdField('scoring', 'left', 'image', '')}
+                          title="Clear scoring left image"
+                          ariaLabel="Clear scoring left image"
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                        <div className="relative">
+                          <input
+                            ref={scoringRightAdImageInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                            onChange={(e) => onPresentModeAdImageUpload('scoring', 'right', e)}
+                          />
+                          <Button size="sm" variant="outline" className="px-3" title="Upload scoring right image" ariaLabel="Upload scoring right image">
+                            <Upload size={14} />
+                          </Button>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="px-3"
+                          onClick={() => updateDraftPresentModeAdField('scoring', 'right', 'image', '')}
+                          title="Clear scoring right image"
+                          ariaLabel="Clear scoring right image"
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      </div>
+                    </Card>
+                  </div>
                 </Card>}
               </div>
 
@@ -3092,6 +3373,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       { id: 'lanes', label: t('tab.lane_assignments', 'Lanes'), icon: Columns4 },
       { id: 'scoring', label: t('tab.scoring', 'Score'), icon: ClipboardList },
       { id: 'brackets', label: t('tab.brackets', 'Brackets'), icon: GitBranch },
+      ...(effectiveRole === 'admin' ? [{ id: 'brc', label: 'BRC', icon: GitBranch }] : []),
       { id: 'standings', label: t('tab.tournament_result', 'Standing'), icon: Trophy },
     ];
 
@@ -3134,13 +3416,23 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
     window.open(url.toString(), '_blank', 'noopener,noreferrer');
   };
 
-  const openStandingsScreenMode = () => {
+  const openStandingsScreenMode = (options?: { mode?: 'players' | 'teams'; gender?: 'all' | 'male' | 'female' }) => {
     if (typeof window === 'undefined') return;
     const url = new URL(window.location.href);
     url.searchParams.set('tournament', String(tournament.id));
     url.searchParams.set('tab', 'standings');
     url.searchParams.set('public', '1');
     url.searchParams.set('screen', 'standings');
+    if (options?.mode) {
+      url.searchParams.set('standingsMode', options.mode);
+    } else {
+      url.searchParams.delete('standingsMode');
+    }
+    if (options?.gender) {
+      url.searchParams.set('gender', options.gender);
+    } else {
+      url.searchParams.delete('gender');
+    }
     window.open(url.toString(), '_blank', 'noopener,noreferrer');
   };
 
@@ -3290,9 +3582,10 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       <div className="min-h-[400px]">
         {activeTab === 'participants' && <ParticipantView tournament={tournament} role={effectiveRole} />}
         {activeTab === 'lanes' && <LaneView tournament={tournament} role={effectiveRole} />}
-        {activeTab === 'scoring' && <ScoringView tournament={tournament} role={effectiveRole} onPresentScoreScreen={openScoreScreenMode} scoreScreenMode={isScoreScreenMode} />}
+        {activeTab === 'scoring' && <ScoringView tournament={tournament} role={effectiveRole} sponsorsConfig={sponsorsConfig} onPresentScoreScreen={openScoreScreenMode} scoreScreenMode={isScoreScreenMode} />}
         {activeTab === 'brackets' && <BracketsView tournament={tournament} role={effectiveRole} onTournamentUpdated={onTournamentUpdated} />}
-        {activeTab === 'standings' && <StandingsView tournament={tournament} role={effectiveRole} onPresentStandingsScreen={openStandingsScreenMode} standingsScreenMode={isStandingsScreenMode} />}
+        {activeTab === 'brc' && effectiveRole === 'admin' && <BrcView tournament={tournament} role={effectiveRole} onTournamentUpdated={onTournamentUpdated} setActiveTab={setActiveTab} />}
+        {activeTab === 'standings' && <StandingsView tournament={tournament} role={effectiveRole} sponsorsConfig={sponsorsConfig} onPresentStandingsScreen={openStandingsScreenMode} standingsScreenMode={isStandingsScreenMode} />}
       </div>
     </div>
   );
@@ -4156,7 +4449,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div>
           <h3 className="text-xl font-bold text-emerald-800">{canManageParticipants ? tx('Manage Participants') : tx('Participants')}</h3>
@@ -5818,7 +6111,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   );
 }
 
-function ScoringView({ tournament, role, onPresentScoreScreen, scoreScreenMode }: { tournament: Tournament; role: UserRole; onPresentScoreScreen?: () => void; scoreScreenMode?: boolean }) {
+function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, scoreScreenMode }: { tournament: Tournament; role: UserRole; sponsorsConfig?: SponsorsConfig; onPresentScoreScreen?: () => void; scoreScreenMode?: boolean }) {
   const canManageScores = role === 'admin' || role === 'moderator';
   const isScoreScreenMode = Boolean(scoreScreenMode);
   const tx = React.useContext(UiTranslationContext);
@@ -5838,6 +6131,7 @@ function ScoringView({ tournament, role, onPresentScoreScreen, scoreScreenMode }
   const scoringTableRef = useRef<HTMLDivElement | null>(null);
   const say = (message: string) => alert(tx(message));
   const ask = (message: string) => confirm(tx(message));
+  const scoringPresentAdBlock = sponsorsConfig?.presentModeAds?.scoring || DEFAULT_PRESENT_MODE_ADS.scoring;
 
   useEffect(() => {
     loadData();
@@ -6664,7 +6958,7 @@ function ScoringView({ tournament, role, onPresentScoreScreen, scoreScreenMode }
       </div>
       )}
 
-      <Card ref={scoringTableRef} className="border-[#AFDDE5]/60 overflow-visible">
+      <Card ref={scoringTableRef} className="border-[#AFDDE5]/60 overflow-visible relative">
         <div
           ref={scoringHeaderScrollRef}
           className={isScoreScreenMode
@@ -6851,6 +7145,286 @@ function ScoringView({ tournament, role, onPresentScoreScreen, scoreScreenMode }
           </tbody>
         </table>
         </div>
+
+        {isScoreScreenMode && scoringPresentAdBlock.enabled && (
+          <>
+            <div className="hidden xl:block absolute top-0 bottom-0 left-0 -translate-x-full -ml-1 z-30 w-[15.5rem] border-r border-black/10 bg-white/90 backdrop-blur-sm">
+              <div className="h-full p-2">
+                <div className="h-full rounded-lg border border-black/10 bg-white shadow-sm overflow-hidden p-2">
+                  <div className="relative h-full w-full rounded-md border border-black/15 bg-black/[0.02]">
+                    {scoringPresentAdBlock.left.image ? (
+                      <a
+                        href={(scoringPresentAdBlock.left.link || '#')}
+                        target={scoringPresentAdBlock.left.link ? '_blank' : undefined}
+                        rel={scoringPresentAdBlock.left.link ? 'noopener noreferrer' : undefined}
+                        className="h-full w-full flex items-center justify-center p-3"
+                        title="Scoring left ad"
+                      >
+                        <img
+                          src={scoringPresentAdBlock.left.image}
+                          alt="Scoring left ad"
+                          className="max-h-full max-w-full object-contain opacity-70"
+                        />
+                      </a>
+                    ) : (
+                      <div className="h-full w-full flex flex-col items-center justify-center px-3 text-center">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-black/70">Ad Space</p>
+                        <p className="text-[11px] text-black/45 mt-1">Animated image can be placed here</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="hidden xl:block absolute top-0 bottom-0 right-0 translate-x-full mr-1 z-30 w-[15.5rem] border-l border-black/10 bg-white/90 backdrop-blur-sm">
+              <div className="h-full p-2">
+                <div className="h-full rounded-lg border border-black/10 bg-white shadow-sm overflow-hidden p-2">
+                  <div className="relative h-full w-full rounded-md border border-black/15 bg-black/[0.02]">
+                    {scoringPresentAdBlock.right.image ? (
+                      <a
+                        href={(scoringPresentAdBlock.right.link || '#')}
+                        target={scoringPresentAdBlock.right.link ? '_blank' : undefined}
+                        rel={scoringPresentAdBlock.right.link ? 'noopener noreferrer' : undefined}
+                        className="h-full w-full flex items-center justify-center p-3"
+                        title="Scoring right ad"
+                      >
+                        <img
+                          src={scoringPresentAdBlock.right.image}
+                          alt="Scoring right ad"
+                          className="max-h-full max-w-full object-contain opacity-70"
+                        />
+                      </a>
+                    ) : (
+                      <div className="h-full w-full flex flex-col items-center justify-center px-3 text-center">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-black/70">Ad Space</p>
+                        <p className="text-[11px] text-black/45 mt-1">Animated image can be placed here</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function BrcView({ tournament, role, onTournamentUpdated, setActiveTab }: { tournament: Tournament; role: UserRole; onTournamentUpdated?: (t: Tournament) => void; setActiveTab: (t: any) => void }) {
+  void onTournamentUpdated;
+  if (role !== 'admin') {
+    return (
+      <Card className="p-6 border border-amber-200 bg-amber-50/40">
+        <p className="text-sm font-semibold text-amber-800">BRC page is available for admins only.</p>
+      </Card>
+    );
+  }
+
+  const brcDraftStorageKey = `btm_brc_draft_${tournament.id}`;
+  const importDraftInputRef = useRef<HTMLInputElement | null>(null);
+  const [draftText, setDraftText] = useState('');
+  const [statusMessage, setStatusMessage] = useState('');
+  const [isHydratingLiveSnapshot, setIsHydratingLiveSnapshot] = useState(false);
+
+  const buildDraftPayload = async () => {
+    const [bracketsData, participantsData, teamsData] = await Promise.all([
+      api.getBrackets(tournament.id, { division: 'all' }),
+      api.getParticipants(tournament.id),
+      api.getTeams(tournament.id),
+    ]);
+    return {
+      meta: {
+        createdAt: new Date().toISOString(),
+        tournamentId: tournament.id,
+        tournamentName: tournament.name,
+        source: 'live-snapshot',
+      },
+      brackets: bracketsData,
+      participants: participantsData,
+      teams: teamsData,
+    };
+  };
+
+  useEffect(() => {
+    const cached = localStorage.getItem(brcDraftStorageKey);
+    if (cached) {
+      setDraftText(cached);
+      return;
+    }
+
+    const starter = {
+      meta: {
+        createdAt: new Date().toISOString(),
+        tournamentId: tournament.id,
+        tournamentName: tournament.name,
+        source: 'manual-start',
+      },
+      brackets: [],
+      participants: [],
+      teams: [],
+    };
+    setDraftText(JSON.stringify(starter, null, 2));
+  }, [brcDraftStorageKey, tournament.id, tournament.name]);
+
+  const saveDraftLocally = () => {
+    try {
+      JSON.parse(draftText);
+      localStorage.setItem(brcDraftStorageKey, draftText);
+      setStatusMessage('BRC draft saved locally. Live tournament results were not changed.');
+    } catch {
+      setStatusMessage('Draft is not valid JSON. Please fix JSON format before saving.');
+    }
+  };
+
+  const hydrateDraftFromLive = async () => {
+    try {
+      setIsHydratingLiveSnapshot(true);
+      const payload = await buildDraftPayload();
+      const nextText = JSON.stringify(payload, null, 2);
+      setDraftText(nextText);
+      localStorage.setItem(brcDraftStorageKey, nextText);
+      setStatusMessage('Draft replaced with a fresh live snapshot. Live data is still unchanged.');
+    } catch (err: any) {
+      setStatusMessage(err?.message || 'Failed to load live snapshot for BRC draft.');
+    } finally {
+      setIsHydratingLiveSnapshot(false);
+    }
+  };
+
+  const exportDraftJson = () => {
+    try {
+      JSON.parse(draftText);
+      const blob = new Blob([draftText], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${tournament.name}_brc_draft.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setStatusMessage('Draft exported successfully.');
+    } catch {
+      setStatusMessage('Cannot export: draft is not valid JSON.');
+    }
+  };
+
+  const importDraftJson = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = String(event.target?.result || '');
+      try {
+        JSON.parse(text);
+        setDraftText(text);
+        localStorage.setItem(brcDraftStorageKey, text);
+        setStatusMessage('Draft imported and saved locally.');
+      } catch {
+        setStatusMessage('Imported file is not valid JSON.');
+      } finally {
+        if (importDraftInputRef.current) importDraftInputRef.current.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const clearDraft = () => {
+    localStorage.removeItem(brcDraftStorageKey);
+    const resetDraft = {
+      meta: {
+        createdAt: new Date().toISOString(),
+        tournamentId: tournament.id,
+        tournamentName: tournament.name,
+        source: 'manual-reset',
+      },
+      brackets: [],
+      participants: [],
+      teams: [],
+    };
+    const text = JSON.stringify(resetDraft, null, 2);
+    setDraftText(text);
+    setStatusMessage('Draft cleared. Live tournament results were not changed.');
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-6 border border-[#AFDDE5]/70 bg-[#AFDDE5]/12">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-bold text-emerald-800">BRC (Temporary)</h3>
+            <p className="text-sm text-black/55 mt-1">
+              This is an isolated draft workspace. It stores data locally in your browser and does not overwrite live Brackets results.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={hydrateDraftFromLive}
+              title="Load Live Snapshot"
+              ariaLabel="Load Live Snapshot"
+              disabled={isHydratingLiveSnapshot}
+            >
+              <RefreshCw size={14} />
+            </Button>
+            <Button
+              variant="outline"
+              onClick={saveDraftLocally}
+              title="Save Draft"
+              ariaLabel="Save Draft"
+            >
+              <Save size={14} />
+            </Button>
+            <Button
+              variant="outline"
+              onClick={exportDraftJson}
+              title="Export Draft"
+              ariaLabel="Export Draft"
+            >
+              <Upload size={14} />
+            </Button>
+            <div className="relative">
+              <input
+                ref={importDraftInputRef}
+                type="file"
+                accept=".json"
+                className="absolute inset-0 opacity-0 cursor-pointer"
+                onChange={importDraftJson}
+              />
+              <Button variant="outline" title="Import Draft" ariaLabel="Import Draft">
+                <Download size={14} />
+              </Button>
+            </div>
+            <Button
+              variant="outline"
+              onClick={clearDraft}
+              title="Clear Draft"
+              ariaLabel="Clear Draft"
+            >
+              <Trash2 size={14} />
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setActiveTab('brackets')}
+              title="Go to Brackets"
+              ariaLabel="Go to Brackets"
+            >
+              <GitBranch size={14} />
+            </Button>
+          </div>
+        </div>
+        {statusMessage && <p className="text-xs text-black/55 mt-3">{statusMessage}</p>}
+      </Card>
+
+      <Card className="p-6 border border-black/10">
+        <p className="text-sm text-black/65 mb-3">BRC Draft JSON (local only):</p>
+        <textarea
+          value={draftText}
+          onChange={(e) => setDraftText(e.target.value)}
+          className="w-full min-h-[420px] rounded-md border border-black/15 bg-white px-3 py-2 text-xs font-mono leading-5 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+          spellCheck={false}
+        />
       </Card>
     </div>
   );
@@ -10919,10 +11493,25 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   );
 }
 
-function StandingsView({ tournament, role, onPresentStandingsScreen, standingsScreenMode }: { tournament: Tournament; role: UserRole; onPresentStandingsScreen?: () => void; standingsScreenMode?: boolean }) {
+function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScreen, standingsScreenMode }: { tournament: Tournament; role: UserRole; sponsorsConfig?: SponsorsConfig; onPresentStandingsScreen?: (options?: { mode?: 'players' | 'teams'; gender?: 'all' | 'male' | 'female' }) => void; standingsScreenMode?: boolean }) {
   const isPublicView = role === 'public';
   const isStandingsScreenMode = Boolean(standingsScreenMode);
   const isTeamTournament = tournament.type === 'team';
+  const screenStandingsParams = React.useMemo(() => {
+    if (typeof window === 'undefined') {
+      return {
+        mode: null as 'players' | 'teams' | null,
+        gender: null as 'all' | 'male' | 'female' | null,
+      };
+    }
+    const params = new URLSearchParams(window.location.search);
+    const modeRaw = String(params.get('standingsMode') || '').trim().toLowerCase();
+    const genderRaw = String(params.get('gender') || '').trim().toLowerCase();
+    return {
+      mode: modeRaw === 'players' || modeRaw === 'teams' ? modeRaw : null,
+      gender: genderRaw === 'all' || genderRaw === 'male' || genderRaw === 'female' ? genderRaw : null,
+    };
+  }, []);
   // Gender filter for standings table only
   const [genderFilter, setGenderFilter] = useState<'all' | 'male' | 'female'>('all');
   const canManageStandings = role === 'admin' || role === 'moderator';
@@ -10962,6 +11551,23 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
     return '';
   };
 
+  const presentModeAds = React.useMemo(() => {
+    const tournamentAds = (sponsorsConfig?.tournaments?.[String(tournament.id)] || [])
+      .filter((item) => String(item?.logo || '').trim().length > 0);
+    const globalAds = (sponsorsConfig?.global || [])
+      .filter((item) => String(item?.logo || '').trim().length > 0);
+    return [...tournamentAds, ...globalAds]
+      .slice(0, 6)
+      .map((item, index) => ({
+        id: String(item.id || `ad-${index}`),
+        name: String(item.name || 'Sponsor'),
+        logo: normalizeWebUrl(item.logo || ''),
+        url: normalizeWebUrl(item.url || ''),
+      }))
+      .filter((item) => item.logo.length > 0);
+  }, [sponsorsConfig, tournament.id]);
+  const standingsPresentAdBlock = sponsorsConfig?.presentModeAds?.standings || DEFAULT_PRESENT_MODE_ADS.standings;
+
   useEffect(() => {
     loadStandings({
       includeAdditional: Boolean(tournament.has_additional_scores),
@@ -10979,8 +11585,13 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
 
   useEffect(() => {
     if (!isStandingsScreenMode) return;
-    setStandingsMode(tournament.type === 'team' ? 'teams' : 'players');
-  }, [isStandingsScreenMode, tournament.type]);
+    const requestedMode = screenStandingsParams.mode || (tournament.type === 'team' ? 'teams' : 'players');
+    const safeMode = requestedMode === 'teams' && tournament.type !== 'team' ? 'players' : requestedMode;
+    setStandingsMode(safeMode);
+    if (safeMode === 'players') {
+      setGenderFilter(screenStandingsParams.gender || 'all');
+    }
+  }, [isStandingsScreenMode, tournament.type, screenStandingsParams.mode, screenStandingsParams.gender]);
 
   useEffect(() => {
     if (!isStandingsScreenMode) return;
@@ -11032,7 +11643,6 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
   }, [isStandingsScreenMode, standingsMode, standings.length, autoScrollSpeed, isAutoScrollPaused]);
 
   useEffect(() => {
-    if (!isStandingsScreenMode) return;
     const headerEl = standingsHeaderScrollRef.current;
     const bodyEl = standingsBodyScrollRef.current;
     if (!headerEl || !bodyEl) return;
@@ -11065,7 +11675,7 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
       bodyEl.removeEventListener('scroll', syncHeaderFromBody);
       headerEl.removeEventListener('scroll', syncBodyFromHeader);
     };
-  }, [isStandingsScreenMode, standingsMode, hasAdditionalScores, hasBonus, isTeamTournament]);
+  }, [standingsMode, hasAdditionalScores, hasBonus, isTeamTournament]);
 
   useEffect(() => {
     setStandingsMode('players');
@@ -11626,91 +12236,132 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
     }));
   };
 
-  const renderStandingsHeader = () => (
-    <thead>
-      <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
-        <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-black/70 w-12 sticky left-0 z-[3] bg-[#e3f3f6]">Rank</th>
-        <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-black/70 sticky left-12 z-[3] bg-[#e3f3f6]">{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
-        {standingsMode === 'players' && (
-          <>
-            <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">1H/2H</th>
-            <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Club</th>
-          </>
-        )}
-        {standingsMode === 'players' && isTeamTournament && (
-          <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Team</th>
-        )}
-        {gameNumbers.map((gameNumber) => (
-          <th key={`game-th-${gameNumber}`} className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">
-            {gameNumber}
-          </th>
-        ))}
-        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Total</th>
-        {hasAdditionalScores && (
-          <th key="additional-th" className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-violet-700 text-center">
-            +score
-          </th>
-        )}
-        {hasBonus && (
-          <th key="bonus-th" className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-emerald-700 text-center">
-            Bonus
-          </th>
-        )}
-        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Grand Total</th>
-        {standingsMode === 'players' && (
-          <th key="avg-th" className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">Avg</th>
-        )}
-      </tr>
-    </thead>
+  const renderStandingsHeader = () => {
+    const headerTopClass = 'top-0';
+    const headerBaseClass = `px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-black/70 bg-[#e3f3f6] sticky ${headerTopClass} z-[4]`;
+
+    return (
+      <thead>
+        <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
+          <th className={`px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-black/70 w-12 bg-[#e3f3f6] sticky left-0 ${headerTopClass} z-[6]`}>Rank</th>
+          <th className={`px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-black/70 bg-[#e3f3f6] sticky left-12 ${headerTopClass} z-[6]`}>{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
+          {standingsMode === 'players' && (
+            <>
+              <th className={`${headerBaseClass} text-center`}>1H/2H</th>
+              <th className={headerBaseClass}>Club</th>
+            </>
+          )}
+          {standingsMode === 'players' && isTeamTournament && (
+            <th className={headerBaseClass}>Team</th>
+          )}
+          {gameNumbers.map((gameNumber) => (
+            <th key={`game-th-${gameNumber}`} className={`${headerBaseClass} text-center`}>
+              G{gameNumber}
+            </th>
+          ))}
+          <th className={`${headerBaseClass} text-right`}>Total</th>
+          {hasAdditionalScores && (
+            <th key="additional-th" className={`px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-violet-700 bg-[#e3f3f6] sticky ${headerTopClass} z-[4] text-center`}>
+              +score
+            </th>
+          )}
+          {hasBonus && (
+            <th key="bonus-th" className={`px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 bg-[#e3f3f6] sticky ${headerTopClass} z-[4] text-center`}>
+              Bonus
+            </th>
+          )}
+          <th className={`${headerBaseClass} text-right`}>Grand Total</th>
+          {standingsMode === 'players' && (
+            <th key="avg-th" className={`${headerBaseClass} text-center`}>Avg</th>
+          )}
+        </tr>
+      </thead>
+    );
+  };
+
+  const renderStandingsColGroup = () => (
+    <colgroup>
+      <col style={{ width: '48px' }} />
+      <col style={{ width: standingsMode === 'teams' ? '220px' : '180px' }} />
+      {standingsMode === 'players' && (
+        <>
+          <col style={{ width: '68px' }} />
+          <col style={{ width: '150px' }} />
+        </>
+      )}
+      {standingsMode === 'players' && isTeamTournament && <col style={{ width: '120px' }} />}
+      {gameNumbers.map((gameNumber) => (
+        <col key={`game-col-${gameNumber}`} style={{ width: '56px' }} />
+      ))}
+      <col style={{ width: '78px' }} />
+      {hasAdditionalScores && <col style={{ width: '96px' }} />}
+      {hasBonus && <col style={{ width: '96px' }} />}
+      <col style={{ width: '96px' }} />
+      {standingsMode === 'players' && <col style={{ width: '68px' }} />}
+    </colgroup>
   );
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row justify-between md:items-center gap-3">
         <div>
-          <h3 className="text-xl font-bold inline-flex items-center gap-2">
-            <span>{tx('Tournament Result')}</span>
+          <h3 className="text-xl font-bold text-emerald-800 inline-flex items-center gap-2">
+            <span>{isStandingsScreenMode ? tx('Tournament Standings') : tx('Tournament Result')}</span>
             {isStandingsScreenMode && (
               <span className="inline-flex items-center rounded-md border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-emerald-700">
                 {tx('Present Mode')}
               </span>
             )}
           </h3>
-          <p className="text-sm text-black/40">
+          <p className="text-xs text-black/50 mt-0.5">
             {isStandingsScreenMode
-              ? tx('Display mode for tournament standings')
+              ? tx('Rankings sorted from highest to lowest total score')
               : tx('Standings, bracket winners, and tournament highlights')}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {isStandingsScreenMode && (
-            <>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Scroll</span>
-              <select
-                value={autoScrollSpeed}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setAutoScrollSpeed(next === 'fast' || next === 'medium' ? next : 'slow');
-                }}
-                className="h-8 rounded-md border border-[#AFDDE5]/80 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                aria-label="Auto scroll speed"
-              >
-                <option value="slow">Slow</option>
-                <option value="medium">Medium</option>
-                <option value="fast">Fast</option>
-              </select>
-              {isAutoScrollPaused && (
-                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Paused</span>
-              )}
-            </>
-          )}
-          {!isStandingsScreenMode && (
-            <Button variant="manage" onClick={loadStandings} title="Refresh" ariaLabel="Refresh">
-              <RefreshCw size={18} />
-            </Button>
-          )}
-        </div>
+        {isStandingsScreenMode && (
+          <div className="inline-flex items-center gap-1.5 self-start md:self-auto">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Scroll</span>
+            <select
+              value={autoScrollSpeed}
+              onChange={(e) => {
+                const next = e.target.value;
+                setAutoScrollSpeed(next === 'fast' || next === 'medium' ? next : 'slow');
+              }}
+              className="h-8 rounded-md border border-[#AFDDE5]/80 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-200"
+              aria-label="Auto scroll speed"
+            >
+              <option value="slow">Slow</option>
+              <option value="medium">Medium</option>
+              <option value="fast">Fast</option>
+            </select>
+            {isAutoScrollPaused && (
+              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Paused</span>
+            )}
+          </div>
+        )}
       </div>
+
+      {isStandingsScreenMode && presentModeAds.length > 0 && (
+        <div className="xl:hidden -mt-3">
+          <div className="overflow-x-auto no-scrollbar">
+            <div className="inline-flex items-center gap-2 px-1 py-1 min-w-full">
+              {presentModeAds.map((ad) => (
+                <a
+                  key={`mobile-ad-${ad.id}`}
+                  href={ad.url || '#'}
+                  target={ad.url ? '_blank' : undefined}
+                  rel={ad.url ? 'noopener noreferrer' : undefined}
+                  className="h-14 min-w-[140px] max-w-[180px] rounded-md border border-black/10 bg-white px-2 py-1 flex items-center justify-center"
+                  title={ad.name}
+                >
+                  <img src={ad.logo} alt={ad.name} className="max-h-10 max-w-full object-contain" />
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Gender filter segmented buttons for player standings */}
       <div className="space-y-6">
@@ -11801,54 +12452,58 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
             {/* Removed secondary winners table as per user request. */}
           </Card>
 
-          <Card className="p-6">
-            <h4 className="font-bold mb-1">{tx('Tournament Highlights')}</h4>
-            <p className="text-sm text-black/40 mb-4">{tx('Quick stats and highest single game score by category')}</p>
+          <Card className="p-3">
+            <h4 className="font-bold text-sm mb-0.5">{tx('Tournament Highlights')}</h4>
+            <p className="text-xs text-black/40 mb-2">{tx('Quick stats and highest single game score by category')}</p>
 
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-              <div className="rounded-lg border border-black/10 p-3 bg-black/[0.02] text-center">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-2">
+              <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Players</p>
-                <p className="text-lg font-bold mt-1">{totalPlayers}</p>
+                <p className="text-sm font-bold mt-0.5">{totalPlayers}</p>
               </div>
-              <div className="rounded-lg border border-black/10 p-3 bg-black/[0.02] text-center">
+              <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Clubs</p>
-                <p className="text-lg font-bold mt-1">{totalClubs}</p>
+                <p className="text-sm font-bold mt-0.5">{totalClubs}</p>
               </div>
-              <div className="rounded-lg border border-black/10 p-3 bg-black/[0.02] text-center">
+              <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Teams</p>
-                <p className="text-lg font-bold mt-1">{totalTeams}</p>
+                <p className="text-sm font-bold mt-0.5">{totalTeams}</p>
               </div>
-              <div className="rounded-lg border border-black/10 p-3 bg-black/[0.02] text-center">
+              <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">F</p>
-                <p className="text-lg font-bold mt-1">{totalFemale}</p>
+                <p className="text-sm font-bold mt-0.5">{totalFemale}</p>
               </div>
-              <div className="rounded-lg border border-black/10 p-3 bg-black/[0.02] text-center">
+              <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">M</p>
-                <p className="text-lg font-bold mt-1">{totalMale}</p>
+                <p className="text-sm font-bold mt-0.5">{totalMale}</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-lg border border-black/10 p-4 bg-black/[0.02]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="rounded-md border border-black/10 p-2.5 bg-black/[0.02]">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Highest Score Male</p>
                 {maleLeader ? (
                   <>
-                    <p className="text-lg font-bold mt-1">{participantNameMap.get(maleLeader.participant_id) || maleLeader.participant_name || 'N/A'}</p>
-                    <p className="text-sm text-black/50">Game {maleLeader.game_number}: <span className="font-extrabold text-emerald-700 text-lg">{maleLeader.score}</span></p>
+                    <div className="mt-0.5 flex items-center justify-between gap-2">
+                      <p className="text-sm font-bold truncate">{participantNameMap.get(maleLeader.participant_id) || maleLeader.participant_name || 'N/A'}</p>
+                      <span className="text-xl leading-none font-extrabold text-emerald-700">{maleLeader.score}</span>
+                    </div>
                   </>
                 ) : (
-                  <p className="text-sm text-black/40 mt-1">No male result yet.</p>
+                  <p className="text-xs text-black/40 mt-0.5">No male result yet.</p>
                 )}
               </div>
-              <div className="rounded-lg border border-black/10 p-4 bg-black/[0.02]">
+              <div className="rounded-md border border-black/10 p-2.5 bg-black/[0.02]">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Highest Score Female</p>
                 {femaleLeader ? (
                   <>
-                    <p className="text-lg font-bold mt-1">{participantNameMap.get(femaleLeader.participant_id) || femaleLeader.participant_name || 'N/A'}</p>
-                    <p className="text-sm text-black/50">Game {femaleLeader.game_number}: <span className="font-extrabold text-violet-700 text-lg">{femaleLeader.score}</span></p>
+                    <div className="mt-0.5 flex items-center justify-between gap-2">
+                      <p className="text-sm font-bold truncate">{participantNameMap.get(femaleLeader.participant_id) || femaleLeader.participant_name || 'N/A'}</p>
+                      <span className="text-xl leading-none font-extrabold text-violet-700">{femaleLeader.score}</span>
+                    </div>
                   </>
                 ) : (
-                  <p className="text-sm text-black/40 mt-1">No female result yet.</p>
+                  <p className="text-xs text-black/40 mt-0.5">No female result yet.</p>
                 )}
               </div>
             </div>
@@ -11856,33 +12511,92 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
         </div>
         )}
 
-        <Card className="overflow-visible">
-          <div className={`p-6 border-b border-black/5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-white/95 ${isStandingsScreenMode ? '' : 'sticky top-[7.25rem] z-30 backdrop-blur-sm'}`}>
+        <Card className="overflow-visible relative">
+          {!isStandingsScreenMode && (
+          <div className="p-6 border-b border-black/5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-white/95">
             <div>
-              <h4 className="font-bold">{tx('Tournament Standings')}</h4>
-              <p className="text-sm text-black/40">{tx('Rankings sorted from highest to lowest total score')}</p>
-              {standingsMode === 'teams' && isTeamTournament && (
-                <p className={`text-xs mt-1 ${teamsCountValid ? 'text-emerald-700' : 'text-amber-700'}`}>
-                  Team check: ranked teams = {rankedTeamsCount} (real teams only), assigned players = {assignedPlayersCount}, unassigned players = {unassignedPlayersCount}.
-                  {teamsCountValid ? ' OK.' : ' Mismatch detected. Please review team assignments in Participants page.'}
-                </p>
-              )}
-              {!bonusApiAvailable && (
-                <p className="text-xs mt-1 text-amber-700">
-                  Bonus editing is currently unavailable on this server build. Standings still load using score totals.
-                </p>
-              )}
-              {!additionalApiAvailable && hasAdditionalScores && (
-                <p className="text-xs mt-1 text-amber-700">
-                  Additional score editing is currently unavailable on this server build.
-                </p>
+              {!isStandingsScreenMode && (
+                <>
+                  <h4 className="font-bold">{tx('Tournament Standings')}</h4>
+                  <p className="text-sm text-black/40">{tx('Rankings sorted from highest to lowest total score')}</p>
+                  {standingsMode === 'teams' && isTeamTournament && (
+                    <p className={`text-xs mt-1 ${teamsCountValid ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      Team check: ranked teams = {rankedTeamsCount} (real teams only), assigned players = {assignedPlayersCount}, unassigned players = {unassignedPlayersCount}.
+                      {teamsCountValid ? ' OK.' : ' Mismatch detected. Please review team assignments in Participants page.'}
+                    </p>
+                  )}
+                  {!bonusApiAvailable && (
+                    <p className="text-xs mt-1 text-amber-700">
+                      Bonus editing is currently unavailable on this server build. Standings still load using score totals.
+                    </p>
+                  )}
+                  {!additionalApiAvailable && hasAdditionalScores && (
+                    <p className="text-xs mt-1 text-amber-700">
+                      Additional score editing is currently unavailable on this server build.
+                    </p>
+                  )}
+                </>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            <div className="flex flex-wrap items-center gap-2 w-full md:flex-1">
+              {!isStandingsScreenMode && (
+                <div className="w-full md:w-auto flex justify-center">
+                <div className={`flex items-center gap-1 ${segmentedTabContainerClass} p-0.5`}>
+                  <button
+                    onClick={() => setStandingsMode('players')}
+                    className={getSegmentedTabButtonClass(standingsMode === 'players', 'compact', 'px-2.5 py-1 text-[10px]')}
+                  >
+                    Players
+                  </button>
+
+                  {standingsMode === 'players' && !isTeamTournament && (
+                    <div className="flex items-center gap-1 ml-0.5">
+                      <button
+                        onClick={() => setGenderFilter('all')}
+                        className={`px-1.5 py-0.5 rounded font-bold text-[11px] border ${genderFilter === 'all' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-white text-black/50 border-black/10'} transition-colors`}
+                        title="Show all"
+                      >
+                        All
+                      </button>
+                      <button
+                        onClick={() => setGenderFilter('female')}
+                        className={`px-1.5 py-0.5 rounded font-bold text-[11px] border ${genderFilter === 'female' ? 'bg-pink-100 text-pink-700 border-pink-300' : 'bg-white text-black/50 border-black/10'} transition-colors`}
+                        title="Show only female (F)"
+                      >
+                        F
+                      </button>
+                      <button
+                        onClick={() => setGenderFilter('male')}
+                        className={`px-1.5 py-0.5 rounded font-bold text-[11px] border ${genderFilter === 'male' ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-white text-black/50 border-black/10'} transition-colors`}
+                        title="Show only male (M)"
+                      >
+                        M
+                      </button>
+                    </div>
+                  )}
+
+                  {isTeamTournament && (
+                    <button
+                      onClick={() => setStandingsMode('teams')}
+                      className={getSegmentedTabButtonClass(standingsMode === 'teams', 'compact', 'px-2.5 py-1 text-[10px]')}
+                    >
+                      Teams
+                    </button>
+                  )}
+                </div>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:ml-auto md:justify-end">
               {!isStandingsScreenMode && !isPublicView && (
                 <>
                   {onPresentStandingsScreen && (
-                    <Button variant="outline" onClick={onPresentStandingsScreen} title="Present Standings Screen" ariaLabel="Present Standings Screen">
+                    <Button
+                      variant="outline"
+                      onClick={() => onPresentStandingsScreen({ mode: standingsMode, gender: genderFilter })}
+                      title="Present Standings Screen"
+                      ariaLabel="Present Standings Screen"
+                    >
                       <Eye size={14} />
                     </Button>
                   )}
@@ -11909,67 +12623,19 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
                   <Printer size={14} />
                 </Button>
               )}
-            </div>
-          </div>
-          {!isStandingsScreenMode && (
-          <div className="px-6 py-2 border-b border-black/5 bg-white/95">
-            <div className={`flex flex-wrap gap-2 items-center ${segmentedTabContainerClass} w-fit`}>
-              <button
-                onClick={() => setStandingsMode('players')}
-                className={getSegmentedTabButtonClass(standingsMode === 'players', 'compact')}
-              >
-                Players
-              </button>
-              {/* Gender sorting buttons for player standings */}
-              {standingsMode === 'players' && !isTeamTournament && (
-                <div className="flex gap-1 ml-2">
-                  <button
-                    onClick={() => setGenderFilter('all')}
-                    className={`px-2 py-1 rounded font-bold text-xs border ${genderFilter === 'all' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-white text-black/50 border-black/10'} transition-colors`}
-                    title="Show all"
-                  >
-                    All
-                  </button>
-                  <button
-                    onClick={() => setGenderFilter('female')}
-                    className={`px-2 py-1 rounded font-bold text-xs border ${genderFilter === 'female' ? 'bg-pink-100 text-pink-700 border-pink-300' : 'bg-white text-black/50 border-black/10'} transition-colors`}
-                    title="Show only female (F)"
-                  >
-                    {/* You can replace with a gender icon if desired */}
-                    F
-                  </button>
-                  <button
-                    onClick={() => setGenderFilter('male')}
-                    className={`px-2 py-1 rounded font-bold text-xs border ${genderFilter === 'male' ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-white text-black/50 border-black/10'} transition-colors`}
-                    title="Show only male (M)"
-                  >
-                    {/* You can replace with a gender icon if desired */}
-                    M
-                  </button>
-                </div>
-              )}
-              {/* Only show Teams tab if team tournament */}
-              {isTeamTournament && (
-                <button
-                  onClick={() => setStandingsMode('teams')}
-                  className={getSegmentedTabButtonClass(standingsMode === 'teams', 'compact')}
-                >
-                  Teams
-                </button>
-              )}
+              </div>
             </div>
           </div>
           )}
-          {isStandingsScreenMode && (
-            <div
-              ref={standingsHeaderScrollRef}
-              className="overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]"
-            >
-              <table className="w-full min-w-[920px] text-left border-collapse">
-                {renderStandingsHeader()}
-              </table>
-            </div>
-          )}
+          <div
+            ref={standingsHeaderScrollRef}
+            className={`${isStandingsScreenMode ? 'overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]' : 'sticky top-[7.25rem] z-30 overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]'}`}
+          >
+            <table className="w-full min-w-[760px] text-left border-collapse table-fixed">
+              {renderStandingsColGroup()}
+              {renderStandingsHeader()}
+            </table>
+          </div>
           <div
             ref={(node) => {
               standingsScrollRef.current = node;
@@ -11983,13 +12649,13 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
               if (isStandingsScreenMode) setIsAutoScrollPaused(false);
             }}
           >
-          <table ref={standingsTableRef} className="w-full min-w-[920px] text-left border-collapse">
-            {!isStandingsScreenMode && renderStandingsHeader()}
+          <table ref={standingsTableRef} className="w-full min-w-[760px] text-left border-collapse table-fixed">
+            {renderStandingsColGroup()}
             <tbody className="divide-y divide-black/5">
               {standingsMode === 'players' && filteredPlayerStandingsRows.map((s, idx) => (
                 <tr key={s.participant_id} className="hover:bg-[#AFDDE5]/20 transition-colors">
-                  <td className="px-3 py-2 text-[13px] font-bold text-black/60 sticky left-0 z-[2] bg-white">{idx + 1}</td>
-                  <td className="px-3 py-2 text-[13px] font-bold leading-tight sticky left-12 z-[2] bg-white">
+                  <td className="px-2 py-1.5 text-xs font-bold text-black/60 sticky left-0 z-[2] bg-white">{idx + 1}</td>
+                  <td className="px-2 py-1.5 text-xs font-bold leading-tight sticky left-12 z-[2] bg-white">
                     <span className="inline-flex items-center gap-1.5">
                       {renderFemaleInitialUnderline(
                         s.participant_name,
@@ -11997,15 +12663,15 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
                       )}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-center font-bold text-xs text-black/60">
+                  <td className="px-2.5 py-1.5 text-center font-bold text-[11px] text-black/60">
                     {s.hands}
                   </td>
-                  <td className="px-6 py-4 text-black/40 text-sm">
+                  <td className="px-2.5 py-1.5 text-black/70 text-[13px] font-medium leading-tight">
                     {s.club}
                   </td>
                   {/* Only show team column if team tournament and standingsMode is players */}
                   {standingsMode === 'players' && isTeamTournament && (
-                    <td className="px-6 py-4 text-black/40 text-sm">{s.team_name}</td>
+                    <td className="px-2.5 py-1.5 text-black/40 text-xs">{s.team_name}</td>
                   )}
                   {gameNumbers.map((gameNumber, gameIndex) => {
                     const value = s.games[gameIndex] ?? 0;
@@ -12018,13 +12684,13 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
                         ? 'text-rose-700 font-bold'
                         : '';
                     return (
-                      <td key={`game-td-${s.participant_id}-${gameNumber}`} className={`px-6 py-4 text-center ${cellClass}`}> 
+                      <td key={`game-td-${s.participant_id}-${gameNumber}`} className={`px-2.5 py-1.5 text-center text-sm ${cellClass}`}>
                         {value}
                       </td>
                     );
                   })}
-                  <td className="px-6 py-4 text-right text-black/50">{s.total}</td>
-                  {hasAdditionalScores && <td className="px-6 py-4 text-center text-violet-700">
+                  <td className="px-2.5 py-1.5 text-right text-black/50 text-sm">{s.total}</td>
+                  {hasAdditionalScores && <td className="px-2.5 py-1.5 text-center text-violet-700">
                     {(() => {
                       const aKey = toBonusKey('participant', s.participant_id);
                       const liveValue = additionalDrafts[aKey] !== undefined ? additionalDrafts[aKey] : String(s.additional);
@@ -12036,12 +12702,12 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
                           onBlur={(e) => persistAdditional('participant', s.participant_id, e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
                           disabled={savingAdditionalKey === aKey}
-                          className="w-12 mx-auto px-1 py-1 rounded border border-violet-200 focus:outline-none focus:ring-2 focus:ring-violet-200 text-center"
+                          className="w-14 mx-auto px-1.5 py-0.5 rounded border border-violet-200 focus:outline-none focus:ring-2 focus:ring-violet-200 text-center text-xs"
                         />
                       ) : s.additional;
                     })()}
                   </td>}
-                  {hasBonus && <td className="px-6 py-4 text-center text-emerald-700">
+                  {hasBonus && <td className="px-2.5 py-1.5 text-center text-emerald-700">
                     {(() => {
                       const bonusKey = toBonusKey('participant', s.participant_id);
                       const liveValue = bonusDrafts[bonusKey] !== undefined ? bonusDrafts[bonusKey] : String(s.bonus);
@@ -12053,18 +12719,18 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
                           onBlur={(e) => persistBonus('participant', s.participant_id, e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
                           disabled={savingBonusKey === bonusKey}
-                          className="w-12 mx-auto px-1 py-1 rounded border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 text-center"
+                          className="w-14 mx-auto px-1.5 py-0.5 rounded border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 text-center text-xs"
                         />
                       ) : s.bonus;
                     })()}
                   </td>}
                   <td
-                      className="px-6 py-4 text-right font-bold"
+                      className="px-2.5 py-1.5 text-right font-bold text-sm"
                     >
                       {s.grand_total}
                     </td>
                   <td
-                    className={`px-6 py-4 text-center text-black/60 ${
+                    className={`px-2.5 py-1.5 text-center text-black/60 text-sm ${
                       maleTopAvgIds.has(s.participant_id)
                         ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200 font-bold'
                         : femaleTopAvgIds.has(s.participant_id)
@@ -12078,9 +12744,9 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
               ))}
               {standingsMode === 'teams' && teamStandingsRows.map((s, idx) => (
                 <tr key={s.key} className="hover:bg-[#AFDDE5]/20 transition-colors">
-                  <td className="px-3 py-2 text-[13px] font-bold text-black/60 sticky left-0 z-[2] bg-white">{idx + 1}</td>
-                  <td className="px-3 py-2 leading-tight sticky left-12 z-[2] bg-white">
-                    <div className="text-[13px] font-bold">{s.team_name}</div>
+                  <td className="px-2 py-1.5 text-xs font-bold text-black/60 sticky left-0 z-[2] bg-white">{idx + 1}</td>
+                  <td className="px-2 py-1.5 leading-tight sticky left-12 z-[2] bg-white">
+                    <div className="text-xs font-bold">{s.team_name}</div>
                     <div className="text-[10px] text-black/50 lowercase mt-0.5">
                       {s.members.length > 0 ? s.members.join(', ') : 'no members'}
                     </div>
@@ -12088,11 +12754,11 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
                   {gameNumbers.map((gameNumber, gameIndex) => {
                     const value = s.games[gameIndex] ?? 0;
                     return (
-                      <td key={`game-td-${s.key}-${gameNumber}`} className="px-6 py-4 text-center">{value}</td>
+                      <td key={`game-td-${s.key}-${gameNumber}`} className="px-2.5 py-1.5 text-center text-sm">{value}</td>
                     );
                   })}
-                  <td className="px-6 py-4 text-right text-black/50">{s.total}</td>
-                  {hasAdditionalScores && <td className="px-6 py-4 text-center text-violet-700">
+                  <td className="px-2.5 py-1.5 text-right text-black/50 text-sm">{s.total}</td>
+                  {hasAdditionalScores && <td className="px-2.5 py-1.5 text-center text-violet-700">
                     {(() => {
                       if (!s.team_id) return s.additional;
                       const aKey = toBonusKey('team', s.team_id);
@@ -12105,12 +12771,12 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
                           onBlur={(e) => persistAdditional('team', s.team_id as number, e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
                           disabled={savingAdditionalKey === aKey}
-                          className="w-12 mx-auto px-1 py-1 rounded border border-violet-200 focus:outline-none focus:ring-2 focus:ring-violet-200 text-center"
+                          className="w-14 mx-auto px-1.5 py-0.5 rounded border border-violet-200 focus:outline-none focus:ring-2 focus:ring-violet-200 text-center text-xs"
                         />
                       ) : s.additional;
                     })()}
                   </td>}
-                  {hasBonus && <td className="px-6 py-4 text-center text-emerald-700">
+                  {hasBonus && <td className="px-2.5 py-1.5 text-center text-emerald-700">
                     {(() => {
                       if (!s.team_id) return s.bonus;
                       const bonusKey = toBonusKey('team', s.team_id);
@@ -12123,15 +12789,15 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
                           onBlur={(e) => persistBonus('team', s.team_id as number, e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
                           disabled={savingBonusKey === bonusKey}
-                          className="w-12 mx-auto px-1 py-1 rounded border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 text-center"
+                          className="w-14 mx-auto px-1.5 py-0.5 rounded border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 text-center text-xs"
                         />
                       ) : s.bonus;
                     })()}
                   </td>}
-                  <td className="px-6 py-4 text-right font-bold">{s.grand_total}</td>
+                  <td className="px-2.5 py-1.5 text-right font-bold text-sm">{s.grand_total}</td>
                 </tr>
               ))}
-              {((standingsMode === 'players' && playerStandingsRows.length === 0) || (standingsMode === 'teams' && teamStandingsRows.length === 0)) && (
+              {((standingsMode === 'players' && filteredPlayerStandingsRows.length === 0) || (standingsMode === 'teams' && teamStandingsRows.length === 0)) && (
                 <tr>
                   {(() => {
                     // players: Rank + Name + Club + (Team if team tournament) + games + Total + [optional extras] + GrandTotal + Avg
@@ -12149,6 +12815,67 @@ function StandingsView({ tournament, role, onPresentStandingsScreen, standingsSc
             </tbody>
           </table>
           </div>
+
+          {isStandingsScreenMode && standingsPresentAdBlock.enabled && (
+            <>
+              <div className="hidden xl:block absolute top-0 bottom-0 left-0 -translate-x-full -ml-1 z-30 w-[15.5rem] border-r border-black/10 bg-white/90 backdrop-blur-sm">
+                <div className="h-full p-2">
+                  <div className="h-full rounded-lg border border-black/10 bg-white shadow-sm overflow-hidden p-2">
+                    <div className="relative h-full w-full rounded-md border border-black/15 bg-black/[0.02]">
+                      {standingsPresentAdBlock.left.image ? (
+                        <a
+                          href={(standingsPresentAdBlock.left.link || '#')}
+                          target={standingsPresentAdBlock.left.link ? '_blank' : undefined}
+                          rel={standingsPresentAdBlock.left.link ? 'noopener noreferrer' : undefined}
+                          className="h-full w-full flex items-center justify-center p-3"
+                          title="Standings left ad"
+                        >
+                          <img
+                            src={standingsPresentAdBlock.left.image}
+                            alt="Standings left ad"
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        </a>
+                      ) : (
+                        <div className="h-full w-full flex flex-col items-center justify-center px-3 text-center">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-black/70">Ad Space</p>
+                          <p className="text-[11px] text-black/45 mt-1">Animated image can be placed here</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="hidden xl:block absolute top-0 bottom-0 right-0 translate-x-full mr-1 z-30 w-[15.5rem] border-l border-black/10 bg-white/90 backdrop-blur-sm">
+                <div className="h-full p-2">
+                  <div className="h-full rounded-lg border border-black/10 bg-white shadow-sm overflow-hidden p-2">
+                    <div className="relative h-full w-full rounded-md border border-black/15 bg-black/[0.02]">
+                      {standingsPresentAdBlock.right.image ? (
+                        <a
+                          href={(standingsPresentAdBlock.right.link || '#')}
+                          target={standingsPresentAdBlock.right.link ? '_blank' : undefined}
+                          rel={standingsPresentAdBlock.right.link ? 'noopener noreferrer' : undefined}
+                          className="h-full w-full flex items-center justify-center p-3"
+                          title="Standings right ad"
+                        >
+                          <img
+                            src={standingsPresentAdBlock.right.image}
+                            alt="Standings right ad"
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        </a>
+                      ) : (
+                        <div className="h-full w-full flex flex-col items-center justify-center px-3 text-center">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-black/70">Ad Space</p>
+                          <p className="text-[11px] text-black/45 mt-1">Animated image can be placed here</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </Card>
       </div>
     </div>
