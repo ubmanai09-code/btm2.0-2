@@ -24,6 +24,7 @@ import {
   ArchiveRestore,
   Printer,
   BrushCleaning,
+  GripVertical,
   X,
   LogIn,
   LogOut,
@@ -115,6 +116,14 @@ const DEFAULT_SPONSORS_CONFIG: SponsorsConfig = {
 const SPONSORS_CONFIG_OVERRIDE_KEY = 'btm_sponsors_config_override';
 const SPONSORS_CONFIG_CACHE_KEY = 'btm_sponsors_config_cache';
 
+const normalizeWebUrl = (value: unknown): string => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  if (/^(https?:)?\/\//i.test(raw) || /^(data:|blob:)/i.test(raw)) return raw;
+  if (/^www\./i.test(raw)) return `https://${raw}`;
+  return raw;
+};
+
 const normalizeSponsorInfoList = (value: any): SponsorInfo[] => {
   if (!Array.isArray(value)) return [];
   return value
@@ -150,8 +159,8 @@ const normalizeSponsorsConfig = (value: any): SponsorsConfig => {
     enabled: rawDashboardPromo?.enabled !== false,
     title: String(rawDashboardPromo?.title || DEFAULT_DASHBOARD_PROMO.title),
     subtitle: String(rawDashboardPromo?.subtitle || DEFAULT_DASHBOARD_PROMO.subtitle),
-    image: String(rawDashboardPromo?.image || ''),
-    link: String(rawDashboardPromo?.link || ''),
+    image: normalizeWebUrl(rawDashboardPromo?.image || ''),
+    link: normalizeWebUrl(rawDashboardPromo?.link || ''),
   };
 
   return {
@@ -536,6 +545,35 @@ export default function App() {
   });
   const [publicDictionary, setPublicDictionary] = useState<Map<string, BilingualTerm>>(new Map());
   const isAdmin = currentRole === 'admin';
+  const scoreScreenQueryParams = (() => {
+    if (typeof window === 'undefined') {
+      return {
+        tournamentId: null as number | null,
+        tab: null as 'participants' | 'lanes' | 'scoring' | 'brackets' | 'standings' | null,
+        forcePublic: false,
+        scoreScreen: false,
+        standingsScreen: false,
+      };
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const tournamentIdRaw = Number.parseInt(String(params.get('tournament') || ''), 10);
+    const tabRaw = String(params.get('tab') || '').trim().toLowerCase();
+    const tab = tabRaw === 'participants' || tabRaw === 'lanes' || tabRaw === 'scoring' || tabRaw === 'brackets' || tabRaw === 'standings'
+      ? tabRaw
+      : null;
+    const forcePublic = params.get('public') === '1';
+    const scoreScreen = params.get('screen') === 'score';
+    const standingsScreen = params.get('screen') === 'standings';
+
+    return {
+      tournamentId: Number.isFinite(tournamentIdRaw) && tournamentIdRaw > 0 ? tournamentIdRaw : null,
+      tab,
+      forcePublic,
+      scoreScreen,
+      standingsScreen,
+    };
+  })();
 
   useEffect(() => {
     fetch('/i18n-en-mn.csv')
@@ -709,6 +747,11 @@ export default function App() {
   }, [authToken, lockedRole]);
 
   useEffect(() => {
+    if (!scoreScreenQueryParams.forcePublic) return;
+    setCurrentRole('public');
+  }, [scoreScreenQueryParams.forcePublic]);
+
+  useEffect(() => {
     if (!originalFetchRef.current) {
       originalFetchRef.current = window.fetch.bind(window);
     }
@@ -763,6 +806,18 @@ export default function App() {
     try {
       const data = await api.getTournaments();
       setTournaments(data);
+
+      if (scoreScreenQueryParams.tournamentId) {
+        const routedTournament = data.find((item) => item.id === scoreScreenQueryParams.tournamentId);
+        if (routedTournament) {
+          setSelectedTournament(routedTournament);
+          setView('detail');
+          if (scoreScreenQueryParams.tab) {
+            setActiveTab(scoreScreenQueryParams.tab);
+          }
+          return;
+        }
+      }
       
       // Restore selected tournament if applicable
       const savedId = localStorage.getItem('btm_selected_id');
@@ -1870,9 +1925,10 @@ export default function App() {
                       <div className="rounded-lg border border-black/10 bg-white overflow-hidden">
                         {dashboardPromo.image ? (
                           <img
-                            src={dashboardPromo.image}
+                            src={normalizeWebUrl(dashboardPromo.image)}
                             alt={dashboardPromo.title || 'Dashboard promo image'}
                             className="w-full h-44 object-cover"
+                            referrerPolicy="no-referrer"
                           />
                         ) : (
                           <div className="h-44 flex items-center justify-center text-sm text-black/45 bg-black/[0.02]">
@@ -1887,8 +1943,8 @@ export default function App() {
                           <p className="text-xs text-black/55 mt-1">{dashboardPromo.subtitle}</p>
                         )}
                         {dashboardPromo.link && (
-                          <a href={dashboardPromo.link} target="_blank" rel="noreferrer" className="text-xs text-emerald-700 underline break-all mt-1 inline-block">
-                            {dashboardPromo.link}
+                          <a href={normalizeWebUrl(dashboardPromo.link)} target="_blank" rel="noreferrer" className="text-xs text-emerald-700 underline break-all mt-1 inline-block">
+                            {normalizeWebUrl(dashboardPromo.link)}
                           </a>
                         )}
                       </div>
@@ -2325,6 +2381,8 @@ export default function App() {
               role={currentRole}
               tPublic={tPublic}
               sponsorsConfig={sponsorsConfig}
+              scoreScreenMode={scoreScreenQueryParams.scoreScreen}
+              standingsScreenMode={scoreScreenQueryParams.standingsScreen}
             />
           )}
       </main>
@@ -2775,9 +2833,10 @@ export default function App() {
                   <div className="w-full h-40 rounded-md border border-black/10 bg-white overflow-hidden">
                     {sponsorsConfigDraft.dashboardPromo?.image ? (
                       <img
-                        src={sponsorsConfigDraft.dashboardPromo.image}
+                        src={normalizeWebUrl(sponsorsConfigDraft.dashboardPromo.image)}
                         alt="Dashboard promo preview"
                         className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-sm text-black/45 bg-black/[0.02]">
@@ -2860,7 +2919,7 @@ export default function App() {
 
 // --- Sub-Views ---
 
-function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, activeTab, setActiveTab, role, tPublic, sponsorsConfig }: {
+function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, activeTab, setActiveTab, role, tPublic, sponsorsConfig, scoreScreenMode, standingsScreenMode }: {
   tournament: Tournament,
   onBack: () => void,
   onEdit: (t: Tournament) => void,
@@ -2870,6 +2929,8 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
   role: UserRole,
   tPublic: (key: string, fallback: string) => string,
   sponsorsConfig: SponsorsConfig,
+  scoreScreenMode?: boolean,
+  standingsScreenMode?: boolean,
 }) {
   const t = tPublic;
   const [moderatorAccess, setModeratorAccess] = useState<ModeratorTournamentAccess | null>(null);
@@ -2888,6 +2949,9 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
   const [showModeratorPanel, setShowModeratorPanel] = useState(false);
   const [isTournamentCardCollapsed, setIsTournamentCardCollapsed] = useState(true);
   const [isDesktopTournamentHeader, setIsDesktopTournamentHeader] = useState(false);
+  const isScoreScreenMode = Boolean(scoreScreenMode);
+  const isStandingsScreenMode = Boolean(standingsScreenMode);
+  const isPresentScreenMode = isScoreScreenMode || isStandingsScreenMode;
 
   const loadAccessData = async () => {
     if (role !== 'admin' && role !== 'moderator') {
@@ -3050,8 +3114,39 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
     return () => mediaQuery.removeEventListener('change', applyMode);
   }, []);
 
+  useEffect(() => {
+    if (isScoreScreenMode && activeTab !== 'scoring') {
+      setActiveTab('scoring');
+      return;
+    }
+    if (isStandingsScreenMode && activeTab !== 'standings') {
+      setActiveTab('standings');
+    }
+  }, [isScoreScreenMode, isStandingsScreenMode, activeTab, setActiveTab]);
+
+  const openScoreScreenMode = () => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('tournament', String(tournament.id));
+    url.searchParams.set('tab', 'scoring');
+    url.searchParams.set('public', '1');
+    url.searchParams.set('screen', 'score');
+    window.open(url.toString(), '_blank', 'noopener,noreferrer');
+  };
+
+  const openStandingsScreenMode = () => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('tournament', String(tournament.id));
+    url.searchParams.set('tab', 'standings');
+    url.searchParams.set('public', '1');
+    url.searchParams.set('screen', 'standings');
+    window.open(url.toString(), '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <div className="space-y-4">
+      {!isPresentScreenMode && (
       <div className="space-y-4">
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_430px] gap-4">
           <Card className="p-2 border border-emerald-200 bg-gradient-to-br from-white via-emerald-50/60 to-[#AFDDE5]/35 shadow-sm xl:col-span-2">
@@ -3157,7 +3252,9 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
 
       </div>
       </div>
+      )}
 
+      {!isPresentScreenMode && (
       <div className="sticky top-16 z-40 bg-white/95 backdrop-blur-sm border-b border-orange-100 shadow-sm px-0 py-2">
         <div className={`${segmentedTabContainerOrangeClass} w-full grid grid-cols-3 gap-1 justify-items-center sm:w-auto sm:inline-flex sm:min-w-max`}>
           <button
@@ -3188,13 +3285,14 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
           ))}
         </div>
       </div>
+      )}
 
       <div className="min-h-[400px]">
         {activeTab === 'participants' && <ParticipantView tournament={tournament} role={effectiveRole} />}
         {activeTab === 'lanes' && <LaneView tournament={tournament} role={effectiveRole} />}
-        {activeTab === 'scoring' && <ScoringView tournament={tournament} role={effectiveRole} />}
+        {activeTab === 'scoring' && <ScoringView tournament={tournament} role={effectiveRole} onPresentScoreScreen={openScoreScreenMode} scoreScreenMode={isScoreScreenMode} />}
         {activeTab === 'brackets' && <BracketsView tournament={tournament} role={effectiveRole} onTournamentUpdated={onTournamentUpdated} />}
-        {activeTab === 'standings' && <StandingsView tournament={tournament} role={effectiveRole} />}
+        {activeTab === 'standings' && <StandingsView tournament={tournament} role={effectiveRole} onPresentStandingsScreen={openStandingsScreenMode} standingsScreenMode={isStandingsScreenMode} />}
       </div>
     </div>
   );
@@ -4767,16 +4865,26 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   const [loading, setLoading] = useState(true);
   const [currentShift, setCurrentShift] = useState(1);
   const [selectedItem, setSelectedItem] = useState<{ id: number, type: 'assignment' | 'waiting' } | null>(null);
-  const [outOfOperationLanes, setOutOfOperationLanes] = useState<number[]>([]);
+  const [outOfOperationLanesByShift, setOutOfOperationLanesByShift] = useState<Record<number, number[]>>({});
+  const [draggingAssignment, setDraggingAssignment] = useState<{ assignmentId: number; laneNumber: number; shiftNumber: number } | null>(null);
+  const [isDesktopViewport, setIsDesktopViewport] = useState(false);
   const [lanePickerLaneNumber, setLanePickerLaneNumber] = useState<number | null>(null);
+  const [lanePickerShift, setLanePickerShift] = useState(1);
   const [lanePickerSearchQuery, setLanePickerSearchQuery] = useState('');
   const say = (message: string) => alert(tx(message));
   const ask = (message: string) => confirm(tx(message));
 
   useEffect(() => {
-    setOutOfOperationLanes([]);
+    setOutOfOperationLanesByShift({});
     loadData();
   }, [tournament.id]);
+
+  useEffect(() => {
+    const updateViewportFlag = () => setIsDesktopViewport(window.innerWidth >= 768);
+    updateViewportFlag();
+    window.addEventListener('resize', updateViewportFlag);
+    return () => window.removeEventListener('resize', updateViewportFlag);
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -4806,16 +4914,20 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   };
 
   const eligibleParticipants = participants.filter(isParticipantAllowedByRule);
-  const operationalLaneNumbers = Array.from({ length: tournament.lanes_count }, (_, i) => i + 1)
-    .filter((laneNumber) => !outOfOperationLanes.includes(laneNumber));
+  const getOutOfOperationLanes = (shiftNumber: number) => outOfOperationLanesByShift[shiftNumber] || [];
+  const getOperationalLaneNumbers = (shiftNumber: number) =>
+    Array.from({ length: tournament.lanes_count }, (_, i) => i + 1)
+      .filter((laneNumber) => !getOutOfOperationLanes(shiftNumber).includes(laneNumber));
 
-  const toggleLaneOperationStatus = (laneNumber: number) => {
+  const toggleLaneOperationStatus = (laneNumber: number, shiftNumber: number) => {
     if (!canManageLanes) return;
-    setOutOfOperationLanes((prev) => (
-      prev.includes(laneNumber)
-        ? prev.filter((value) => value !== laneNumber)
-        : [...prev, laneNumber]
-    ));
+    setOutOfOperationLanesByShift((prev) => {
+      const current = prev[shiftNumber] || [];
+      const next = current.includes(laneNumber)
+        ? current.filter((value) => value !== laneNumber)
+        : [...current, laneNumber];
+      return { ...prev, [shiftNumber]: next };
+    });
   };
 
   const handleAutoAssign = async () => {
@@ -4826,13 +4938,21 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       return;
     }
 
-    const activeLaneCount = operationalLaneNumbers.length;
-    if (activeLaneCount === 0) {
+    const shiftNumbers = Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1);
+    const operationalByShift = shiftNumbers.map((shiftNumber) => ({
+      shiftNumber,
+      laneNumbers: getOperationalLaneNumbers(shiftNumber),
+    }));
+
+    const totalCapacity = operationalByShift.reduce(
+      (sum, shiftData) => sum + (shiftData.laneNumbers.length * tournament.players_per_lane),
+      0
+    );
+    if (totalCapacity === 0) {
       say('All lanes are set to out of operation. Mark at least one lane as operational to auto-assign.');
       return;
     }
 
-    const totalCapacity = activeLaneCount * tournament.players_per_lane * Math.max(1, tournament.shifts_count || 1);
     if (totalCapacity <= 0) {
       say('Tournament lane capacity is invalid. Please check lanes, shifts, and players per lane.');
       return;
@@ -4845,15 +4965,22 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     }
 
     const assignable = shuffled.slice(0, totalCapacity);
-    const perShiftCapacity = activeLaneCount * tournament.players_per_lane;
-    const assignments: Partial<LaneAssignment>[] = assignable.map((item, index) => {
-      const shiftNumber = Math.floor(index / perShiftCapacity) + 1;
-      const laneSlotIndex = index % perShiftCapacity;
-      const laneNumber = operationalLaneNumbers[Math.floor(laneSlotIndex / tournament.players_per_lane)];
-      return tournament.type === 'individual'
-        ? { participant_id: (item as Participant).id, lane_number: laneNumber, shift_number: shiftNumber }
-        : { team_id: (item as Team).id, lane_number: laneNumber, shift_number: shiftNumber };
-    });
+    const assignments: Partial<LaneAssignment>[] = [];
+    let assignableIndex = 0;
+
+    for (const shiftData of operationalByShift) {
+      const perShiftCapacity = shiftData.laneNumbers.length * tournament.players_per_lane;
+      for (let slot = 0; slot < perShiftCapacity && assignableIndex < assignable.length; slot += 1) {
+        const item = assignable[assignableIndex];
+        assignableIndex += 1;
+        const laneNumber = shiftData.laneNumbers[Math.floor(slot / tournament.players_per_lane)];
+        assignments.push(
+          tournament.type === 'individual'
+            ? { participant_id: (item as Participant).id, lane_number: laneNumber, shift_number: shiftData.shiftNumber }
+            : { team_id: (item as Team).id, lane_number: laneNumber, shift_number: shiftData.shiftNumber }
+        );
+      }
+    }
 
     try {
       await api.bulkUpdateLanes(tournament.id, assignments);
@@ -4869,12 +4996,12 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     }
   };
 
-  const handleMoveToLane = async (laneNumber: number) => {
+  const handleMoveToLane = async (laneNumber: number, targetShift: number = currentShift) => {
     if (!canManageLanes) return;
     if (!selectedItem) return;
 
     const currentLaneAssignments = lanes.filter(
-      (lane) => lane.lane_number === laneNumber && lane.shift_number === currentShift
+      (lane) => lane.lane_number === laneNumber && lane.shift_number === targetShift
     );
     if (currentLaneAssignments.length >= tournament.players_per_lane) {
       say('This lane is already full for the selected shift.');
@@ -4886,7 +5013,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         // Add new assignment
         const payload: Partial<LaneAssignment> = {
           lane_number: laneNumber,
-          shift_number: currentShift
+          shift_number: targetShift
         };
         if (tournament.type === 'individual') {
           const player = participants.find((p) => p.id === selectedItem.id);
@@ -4907,7 +5034,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         // Update existing assignment
         await api.updateLaneAssignment(selectedItem.id, {
           lane_number: laneNumber,
-          shift_number: currentShift
+          shift_number: targetShift
         });
       }
       setSelectedItem(null);
@@ -4917,11 +5044,11 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     }
   };
 
-  const handleAssignWaitingItemToLane = async (waitingItemId: number, laneNumber: number) => {
+  const handleAssignWaitingItemToLane = async (waitingItemId: number, laneNumber: number, targetShift: number = currentShift) => {
     if (!canManageLanes) return;
 
     const currentLaneAssignments = lanes.filter(
-      (lane) => lane.lane_number === laneNumber && lane.shift_number === currentShift
+      (lane) => lane.lane_number === laneNumber && lane.shift_number === targetShift
     );
     if (currentLaneAssignments.length >= tournament.players_per_lane) {
       say('This lane is already full for the selected shift.');
@@ -4931,7 +5058,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     try {
       const payload: Partial<LaneAssignment> = {
         lane_number: laneNumber,
-        shift_number: currentShift,
+        shift_number: targetShift,
       };
 
       if (tournament.type === 'individual') {
@@ -4951,6 +5078,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
       await api.addLaneAssignment(tournament.id, payload);
       setLanePickerLaneNumber(null);
+      setLanePickerShift(1);
       setLanePickerSearchQuery('');
       setSelectedItem(null);
       await loadData();
@@ -5000,6 +5128,34 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       });
     }
     loadData();
+  };
+
+  const handleSwapWithinLane = async (assignmentId: number, withAssignmentId: number) => {
+    if (!canManageLanes) return;
+    if (!Number.isFinite(assignmentId) || !Number.isFinite(withAssignmentId)) return;
+    if (assignmentId === withAssignmentId) return;
+    try {
+      await api.swapLaneAssignments(assignmentId, withAssignmentId);
+      setSelectedItem(null);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      say('Failed to reorder players within lane.');
+    }
+  };
+
+  const handleLaneAssignmentDrop = async (targetAssignmentId: number, laneNumber: number, shiftNumber: number) => {
+    if (!draggingAssignment) return;
+    if (draggingAssignment.assignmentId === targetAssignmentId) {
+      setDraggingAssignment(null);
+      return;
+    }
+    if (draggingAssignment.laneNumber !== laneNumber || draggingAssignment.shiftNumber !== shiftNumber) {
+      setDraggingAssignment(null);
+      return;
+    }
+    await handleSwapWithinLane(draggingAssignment.assignmentId, targetAssignmentId);
+    setDraggingAssignment(null);
   };
 
   const handleExportLanes = () => {
@@ -5222,56 +5378,65 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       return `${firstName}${lastInitial ? ` ${lastInitial}.` : ''}`.trim() || '-';
     };
 
-    const laneRowsHtml = Object.entries(groupedLanes).map(([laneNum, assignments]) => {
-      const names = assignments.map((assignment) => {
-        if (tournament.type === 'individual') {
-          const participant = participants.find((p) => p.id === assignment.participant_id);
-          return participant ? `${participant.first_name || ''} ${participant.last_name || ''}`.trim() : '';
-        }
-        return assignment.team_name || '';
-      }).filter(Boolean).join(', ') || '-';
+    const shiftsForPrint = Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1);
+    const shiftTablesHtml = shiftsForPrint.map((shift) => {
+      const grouped = groupedLanesByShift[shift] || {};
+      const laneRowsHtml = Object.entries(grouped).map(([laneNum, assignments]) => {
+        const names = assignments.map((assignment) => {
+          if (tournament.type === 'individual') {
+            const participant = participants.find((p) => p.id === assignment.participant_id);
+            return participant ? `${participant.first_name || ''} ${participant.last_name || ''}`.trim() : '';
+          }
+          return assignment.team_name || '';
+        }).filter(Boolean).join(', ') || '-';
 
-      const laneTeamMembers = tournament.type === 'team'
-        ? assignments.map((assignment) => {
-            if (!assignment.team_id) return '';
-            const members = participants
-              .filter((participant) => participant.team_id === assignment.team_id)
-              .map((participant) => formatPrintMemberName(participant))
-              .filter(Boolean)
-              .join(', ');
-            return members || '';
-          }).filter(Boolean).join(' | ') || '-'
-        : '';
+        const laneTeamMembers = tournament.type === 'team'
+          ? assignments.map((assignment) => {
+              if (!assignment.team_id) return '';
+              const members = participants
+                .filter((participant) => participant.team_id === assignment.team_id)
+                .map((participant) => formatPrintMemberName(participant))
+                .filter(Boolean)
+                .join(', ');
+              return members || '';
+            }).filter(Boolean).join(' | ') || '-'
+          : '';
+
+        return `
+          <tr>
+            <td>${laneNum}</td>
+            <td>${names}</td>
+            ${tournament.type === 'team' ? `<td>${laneTeamMembers}</td>` : ''}
+          </tr>
+        `;
+      }).join('');
 
       return `
-        <tr>
-          <td>${laneNum}</td>
-          <td>${names}</td>
-          ${tournament.type === 'team' ? `<td>${laneTeamMembers}</td>` : ''}
-        </tr>
+        <h3>${tx('Shift')} ${shift}</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>${tx('Lane')}</th>
+              <th>${tournament.type === 'individual' ? tx('Players') : tx('Teams')}</th>
+              ${tournament.type === 'team' ? `<th>${tx('Team Members')}</th>` : ''}
+            </tr>
+          </thead>
+          <tbody>
+            ${laneRowsHtml}
+          </tbody>
+        </table>
       `;
     }).join('');
 
     const lanesContentHtml = `
       <h2>${tx('Lanes')}</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>${tx('Lane')}</th>
-            <th>${tournament.type === 'individual' ? tx('Players') : tx('Teams')}</th>
-            ${tournament.type === 'team' ? `<th>${tx('Team Members')}</th>` : ''}
-          </tr>
-        </thead>
-        <tbody>
-          ${laneRowsHtml}
-        </tbody>
-      </table>
+      ${shiftTablesHtml}
     `;
 
     writeAndPrintDocument(printWindow, buildPrintDocument({
       tournament,
       pageTitle: `${tournament.name} - ${tx('Lane Assignments')}`,
-      pageSubtitle: `${tx('Lane Assignments')} • ${tx('Shift')} ${currentShift}`,
+      pageSubtitle: tournament.shifts_count > 1 ? `${tx('Lane Assignments')} • ${tx('All Shifts')}` : `${tx('Lane Assignments')} • ${tx('Shift')} 1`,
       contentHtml: lanesContentHtml,
     }));
   };
@@ -5295,10 +5460,23 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     return teamName.includes(normalizedLanePickerSearch);
   });
 
-  const groupedLanes: Record<number, LaneAssignment[]> = {};
-  for (let i = 1; i <= tournament.lanes_count; i++) {
-    groupedLanes[i] = lanes.filter(l => l.lane_number === i && l.shift_number === currentShift);
-  }
+  const shifts = Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1);
+  const groupedLanesByShift: Record<number, Record<number, LaneAssignment[]>> = {};
+  shifts.forEach((shift) => {
+    const grouped: Record<number, LaneAssignment[]> = {};
+    for (let i = 1; i <= tournament.lanes_count; i++) {
+      grouped[i] = lanes
+        .filter((lane) => lane.lane_number === i && lane.shift_number === shift)
+        .sort((a, b) => a.id - b.id);
+    }
+    groupedLanesByShift[shift] = grouped;
+  });
+
+  const waitingQueueHeightClass = waitingQueue.length > 16
+    ? 'max-h-[184px]'
+    : waitingQueue.length > 8
+      ? 'max-h-[128px]'
+      : 'max-h-[72px]';
 
   return (
     <div className="space-y-6">
@@ -5318,51 +5496,34 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         </div>
       </div>
 
-      {/* Shift Selector */}
-      {tournament.shifts_count > 1 && (
-        <div className={`sticky top-[7.25rem] z-30 ${segmentedTabContainerClass} w-fit`}>
-          {Array.from({ length: tournament.shifts_count }, (_, i) => i + 1).map(s => (
-            <button
-              key={s}
-              onClick={() => setCurrentShift(s)}
-              className={getSegmentedTabButtonClass(currentShift === s, 'compact')}
-            >
-              {tx('Shift')} {s}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+      <div className="space-y-2">
         {/* Waiting Queue */}
-        <div className="lg:col-span-1 space-y-4">
-          <Card className="p-3 border-[#AFDDE5]/60 bg-white">
-            <h4 className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 mb-3 flex items-center justify-between">
-              {tx('Waiting Queue')}
-              <span className="bg-emerald-100 px-1.5 py-0.5 rounded text-emerald-800">{waitingQueue.length}</span>
-            </h4>
-            <div className="space-y-2 max-h-[600px] overflow-y-auto no-scrollbar">
-              {waitingQueue.length === 0 ? (
-                <p className="text-xs text-black/20 italic text-center py-8">{tx('All assigned')}</p>
-              ) : (
-                waitingQueue.map(item => {
-                  const teamMembers = tournament.type === 'team' 
+        {waitingQueue.length > 0 && (
+          <div className="w-full xl:flex-1 xl:min-w-0">
+            <Card className="p-1 border-[#AFDDE5]/60 bg-white">
+              <h4 className="text-[9px] font-bold uppercase tracking-widest text-emerald-700 mb-1 flex items-center justify-between">
+                {tx('Waiting Queue')}
+                <span className="bg-emerald-100 px-1 py-0 rounded text-emerald-700 text-[8px]">{waitingQueue.length}</span>
+              </h4>
+              <div className={`flex flex-wrap gap-1 overflow-y-auto no-scrollbar ${waitingQueueHeightClass}`}>
+                {waitingQueue.map(item => {
+                  const teamMembers = tournament.type === 'team'
                     ? participants.filter(p => p.team_id === item.id)
                     : [];
 
                   return (
-                    <div 
+                    <div
                       key={item.id}
                       onClick={() => setSelectedItem({ id: item.id, type: 'waiting' })}
-                      className={`p-2 rounded border transition-all cursor-pointer group ${
+                      className={`min-w-[150px] flex-1 p-1 rounded border transition-all cursor-pointer group ${
                         selectedItem?.id === item.id && selectedItem.type === 'waiting'
-                        ? 'bg-emerald-700 text-white border-emerald-700'
-                        : 'bg-white border-black/10 hover:border-emerald-300 hover:bg-emerald-50/30'
+                          ? 'bg-emerald-700 text-white border-emerald-700'
+                          : 'bg-white border-black/10 hover:border-emerald-300 hover:bg-emerald-50/30'
                       }`}
                     >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="text-sm font-bold uppercase tracking-wide flex items-center gap-1">
+                      <div className="flex justify-between items-center gap-1">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-bold uppercase tracking-wide flex items-center gap-0.5 truncate">
                             <span>{renderFemaleInitialUnderline(
                               tournament.type === 'individual'
                                 ? `${(item as Participant).first_name} ${(item as Participant).last_name.charAt(0).toUpperCase()}.`
@@ -5371,10 +5532,10 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                             )}</span>
                           </div>
                           {tournament.type === 'team' && teamMembers.length > 0 && (
-                            <div className={`text-[10px] mt-1 font-medium ${
+                            <div className={`text-[8px] mt-0.5 font-medium truncate ${
                               selectedItem?.id === item.id && selectedItem.type === 'waiting'
-                              ? 'text-white/60'
-                              : 'text-black/40'
+                                ? 'text-white/60'
+                                : 'text-black/40'
                             }`}>
                               {teamMembers.map((p, idx) => (
                                 <span key={p.id} className="inline-flex items-center gap-1">
@@ -5387,7 +5548,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                             </div>
                           )}
                         </div>
-                        <button 
+                        <button
                           onClick={(e) => { e.stopPropagation(); handleRemoveFromTournament(item.id, tournament.type === 'individual' ? 'participant' : 'team'); }}
                           className={`opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-all ${
                             selectedItem?.id === item.id && selectedItem.type === 'waiting' ? 'text-white' : ''
@@ -5399,15 +5560,16 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                       </div>
                     </div>
                   );
-                })
-              )}
-            </div>
-          </Card>
-        </div>
+                })}
+              </div>
+            </Card>
+          </div>
+        )}
+      </div>
 
-        {/* Lanes Grid */}
-        <div className="lg:col-span-3">
-          <div className="sticky top-[7.25rem] z-20 bg-white/95 backdrop-blur-sm border border-[#AFDDE5]/50 rounded-md px-2 py-1.5 flex flex-wrap items-center justify-between gap-2 mb-2">
+      {/* Lanes Grid */}
+      <div>
+        <div className="sticky top-[7.25rem] z-20 bg-white/95 backdrop-blur-sm border border-[#AFDDE5]/50 rounded-md px-2 py-1.5 flex flex-wrap items-center justify-between gap-2 mb-2">
             <div className="flex flex-wrap items-center gap-1.5">
               <Button size="sm" variant="manage" onClick={loadData} title="Refresh" ariaLabel="Refresh" className="px-2">
                 <RefreshCw size={14} />
@@ -5447,37 +5609,55 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
               </Button>
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="space-y-3">
+            {shifts.map((shift) => {
+              const groupedLanes = groupedLanesByShift[shift] || {};
+              const shiftSectionClass = shift % 2 === 0
+                ? 'border-slate-200/90 bg-slate-50/30'
+                : 'border-cyan-200/80 bg-cyan-50/20';
+              const shiftLaneBorderClass = shift % 2 === 0 ? 'border-slate-200/90' : 'border-cyan-200/80';
+              return (
+              <div key={shift} className={`rounded-lg p-2 ${shiftSectionClass}`}>
+                {tournament.shifts_count > 1 && (
+                  <div className="mb-2 flex items-center gap-2 px-1">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-700 whitespace-nowrap">
+                      {tx('Shift')} {shift}
+                    </span>
+                    <span className="h-px flex-1 bg-slate-300/80" />
+                  </div>
+                )}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
             {Object.entries(groupedLanes).map(([laneNum, assignments]) => {
               const laneNumber = parseInt(laneNum);
-              const isLaneOutOfOperation = outOfOperationLanes.includes(laneNumber);
+              const isLaneOutOfOperation = (outOfOperationLanesByShift[shift] || []).includes(laneNumber);
               return (
               <Card 
                 key={laneNum} 
-                className={`flex flex-col h-full min-h-[160px] transition-all border-2 ${
-                  selectedItem ? 'border-emerald-300 bg-emerald-50/20 cursor-pointer hover:border-emerald-500' : 'border-[#AFDDE5]/70 bg-white'
+                className={`flex flex-col h-full min-h-[120px] transition-all border ${
+                  selectedItem ? 'border-cyan-300 bg-cyan-50/30 cursor-pointer hover:border-cyan-500' : `${shiftLaneBorderClass} bg-white`
                 }`}
                 onClick={() => {
                   if (!canManageLanes) return;
                   if (selectedItem) {
-                    handleMoveToLane(laneNumber);
+                    handleMoveToLane(laneNumber, shift);
                     return;
                   }
                   if (isLaneOutOfOperation) return;
                   if (assignments.length >= tournament.players_per_lane) return;
                   if (waitingQueue.length === 0) return;
+                  setLanePickerShift(shift);
                   setLanePickerLaneNumber(laneNumber);
                 }}
               >
-                <div className="bg-[#AFDDE5]/45 text-emerald-900 px-2.5 py-1.5 flex justify-between items-center group/header border-b border-[#AFDDE5]/70">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-[10px] uppercase tracking-widest">Lane {laneNum}</span>
+                <div className="bg-slate-100/80 text-slate-800 px-2 py-1 flex justify-between items-center group/header border-b border-slate-200/90">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-[9px] uppercase tracking-widest">Lane {laneNum}</span>
                     <button
                       type="button"
                       onClick={(e) => e.stopPropagation()}
                       onDoubleClick={(e) => {
                         e.stopPropagation();
-                        toggleLaneOperationStatus(laneNumber);
+                        toggleLaneOperationStatus(laneNumber, shift);
                       }}
                       className={`h-3.5 min-w-3.5 rounded-full text-[9px] leading-none font-bold inline-flex items-center justify-center border transition-all ${
                         isLaneOutOfOperation
@@ -5492,22 +5672,22 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                       {isLaneOutOfOperation ? '−' : ''}
                     </button>
                     <button 
-                      onClick={(e) => { e.stopPropagation(); handleMoveLane(laneNumber, currentShift); }}
-                      className="opacity-0 group-hover/header:opacity-100 p-1 hover:text-emerald-700 transition-all"
+                      onClick={(e) => { e.stopPropagation(); handleMoveLane(laneNumber, shift); }}
+                      className="opacity-0 group-hover/header:opacity-100 p-1 hover:text-cyan-700 transition-all"
                       title="Move entire lane"
                     >
                       <ArrowRightLeft size={10} />
                     </button>
                   </div>
-                  <span className="text-[10px] text-black/50">{assignments.length} / {tournament.players_per_lane}</span>
+                  <span className="text-[9px] text-black/50">{assignments.length} / {tournament.players_per_lane}</span>
                 </div>
-                <div className="p-2 flex-1 flex flex-col gap-1.5">
+                <div className="p-1 flex-1 flex flex-col gap-0.5">
                   {assignments.length === 0 ? (
-                    <div className="flex-1 flex items-center justify-center text-emerald-200/60">
-                      <Plus size={32} />
+                    <div className="flex-1 flex items-center justify-center text-slate-300/70">
+                      <Plus size={24} />
                     </div>
                   ) : (
-                    assignments.map(a => {
+                    assignments.map((a) => {
                       const teamMembers = tournament.type === 'team' && a.team_id
                         ? participants.filter(p => p.team_id === a.team_id)
                         : [];
@@ -5524,72 +5704,75 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                         <div 
                           key={a.id} 
                           onClick={(e) => { e.stopPropagation(); setSelectedItem({ id: a.id, type: 'assignment' }); }}
-                          className={`text-[10px] p-1.5 rounded border font-bold uppercase tracking-wide flex justify-between items-start group cursor-pointer transition-all ${
+                          draggable={canManageLanes && isDesktopViewport}
+                          onDragStart={(e) => {
+                            if (!canManageLanes || !isDesktopViewport) return;
+                            e.stopPropagation();
+                            setDraggingAssignment({ assignmentId: a.id, laneNumber, shiftNumber: shift });
+                          }}
+                          onDragEnd={() => setDraggingAssignment(null)}
+                          onDragOver={(e) => {
+                            if (!draggingAssignment) return;
+                            if (draggingAssignment.laneNumber !== laneNumber || draggingAssignment.shiftNumber !== shift) return;
+                            e.preventDefault();
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            void handleLaneAssignmentDrop(a.id, laneNumber, shift);
+                          }}
+                          className={`text-[12px] w-full px-1.5 py-0.5 rounded font-bold uppercase tracking-wide flex items-center justify-start gap-1 group cursor-pointer transition-all whitespace-nowrap ${
                             selectedItem?.id === a.id && selectedItem.type === 'assignment'
-                            ? 'bg-transparent text-emerald-800 border-emerald-500'
-                            : 'bg-transparent border-transparent hover:border-emerald-200'
+                            ? 'bg-cyan-700 text-white'
+                            : 'text-black'
                           }`}
+                          title={tournament.type === 'team' && teamMembers.length > 0 ? teamMembers.map(p => `${p.first_name} ${p.last_name}`).join(', ') : ''}
                         >
-                          <div className="flex-1">
-                            <div className="text-sm font-bold flex items-center gap-1">
-                              <span>{renderFemaleInitialUnderline(displayName, tournament.type === 'individual' && participant?.gender?.toLowerCase() === 'female')}</span>
-                            </div>
-                            {tournament.type === 'team' && teamMembers.length > 0 && (
-                              <div className={`text-[10px] mt-0.5 font-medium ${
-                                selectedItem?.id === a.id && selectedItem.type === 'assignment'
-                                ? 'text-white/60'
-                                : 'text-black/40'
-                              }`}>
-                                {teamMembers.map((p, idx) => (
-                                  <span key={p.id} className="inline-flex items-center gap-1">
-                                    <span>{renderFemaleInitialUnderline(
-                                      `${p.first_name} ${p.last_name.charAt(0).toUpperCase()}.${idx < teamMembers.length - 1 ? ', ' : ''}`,
-                                      p.gender?.toLowerCase() === 'female'
-                                    )}</span>
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100">
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); handleRemoveAssignment(a.id); }}
-                              className="p-1 hover:text-amber-500"
-                              title="Move back to Waiting Queue"
-                            >
-                              <UserMinus size={12} />
-                            </button>
-                          </div>
+                          {canManageLanes && isDesktopViewport && (
+                            <span className="hidden md:inline-flex items-center text-black/35 group-hover:text-cyan-700" title="Drag to reorder within lane">
+                              <GripVertical size={12} />
+                            </span>
+                          )}
+                          <span className="min-w-0 flex-1 truncate text-left">{renderFemaleInitialUnderline(displayName, tournament.type === 'individual' && participant?.gender?.toLowerCase() === 'female')}</span>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleRemoveAssignment(a.id); }}
+                            className="ml-auto opacity-0 group-hover:opacity-100 p-0 hover:text-red-400 transition-all"
+                            title="Move back to Waiting Queue"
+                          >
+                            <X size={10} />
+                          </button>
                         </div>
                       );
                     })
                   )}
                   {selectedItem && assignments.length < tournament.players_per_lane && (
-                    <div className="mt-auto pt-2 border-t border-dashed border-emerald-500/20 text-center">
-                      <span className="text-[8px] font-bold text-emerald-600 uppercase tracking-widest">Click to place here</span>
+                    <div className="w-full text-center text-[7px] font-bold text-cyan-700 uppercase tracking-widest py-1">
+                      Click to place
                     </div>
                   )}
                   {!selectedItem && canManageLanes && !isLaneOutOfOperation && assignments.length < tournament.players_per_lane && waitingQueue.length > 0 && (
-                    <div className="mt-auto pt-2 border-t border-dashed border-emerald-500/20 text-center">
-                      <span className="text-[8px] font-bold text-emerald-600 uppercase tracking-widest">Click lane to pick from queue</span>
+                    <div className="w-full text-center text-[7px] font-bold text-cyan-700 uppercase tracking-widest py-1">
+                      Click to add
                     </div>
                   )}
                 </div>
               </Card>
             )})}
-          </div>
+                </div>
+              </div>
+            )})}
         </div>
       </div>
 
       {lanePickerLaneNumber !== null && (
-        <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center p-4" onClick={() => { setLanePickerLaneNumber(null); setLanePickerSearchQuery(''); }}>
+        <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center p-4" onClick={() => { setLanePickerLaneNumber(null); setLanePickerShift(1); setLanePickerSearchQuery(''); }}>
           <div className="w-full max-w-lg bg-white rounded-lg border border-[#AFDDE5]/70 shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-4 py-3 border-b border-[#AFDDE5]/70 bg-[#eaf7fa] flex items-center justify-between gap-2">
               <div>
-                <h4 className="text-sm font-bold text-emerald-800 uppercase tracking-wide">Assign to Lane {lanePickerLaneNumber}</h4>
+                <h4 className="text-sm font-bold text-emerald-800 uppercase tracking-wide">Assign to Lane {lanePickerLaneNumber} • {tx('Shift')} {lanePickerShift}</h4>
                 <p className="text-[11px] text-black/55">Pick a {tournament.type === 'individual' ? 'player' : 'team'} from waiting queue</p>
               </div>
-              <Button size="sm" variant="outline" onClick={() => { setLanePickerLaneNumber(null); setLanePickerSearchQuery(''); }} title="Close" ariaLabel="Close">
+              <Button size="sm" variant="outline" onClick={() => { setLanePickerLaneNumber(null); setLanePickerShift(1); setLanePickerSearchQuery(''); }} title="Close" ariaLabel="Close">
                 <X size={14} />
               </Button>
             </div>
@@ -5618,7 +5801,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                     <button
                       key={item.id}
                       type="button"
-                      onClick={() => handleAssignWaitingItemToLane(item.id, lanePickerLaneNumber)}
+                      onClick={() => handleAssignWaitingItemToLane(item.id, lanePickerLaneNumber, lanePickerShift)}
                       className="w-full text-left px-3 py-2 rounded border border-black/10 hover:border-emerald-300 hover:bg-emerald-50/40 transition-colors"
                     >
                       <p className="text-sm font-semibold text-black uppercase tracking-wide">{label || '-'}</p>
@@ -5635,24 +5818,125 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   );
 }
 
-function ScoringView({ tournament, role }: { tournament: Tournament; role: UserRole }) {
+function ScoringView({ tournament, role, onPresentScoreScreen, scoreScreenMode }: { tournament: Tournament; role: UserRole; onPresentScoreScreen?: () => void; scoreScreenMode?: boolean }) {
   const canManageScores = role === 'admin' || role === 'moderator';
+  const isScoreScreenMode = Boolean(scoreScreenMode);
   const tx = React.useContext(UiTranslationContext);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
   const [lanes, setLanes] = useState<LaneAssignment[]>([]);
   const [swapInFlight, setSwapInFlight] = useState(false);
   const [draftScores, setDraftScores] = useState<Record<string, string>>({});
+  const [autoScrollSpeed, setAutoScrollSpeed] = useState<'slow' | 'medium' | 'fast'>('slow');
+  const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
   const [loading, setLoading] = useState(true);
   const [currentShift, setCurrentShift] = useState(1);
   const importScoresInputRef = useRef<HTMLInputElement | null>(null);
-  const scoringTableRef = useRef<HTMLTableElement | null>(null);
+  const scoringHeaderScrollRef = useRef<HTMLDivElement | null>(null);
+  const scoringBodyScrollRef = useRef<HTMLDivElement | null>(null);
+  const scoringScrollRef = useRef<HTMLDivElement | null>(null);
+  const scoringTableRef = useRef<HTMLDivElement | null>(null);
   const say = (message: string) => alert(tx(message));
   const ask = (message: string) => confirm(tx(message));
 
   useEffect(() => {
     loadData();
   }, [tournament.id]);
+
+  useEffect(() => {
+    if (!isScoreScreenMode) return;
+
+    const intervalId = window.setInterval(() => {
+      loadData({ silent: true });
+    }, 3000);
+
+    return () => window.clearInterval(intervalId);
+  }, [tournament.id, currentShift, isScoreScreenMode]);
+
+  useEffect(() => {
+    if (!isScoreScreenMode) return;
+
+    const container = scoringScrollRef.current;
+    if (!container) return;
+
+    let animationId = 0;
+    let previousTs = 0;
+    let carryPx = 0;
+    let bottomHoldUntil = 0;
+    const bottomHoldMs = 4000;
+    const pxPerSecond = autoScrollSpeed === 'fast' ? 34 : autoScrollSpeed === 'medium' ? 22 : 14;
+
+    const tick = (ts: number) => {
+      if (!previousTs) previousTs = ts;
+      const deltaSeconds = (ts - previousTs) / 1000;
+      previousTs = ts;
+
+      if (!isAutoScrollPaused) {
+        const maxScrollTop = container.scrollHeight - container.clientHeight;
+        if (maxScrollTop > 0) {
+          const atBottom = container.scrollTop >= (maxScrollTop - 1);
+          if (atBottom) {
+            if (!bottomHoldUntil) {
+              bottomHoldUntil = ts + bottomHoldMs;
+            }
+            if (ts >= bottomHoldUntil) {
+              container.scrollTop = 0;
+              carryPx = 0;
+              bottomHoldUntil = 0;
+            }
+          } else {
+            bottomHoldUntil = 0;
+            carryPx += (pxPerSecond * deltaSeconds);
+            const wholeStep = Math.floor(carryPx);
+            if (wholeStep > 0) {
+              carryPx -= wholeStep;
+              container.scrollTop = Math.min(maxScrollTop, container.scrollTop + wholeStep);
+            }
+          }
+        }
+      }
+
+      animationId = window.requestAnimationFrame(tick);
+    };
+
+    animationId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(animationId);
+  }, [isScoreScreenMode, currentShift, scores.length, participants.length, lanes.length, autoScrollSpeed, isAutoScrollPaused]);
+
+  useEffect(() => {
+    const headerEl = scoringHeaderScrollRef.current;
+    const bodyEl = scoringBodyScrollRef.current;
+    if (!headerEl || !bodyEl) return;
+
+    let syncingFromBody = false;
+    let syncingFromHeader = false;
+
+    const syncHeaderFromBody = () => {
+      if (syncingFromHeader) {
+        syncingFromHeader = false;
+        return;
+      }
+      syncingFromBody = true;
+      headerEl.scrollLeft = bodyEl.scrollLeft;
+    };
+
+    const syncBodyFromHeader = () => {
+      if (syncingFromBody) {
+        syncingFromBody = false;
+        return;
+      }
+      syncingFromHeader = true;
+      bodyEl.scrollLeft = headerEl.scrollLeft;
+    };
+
+    bodyEl.addEventListener('scroll', syncHeaderFromBody, { passive: true });
+    headerEl.addEventListener('scroll', syncBodyFromHeader, { passive: true });
+
+    return () => {
+      bodyEl.removeEventListener('scroll', syncHeaderFromBody);
+      headerEl.removeEventListener('scroll', syncBodyFromHeader);
+    };
+  }, [isScoreScreenMode, currentShift, scores.length, participants.length, lanes.length]);
 
   useEffect(() => {
     setCurrentShift(1);
@@ -5662,8 +5946,10 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     setDraftScores({});
   }, [tournament.id, currentShift]);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       const [pData, sData, lData] = await Promise.all([
         api.getParticipants(tournament.id),
@@ -5676,11 +5962,14 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
   const gameNumbers = Array.from({ length: Math.max(1, tournament.games_count || 1) }, (_, i) => i + 1);
+  const shiftNumbers = Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1);
 
   const scoreMap = new Map<string, number>();
   for (const s of scores) {
@@ -5726,28 +6015,73 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     }
   }
 
-  const teamLaneMap = new Map<number, LaneAssignment>();
-  const participantLaneMap = new Map<number, LaneAssignment>();
-  const activeShiftLanes = lanes.filter(l => (l.shift_number || 1) === currentShift);
-  for (const lane of activeShiftLanes) {
-    if (lane.team_id && !teamLaneMap.has(lane.team_id)) {
-      teamLaneMap.set(lane.team_id, lane);
+  const getShiftLaneMaps = (shiftNumber: number) => {
+    const teamLaneMap = new Map<number, LaneAssignment>();
+    const participantLaneMap = new Map<number, LaneAssignment>();
+    const shiftLanes = lanes.filter((lane) => (lane.shift_number || 1) === shiftNumber);
+    for (const lane of shiftLanes) {
+      if (lane.team_id && !teamLaneMap.has(lane.team_id)) {
+        teamLaneMap.set(lane.team_id, lane);
+      }
+      if (lane.participant_id && !participantLaneMap.has(lane.participant_id)) {
+        participantLaneMap.set(lane.participant_id, lane);
+      }
     }
-    if (lane.participant_id && !participantLaneMap.has(lane.participant_id)) {
-      participantLaneMap.set(lane.participant_id, lane);
-    }
-  }
+    return { teamLaneMap, participantLaneMap };
+  };
 
-  const getLaneBadge = (participant: Participant) => {
+  const getLaneBadgeForShift = (
+    participant: Participant,
+    shiftNumber: number,
+    laneMaps?: { teamLaneMap: Map<number, LaneAssignment>; participantLaneMap: Map<number, LaneAssignment> }
+  ) => {
+    const resolvedLaneMaps = laneMaps || getShiftLaneMaps(shiftNumber);
     if (tournament.type === 'team') {
       if (!participant.team_id) return '-';
-      const lane = teamLaneMap.get(participant.team_id);
+      const lane = resolvedLaneMaps.teamLaneMap.get(participant.team_id);
       if (!lane) return '-';
       const position = teamMemberPositionMap.get(participant.id) || 1;
       return `L${lane.lane_number}-${position}`;
     }
-    const lane = participantLaneMap.get(participant.id);
+    const lane = resolvedLaneMaps.participantLaneMap.get(participant.id);
     return lane ? `L${lane.lane_number}` : '-';
+  };
+
+  const getScoringParticipantsForShift = (
+    shiftNumber: number,
+    laneMaps?: { teamLaneMap: Map<number, LaneAssignment>; participantLaneMap: Map<number, LaneAssignment> }
+  ) => {
+    const resolvedLaneMaps = laneMaps || getShiftLaneMaps(shiftNumber);
+    return participants
+      .filter((participant) => {
+        if (tournament.type === 'team') {
+          return participant.team_id !== null && resolvedLaneMaps.teamLaneMap.has(participant.team_id);
+        }
+        return resolvedLaneMaps.participantLaneMap.has(participant.id);
+      })
+      .sort((a, b) => {
+        if (tournament.type === 'team') {
+          const laneA = a.team_id ? (resolvedLaneMaps.teamLaneMap.get(a.team_id)?.lane_number || Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+          const laneB = b.team_id ? (resolvedLaneMaps.teamLaneMap.get(b.team_id)?.lane_number || Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+          if (laneA !== laneB) return laneA - laneB;
+
+          const teamA = (a.team_name || '').toLowerCase();
+          const teamB = (b.team_name || '').toLowerCase();
+          const teamCompare = teamA.localeCompare(teamB);
+          if (teamCompare !== 0) return teamCompare;
+          const posA = teamMemberPositionMap.get(a.id) || Number.MAX_SAFE_INTEGER;
+          const posB = teamMemberPositionMap.get(b.id) || Number.MAX_SAFE_INTEGER;
+          if (posA !== posB) return posA - posB;
+          return a.id - b.id;
+        }
+        const laneA = resolvedLaneMaps.participantLaneMap.get(a.id)?.lane_number || Number.MAX_SAFE_INTEGER;
+        const laneB = resolvedLaneMaps.participantLaneMap.get(b.id)?.lane_number || Number.MAX_SAFE_INTEGER;
+        if (laneA !== laneB) return laneA - laneB;
+        const laneAssignmentA = resolvedLaneMaps.participantLaneMap.get(a.id)?.id || Number.MAX_SAFE_INTEGER;
+        const laneAssignmentB = resolvedLaneMaps.participantLaneMap.get(b.id)?.id || Number.MAX_SAFE_INTEGER;
+        if (laneAssignmentA !== laneAssignmentB) return laneAssignmentA - laneAssignmentB;
+        return `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`);
+      });
   };
 
   const formatScoringName = (participant: Participant) => {
@@ -5762,36 +6096,21 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     return `${firstName} ${lastName}`.trim().toUpperCase();
   };
 
-  const scoringParticipants = participants
-    .filter(p => {
-      if (tournament.type === 'team') {
-        return p.team_id !== null && teamLaneMap.has(p.team_id);
-      }
-      return participantLaneMap.has(p.id);
+  const currentShiftLaneMaps = getShiftLaneMaps(currentShift);
+  const teamLaneMap = currentShiftLaneMaps.teamLaneMap;
+  const participantLaneMap = currentShiftLaneMaps.participantLaneMap;
+  const getLaneBadge = (participant: Participant) => getLaneBadgeForShift(participant, currentShift, currentShiftLaneMaps);
+  const scoringParticipants = getScoringParticipantsForShift(currentShift, currentShiftLaneMaps);
+  const scoringShiftSections = isScoreScreenMode
+    ? shiftNumbers.map((shiftNumber) => {
+      const laneMaps = getShiftLaneMaps(shiftNumber);
+      return {
+        shiftNumber,
+        laneMaps,
+        participants: getScoringParticipantsForShift(shiftNumber, laneMaps),
+      };
     })
-    .sort((a, b) => {
-      if (tournament.type === 'team') {
-        const laneA = a.team_id ? (teamLaneMap.get(a.team_id)?.lane_number || Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
-        const laneB = b.team_id ? (teamLaneMap.get(b.team_id)?.lane_number || Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
-        if (laneA !== laneB) return laneA - laneB;
-
-        const teamA = (a.team_name || '').toLowerCase();
-        const teamB = (b.team_name || '').toLowerCase();
-        const teamCompare = teamA.localeCompare(teamB);
-        if (teamCompare !== 0) return teamCompare;
-        const posA = teamMemberPositionMap.get(a.id) || Number.MAX_SAFE_INTEGER;
-        const posB = teamMemberPositionMap.get(b.id) || Number.MAX_SAFE_INTEGER;
-        if (posA !== posB) return posA - posB;
-        return a.id - b.id;
-      }
-      const laneA = participantLaneMap.get(a.id)?.lane_number || Number.MAX_SAFE_INTEGER;
-      const laneB = participantLaneMap.get(b.id)?.lane_number || Number.MAX_SAFE_INTEGER;
-      if (laneA !== laneB) return laneA - laneB;
-      const laneAssignmentA = participantLaneMap.get(a.id)?.id || Number.MAX_SAFE_INTEGER;
-      const laneAssignmentB = participantLaneMap.get(b.id)?.id || Number.MAX_SAFE_INTEGER;
-      if (laneAssignmentA !== laneAssignmentB) return laneAssignmentA - laneAssignmentB;
-      return `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`);
-    });
+    : [{ shiftNumber: currentShift, laneMaps: currentShiftLaneMaps, participants: scoringParticipants }];
 
   const teamVisiblePositionMap = new Map<number, { index: number; count: number }>();
   if (tournament.type === 'team') {
@@ -6211,21 +6530,82 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
     }));
   };
 
+  const renderScoringColGroup = () => (
+    <colgroup>
+      <col style={{ width: '128px' }} />
+      <col style={{ width: '64px' }} />
+      {gameNumbers.map((gameNumber) => (
+        <col key={`col-${gameNumber}`} style={{ width: '58px' }} />
+      ))}
+      <col style={{ width: '60px' }} />
+      <col style={{ width: '56px' }} />
+    </colgroup>
+  );
+
+  const renderScoringHeader = () => (
+    <thead>
+      <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
+        <th className="px-2 py-2 sm:px-4 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 sticky left-0 z-[5] bg-[#e3f3f6] min-w-[112px] sm:min-w-[180px]">Participant</th>
+        <th className="px-2 py-2 sm:px-4 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 bg-[#e3f3f6] min-w-[54px] sm:min-w-[84px]">Lane</th>
+        {gameNumbers.map(gameNumber => (
+          <th key={gameNumber} className="px-1.5 py-2 sm:px-3 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 text-center bg-[#e3f3f6] min-w-[56px] sm:min-w-[110px]">
+            <span className="sm:hidden">G{gameNumber}</span>
+            <span className="hidden sm:inline">Game {gameNumber}</span>
+          </th>
+        ))}
+        <th className="px-2 py-2 sm:px-4 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 text-right sticky right-[52px] sm:right-[82px] z-[6] bg-[#e3f3f6] min-w-[58px] sm:min-w-[88px]">
+          <span className="sm:hidden">Tot</span>
+          <span className="hidden sm:inline">Total</span>
+        </th>
+        <th className="px-2 py-2 sm:px-4 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 text-right sticky right-0 z-[7] bg-[#e3f3f6] min-w-[52px] sm:min-w-[82px]">Avg</th>
+      </tr>
+    </thead>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-3">
         <div>
-          <h3 className="text-xl font-bold text-emerald-800">{tx('Score Entry')}</h3>
+          <h3 className="text-xl font-bold text-emerald-800 inline-flex items-center gap-2">
+            <span>{tx('Score Entry')}</span>
+            {isScoreScreenMode && (
+              <span className="inline-flex items-center rounded-md border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-emerald-700">
+                {tx('Present Mode')}
+              </span>
+            )}
+          </h3>
           <p className="text-xs text-black/50 mt-0.5">
-            {tx('Enter game results for each participant')}{tournament.type === 'team' ? ` ${tx('(assigned team players only)')}` : ''} • {tx('Shift')} {currentShift}
+            {tx('Enter game results for each participant')}{tournament.type === 'team' ? ` ${tx('(assigned team players only)')}` : ''} • {isScoreScreenMode ? tx('All Shifts') : `${tx('Shift')} ${currentShift}`}
           </p>
         </div>
+        {isScoreScreenMode && (
+          <div className="inline-flex items-center gap-1.5 self-start md:self-auto">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Scroll</span>
+            <select
+              value={autoScrollSpeed}
+              onChange={(e) => {
+                const next = e.target.value;
+                setAutoScrollSpeed(next === 'fast' || next === 'medium' ? next : 'slow');
+              }}
+              className="h-8 rounded-md border border-[#AFDDE5]/80 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-200"
+              aria-label="Auto scroll speed"
+            >
+              <option value="slow">Slow</option>
+              <option value="medium">Medium</option>
+              <option value="fast">Fast</option>
+            </select>
+            {isAutoScrollPaused && (
+              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Paused</span>
+            )}
+          </div>
+        )}
       </div>
 
+      {!isScoreScreenMode && (
       <div className="sticky top-[7.25rem] z-30 flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-white/95 backdrop-blur-sm py-1">
         <div className="flex flex-wrap items-center gap-2">
           <div className={`${segmentedTabContainerClass} w-fit`}>
-            {Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1).map(shift => (
+            {shiftNumbers.map(shift => (
               <button
                 key={shift}
                 onClick={() => setCurrentShift(shift)}
@@ -6248,6 +6628,11 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto md:justify-end">
+          {onPresentScoreScreen && (
+            <Button size="sm" variant="outline" onClick={onPresentScoreScreen} title="Present Score Screen" ariaLabel="Present Score Screen" className="px-2">
+              <Eye size={14} />
+            </Button>
+          )}
           {canManageScores && (
             <Button size="sm" variant="outline" onClick={handleSaveScores} title="Save" ariaLabel="Save" className="px-2">
               <Save size={14} />
@@ -6277,55 +6662,80 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
           </Button>
         </div>
       </div>
+      )}
 
-      <Card className="overflow-x-auto border-[#AFDDE5]/60">
-        <table ref={scoringTableRef} className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
-              <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70 sticky left-0 z-[3] bg-[#e3f3f6]">Participant</th>
-              <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70">Lane</th>
-              {gameNumbers.map(gameNumber => (
-                <th key={gameNumber} className="px-3 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70 text-center min-w-[110px]">
-                  {gameNumber}
-                </th>
-              ))}
-              <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70 text-right">Total</th>
-              <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-black/70 text-right">Avg</th>
-            </tr>
-          </thead>
+      <Card ref={scoringTableRef} className="border-[#AFDDE5]/60 overflow-visible">
+        <div
+          ref={scoringHeaderScrollRef}
+          className={isScoreScreenMode
+            ? 'overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]'
+            : 'sticky top-[7.25rem] sm:top-[10.5rem] z-[25] overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]'}
+        >
+          <table className="w-full text-left border-separate border-spacing-0 text-[11px] sm:text-sm table-fixed">
+            {renderScoringColGroup()}
+            {renderScoringHeader()}
+          </table>
+        </div>
+        <div
+          ref={(node) => {
+            scoringScrollRef.current = node;
+            scoringBodyScrollRef.current = node;
+          }}
+          className={isScoreScreenMode ? 'overflow-auto max-h-[calc(100vh-14rem)]' : 'overflow-x-auto'}
+          onMouseEnter={() => {
+            if (isScoreScreenMode) setIsAutoScrollPaused(true);
+          }}
+          onMouseLeave={() => {
+            if (isScoreScreenMode) setIsAutoScrollPaused(false);
+          }}
+        >
+        <table className="w-full text-left border-separate border-spacing-0 text-[11px] sm:text-sm table-fixed">
+          {renderScoringColGroup()}
           <tbody className="divide-y divide-black/5">
-            {scoringParticipants.map((p, index) => {
-              const { total, average } = getParticipantStats(p.id);
-              const teamLabel = p.team_name || 'Unassigned';
-              const previousTeamLabel = index > 0 ? (scoringParticipants[index - 1].team_name || 'Unassigned') : null;
-              const showTeamHeader = tournament.type === 'team' && teamLabel !== previousTeamLabel;
-              
-              return (
-                <React.Fragment key={p.id}>
-                  {showTeamHeader && (
-                    <tr className="bg-[#AFDDE5]/20">
-                      <td className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-emerald-700" colSpan={gameNumbers.length + 4}>
-                        Team: {teamLabel}
-                      </td>
-                    </tr>
-                  )}
-                  <tr className="hover:bg-[#AFDDE5]/20 transition-colors">
-                    <td className="px-4 py-3 font-bold text-sm text-black sticky left-0 z-[2] bg-white">
+            {scoringShiftSections.map((section) => (
+              <React.Fragment key={`shift-${section.shiftNumber}`}>
+                {isScoreScreenMode && (
+                  <tr className="bg-[#AFDDE5]/30">
+                    <td className="px-2 py-2 sm:px-4 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-emerald-700" colSpan={gameNumbers.length + 4}>
+                      {tx('Shift')} {section.shiftNumber}
+                    </td>
+                  </tr>
+                )}
+                {section.participants.map((p, index) => {
+                  const { total, average } = getParticipantStats(p.id);
+                  const teamLabel = p.team_name || 'Unassigned';
+                  const previousTeamLabel = index > 0 ? (section.participants[index - 1].team_name || 'Unassigned') : null;
+                  const showTeamHeader = tournament.type === 'team' && teamLabel !== previousTeamLabel;
+                  const laneBadge = getLaneBadgeForShift(p, section.shiftNumber, section.laneMaps);
+
+                  return (
+                    <React.Fragment key={`${section.shiftNumber}-${p.id}`}>
+                      {showTeamHeader && (
+                        <tr className="bg-[#AFDDE5]/20">
+                          <td className="px-2 py-2 sm:px-4 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-emerald-700" colSpan={gameNumbers.length + 4}>
+                            Team: {teamLabel}
+                          </td>
+                        </tr>
+                      )}
+                      <tr className="hover:bg-[#AFDDE5]/20 transition-colors">
+                    <td className="px-2 py-2 sm:px-4 sm:py-3 font-bold text-[11px] sm:text-sm text-black sticky left-0 z-[2] bg-white max-w-[112px] sm:max-w-none">
                       <span className="inline-flex items-center gap-1">
                         {renderFemaleInitialUnderline(formatScoringName(p), p.gender?.toLowerCase() === 'female')}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-2 py-2 sm:px-4 sm:py-3">
                       {tournament.type === 'team' ? (
-                        <div className="flex items-center gap-1.5">
-                          <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest bg-[#AFDDE5]/35 text-emerald-800 border border-[#AFDDE5]/70">
-                            {getLaneBadge(p)}
+                        <div className="flex items-center gap-1 sm:gap-1.5">
+                          <span className="inline-flex items-center px-1.5 py-1 sm:px-2 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.14em] sm:tracking-widest bg-[#AFDDE5]/35 text-emerald-800 border border-[#AFDDE5]/70 whitespace-nowrap">
+                            {laneBadge}
                           </span>
+                          {!isScoreScreenMode && (
+                            <>
                           <button
                             type="button"
                             onClick={() => handleSwapTeamPosition(p, 'up')}
                             disabled={swapInFlight || !canManageScores || (teamVisiblePositionMap.get(p.id)?.index ?? 0) <= 0}
-                            className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="hidden sm:inline-flex w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed items-center justify-center"
                             title="Swap with previous player"
                           >
                             ↑
@@ -6334,11 +6744,13 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                             type="button"
                             onClick={() => handleSwapTeamPosition(p, 'down')}
                             disabled={swapInFlight || !canManageScores || (teamVisiblePositionMap.get(p.id)?.index ?? 0) >= ((teamVisiblePositionMap.get(p.id)?.count ?? 1) - 1)}
-                            className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="hidden sm:inline-flex w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed items-center justify-center"
                             title="Swap with next player"
                           >
                             ↓
                           </button>
+                            </>
+                          )}
                           {swapInFlight && (
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-emerald-700" aria-live="polite">
                               <span className="inline-block w-2.5 h-2.5 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin" />
@@ -6347,15 +6759,17 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                           )}
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1.5">
-                          <span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest bg-[#AFDDE5]/35 text-emerald-800 border border-[#AFDDE5]/70">
-                            {getLaneBadge(p)}
+                        <div className="flex items-center gap-1 sm:gap-1.5">
+                          <span className="inline-flex items-center px-1.5 py-1 sm:px-2 rounded-md text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.14em] sm:tracking-widest bg-[#AFDDE5]/35 text-emerald-800 border border-[#AFDDE5]/70 whitespace-nowrap">
+                            {laneBadge}
                           </span>
+                          {!isScoreScreenMode && (
+                            <>
                           <button
                             type="button"
                             onClick={() => handleSwapIndividualPosition(p, 'up')}
                             disabled={swapInFlight || !canManageScores || index <= 0}
-                            className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="hidden sm:inline-flex w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed items-center justify-center"
                             title="Swap with previous player"
                           >
                             ↑
@@ -6363,12 +6777,14 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                           <button
                             type="button"
                             onClick={() => handleSwapIndividualPosition(p, 'down')}
-                            disabled={swapInFlight || !canManageScores || index >= scoringParticipants.length - 1}
-                            className="w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            disabled={swapInFlight || !canManageScores || index >= section.participants.length - 1}
+                            className="hidden sm:inline-flex w-6 h-6 rounded border border-[#AFDDE5]/70 text-black/50 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed items-center justify-center"
                             title="Swap with next player"
                           >
                             ↓
                           </button>
+                            </>
+                          )}
                           {swapInFlight && (
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-emerald-700" aria-live="polite">
                               <span className="inline-block w-2.5 h-2.5 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin" />
@@ -6384,7 +6800,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                         ? draftScores[scoreKey]
                         : (scoreMap.get(scoreKey) ?? '');
                       return (
-                        <td key={gameNumber} className="px-3 py-3 text-center">
+                        <td key={gameNumber} className="px-1.5 py-2 sm:px-3 sm:py-3 text-center">
                           <input
                             type="text"
                             inputMode="numeric"
@@ -6400,19 +6816,30 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
                               }
                             }}
                             disabled={!canManageScores}
-                            className="w-20 px-2 py-1.5 rounded-lg border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 font-bold text-center"
+                            className="w-14 sm:w-20 px-1.5 sm:px-2 py-1 sm:py-1.5 rounded-md sm:rounded-lg border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 font-bold text-[11px] sm:text-sm text-center"
                             placeholder="0"
                           />
                         </td>
                       );
                     })}
-                    <td className="px-4 py-3 text-right font-bold text-base text-black/80">{total}</td>
-                    <td className="px-4 py-3 text-right font-bold text-base text-emerald-700">{average.toFixed(1)}</td>
+                    <td className="px-2 py-2 sm:px-4 sm:py-3 text-right font-bold text-[11px] sm:text-base text-black/80 whitespace-nowrap sticky right-[52px] sm:right-[82px] z-[2] bg-white">{total}</td>
+                    <td className="px-2 py-2 sm:px-4 sm:py-3 text-right font-bold text-[11px] sm:text-base text-emerald-700 whitespace-nowrap sticky right-0 z-[3] bg-white">{average.toFixed(1)}</td>
                   </tr>
-                </React.Fragment>
-              );
-            })}
-            {scoringParticipants.length === 0 && (
+                    </React.Fragment>
+                  );
+                })}
+                {section.participants.length === 0 && (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-black/40" colSpan={gameNumbers.length + 4}>
+                      {tournament.type === 'team'
+                        ? `No team participants assigned to Shift ${section.shiftNumber}.`
+                        : `No participants assigned to Shift ${section.shiftNumber}.`}
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            ))}
+            {!isScoreScreenMode && scoringParticipants.length === 0 && (
               <tr>
                 <td className="px-4 py-8 text-center text-black/40" colSpan={gameNumbers.length + 4}>
                   {tournament.type === 'team'
@@ -6423,6 +6850,7 @@ function ScoringView({ tournament, role }: { tournament: Tournament; role: UserR
             )}
           </tbody>
         </table>
+        </div>
       </Card>
     </div>
   );
@@ -10491,8 +10919,10 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   );
 }
 
-function StandingsView({ tournament, role }: { tournament: Tournament; role: UserRole }) {
-    const isPublicView = role === 'public';
+function StandingsView({ tournament, role, onPresentStandingsScreen, standingsScreenMode }: { tournament: Tournament; role: UserRole; onPresentStandingsScreen?: () => void; standingsScreenMode?: boolean }) {
+  const isPublicView = role === 'public';
+  const isStandingsScreenMode = Boolean(standingsScreenMode);
+  const isTeamTournament = tournament.type === 'team';
   // Gender filter for standings table only
   const [genderFilter, setGenderFilter] = useState<'all' | 'male' | 'female'>('all');
   const canManageStandings = role === 'admin' || role === 'moderator';
@@ -10513,9 +10943,14 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
   const [savingAdditionalKey, setSavingAdditionalKey] = useState<string | null>(null);
   const [additionalApiAvailable, setAdditionalApiAvailable] = useState(true);
   const [standingsMode, setStandingsMode] = useState<'players' | 'teams'>('players');
+  const [autoScrollSpeed, setAutoScrollSpeed] = useState<'slow' | 'medium' | 'fast'>('slow');
+  const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
   const [loading, setLoading] = useState(true);
   const standingsImportInputRef = useRef<HTMLInputElement | null>(null);
+  const standingsHeaderScrollRef = useRef<HTMLDivElement | null>(null);
+  const standingsBodyScrollRef = useRef<HTMLDivElement | null>(null);
   const standingsTableRef = useRef<HTMLTableElement | null>(null);
+  const standingsScrollRef = useRef<HTMLDivElement | null>(null);
 
   const toBonusKey = (kind: 'participant' | 'team', id: number) => `${kind}-${id}`;
   const getBonus = (kind: 'participant' | 'team', id: number) => Number(bonusByKey[toBonusKey(kind, id)] || 0);
@@ -10535,6 +10970,104 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
   }, [tournament.id, tournament.has_additional_scores, tournament.has_bonus]);
 
   useEffect(() => {
+    if (!isStandingsScreenMode) return;
+    const intervalId = window.setInterval(() => {
+      loadStandings({ silent: true });
+    }, 3000);
+    return () => window.clearInterval(intervalId);
+  }, [tournament.id, standingsMode, isStandingsScreenMode]);
+
+  useEffect(() => {
+    if (!isStandingsScreenMode) return;
+    setStandingsMode(tournament.type === 'team' ? 'teams' : 'players');
+  }, [isStandingsScreenMode, tournament.type]);
+
+  useEffect(() => {
+    if (!isStandingsScreenMode) return;
+    const container = standingsScrollRef.current;
+    if (!container) return;
+
+    let animationId = 0;
+    let previousTs = 0;
+    let carryPx = 0;
+    let bottomHoldUntil = 0;
+    const bottomHoldMs = 4000;
+    const pxPerSecond = autoScrollSpeed === 'fast' ? 34 : autoScrollSpeed === 'medium' ? 22 : 14;
+
+    const tick = (ts: number) => {
+      if (!previousTs) previousTs = ts;
+      const deltaSeconds = (ts - previousTs) / 1000;
+      previousTs = ts;
+
+      if (!isAutoScrollPaused) {
+        const maxScrollTop = container.scrollHeight - container.clientHeight;
+        if (maxScrollTop > 0) {
+          const atBottom = container.scrollTop >= (maxScrollTop - 1);
+          if (atBottom) {
+            if (!bottomHoldUntil) {
+              bottomHoldUntil = ts + bottomHoldMs;
+            }
+            if (ts >= bottomHoldUntil) {
+              container.scrollTop = 0;
+              carryPx = 0;
+              bottomHoldUntil = 0;
+            }
+          } else {
+            bottomHoldUntil = 0;
+            carryPx += (pxPerSecond * deltaSeconds);
+            const wholeStep = Math.floor(carryPx);
+            if (wholeStep > 0) {
+              carryPx -= wholeStep;
+              container.scrollTop = Math.min(maxScrollTop, container.scrollTop + wholeStep);
+            }
+          }
+        }
+      }
+
+      animationId = window.requestAnimationFrame(tick);
+    };
+
+    animationId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(animationId);
+  }, [isStandingsScreenMode, standingsMode, standings.length, autoScrollSpeed, isAutoScrollPaused]);
+
+  useEffect(() => {
+    if (!isStandingsScreenMode) return;
+    const headerEl = standingsHeaderScrollRef.current;
+    const bodyEl = standingsBodyScrollRef.current;
+    if (!headerEl || !bodyEl) return;
+
+    let syncingFromBody = false;
+    let syncingFromHeader = false;
+
+    const syncHeaderFromBody = () => {
+      if (syncingFromHeader) {
+        syncingFromHeader = false;
+        return;
+      }
+      syncingFromBody = true;
+      headerEl.scrollLeft = bodyEl.scrollLeft;
+    };
+
+    const syncBodyFromHeader = () => {
+      if (syncingFromBody) {
+        syncingFromBody = false;
+        return;
+      }
+      syncingFromHeader = true;
+      bodyEl.scrollLeft = headerEl.scrollLeft;
+    };
+
+    bodyEl.addEventListener('scroll', syncHeaderFromBody, { passive: true });
+    headerEl.addEventListener('scroll', syncBodyFromHeader, { passive: true });
+
+    return () => {
+      bodyEl.removeEventListener('scroll', syncHeaderFromBody);
+      headerEl.removeEventListener('scroll', syncBodyFromHeader);
+    };
+  }, [isStandingsScreenMode, standingsMode, hasAdditionalScores, hasBonus, isTeamTournament]);
+
+  useEffect(() => {
     setStandingsMode('players');
   }, [tournament.id, tournament.type]);
 
@@ -10543,8 +11076,10 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
     setHasBonus(Boolean(tournament.has_bonus));
   }, [tournament.id, tournament.has_additional_scores, tournament.has_bonus]);
 
-  const loadStandings = async (options?: { includeAdditional?: boolean; includeBonus?: boolean }) => {
-    setLoading(true);
+  const loadStandings = async (options?: { includeAdditional?: boolean; includeBonus?: boolean; silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true);
+    }
     try {
       let latestTournamentConfig: Tournament | null = null;
       try {
@@ -10626,7 +11161,9 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!options?.silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -10709,7 +11246,6 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
 
   const participantGenderMap = new Map<number, string>();
   const participantInfoMap = new Map<number, Participant>();
-  const isTeamTournament = tournament.type === 'team';
   for (const p of participants) {
     participantGenderMap.set(p.id, normalizeGender(p.gender));
     participantInfoMap.set(p.id, p);
@@ -11090,20 +11626,95 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
     }));
   };
 
+  const renderStandingsHeader = () => (
+    <thead>
+      <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
+        <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-black/70 w-12 sticky left-0 z-[3] bg-[#e3f3f6]">Rank</th>
+        <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-black/70 sticky left-12 z-[3] bg-[#e3f3f6]">{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
+        {standingsMode === 'players' && (
+          <>
+            <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">1H/2H</th>
+            <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Club</th>
+          </>
+        )}
+        {standingsMode === 'players' && isTeamTournament && (
+          <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Team</th>
+        )}
+        {gameNumbers.map((gameNumber) => (
+          <th key={`game-th-${gameNumber}`} className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">
+            {gameNumber}
+          </th>
+        ))}
+        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Total</th>
+        {hasAdditionalScores && (
+          <th key="additional-th" className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-violet-700 text-center">
+            +score
+          </th>
+        )}
+        {hasBonus && (
+          <th key="bonus-th" className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-emerald-700 text-center">
+            Bonus
+          </th>
+        )}
+        <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Grand Total</th>
+        {standingsMode === 'players' && (
+          <th key="avg-th" className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">Avg</th>
+        )}
+      </tr>
+    </thead>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-xl font-bold">{tx('Tournament Result')}</h3>
-          <p className="text-sm text-black/40">{tx('Standings, bracket winners, and tournament highlights')}</p>
+          <h3 className="text-xl font-bold inline-flex items-center gap-2">
+            <span>{tx('Tournament Result')}</span>
+            {isStandingsScreenMode && (
+              <span className="inline-flex items-center rounded-md border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-emerald-700">
+                {tx('Present Mode')}
+              </span>
+            )}
+          </h3>
+          <p className="text-sm text-black/40">
+            {isStandingsScreenMode
+              ? tx('Display mode for tournament standings')
+              : tx('Standings, bracket winners, and tournament highlights')}
+          </p>
         </div>
-        <Button variant="manage" onClick={loadStandings} title="Refresh" ariaLabel="Refresh">
-          <RefreshCw size={18} />
-        </Button>
+        <div className="flex items-center gap-2">
+          {isStandingsScreenMode && (
+            <>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Scroll</span>
+              <select
+                value={autoScrollSpeed}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setAutoScrollSpeed(next === 'fast' || next === 'medium' ? next : 'slow');
+                }}
+                className="h-8 rounded-md border border-[#AFDDE5]/80 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                aria-label="Auto scroll speed"
+              >
+                <option value="slow">Slow</option>
+                <option value="medium">Medium</option>
+                <option value="fast">Fast</option>
+              </select>
+              {isAutoScrollPaused && (
+                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Paused</span>
+              )}
+            </>
+          )}
+          {!isStandingsScreenMode && (
+            <Button variant="manage" onClick={loadStandings} title="Refresh" ariaLabel="Refresh">
+              <RefreshCw size={18} />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Gender filter segmented buttons for player standings */}
       <div className="space-y-6">
+        {!isStandingsScreenMode && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <div className="p-6 border-b border-black/5">
@@ -11243,9 +11854,10 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
             </div>
           </Card>
         </div>
+        )}
 
         <Card className="overflow-visible">
-          <div className="p-6 border-b border-black/5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 sticky top-[7.25rem] z-30 bg-white/95 backdrop-blur-sm">
+          <div className={`p-6 border-b border-black/5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-white/95 ${isStandingsScreenMode ? '' : 'sticky top-[7.25rem] z-30 backdrop-blur-sm'}`}>
             <div>
               <h4 className="font-bold">{tx('Tournament Standings')}</h4>
               <p className="text-sm text-black/40">{tx('Rankings sorted from highest to lowest total score')}</p>
@@ -11267,8 +11879,13 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-              {!isPublicView && (
+              {!isStandingsScreenMode && !isPublicView && (
                 <>
+                  {onPresentStandingsScreen && (
+                    <Button variant="outline" onClick={onPresentStandingsScreen} title="Present Standings Screen" ariaLabel="Present Standings Screen">
+                      <Eye size={14} />
+                    </Button>
+                  )}
                   <Button variant="outline" onClick={handleSaveStandings} title="Save" ariaLabel="Save">
                     <Save size={14} />
                   </Button>
@@ -11287,11 +11904,14 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
                   </Button>
                 </>
               )}
-              <Button variant="outline" onClick={handlePrintStandings} title="Print" ariaLabel="Print">
-                <Printer size={14} />
-              </Button>
+              {!isStandingsScreenMode && (
+                <Button variant="outline" onClick={handlePrintStandings} title="Print" ariaLabel="Print">
+                  <Printer size={14} />
+                </Button>
+              )}
             </div>
           </div>
+          {!isStandingsScreenMode && (
           <div className="px-6 py-2 border-b border-black/5 bg-white/95">
             <div className={`flex flex-wrap gap-2 items-center ${segmentedTabContainerClass} w-fit`}>
               <button
@@ -11339,44 +11959,32 @@ function StandingsView({ tournament, role }: { tournament: Tournament; role: Use
               )}
             </div>
           </div>
-          <div className="overflow-x-auto">
+          )}
+          {isStandingsScreenMode && (
+            <div
+              ref={standingsHeaderScrollRef}
+              className="overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]"
+            >
+              <table className="w-full min-w-[920px] text-left border-collapse">
+                {renderStandingsHeader()}
+              </table>
+            </div>
+          )}
+          <div
+            ref={(node) => {
+              standingsScrollRef.current = node;
+              standingsBodyScrollRef.current = node;
+            }}
+            className={isStandingsScreenMode ? 'overflow-auto max-h-[calc(100vh-14rem)]' : 'overflow-x-auto'}
+            onMouseEnter={() => {
+              if (isStandingsScreenMode) setIsAutoScrollPaused(true);
+            }}
+            onMouseLeave={() => {
+              if (isStandingsScreenMode) setIsAutoScrollPaused(false);
+            }}
+          >
           <table ref={standingsTableRef} className="w-full min-w-[920px] text-left border-collapse">
-            <thead>
-              <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-black/70 w-12 sticky left-0 z-[3] bg-[#e3f3f6]">Rank</th>
-                <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-black/70 sticky left-12 z-[3] bg-[#e3f3f6]">{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
-                {standingsMode === 'players' && (
-                  <>
-                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">1H/2H</th>
-                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Club</th>
-                  </>
-                )}
-                {/* Only show team column if team tournament and standingsMode is players */}
-                {standingsMode === 'players' && isTeamTournament && (
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70">Team</th>
-                )}
-                {gameNumbers.map((gameNumber) => (
-                  <th key={`game-th-${gameNumber}`} className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">
-                    {gameNumber}
-                  </th>
-                ))}
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Total</th>
-                {hasAdditionalScores && (
-                  <th key="additional-th" className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-violet-700 text-center">
-                    +score
-                  </th>
-                )}
-                {hasBonus && (
-                  <th key="bonus-th" className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-emerald-700 text-center">
-                    Bonus
-                  </th>
-                )}
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-right">Grand Total</th>
-                {standingsMode === 'players' && (
-                  <th key="avg-th" className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-black/70 text-center">Avg</th>
-                )}
-              </tr>
-            </thead>
+            {!isStandingsScreenMode && renderStandingsHeader()}
             <tbody className="divide-y divide-black/5">
               {standingsMode === 'players' && filteredPlayerStandingsRows.map((s, idx) => (
                 <tr key={s.participant_id} className="hover:bg-[#AFDDE5]/20 transition-colors">
