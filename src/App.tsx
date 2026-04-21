@@ -1513,6 +1513,51 @@ export default function App() {
     reader.readAsDataURL(file);
   };
 
+  const createSamplePromoImage = (options: {
+    primaryBg: string;
+    secondaryBg: string;
+    accent: string;
+    heading: string;
+    subheading: string;
+    playerLabel: string;
+  }) => {
+    const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="628" viewBox="0 0 1200 628">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="${options.primaryBg}" />
+      <stop offset="100%" stop-color="${options.secondaryBg}" />
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1200" height="628" fill="url(#bg)" />
+  <circle cx="920" cy="210" r="130" fill="rgba(255,255,255,0.18)" />
+  <rect x="210" y="340" width="700" height="220" rx="24" fill="rgba(255,255,255,0.14)" />
+  <text x="90" y="118" font-family="Arial, sans-serif" font-size="62" font-weight="800" fill="white">${options.heading}</text>
+  <text x="90" y="172" font-family="Arial, sans-serif" font-size="28" font-weight="600" fill="rgba(255,255,255,0.92)">${options.subheading}</text>
+
+  <circle cx="920" cy="360" r="66" fill="${options.accent}" />
+  <rect x="852" y="432" width="136" height="126" rx="60" fill="${options.accent}" />
+  <text x="90" y="430" font-family="Arial, sans-serif" font-size="44" font-weight="800" fill="white">${options.playerLabel}</text>
+  <text x="90" y="484" font-family="Arial, sans-serif" font-size="26" font-weight="600" fill="rgba(255,255,255,0.9)">BOWLING TOURNAMENT MANAGER</text>
+  <circle cx="1038" cy="520" r="24" fill="rgba(255,255,255,0.9)" />
+  <circle cx="1078" cy="520" r="24" fill="rgba(255,255,255,0.9)" />
+  <circle cx="1118" cy="520" r="24" fill="rgba(255,255,255,0.9)" />
+</svg>`;
+    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+  };
+
+  const applyMalePromoTemplate = () => {
+    const image = createSamplePromoImage({
+      primaryBg: '#0d3b66',
+      secondaryBg: '#1b6ca8',
+      accent: '#ffd166',
+      heading: 'ALL IN ONE',
+      subheading: 'Tournament management and live presentation',
+      playerLabel: 'MALE PLAYER',
+    });
+    updateDraftDashboardPromoField('image', image);
+  };
+
   const onPresentModeAdImageUpload = (
     screen: 'standings' | 'scoring',
     side: 'left' | 'right',
@@ -7157,7 +7202,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                         href={(scoringPresentAdBlock.left.link || '#')}
                         target={scoringPresentAdBlock.left.link ? '_blank' : undefined}
                         rel={scoringPresentAdBlock.left.link ? 'noopener noreferrer' : undefined}
-                        className="h-full w-full flex items-center justify-center p-3"
+                        className="h-full w-full flex items-start justify-center p-3"
                         title="Scoring left ad"
                       >
                         <img
@@ -7185,7 +7230,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                         href={(scoringPresentAdBlock.right.link || '#')}
                         target={scoringPresentAdBlock.right.link ? '_blank' : undefined}
                         rel={scoringPresentAdBlock.right.link ? 'noopener noreferrer' : undefined}
-                        className="h-full w-full flex items-center justify-center p-3"
+                        className="h-full w-full flex items-start justify-center p-3"
                         title="Scoring right ad"
                       >
                         <img
@@ -12827,7 +12872,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                           href={(standingsPresentAdBlock.left.link || '#')}
                           target={standingsPresentAdBlock.left.link ? '_blank' : undefined}
                           rel={standingsPresentAdBlock.left.link ? 'noopener noreferrer' : undefined}
-                          className="h-full w-full flex items-center justify-center p-3"
+                          className="h-full w-full flex items-start justify-center p-3"
                           title="Standings left ad"
                         >
                           <img
@@ -12855,7 +12900,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                           href={(standingsPresentAdBlock.right.link || '#')}
                           target={standingsPresentAdBlock.right.link ? '_blank' : undefined}
                           rel={standingsPresentAdBlock.right.link ? 'noopener noreferrer' : undefined}
-                          className="h-full w-full flex items-center justify-center p-3"
+                          className="h-full w-full flex items-start justify-center p-3"
                           title="Standings right ad"
                         >
                           <img
