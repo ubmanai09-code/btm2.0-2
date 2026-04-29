@@ -6167,6 +6167,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   const [draftScores, setDraftScores] = useState<Record<string, string>>({});
   const [autoScrollSpeed, setAutoScrollSpeed] = useState<'slow' | 'medium' | 'fast'>('slow');
   const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
+  const [pulsingTeamTotalKeys, setPulsingTeamTotalKeys] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [currentShift, setCurrentShift] = useState(1);
   const importScoresInputRef = useRef<HTMLInputElement | null>(null);
@@ -6174,9 +6175,18 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   const scoringBodyScrollRef = useRef<HTMLDivElement | null>(null);
   const scoringScrollRef = useRef<HTMLDivElement | null>(null);
   const scoringTableRef = useRef<HTMLDivElement | null>(null);
+  const previousTeamTotalsRef = useRef<Map<string, number>>(new Map());
+  const teamPulseTimeoutsRef = useRef<number[]>([]);
   const say = (message: string) => alert(tx(message));
   const ask = (message: string) => confirm(tx(message));
   const scoringPresentAdBlock = sponsorsConfig?.presentModeAds?.scoring || DEFAULT_PRESENT_MODE_ADS.scoring;
+
+  useEffect(() => {
+    return () => {
+      teamPulseTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+      teamPulseTimeoutsRef.current = [];
+    };
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -6450,6 +6460,65 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
       };
     })
     : [{ shiftNumber: currentShift, laneMaps: currentShiftLaneMaps, participants: scoringParticipants }];
+
+  const teamTotalsByHeaderKey = new Map<string, number>();
+  if (tournament.type === 'team') {
+    for (const section of scoringShiftSections) {
+      for (const participant of section.participants) {
+        const teamLabel = participant.team_name || 'Unassigned';
+        const teamHeaderKey = participant.team_id !== null
+          ? `${section.shiftNumber}-team-${participant.team_id}`
+          : `${section.shiftNumber}-unassigned-${teamLabel}`;
+        const runningTotal = teamTotalsByHeaderKey.get(teamHeaderKey) || 0;
+        teamTotalsByHeaderKey.set(teamHeaderKey, runningTotal + getParticipantStats(participant.id).total);
+      }
+    }
+  }
+
+  const teamTotalsSignature = Array.from(teamTotalsByHeaderKey.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, total]) => `${key}:${total}`)
+    .join('|');
+
+  useEffect(() => {
+    if (tournament.type !== 'team') return;
+
+    if (!isScoreScreenMode) {
+      setPulsingTeamTotalKeys({});
+      previousTeamTotalsRef.current = new Map(teamTotalsByHeaderKey);
+      return;
+    }
+
+    const previousTotals = previousTeamTotalsRef.current;
+    const changedKeys: string[] = [];
+
+    for (const [key, total] of teamTotalsByHeaderKey.entries()) {
+      const previous = previousTotals.get(key);
+      if (previous !== undefined && previous !== total) {
+        changedKeys.push(key);
+      }
+    }
+
+    previousTeamTotalsRef.current = new Map(teamTotalsByHeaderKey);
+    if (changedKeys.length === 0) return;
+
+    setPulsingTeamTotalKeys((prev) => {
+      const next = { ...prev };
+      changedKeys.forEach((key) => { next[key] = true; });
+      return next;
+    });
+
+    const timeoutId = window.setTimeout(() => {
+      setPulsingTeamTotalKeys((prev) => {
+        const next = { ...prev };
+        changedKeys.forEach((key) => { delete next[key]; });
+        return next;
+      });
+      teamPulseTimeoutsRef.current = teamPulseTimeoutsRef.current.filter((id) => id !== timeoutId);
+    }, 900);
+
+    teamPulseTimeoutsRef.current.push(timeoutId);
+  }, [isScoreScreenMode, teamTotalsSignature, tournament.type]);
 
   const teamVisiblePositionMap = new Map<number, { index: number; count: number }>();
   if (tournament.type === 'team') {
@@ -7045,6 +7114,12 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                   const teamLabel = p.team_name || 'Unassigned';
                   const previousTeamLabel = index > 0 ? (section.participants[index - 1].team_name || 'Unassigned') : null;
                   const showTeamHeader = tournament.type === 'team' && teamLabel !== previousTeamLabel;
+                  const teamHeaderKey = p.team_id !== null
+                    ? `${section.shiftNumber}-team-${p.team_id}`
+                    : `${section.shiftNumber}-unassigned-${teamLabel}`;
+                  const teamTotalScore = showTeamHeader
+                    ? (teamTotalsByHeaderKey.get(teamHeaderKey) || 0)
+                    : 0;
                   const laneBadge = getLaneBadgeForShift(p, section.shiftNumber, section.laneMaps);
 
                   return (
@@ -7052,7 +7127,16 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                       {showTeamHeader && (
                         <tr className="bg-[#AFDDE5]/20">
                           <td className="px-2 py-2 sm:px-4 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-emerald-700" colSpan={gameNumbers.length + 4}>
-                            Team: {teamLabel}
+                            <div className="flex items-center justify-between gap-3">
+                              <span>Team: {teamLabel}</span>
+                              <span
+                                className={`inline-flex items-center rounded-md border font-black uppercase align-middle tabular-nums transition-all duration-300 ${isScoreScreenMode
+                                  ? 'border-emerald-600 bg-emerald-600 px-3 py-1.5 text-[11px] sm:text-xs tracking-[0.16em] text-white shadow-sm'
+                                  : 'border-emerald-300 bg-emerald-50 px-2 py-1 text-[9px] sm:text-[10px] tracking-[0.14em] sm:tracking-widest text-emerald-800'} ${isScoreScreenMode && pulsingTeamTotalKeys[teamHeaderKey] ? 'animate-pulse ring-2 ring-emerald-200 ring-offset-1 scale-[1.03]' : ''}`}
+                              >
+                                Total: {teamTotalScore}
+                              </span>
+                            </div>
                           </td>
                         </tr>
                       )}
