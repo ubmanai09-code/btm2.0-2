@@ -12633,18 +12633,18 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
               )}
 
               <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:ml-auto md:justify-end">
+              {!isStandingsScreenMode && onPresentStandingsScreen && (
+                <Button
+                  variant="outline"
+                  onClick={() => onPresentStandingsScreen({ mode: standingsMode, gender: genderFilter })}
+                  title="Present Standings Screen"
+                  ariaLabel="Present Standings Screen"
+                >
+                  <Eye size={14} />
+                </Button>
+              )}
               {!isStandingsScreenMode && !isPublicView && (
                 <>
-                  {onPresentStandingsScreen && (
-                    <Button
-                      variant="outline"
-                      onClick={() => onPresentStandingsScreen({ mode: standingsMode, gender: genderFilter })}
-                      title="Present Standings Screen"
-                      ariaLabel="Present Standings Screen"
-                    >
-                      <Eye size={14} />
-                    </Button>
-                  )}
                   <Button variant="outline" onClick={handleSaveStandings} title="Save" ariaLabel="Save">
                     <Save size={14} />
                   </Button>
