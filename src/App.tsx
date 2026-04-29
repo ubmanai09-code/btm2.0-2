@@ -6941,6 +6941,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   const renderScoringColGroup = () => (
     <colgroup>
       <col style={{ width: '128px' }} />
+      {tournament.type === 'team' && <col style={{ width: '72px' }} />}
       <col style={{ width: '64px' }} />
       {gameNumbers.map((gameNumber) => (
         <col key={`col-${gameNumber}`} style={{ width: '58px' }} />
@@ -6954,6 +6955,9 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
     <thead>
       <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
         <th className="px-2 py-2 sm:px-4 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 sticky left-0 z-[5] bg-[#e3f3f6] min-w-[112px] sm:min-w-[180px]">Participant</th>
+        {tournament.type === 'team' && (
+          <th className="px-1 py-2 sm:px-1.5 sm:py-3 text-[8px] sm:text-[9px] font-bold uppercase tracking-[0.14em] sm:tracking-[0.16em] text-black/70 text-center bg-[#e3f3f6] min-w-[64px] sm:min-w-[72px]">Tot</th>
+        )}
         <th className="px-2 py-2 sm:px-4 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 bg-[#e3f3f6] min-w-[54px] sm:min-w-[84px]">Lane</th>
         {gameNumbers.map(gameNumber => (
           <th key={gameNumber} className="px-1.5 py-2 sm:px-3 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 text-center bg-[#e3f3f6] min-w-[56px] sm:min-w-[110px]">
@@ -6969,6 +6973,8 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
       </tr>
     </thead>
   );
+
+  const scoringTableColSpan = gameNumbers.length + 4 + (tournament.type === 'team' ? 1 : 0);
 
   return (
     <div className="space-y-6">
@@ -7100,11 +7106,33 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
         <table className="w-full text-left border-separate border-spacing-0 text-[11px] sm:text-sm table-fixed">
           {renderScoringColGroup()}
           <tbody className="divide-y divide-black/5">
-            {scoringShiftSections.map((section) => (
+            {scoringShiftSections.map((section) => {
+              const sectionTeamPositionMap = new Map<number, { index: number; count: number; teamHeaderKey: string }>();
+              if (tournament.type === 'team') {
+                const participantsByTeamKey = new Map<string, Participant[]>();
+                for (const participant of section.participants) {
+                  const teamLabel = participant.team_name || 'Unassigned';
+                  const teamHeaderKey = participant.team_id !== null
+                    ? `${section.shiftNumber}-team-${participant.team_id}`
+                    : `${section.shiftNumber}-unassigned-${teamLabel}`;
+                  const members = participantsByTeamKey.get(teamHeaderKey) || [];
+                  members.push(participant);
+                  participantsByTeamKey.set(teamHeaderKey, members);
+                }
+
+                for (const [teamHeaderKey, members] of participantsByTeamKey.entries()) {
+                  const count = members.length;
+                  members.forEach((member, index) => {
+                    sectionTeamPositionMap.set(member.id, { index, count, teamHeaderKey });
+                  });
+                }
+              }
+
+              return (
               <React.Fragment key={`shift-${section.shiftNumber}`}>
                 {isScoreScreenMode && (
                   <tr className="bg-[#AFDDE5]/30">
-                    <td className="px-2 py-2 sm:px-4 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-emerald-700" colSpan={gameNumbers.length + 4}>
+                    <td className="px-2 py-2 sm:px-4 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-emerald-700" colSpan={scoringTableColSpan}>
                       {tx('Shift')} {section.shiftNumber}
                     </td>
                   </tr>
@@ -7117,26 +7145,22 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                   const teamHeaderKey = p.team_id !== null
                     ? `${section.shiftNumber}-team-${p.team_id}`
                     : `${section.shiftNumber}-unassigned-${teamLabel}`;
-                  const teamTotalScore = showTeamHeader
-                    ? (teamTotalsByHeaderKey.get(teamHeaderKey) || 0)
-                    : 0;
+                  const teamTotalScore = teamTotalsByHeaderKey.get(teamHeaderKey) || 0;
+                  const teamPosition = sectionTeamPositionMap.get(p.id);
+                  const showMergedTeamTotal = Boolean(
+                    tournament.type === 'team'
+                    && teamPosition
+                    && teamPosition.index === 0
+                    && teamPosition.count > 0
+                  );
                   const laneBadge = getLaneBadgeForShift(p, section.shiftNumber, section.laneMaps);
 
                   return (
                     <React.Fragment key={`${section.shiftNumber}-${p.id}`}>
                       {showTeamHeader && (
                         <tr className="bg-[#AFDDE5]/20">
-                          <td className="px-2 py-2 sm:px-4 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-emerald-700" colSpan={gameNumbers.length + 4}>
-                            <div className="flex items-center justify-between gap-3">
-                              <span>Team: {teamLabel}</span>
-                              <span
-                                className={`inline-flex items-center rounded-md border font-black uppercase align-middle tabular-nums transition-all duration-300 ${isScoreScreenMode
-                                  ? 'border-emerald-600 bg-emerald-600 px-3 py-1.5 text-[11px] sm:text-xs tracking-[0.16em] text-white shadow-sm'
-                                  : 'border-emerald-300 bg-emerald-50 px-2 py-1 text-[9px] sm:text-[10px] tracking-[0.14em] sm:tracking-widest text-emerald-800'} ${isScoreScreenMode && pulsingTeamTotalKeys[teamHeaderKey] ? 'animate-pulse ring-2 ring-emerald-200 ring-offset-1 scale-[1.03]' : ''}`}
-                              >
-                                Total: {teamTotalScore}
-                              </span>
-                            </div>
+                          <td className="px-2 py-2 sm:px-4 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-emerald-700" colSpan={scoringTableColSpan}>
+                            <span>Team: {teamLabel}</span>
                           </td>
                         </tr>
                       )}
@@ -7146,6 +7170,22 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                         {renderFemaleInitialUnderline(formatScoringName(p), p.gender?.toLowerCase() === 'female')}
                       </span>
                     </td>
+                    {tournament.type === 'team' && showMergedTeamTotal && (
+                      <td
+                        rowSpan={teamPosition?.count || 1}
+                        className={`px-1 sm:px-1.5 text-center align-middle border-x border-[#AFDDE5]/50 bg-emerald-50/60 transition-all duration-300 ${isScoreScreenMode && pulsingTeamTotalKeys[teamHeaderKey] ? 'animate-pulse' : ''}`}
+                      >
+                        <div
+                          className={`relative mx-auto rounded-full border-2 border-emerald-200 bg-white shadow-sm ${isScoreScreenMode
+                            ? 'w-[72px] h-[72px] sm:w-[112px] sm:h-[112px]'
+                            : 'w-[64px] h-[64px] sm:w-[96px] sm:h-[96px]'} ${isScoreScreenMode && pulsingTeamTotalKeys[teamHeaderKey] ? 'ring-2 ring-emerald-200 ring-offset-1 scale-[1.03]' : ''}`}
+                        >
+                          <span className={`absolute inset-0 flex items-center justify-center font-black tabular-nums text-emerald-700 ${isScoreScreenMode ? 'text-[24px] sm:text-[36px]' : 'text-[20px] sm:text-[30px]'}`}>
+                            {teamTotalScore}
+                          </span>
+                        </div>
+                      </td>
+                    )}
                     <td className="px-2 py-2 sm:px-4 sm:py-3">
                       {tournament.type === 'team' ? (
                         <div className="flex items-center gap-1 sm:gap-1.5">
@@ -7253,7 +7293,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                 })}
                 {section.participants.length === 0 && (
                   <tr>
-                    <td className="px-4 py-6 text-center text-black/40" colSpan={gameNumbers.length + 4}>
+                    <td className="px-4 py-6 text-center text-black/40" colSpan={scoringTableColSpan}>
                       {tournament.type === 'team'
                         ? `No team participants assigned to Shift ${section.shiftNumber}.`
                         : `No participants assigned to Shift ${section.shiftNumber}.`}
@@ -7261,10 +7301,11 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                   </tr>
                 )}
               </React.Fragment>
-            ))}
+              );
+            })}
             {!isScoreScreenMode && scoringParticipants.length === 0 && (
               <tr>
-                <td className="px-4 py-8 text-center text-black/40" colSpan={gameNumbers.length + 4}>
+                <td className="px-4 py-8 text-center text-black/40" colSpan={scoringTableColSpan}>
                   {tournament.type === 'team'
                     ? `No team participants assigned to Shift ${currentShift}.`
                     : `No participants assigned to Shift ${currentShift}.`}
