@@ -6202,6 +6202,19 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
     return () => window.clearInterval(intervalId);
   }, [tournament.id, currentShift, isScoreScreenMode]);
 
+  // Auto-refresh for regular scoring view (admin/moderator), pauses when there are unsaved drafts
+  useEffect(() => {
+    if (isScoreScreenMode) return;
+    const hasDrafts = Object.keys(draftScores).length > 0;
+    if (hasDrafts) return;
+
+    const intervalId = window.setInterval(() => {
+      loadData({ silent: true });
+    }, 20000);
+
+    return () => window.clearInterval(intervalId);
+  }, [tournament.id, currentShift, isScoreScreenMode, draftScores]);
+
   useEffect(() => {
     if (!isScoreScreenMode) return;
 
@@ -11750,6 +11763,15 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     const intervalId = window.setInterval(() => {
       loadStandings({ silent: true });
     }, 3000);
+    return () => window.clearInterval(intervalId);
+  }, [tournament.id, standingsMode, isStandingsScreenMode]);
+
+  // Auto-refresh for regular standings view, pauses when in screen mode (already handled above)
+  useEffect(() => {
+    if (isStandingsScreenMode) return;
+    const intervalId = window.setInterval(() => {
+      loadStandings({ silent: true });
+    }, 20000);
     return () => window.clearInterval(intervalId);
   }, [tournament.id, standingsMode, isStandingsScreenMode]);
 
