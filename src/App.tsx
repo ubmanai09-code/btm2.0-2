@@ -6170,6 +6170,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   const [pulsingTeamTotalKeys, setPulsingTeamTotalKeys] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [currentShift, setCurrentShift] = useState(1);
+  const [presentShiftFilter, setPresentShiftFilter] = useState<number[] | null>(null);
   const importScoresInputRef = useRef<HTMLInputElement | null>(null);
   const scoringHeaderScrollRef = useRef<HTMLDivElement | null>(null);
   const scoringBodyScrollRef = useRef<HTMLDivElement | null>(null);
@@ -6463,8 +6464,20 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   const participantLaneMap = currentShiftLaneMaps.participantLaneMap;
   const getLaneBadge = (participant: Participant) => getLaneBadgeForShift(participant, currentShift, currentShiftLaneMaps);
   const scoringParticipants = getScoringParticipantsForShift(currentShift, currentShiftLaneMaps);
+  const presentShiftsToShow = presentShiftFilter ?? shiftNumbers;
+  const togglePresentShift = (shift: number) => {
+    const current = presentShiftFilter ?? shiftNumbers;
+    if (current.includes(shift)) {
+      const next = current.filter((s) => s !== shift);
+      if (next.length === 0) return;
+      setPresentShiftFilter(next.length === shiftNumbers.length ? null : next);
+    } else {
+      const next = [...current, shift].sort((a, b) => a - b);
+      setPresentShiftFilter(next.length === shiftNumbers.length ? null : next);
+    }
+  };
   const scoringShiftSections = isScoreScreenMode
-    ? shiftNumbers.map((shiftNumber) => {
+    ? presentShiftsToShow.map((shiftNumber) => {
       const laneMaps = getShiftLaneMaps(shiftNumber);
       return {
         shiftNumber,
@@ -7002,28 +7015,49 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
             )}
           </h3>
           <p className="text-xs text-black/50 mt-0.5">
-            {tx('Enter game results for each participant')}{tournament.type === 'team' ? ` ${tx('(assigned team players only)')}` : ''} • {isScoreScreenMode ? tx('All Shifts') : `${tx('Shift')} ${currentShift}`}
+            {tx('Enter game results for each participant')}{tournament.type === 'team' ? ` ${tx('(assigned team players only)')}` : ''} • {isScoreScreenMode ? (presentShiftFilter !== null ? `${tx('Shift')} ${presentShiftFilter.join(', ')}` : tx('All Shifts')) : `${tx('Shift')} ${currentShift}`}
           </p>
         </div>
         {isScoreScreenMode && (
-          <div className="inline-flex items-center gap-1.5 self-start md:self-auto">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Scroll</span>
-            <select
-              value={autoScrollSpeed}
-              onChange={(e) => {
-                const next = e.target.value;
-                setAutoScrollSpeed(next === 'fast' || next === 'medium' ? next : 'slow');
-              }}
-              className="h-8 rounded-md border border-[#AFDDE5]/80 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-200"
-              aria-label="Auto scroll speed"
-            >
-              <option value="slow">Slow</option>
-              <option value="medium">Medium</option>
-              <option value="fast">Fast</option>
-            </select>
-            {isAutoScrollPaused && (
-              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Paused</span>
+          <div className="flex flex-wrap items-center gap-3 self-start md:self-auto">
+            {shiftNumbers.length > 1 && (
+              <div className="inline-flex items-center gap-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Shifts</span>
+                {shiftNumbers.map((shift) => {
+                  const isChecked = presentShiftsToShow.includes(shift);
+                  return (
+                    <label key={shift} className="inline-flex items-center gap-1 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => togglePresentShift(shift)}
+                        className="w-3.5 h-3.5 cursor-pointer accent-emerald-600"
+                      />
+                      <span className="text-[11px] font-semibold text-black/70">{shift}</span>
+                    </label>
+                  );
+                })}
+              </div>
             )}
+            <div className="inline-flex items-center gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Scroll</span>
+              <select
+                value={autoScrollSpeed}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setAutoScrollSpeed(next === 'fast' || next === 'medium' ? next : 'slow');
+                }}
+                className="h-8 rounded-md border border-[#AFDDE5]/80 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                aria-label="Auto scroll speed"
+              >
+                <option value="slow">Slow</option>
+                <option value="medium">Medium</option>
+                <option value="fast">Fast</option>
+              </select>
+              {isAutoScrollPaused && (
+                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Paused</span>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -12107,10 +12141,16 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     // Sort by total (first N games), then average, then name
     .sort((a, b) => (b.total - a.total) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name));
 
+  const shiftNumbers = Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1);
+
   // Filter by gender if selected
   let filteredPlayerStandingsRows = playerStandingsRows;
   if (!isTeamTournament && standingsMode === 'players' && typeof genderFilter !== 'undefined' && genderFilter !== 'all') {
     filteredPlayerStandingsRows = playerStandingsRows.filter(row => (participantGenderMap.get(row.participant_id) || '').toLowerCase() === genderFilter);
+  }
+  // In present mode hide participants with no scores entered yet
+  if (isStandingsScreenMode) {
+    filteredPlayerStandingsRows = filteredPlayerStandingsRows.filter((row) => row.grand_total > 0 || row.total > 0);
   }
 
   const formatTeamMemberCompact = (participant: Participant) => {
@@ -12156,7 +12196,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     }
   }
 
-  const teamStandingsRows = Array.from(teamMap.values())
+  const teamStandingsRowsAll = Array.from(teamMap.values())
     .map((row) => {
       const teamId = Number(row.team_id || 0);
       const additional = hasAdditionalScores && teamId > 0 ? getAdditional('team', teamId) : 0;
@@ -12171,6 +12211,10 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     })
     // Sort by total (first N games), then name
     .sort((a, b) => (b.total - a.total) || a.team_name.localeCompare(b.team_name));
+  // In present mode hide teams with no scores entered yet
+  const teamStandingsRows = isStandingsScreenMode
+    ? teamStandingsRowsAll.filter((row) => row.grand_total > 0 || row.total > 0)
+    : teamStandingsRowsAll;
   const registeredPlayersCount = participants.length;
   const assignedPlayersCount = participants.filter((p) => p.team_id !== null).length;
   const unassignedPlayersCount = Math.max(0, registeredPlayersCount - assignedPlayersCount);
