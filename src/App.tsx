@@ -33,10 +33,14 @@ import {
   Eye,
   EyeOff,
   Shield,
-  Search
+  Search,
+  FileImage
 } from 'lucide-react';
+import { toPng } from 'html-to-image';
 import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput } from './services/api';
 import { buildKnownBracketTemplateDefaults } from './utils/bracketTemplates';
+import BracketBuilderWorkspace from './components/BracketBuilderWorkspace';
+import BracketBuilderV2 from './components/BracketBuilderV2';
 
 type UserRole = 'admin' | 'moderator' | 'public';
 
@@ -3419,6 +3423,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       { id: 'scoring', label: t('tab.scoring', 'Score'), icon: ClipboardList },
       { id: 'brackets', label: t('tab.brackets', 'Brackets'), icon: GitBranch },
       ...(effectiveRole === 'admin' ? [{ id: 'brc', label: 'BRC', icon: GitBranch }] : []),
+      ...(effectiveRole === 'admin' ? [{ id: 'builder-v2', label: 'Builder V2', icon: GitBranch }] : []),
       { id: 'standings', label: t('tab.tournament_result', 'Standing'), icon: Trophy },
     ];
 
@@ -3629,6 +3634,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
         {activeTab === 'lanes' && <LaneView tournament={tournament} role={effectiveRole} />}
         {activeTab === 'scoring' && <ScoringView tournament={tournament} role={effectiveRole} sponsorsConfig={sponsorsConfig} onPresentScoreScreen={openScoreScreenMode} scoreScreenMode={isScoreScreenMode} />}
         {activeTab === 'brackets' && <BracketsView tournament={tournament} role={effectiveRole} onTournamentUpdated={onTournamentUpdated} />}
+        {activeTab === 'builder-v2' && <BracketBuilderV2 tournament={tournament} role={effectiveRole} />}
         {activeTab === 'brc' && effectiveRole === 'admin' && <BrcView tournament={tournament} role={effectiveRole} onTournamentUpdated={onTournamentUpdated} setActiveTab={setActiveTab} />}
         {activeTab === 'standings' && <StandingsView tournament={tournament} role={effectiveRole} sponsorsConfig={sponsorsConfig} onPresentStandingsScreen={openStandingsScreenMode} standingsScreenMode={isStandingsScreenMode} />}
       </div>
@@ -7745,7 +7751,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
   });
   const [useManualSeedMatchups, setUseManualSeedMatchups] = useState(false);
   const [customRoundMatchCounts, setCustomRoundMatchCounts] = useState<number[]>([1]);
-  const [customRoundRules, setCustomRoundRules] = useState<Array<'duel' | 'survivor_cut'>>(['duel']);
+  const [customRoundRules, setCustomRoundRules] = useState<Array<'duel' | 'survivor_cut' | 'shootout'>>(['duel']);
   const [customPlacementRules, setCustomPlacementRules] = useState<{ first: string; second: string; third: string }>({ first: '', second: '', third: '' });
   const [customSurvivorScoresByRound, setCustomSurvivorScoresByRound] = useState<Record<number, Record<number, string>>>({});
   const [customSeedMatchups, setCustomSeedMatchups] = useState<Array<{ p1: number | null; p2: number | null }>>([]);
@@ -7948,7 +7954,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       ? selectedFormat.round_match_counts.map((count) => Math.max(1, Number.parseInt(String(count), 10) || 1))
       : [1];
     const roundRules = Array.isArray(selectedFormat.round_rules) && selectedFormat.round_rules.length > 0
-      ? selectedFormat.round_rules.map((rule) => (rule === 'survivor_cut' ? 'survivor_cut' : 'duel')) as Array<'duel' | 'survivor_cut'>
+      ? selectedFormat.round_rules.map((rule) => (rule === 'survivor_cut' || rule === 'shootout' ? rule : 'duel')) as Array<'duel' | 'survivor_cut' | 'shootout'>
       : Array.from({ length: roundMatchCounts.length }, () => 'duel' as const);
 
     setCustomRoundMatchCounts(roundMatchCounts);
@@ -7990,12 +7996,12 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     return values;
   };
 
-  const parseRoundRulesFromText = (input: string, fallbackCount: number): Array<'duel' | 'survivor_cut'> => {
+  const parseRoundRulesFromText = (input: string, fallbackCount: number): Array<'duel' | 'survivor_cut' | 'shootout'> => {
     const values = String(input || '')
       .split(',')
       .map((part) => part.trim())
       .filter((part) => part.length > 0)
-      .map((part) => (part === 'survivor_cut' ? 'survivor_cut' : 'duel'));
+      .map((part) => (part === 'survivor_cut' || part === 'shootout' ? part : 'duel'));
     if (values.length > 0) return values;
     return Array.from({ length: Math.max(1, fallbackCount) }, () => 'duel' as const);
   };
@@ -9250,12 +9256,20 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
       injectedHeadHtml: styleTags,
       extraStyles: `
         .print-only-wrapper { width: max-content; min-width: 100%; }
-        .print-only-wrapper button { display: none !important; }
-        .print-only-wrapper .print-keep-button { display: block !important; }
-        .print-only-wrapper input[type="file"] { display: none !important; }
-        .print-only-wrapper .seed-team-members { line-height: 1.35; overflow: visible !important; }
-        .print-only-wrapper .seed-team-members-short { display: inline; }
-        .print-only-wrapper .seed-team-members-full { display: none; }
+        /* Hide sticky toolbar (manage/action buttons) */
+        .print-only-wrapper .sticky { display: none !important; }
+        /* Render name-display buttons as plain text instead of hiding them */
+        .print-only-wrapper button { background: transparent !important; border: none !important; padding: 0 !important; cursor: default !important; box-shadow: none !important; }
+        /* Hide interactive form controls */
+        .print-only-wrapper input { display: none !important; }
+        .print-only-wrapper select { display: none !important; }
+        /* Remove truncation so team names and member names show in full */
+        .print-only-wrapper .truncate { overflow: visible !important; text-overflow: clip !important; white-space: normal !important; }
+        .print-only-wrapper [class*="max-w-"] { max-width: none !important; }
+        /* Team members in seed list: always show full names */
+        .print-only-wrapper .seed-team-members { line-height: 1.35; overflow: visible !important; -webkit-line-clamp: unset !important; white-space: normal !important; }
+        .print-only-wrapper .seed-team-members-short { display: none !important; }
+        .print-only-wrapper .seed-team-members-full { display: inline !important; }
         @media print {
           .print-only-wrapper .seed-team-members { -webkit-line-clamp: unset !important; white-space: normal !important; }
           .print-only-wrapper .seed-team-members-short { display: none !important; }
@@ -9265,6 +9279,34 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
     });
 
     writeAndPrintDocument(printWindow, html);
+  };
+
+  const handleExportBracketImage = async () => {
+    const exportRoot = printSectionRef.current;
+    if (!exportRoot) {
+      alert('No bracket content available to export.');
+      return;
+    }
+    // Temporarily hide the sticky toolbar so it doesn't appear in the image
+    const stickyEl = exportRoot.querySelector<HTMLElement>('.sticky');
+    const prevDisplay = stickyEl ? stickyEl.style.display : null;
+    if (stickyEl) stickyEl.style.display = 'none';
+    try {
+      const dataUrl = await toPng(exportRoot, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: '#ffffff',
+      });
+      const link = document.createElement('a');
+      link.download = `${tournament.name.replace(/[^a-z0-9_\- ]/gi, '_')}_bracket.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.error('Image export failed', err);
+      alert('Image export failed. Please try again.');
+    } finally {
+      if (stickyEl && prevDisplay !== null) stickyEl.style.display = prevDisplay;
+    }
   };
 
   const isTeamSelectionPlayoffMode = matchPlayType === 'team_selection_playoff';
@@ -10581,6 +10623,9 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
               <Button size="sm" variant="outline" onClick={handlePrintBrackets} title="Print Brackets" ariaLabel="Print Brackets" className="px-2">
                 <Printer size={13} />
               </Button>
+              <Button size="sm" variant="outline" onClick={handleExportBracketImage} title="Export as Image" ariaLabel="Export Bracket as Image" className="px-2">
+                <FileImage size={13} />
+              </Button>
             </div>
           </div>
         ) : (
@@ -10592,6 +10637,9 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
               </Button>
               <Button size="sm" variant="outline" onClick={handlePrintBrackets} title="Print Brackets" ariaLabel="Print Brackets" className="px-2">
                 <Printer size={13} />
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleExportBracketImage} title="Export as Image" ariaLabel="Export Bracket as Image" className="px-2">
+                <FileImage size={13} />
               </Button>
             </div>
           </div>
@@ -12556,24 +12604,45 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           </p>
         </div>
         {isStandingsScreenMode && (
-          <div className="inline-flex items-center gap-1.5 self-start md:self-auto">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Scroll</span>
-            <select
-              value={autoScrollSpeed}
-              onChange={(e) => {
-                const next = e.target.value;
-                setAutoScrollSpeed(next === 'fast' || next === 'medium' ? next : 'slow');
-              }}
-              className="h-8 rounded-md border border-[#AFDDE5]/80 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-200"
-              aria-label="Auto scroll speed"
-            >
-              <option value="slow">Slow</option>
-              <option value="medium">Medium</option>
-              <option value="fast">Fast</option>
-            </select>
-            {isAutoScrollPaused && (
-              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Paused</span>
+          <div className="flex flex-wrap items-center gap-3 self-start md:self-auto">
+            {isTeamTournament && (
+              <div className="inline-flex items-center gap-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">View</span>
+                <div className={segmentedTabContainerClass}>
+                  <button
+                    onClick={() => setStandingsMode('players')}
+                    className={getSegmentedTabButtonClass(standingsMode === 'players', 'compact')}
+                  >
+                    Players
+                  </button>
+                  <button
+                    onClick={() => setStandingsMode('teams')}
+                    className={getSegmentedTabButtonClass(standingsMode === 'teams', 'compact')}
+                  >
+                    Teams
+                  </button>
+                </div>
+              </div>
             )}
+            <div className="inline-flex items-center gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Scroll</span>
+              <select
+                value={autoScrollSpeed}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setAutoScrollSpeed(next === 'fast' || next === 'medium' ? next : 'slow');
+                }}
+                className="h-8 rounded-md border border-[#AFDDE5]/80 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                aria-label="Auto scroll speed"
+              >
+                <option value="slow">Slow</option>
+                <option value="medium">Medium</option>
+                <option value="fast">Fast</option>
+              </select>
+              {isAutoScrollPaused && (
+                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Paused</span>
+              )}
+            </div>
           </div>
         )}
       </div>
