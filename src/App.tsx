@@ -7230,7 +7230,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                       >
                         <div
                           className={`relative mx-auto rounded-full border-2 border-emerald-200 bg-white shadow-sm ${isScoreScreenMode
-                            ? 'w-[72px] h-[72px] sm:w-[112px] sm:h-[112px]'
+                            ? 'w-[72px] h-[72px] sm:w-[104px] sm:h-[104px]'
                             : 'w-[64px] h-[64px] sm:w-[96px] sm:h-[96px]'} ${isScoreScreenMode && pulsingTeamTotalKeys[teamHeaderKey] ? 'ring-2 ring-emerald-200 ring-offset-1 scale-[1.03]' : ''}`}
                         >
                           <span className={`absolute inset-0 flex items-center justify-center font-black tabular-nums text-emerald-700 ${isScoreScreenMode ? 'text-[24px] sm:text-[36px]' : 'text-[20px] sm:text-[30px]'}`}>
