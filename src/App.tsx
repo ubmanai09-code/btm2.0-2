@@ -6239,6 +6239,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   const scoringBodyScrollRef = useRef<HTMLDivElement | null>(null);
   const scoringScrollRef = useRef<HTMLDivElement | null>(null);
   const scoringTableRef = useRef<HTMLDivElement | null>(null);
+  const autoScrollSpeedRef = useRef<'slow' | 'medium' | 'fast'>('slow');
   const previousTeamTotalsRef = useRef<Map<string, number>>(new Map());
   const teamPulseTimeoutsRef = useRef<number[]>([]);
   const say = (message: string) => alert(tx(message));
@@ -6259,6 +6260,10 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
       teamPulseTimeoutsRef.current = [];
     };
   }, []);
+
+  useEffect(() => {
+    autoScrollSpeedRef.current = autoScrollSpeed;
+  }, [autoScrollSpeed]);
 
   useEffect(() => {
     loadData();
@@ -6298,7 +6303,6 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
     let carryPx = 0;
     let bottomHoldUntil = 0;
     const bottomHoldMs = 4000;
-    const pxPerSecond = autoScrollSpeed === 'fast' ? 34 : autoScrollSpeed === 'medium' ? 22 : 14;
 
     const tick = (ts: number) => {
       if (!previousTs) previousTs = ts;
@@ -6306,6 +6310,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
       previousTs = ts;
 
       if (!isAutoScrollPaused) {
+        const pxPerSecond = autoScrollSpeedRef.current === 'fast' ? 34 : autoScrollSpeedRef.current === 'medium' ? 22 : 14;
         const maxScrollTop = container.scrollHeight - container.clientHeight;
         if (maxScrollTop > 0) {
           const atBottom = container.scrollTop >= (maxScrollTop - 1);
@@ -6335,7 +6340,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
 
     animationId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(animationId);
-  }, [isScoreScreenMode, currentShift, scores.length, participants.length, lanes.length, autoScrollSpeed, isAutoScrollPaused]);
+  }, [isScoreScreenMode, currentShift, scores.length, participants.length, lanes.length, isAutoScrollPaused]);
 
   useEffect(() => {
     const headerEl = scoringHeaderScrollRef.current;
@@ -14522,6 +14527,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const standingsBodyScrollRef = useRef<HTMLDivElement | null>(null);
   const standingsTableRef = useRef<HTMLTableElement | null>(null);
   const standingsScrollRef = useRef<HTMLDivElement | null>(null);
+  const autoScrollSpeedRef = useRef<'slow' | 'medium' | 'fast'>('slow');
 
   const toBonusKey = (kind: 'participant' | 'team', id: number) => `${kind}-${id}`;
   const getBonus = (kind: 'participant' | 'team', id: number) => Number(bonusByKey[toBonusKey(kind, id)] || 0);
@@ -14585,6 +14591,10 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   }, [isStandingsScreenMode, tournament.type, screenStandingsParams.mode, screenStandingsParams.gender]);
 
   useEffect(() => {
+    autoScrollSpeedRef.current = autoScrollSpeed;
+  }, [autoScrollSpeed]);
+
+  useEffect(() => {
     if (!isStandingsScreenMode) return;
     const container = standingsScrollRef.current;
     if (!container) return;
@@ -14594,7 +14604,6 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     let carryPx = 0;
     let bottomHoldUntil = 0;
     const bottomHoldMs = 4000;
-    const pxPerSecond = autoScrollSpeed === 'fast' ? 34 : autoScrollSpeed === 'medium' ? 22 : 14;
 
     const tick = (ts: number) => {
       if (!previousTs) previousTs = ts;
@@ -14602,6 +14611,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       previousTs = ts;
 
       if (!isAutoScrollPaused) {
+        const pxPerSecond = autoScrollSpeedRef.current === 'fast' ? 34 : autoScrollSpeedRef.current === 'medium' ? 22 : 14;
         const maxScrollTop = container.scrollHeight - container.clientHeight;
         if (maxScrollTop > 0) {
           const atBottom = container.scrollTop >= (maxScrollTop - 1);
@@ -14631,7 +14641,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
     animationId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(animationId);
-  }, [isStandingsScreenMode, standingsMode, standings.length, autoScrollSpeed, isAutoScrollPaused]);
+  }, [isStandingsScreenMode, standingsMode, standings.length, isAutoScrollPaused]);
 
   useEffect(() => {
     const headerEl = standingsHeaderScrollRef.current;
