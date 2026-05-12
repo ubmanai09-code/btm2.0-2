@@ -28,5 +28,29 @@
     "subtitle": "Promote your brand with a dashboard promo image.",
     "image": "https://imgur.com/a/6UyhYrg",
     "link": ""
+  },
+  "presentModeAds": {
+    "standings": {
+      "enabled": true,
+      "left": {
+        "image": "",
+        "link": ""
+      },
+      "right": {
+        "image": "",
+        "link": ""
+      }
+    },
+    "scoring": {
+      "enabled": true,
+      "left": {
+        "image": "",
+        "link": ""
+      },
+      "right": {
+        "image": "",
+        "link": ""
+      }
+    }
   }
 }
