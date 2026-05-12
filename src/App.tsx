@@ -14492,6 +14492,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const [autoScrollSpeed, setAutoScrollSpeed] = useState<'slow' | 'medium' | 'fast'>('slow');
   const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [mobileExpandedRow, setMobileExpandedRow] = useState<string | null>(null);
   const standingsImportInputRef = useRef<HTMLInputElement | null>(null);
   const standingsHeaderScrollRef = useRef<HTMLDivElement | null>(null);
   const standingsBodyScrollRef = useRef<HTMLDivElement | null>(null);
@@ -15624,9 +15625,106 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
             </div>
           </div>
           )}
+          {/* Mobile compact view — hidden on sm+ */}
+          <div className="sm:hidden px-3 py-2 flex items-center gap-1.5 bg-[#f0fafb] border-b border-[#AFDDE5]/60">
+            <span className="text-[10px] text-black/40 leading-snug">
+              Tap a name for details &bull; Rotate phone for full table
+            </span>
+          </div>
+          <div className="sm:hidden divide-y divide-black/5">
+            {standingsMode === 'players' && filteredPlayerStandingsRows.map((s, idx) => {
+              const rowKey = String(s.participant_id);
+              const isExpanded = mobileExpandedRow === rowKey;
+              const isFemale = (participantGenderMap.get(s.participant_id) || '').startsWith('f');
+              return (
+                <div key={rowKey}>
+                  <button
+                    type="button"
+                    onClick={() => setMobileExpandedRow(isExpanded ? null : rowKey)}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-[#AFDDE5]/20 active:bg-[#AFDDE5]/40 transition-colors"
+                  >
+                    <span className="w-6 shrink-0 text-xs font-bold text-black/40 text-center">{idx + 1}</span>
+                    <span className="flex-1 text-xs font-bold leading-tight truncate">
+                      {isFemale ? <span style={{ textDecorationLine: 'underline', textDecorationStyle: 'dotted' }}>{s.participant_name}</span> : s.participant_name}
+                    </span>
+                    <span className="shrink-0 flex flex-col items-end">
+                      <span className="text-[9px] font-semibold uppercase tracking-wider text-black/30 leading-none">Total</span>
+                      <span className="text-sm font-extrabold tabular-nums leading-tight">{s.grand_total}</span>
+                    </span>
+                    <span className="shrink-0 flex flex-col items-end">
+                      <span className="text-[9px] font-semibold uppercase tracking-wider text-black/30 leading-none">Avg</span>
+                      <span className="text-xs font-bold tabular-nums text-black/50 leading-tight">{s.average.toFixed(1)}</span>
+                    </span>
+                    <span className="shrink-0 text-black/30">{isExpanded ? '▲' : '▼'}</span>
+                  </button>
+                  {isExpanded && (
+                    <div className="px-4 pb-3 pt-1 bg-[#f7fcfd] text-xs space-y-1.5">
+                      {s.club ? <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Club</span><span>{s.club}</span></div> : null}
+                      {showPlayerStyle && s.hands ? <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Style</span><span>{s.hands}</span></div> : null}
+                      {isTeamTournament && s.team_name ? <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Team</span><span>{s.team_name}</span></div> : null}
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                        {gameNumbers.map((gn, gi) => (
+                          <div key={gn} className="flex gap-1">
+                            <span className="text-black/40">G{gn}</span>
+                            <span className="font-semibold">{s.games[gi] ?? 0}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Total</span><span className="font-semibold">{s.total}</span></div>
+                      {hasAdditionalScores ? <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Additional</span><span className="font-semibold text-violet-700">{s.additional}</span></div> : null}
+                      {hasBonus ? <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Bonus</span><span className="font-semibold text-emerald-700">{s.bonus}</span></div> : null}
+                      <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Avg</span><span className="font-semibold">{s.average.toFixed(1)}</span></div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {standingsMode === 'teams' && teamStandingsRows.map((s, idx) => {
+              const rowKey = s.key;
+              const isExpanded = mobileExpandedRow === rowKey;
+              return (
+                <div key={rowKey}>
+                  <button
+                    type="button"
+                    onClick={() => setMobileExpandedRow(isExpanded ? null : rowKey)}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-[#AFDDE5]/20 active:bg-[#AFDDE5]/40 transition-colors"
+                  >
+                    <span className="w-6 shrink-0 text-xs font-bold text-black/40 text-center">{idx + 1}</span>
+                    <span className="flex-1 text-xs font-bold leading-tight truncate">{s.team_name}</span>
+                    <span className="shrink-0 flex flex-col items-end">
+                      <span className="text-[9px] font-semibold uppercase tracking-wider text-black/30 leading-none">Total</span>
+                      <span className="text-sm font-extrabold tabular-nums leading-tight">{s.grand_total}</span>
+                    </span>
+                    <span className="shrink-0 text-black/30">{isExpanded ? '▲' : '▼'}</span>
+                  </button>
+                  {isExpanded && (
+                    <div className="px-4 pb-3 pt-1 bg-[#f7fcfd] text-xs space-y-1.5">
+                      {s.members.length > 0 ? <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Members</span><span>{s.members.join(', ')}</span></div> : null}
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                        {gameNumbers.map((gn, gi) => (
+                          <div key={gn} className="flex gap-1">
+                            <span className="text-black/40">G{gn}</span>
+                            <span className="font-semibold">{s.games[gi] ?? 0}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Total</span><span className="font-semibold">{s.total}</span></div>
+                      {hasAdditionalScores ? <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Additional</span><span className="font-semibold text-violet-700">{s.additional}</span></div> : null}
+                      {hasBonus ? <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Bonus</span><span className="font-semibold text-emerald-700">{s.bonus}</span></div> : null}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {((standingsMode === 'players' && filteredPlayerStandingsRows.length === 0) || (standingsMode === 'teams' && teamStandingsRows.length === 0)) && (
+              <p className="px-4 py-8 text-center text-black/40 italic text-xs">No scores recorded yet.</p>
+            )}
+          </div>
+
+          {/* Desktop full table — hidden on mobile */}
           <div
             ref={standingsHeaderScrollRef}
-            className={`${isStandingsScreenMode ? 'overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]' : 'sticky top-[7.25rem] z-30 overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]'}`}
+            className={`hidden sm:block ${isStandingsScreenMode ? 'overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]' : 'sticky top-[7.25rem] z-30 overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]'}`}
           >
             <table className="w-full min-w-[760px] text-left border-collapse table-fixed">
               {renderStandingsColGroup()}
@@ -15638,7 +15736,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
               standingsScrollRef.current = node;
               standingsBodyScrollRef.current = node;
             }}
-            className={isStandingsScreenMode ? 'overflow-auto max-h-[calc(100vh-14rem)]' : 'overflow-x-auto'}
+            className={`hidden sm:block ${isStandingsScreenMode ? 'overflow-auto max-h-[calc(100vh-14rem)]' : 'overflow-x-auto'}`}
             onMouseEnter={() => {
               if (isStandingsScreenMode) setIsAutoScrollPaused(true);
             }}
