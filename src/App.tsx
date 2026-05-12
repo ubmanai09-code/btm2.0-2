@@ -6245,6 +6245,14 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   const ask = (message: string) => confirm(tx(message));
   const scoringPresentAdBlock = sponsorsConfig?.presentModeAds?.scoring || DEFAULT_PRESENT_MODE_ADS.scoring;
 
+  const exitPresentMode = () => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('screen');
+    url.searchParams.delete('public');
+    window.location.href = url.toString();
+  };
+
   useEffect(() => {
     return () => {
       teamPulseTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
@@ -7083,6 +7091,14 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
         </div>
         {isScoreScreenMode && (
           <div className="flex flex-wrap items-center gap-3 self-start md:self-auto">
+            <button
+              type="button"
+              onClick={exitPresentMode}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold text-sm transition-colors"
+              title="Exit Present Mode"
+            >
+              ← {tx('Back')}
+            </button>
             {shiftNumbers.length > 1 && (
               <div className="inline-flex items-center gap-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Shifts</span>
@@ -14480,6 +14496,14 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
+
+  const exitPresentMode = () => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('screen');
+    url.searchParams.delete('public');
+    window.location.href = url.toString();
+  };
   const [bonusByKey, setBonusByKey] = useState<Record<string, number>>({});
   const [bonusDrafts, setBonusDrafts] = useState<Record<string, string>>({});
   const [savingBonusKey, setSavingBonusKey] = useState<string | null>(null);
@@ -15298,6 +15322,14 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         </div>
         {isStandingsScreenMode && (
           <div className="flex flex-wrap items-center gap-3 self-start md:self-auto">
+            <button
+              type="button"
+              onClick={exitPresentMode}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold text-sm transition-colors"
+              title="Exit Present Mode"
+            >
+              ← {tx('Back')}
+            </button>
             {isTeamTournament && (
               <div className="inline-flex items-center gap-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">View</span>
