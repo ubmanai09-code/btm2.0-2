@@ -21,6 +21,7 @@ export interface Tournament {
   status: 'draft' | 'active' | 'finished' | 'archived';
   has_additional_scores?: number;
   has_bonus?: number;
+  show_player_style?: number;
   created_at: string;
 }
 
@@ -124,11 +125,21 @@ export type KnownBracketFormatInput = {
     first?: string;
     second?: string;
     third?: string;
+    [key: string]: unknown;
   };
   description?: string;
   min_qualified_count?: number;
   recommended_qualified_count?: number;
 };
+
+export interface BuilderRulePreset {
+  id: string;
+  name: string;
+  description?: string;
+  seeding_method: 'registration' | 'manual' | 'random';
+  rounds: any[];
+  bracketCategory?: 'single-elim' | 'stepladder' | 'playoff' | 'ladder' | 'custom' | 'mixed';
+}
 
 
 
@@ -857,6 +868,22 @@ const api = {
     }
     return data;
   },
+  async setBracketDuelScores(
+    tournamentId: number,
+    matchId: number,
+    scores: Array<{ participant_id: number; score: number }>
+  ): Promise<{ success: boolean; winner_id: number }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/brackets/${matchId}/duel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scores }),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to submit duel scores');
+    }
+    return data;
+  },
   async setStepladderShootoutWinner(
     tournamentId: number,
     matchId: number,
@@ -871,6 +898,157 @@ const api = {
     if (!res.ok) {
       throw new Error(data?.error || 'Failed to resolve stepladder shootout');
     }
+    return data;
+  },
+  toBuilderPreset(format: KnownBracketFormat): BuilderRulePreset {
+    const placementRules = (format.placement_rules || {}) as any;
+    const builderState = placementRules.builder || {};
+    const savedRounds = Array.isArray(builderState.rounds) ? builderState.rounds : null;
+    const fallbackRounds = (format.round_match_counts || []).map((count: number, index: number) => {
+      const rule = (format.round_rules || [])[index] || 'duel';
+      return {
+        id: `round-${index + 1}`,
+        name: index === 0 ? 'Round 1' : `Round ${index + 1}`,
+        matchType: rule === 'shootout' ? 'shootout' : (rule === 'survivor_cut' ? 'group' : 'head-to-head'),
+        sourceOutcome: 'winner',
+        playersPerMatch: rule === 'duel' ? 2 : 4,
+        scoringType: 'pins',
+        bestOf: 1,
+        advancementCount: rule === 'duel' ? 1 : 2,
+        manualMatchCount: Number.isFinite(Number(count)) ? Math.max(1, Number(count)) : 1,
+        reseed: false,
+      };
+    });
+    const cat = builderState?.bracketCategory;
+    return {
+      id: String(format.id),
+      name: String(format.name || 'Preset'),
+      description: (format as any).description || '',
+      seeding_method: builderState?.seeding_method === 'manual' || builderState?.seeding_method === 'random'
+        ? builderState.seeding_method
+        : 'registration',
+      rounds: savedRounds && savedRounds.length > 0 ? savedRounds : fallbackRounds,
+      bracketCategory: (cat === 'single-elim' || cat === 'stepladder' || cat === 'playoff' || cat === 'ladder' || cat === 'custom' || cat === 'mixed') ? cat : undefined,
+    };
+  },
+  toBuilderFormatPayload(payload: {
+    id: string;
+    name: string;
+    description?: string;
+    seeding_method: 'registration' | 'manual' | 'random';
+    rounds: any[];
+    bracketCategory?: 'single-elim' | 'stepladder' | 'playoff' | 'ladder' | 'custom' | 'mixed';
+  }): KnownBracketFormatInput {
+    const rounds = Array.isArray(payload.rounds) ? payload.rounds : [];
+    const round_match_counts = rounds.map((round: any) => {
+      const parsed = Number.parseInt(String(round?.manualMatchCount ?? ''), 10);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+    });
+    const round_rules: Array<'duel' | 'survivor_cut'> = rounds.map((round: any) => {
+      const matchType = String(round?.matchType || '').trim();
+      if (matchType === 'shootout') return 'duel';
+      if (matchType === 'group') return 'survivor_cut';
+      return 'duel';
+    });
+    return {
+      id: payload.id,
+      name: payload.name,
+      match_play_type: 'playoff',
+      round_match_counts,
+      round_rules,
+      placement_rules: {
+        first: '',
+        second: '',
+        third: '',
+        builder: {
+          seeding_method: payload.seeding_method,
+          bracketCategory: payload.bracketCategory,
+          rounds,
+        } as any,
+      },
+      description: payload.description,
+    };
+  },
+  createBuilderPresetId(name: string): string {
+    const slug = String(name || 'preset')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'preset';
+    return `builder-${slug}-${Date.now()}`;
+  },
+  async getBuilderRulePresets(): Promise<BuilderRulePreset[]> {
+    const formats = await this.getKnownBracketFormats();
+    return (formats || []).map((format: KnownBracketFormat) => this.toBuilderPreset(format));
+  },
+  async createBuilderRulePreset(payload: {
+    name: string;
+    description?: string;
+    seeding_method: 'registration' | 'manual' | 'random';
+    rounds: any[];
+    bracketCategory?: 'single-elim' | 'stepladder' | 'playoff' | 'ladder' | 'custom' | 'mixed';
+  }): Promise<{ success: boolean; preset?: BuilderRulePreset }> {
+    const id = this.createBuilderPresetId(payload.name);
+    const formatPayload = this.toBuilderFormatPayload({
+      id,
+      name: String(payload.name || '').trim() || 'Preset',
+      description: payload.description,
+      seeding_method: payload.seeding_method,
+      rounds: payload.rounds,
+      bracketCategory: payload.bracketCategory,
+    });
+    const result = await this.createKnownBracketFormat(formatPayload);
+    return {
+      success: Boolean(result?.success),
+      preset: result?.format ? this.toBuilderPreset(result.format) : undefined,
+    };
+  },
+  async deleteBuilderRulePreset(id: string | number): Promise<{ success: boolean }> {
+    return this.deleteKnownBracketFormat(String(id));
+  },
+  async updateBuilderRulePreset(id: string | number, payload: { name?: string; bracketCategory?: string; rounds?: any[] }): Promise<{ success: boolean; preset?: BuilderRulePreset }> {
+    const existing = (await this.getBuilderRulePresets()).find(p => String(p.id) === String(id));
+    if (!existing) throw new Error('Preset not found');
+    const formatPayload = this.toBuilderFormatPayload({
+      id: String(id),
+      name: (payload.name ?? '').trim() || existing.name,
+      seeding_method: existing.seeding_method,
+      rounds: payload.rounds ?? existing.rounds,
+      bracketCategory: (payload.bracketCategory as any) || existing.bracketCategory,
+    });
+    const result = await this.updateKnownBracketFormat(String(id), formatPayload);
+    return {
+      success: Boolean(result?.success),
+      preset: result?.format ? this.toBuilderPreset(result.format) : undefined,
+    };
+  },
+
+  // ── Bracket V2 saved configs ──────────────────────────────────────────────
+
+  async getBracketV2Configs(tournamentId: number): Promise<any[]> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/bracket-v2-configs`);
+    const data = await this.safeJson(res);
+    if (!res.ok) throw new Error(data?.error || 'Failed to load bracket configs');
+    return data;
+  },
+
+  async saveBracketV2Config(tournamentId: number, config: any): Promise<{ success: boolean; id: string }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/bracket-v2-configs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) throw new Error(data?.error || 'Failed to save bracket config');
+    return data;
+  },
+
+  async deleteBracketV2Config(tournamentId: number, configId: string): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/bracket-v2-configs/${encodeURIComponent(configId)}`, {
+      method: 'DELETE',
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) throw new Error(data?.error || 'Failed to delete bracket config');
     return data;
   },
 };

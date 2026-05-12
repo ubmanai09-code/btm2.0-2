@@ -12,12 +12,15 @@ export type TournamentRoundConfig = {
   name: string;
   matchType: EngineMatchType;
   sourceOutcome?: 'winner' | 'loser' | 'both';
+  feedFromRoundId?: string;
   playersPerMatch: number;
   scoringType: EngineScoringType;
   bestOf?: number;
   advancementCount: number;
   manualMatchCount?: number | null;
+  customPairings?: Array<{ slot1?: string | null; slot2?: string | null }>;
   reseed: boolean;
+  injectParticipantSeeds?: number[] | null;
 };
 
 export type TournamentEngineConfig = {
@@ -100,10 +103,10 @@ type SourceToken = {
   outcome?: 'winner' | 'loser';
 };
 
-const COLUMN_WIDTH = 320;
-const NODE_WIDTH = 250;
-const ROW_GAP = 44;
-const BASE_NODE_HEIGHT = 92;
+const COLUMN_WIDTH = 280;
+const NODE_WIDTH = 220;
+const ROW_GAP = 34;
+const BASE_NODE_HEIGHT = 76;
 
 const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
 
@@ -118,6 +121,13 @@ const clampNonNegativeInt = (value: number, fallback: number) => {
 };
 
 const isPowerOfTwo = (value: number) => value > 0 && (value & (value - 1)) === 0;
+
+const nextPowerOfTwo = (value: number) => {
+  let size = 1;
+  const target = Math.max(2, Math.floor(Number(value) || 0));
+  while (size < target) size *= 2;
+  return size;
+};
 
 const buildStandardSeedLineOrder = (size: number): number[] => {
   if (size <= 2) return [1, 2];
@@ -161,11 +171,11 @@ const buildHeadToHeadAssignments = (sources: SourceToken[], matchCount: number):
 
 const buildStandardBracketAssignments = (sources: SourceToken[], matchCount: number): Array<{ source: SourceToken; matchIndex: number; slotIndex: number }> => {
   const totalSlots = matchCount * 2;
-  if (sources.length !== totalSlots || !isPowerOfTwo(sources.length)) {
+  if (!isPowerOfTwo(totalSlots) || sources.length > totalSlots) {
     return buildHeadToHeadAssignments(sources, matchCount);
   }
 
-  const seedOrder = buildStandardSeedLineOrder(sources.length);
+  const seedOrder = buildStandardSeedLineOrder(totalSlots);
   const sourceBySeed = new Map<number, SourceToken>();
   sources.forEach((source) => {
     if (!sourceBySeed.has(source.seed)) {
@@ -198,6 +208,85 @@ const buildSequentialPairingAssignments = (sources: SourceToken[], matchCount: n
   return assignments;
 };
 
+const parseCustomPairingToken = (raw: unknown): { kind: 'auto' | 'bye' | 'seed'; seed?: number } => {
+  const value = String(raw || '').trim().toLowerCase();
+  if (!value) return { kind: 'auto' };
+  if (value === 'bye') return { kind: 'bye' };
+  const match = value.match(/^(?:seed:|s)?(\d+)$/);
+  if (!match) return { kind: 'auto' };
+  return { kind: 'seed', seed: Number.parseInt(match[1], 10) };
+};
+
+const buildCustomHeadToHeadAssignments = (params: {
+  sources: SourceToken[];
+  pairings: Array<{ slot1?: string | null; slot2?: string | null }>;
+  matchCount: number;
+  roundName: string;
+  roundId: string;
+  issues: ValidationIssue[];
+}) => {
+  const { sources, pairings, matchCount, roundName, roundId, issues } = params;
+  const sourceBySeed = new Map<number, SourceToken>();
+  sources.forEach((source) => {
+    if (!sourceBySeed.has(source.seed)) {
+      sourceBySeed.set(source.seed, source);
+    }
+  });
+
+  const assignments: Array<{ source: SourceToken; matchIndex: number; slotIndex: number }> = [];
+  const byeSlots: Array<{ matchIndex: number; slotIndex: number }> = [];
+  const usedSeeds = new Set<number>();
+
+  pairings.slice(0, matchCount).forEach((pairing, matchIndex) => {
+    [pairing?.slot1, pairing?.slot2].forEach((rawValue, slotIndex) => {
+      const token = parseCustomPairingToken(rawValue);
+      if (token.kind === 'auto') return;
+      if (token.kind === 'bye') {
+        byeSlots.push({ matchIndex, slotIndex });
+        return;
+      }
+
+      const seed = Number(token.seed);
+      if (!Number.isFinite(seed) || seed <= 0) return;
+      if (usedSeeds.has(seed)) {
+        issues.push({
+          level: 'warning',
+          message: `${roundName}: Seed #${seed} is assigned more than once in custom pairings.`,
+          roundId,
+        });
+        return;
+      }
+
+      const source = sourceBySeed.get(seed);
+      if (!source) {
+        issues.push({
+          level: 'warning',
+          message: `${roundName}: Seed #${seed} is not available for this round.`,
+          roundId,
+        });
+        return;
+      }
+
+      usedSeeds.add(seed);
+      assignments.push({ source, matchIndex, slotIndex });
+    });
+  });
+
+  const unassignedSeeds = sources
+    .map((source) => source.seed)
+    .filter((seed) => !usedSeeds.has(seed));
+
+  if (pairings.length > 0 && assignments.length > 0 && unassignedSeeds.length > 0) {
+    issues.push({
+      level: 'warning',
+      message: `${roundName}: custom pairings leave ${unassignedSeeds.length} seed(s) unassigned.`,
+      roundId,
+    });
+  }
+
+  return { assignments, byeSlots };
+};
+
 export const buildTournamentEngine = (config: TournamentEngineConfig): TournamentEngineResult => {
   const issues: ValidationIssue[] = [];
   const participants = (config.participants || []).map((participant, index) => ({
@@ -226,6 +315,18 @@ export const buildTournamentEngine = (config: TournamentEngineConfig): Tournamen
     outcome: 'winner',
   }));
   let currentLoserSources: SourceToken[] = [];
+  const outputsByRoundId = new Map<string, { winners: SourceToken[]; losers: SourceToken[] }>();
+
+  const participantTokensBySeed = new Map<number, SourceToken>();
+  participants.forEach((participant) => {
+    participantTokensBySeed.set(participant.seed, {
+      kind: 'participant',
+      label: `${participant.seed}. ${participant.name}`,
+      seed: participant.seed,
+      participantId: participant.id,
+      outcome: 'winner',
+    });
+  });
 
   rounds.forEach((round, roundIndex) => {
     const playersPerMatch = round.matchType === 'head-to-head'
@@ -246,11 +347,29 @@ export const buildTournamentEngine = (config: TournamentEngineConfig): Tournamen
       ? 'winner'
       : (round.sourceOutcome === 'loser' || round.sourceOutcome === 'both' ? round.sourceOutcome : 'winner');
 
-    const roundInputSources = sourceMode === 'loser'
-      ? currentLoserSources
+    const requestedFeed = roundIndex > 0 && typeof round.feedFromRoundId === 'string'
+      ? outputsByRoundId.get(round.feedFromRoundId)
+      : null;
+
+    const sourceWinnerPool = requestedFeed ? requestedFeed.winners : currentWinnerSources;
+    const sourceLoserPool = requestedFeed ? requestedFeed.losers : currentLoserSources;
+
+    let roundInputSources = sourceMode === 'loser'
+      ? sourceLoserPool
       : sourceMode === 'both'
-        ? [...currentWinnerSources, ...currentLoserSources]
-        : currentWinnerSources;
+        ? [...sourceWinnerPool, ...sourceLoserPool]
+        : sourceWinnerPool;
+
+    const injectedSeeds = Array.isArray(round.injectParticipantSeeds) && round.injectParticipantSeeds.length > 0
+      ? round.injectParticipantSeeds
+      : null;
+    if (injectedSeeds !== null) {
+      const advancingWinners = roundInputSources.filter((s) => s.kind === 'advance');
+      const injectedTokens = injectedSeeds
+        .map((s) => participantTokensBySeed.get(s))
+        .filter((t): t is SourceToken => Boolean(t));
+      roundInputSources = [...advancingWinners, ...injectedTokens];
+    }
 
     if (roundInputSources.length === 0) {
       issues.push({ level: 'warning', message: `${round.name}: no incoming participants available for this round.`, roundId: round.id });
@@ -259,6 +378,8 @@ export const buildTournamentEngine = (config: TournamentEngineConfig): Tournamen
     const orderedSources = round.reseed
       ? [...roundInputSources].sort((left, right) => (left.seed - right.seed) || computeStableHash(left.label) - computeStableHash(right.label))
       : [...roundInputSources];
+    const customPairings = Array.isArray(round.customPairings) ? round.customPairings : [];
+    const hasExplicitCustomPairings = customPairings.some((pairing) => String(pairing?.slot1 || '').trim() || String(pairing?.slot2 || '').trim());
 
     if (round.matchType === 'head-to-head' && orderedSources.length === 1) {
       issues.push({
@@ -268,7 +389,11 @@ export const buildTournamentEngine = (config: TournamentEngineConfig): Tournamen
       });
     }
 
-    const matchCount = requestedMatchCount || Math.max(1, Math.ceil(Math.max(orderedSources.length, 1) / playersPerMatch));
+    const isFirstRoundDirectSeeding = injectedSeeds === null && roundIndex === 0 && round.matchType === 'head-to-head' && playersPerMatch === 2 && orderedSources.every((source) => source.kind === 'participant');
+    const autoMatchCount = isFirstRoundDirectSeeding
+      ? Math.max(1, nextPowerOfTwo(Math.max(orderedSources.length, 2)) / 2)
+      : Math.max(1, Math.ceil(Math.max(orderedSources.length, 1) / playersPerMatch));
+    const matchCount = requestedMatchCount || Math.max(autoMatchCount, customPairings.length || 0);
     const roundMatches: MatchNode[] = Array.from({ length: matchCount }, (_, matchIndex) => {
       const id = `${round.id}-match-${matchIndex + 1}`;
       const height = BASE_NODE_HEIGHT + (playersPerMatch * 18);
@@ -300,20 +425,32 @@ export const buildTournamentEngine = (config: TournamentEngineConfig): Tournamen
       return node;
     });
 
+    let byeSlots: Array<{ matchIndex: number; slotIndex: number }> = [];
     const sourceAssignments = (() => {
       if (round.matchType === 'head-to-head' && playersPerMatch === 2) {
         // For explicit bronze-style rounds, keep winners and losers in separate matches.
-        if (sourceMode === 'both' && currentWinnerSources.length > 0 && currentLoserSources.length > 0) {
-          const winnerMatchCount = Math.ceil(currentWinnerSources.length / 2);
-          const loserMatchCount = Math.ceil(currentLoserSources.length / 2);
+        if (sourceMode === 'both' && sourceWinnerPool.length > 0 && sourceLoserPool.length > 0) {
+          const winnerMatchCount = Math.ceil(sourceWinnerPool.length / 2);
+          const loserMatchCount = Math.ceil(sourceLoserPool.length / 2);
           if (matchCount >= winnerMatchCount + loserMatchCount) {
-            const winnerAssignments = buildHeadToHeadAssignments(currentWinnerSources, winnerMatchCount);
-            const loserAssignments = buildHeadToHeadAssignments(currentLoserSources, loserMatchCount)
+            const winnerAssignments = buildHeadToHeadAssignments(sourceWinnerPool, winnerMatchCount);
+            const loserAssignments = buildHeadToHeadAssignments(sourceLoserPool, loserMatchCount)
               .map((assignment) => ({ ...assignment, matchIndex: assignment.matchIndex + winnerMatchCount }));
             return [...winnerAssignments, ...loserAssignments];
           }
         }
-        const isFirstRoundDirectSeeding = roundIndex === 0 && orderedSources.every((source) => source.kind === 'participant');
+        if (isFirstRoundDirectSeeding && hasExplicitCustomPairings) {
+          const customAssignments = buildCustomHeadToHeadAssignments({
+            sources: orderedSources,
+            pairings: customPairings,
+            matchCount,
+            roundName: round.name,
+            roundId: round.id,
+            issues,
+          });
+          byeSlots = customAssignments.byeSlots;
+          return customAssignments.assignments;
+        }
         if (isFirstRoundDirectSeeding) {
           return buildStandardBracketAssignments(orderedSources, matchCount);
         }
@@ -362,6 +499,19 @@ export const buildTournamentEngine = (config: TournamentEngineConfig): Tournamen
           });
         }
       }
+    });
+
+    byeSlots.forEach(({ matchIndex, slotIndex }) => {
+      const match = roundMatches[matchIndex];
+      if (!match || slotIndex >= playersPerMatch) return;
+      const existing = match.slots[slotIndex];
+      if (existing.sourceType !== 'empty') return;
+      match.slots[slotIndex] = {
+        ...existing,
+        slotIndex,
+        sourceType: 'empty',
+        sourceLabel: 'BYE',
+      };
     });
 
     const nextWinnerSources: SourceToken[] = [];
@@ -413,12 +563,23 @@ export const buildTournamentEngine = (config: TournamentEngineConfig): Tournamen
 
     currentWinnerSources = nextWinnerSources;
     currentLoserSources = nextLoserSources;
+    outputsByRoundId.set(round.id, { winners: nextWinnerSources, losers: nextLoserSources });
   });
 
+  const lastRound = rounds.length > 0 ? rounds[rounds.length - 1] : null;
   const lastRoundAdvancement = rounds.length > 0
-    ? clampNonNegativeInt(Number(rounds[rounds.length - 1]?.advancementCount), 1)
+    ? clampNonNegativeInt(Number(lastRound?.advancementCount), 1)
     : 1;
-  const expectedFinalAdvancers = lastRoundAdvancement === 0 ? 0 : 1;
+  const lastRoundManualMatchCount = clampPositiveInt(Number(lastRound?.manualMatchCount || 1), 1);
+  const hasExplicitBronzeMatch = Boolean(
+    lastRound
+    && lastRound.sourceOutcome === 'both'
+    && lastRound.matchType === 'head-to-head'
+    && lastRoundManualMatchCount > 1,
+  );
+  const expectedFinalAdvancers = lastRoundAdvancement === 0
+    ? 0
+    : (hasExplicitBronzeMatch ? (lastRoundManualMatchCount * lastRoundAdvancement) : 1);
   if (rounds.length > 0 && currentWinnerSources.length !== expectedFinalAdvancers) {
     issues.push({
       level: 'warning',

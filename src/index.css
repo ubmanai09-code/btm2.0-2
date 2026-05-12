@@ -23,3 +23,21 @@ body {
 * {
   font-family: 'Roboto Condensed', 'Roboto', ui-sans-serif, system-ui, sans-serif !important;
 }
+
+@media print {
+  body > * {
+    display: none !important;
+  }
+  #root {
+    display: none !important;
+  }
+  #btm-print-area {
+    display: block !important;
+    position: static !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    background: #fff !important;
+    overflow: visible !important;
+  }
+}

@@ -25,6 +25,7 @@ type PersistedBuilderState = {
   seedingMethod: SeedingMethod;
   rounds: TournamentRoundConfig[];
   setupOpen: boolean;
+  includeBronzeMatch: boolean;
 };
 
 type BracketRow = {
@@ -142,7 +143,7 @@ const scoringTypeLabels: Record<EngineScoringType, string> = {
 
 const createRound = (index: number): TournamentRoundConfig => ({
   id: `round-${index + 1}`,
-  name: index === 0 ? 'Round 1' : index === 1 ? 'Semi Final' : index === 2 ? 'Final' : `Round ${index + 1}`,
+  name: index === 0 ? 'Round 1' : index === 1 ? 'SF' : index === 2 ? 'Final' : `Round ${index + 1}`,
   matchType: index === 0 ? 'group' : 'head-to-head',
   sourceOutcome: 'winner',
   playersPerMatch: index === 0 ? 4 : 2,
@@ -205,7 +206,7 @@ const readPersistedState = (storageKey: string): PersistedBuilderState | null =>
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PersistedBuilderState>;
     return {
-      participantMode: isParticipantMode(parsed.participantMode) ? parsed.participantMode : 'registered',
+      participantMode: isParticipantMode(parsed.participantMode) ? parsed.participantMode : 'manual-count',
       manualParticipantCount: Math.max(2, Number.parseInt(String(parsed.manualParticipantCount ?? 16), 10) || 16),
       manualParticipantList: typeof parsed.manualParticipantList === 'string' ? parsed.manualParticipantList : '',
       seedingMethod: isSeedingMethod(parsed.seedingMethod) ? parsed.seedingMethod : 'registration',
@@ -213,6 +214,7 @@ const readPersistedState = (storageKey: string): PersistedBuilderState | null =>
         ? parsed.rounds.map((round, index) => sanitizeRound(round, index))
         : DEFAULT_ROUNDS,
       setupOpen: parsed.setupOpen !== false,
+      includeBronzeMatch: Boolean(parsed.includeBronzeMatch),
     };
   } catch {
     return null;
@@ -628,6 +630,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
   const apiCompat = api as any;
   const canConfigure = role === 'admin';
   const canScore = role === 'admin' || role === 'moderator';
+  const canRenameRounds = canScore;
   const isPublic = role === 'public';
   const storageKey = React.useMemo(() => `btm_bracket_builder_${tournament.id}`, [tournament.id]);
   const persisted = React.useMemo(() => readPersistedState(storageKey), [storageKey]);
@@ -648,19 +651,22 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
   const [slotPickerKey, setSlotPickerKey] = React.useState<string | null>(null);
   const [slotPickerSearch, setSlotPickerSearch] = React.useState('');
   const [assigningSlotKey, setAssigningSlotKey] = React.useState<string | null>(null);
-  const [participantMode, setParticipantMode] = React.useState<ParticipantMode>(persisted?.participantMode ?? 'registered');
+  const [participantMode, setParticipantMode] = React.useState<ParticipantMode>(persisted?.participantMode ?? 'manual-count');
   const [manualParticipantCount, setManualParticipantCount] = React.useState(persisted?.manualParticipantCount ?? 16);
   const [manualParticipantList, setManualParticipantList] = React.useState(persisted?.manualParticipantList ?? '');
   const [seedingMethod, setSeedingMethod] = React.useState<SeedingMethod>(persisted?.seedingMethod ?? 'registration');
   const [rounds, setRounds] = React.useState<TournamentRoundConfig[]>(persisted?.rounds ?? DEFAULT_ROUNDS);
+  const [includeBronzeMatch, setIncludeBronzeMatch] = React.useState(persisted?.includeBronzeMatch ?? false);
   const [needsRegenerate, setNeedsRegenerate] = React.useState(false);
   const [rulePresets, setRulePresets] = React.useState<BuilderRulePreset[]>([]);
   const [showSavePresetModal, setShowSavePresetModal] = React.useState(false);
   const [showLoadPresetModal, setShowLoadPresetModal] = React.useState(false);
   const [savePresetName, setSavePresetName] = React.useState('');
   const [savePresetDesc, setSavePresetDesc] = React.useState('');
+  const [savePresetCategory, setSavePresetCategory] = React.useState<NonNullable<BuilderRulePreset['bracketCategory']>>('custom');
   const [savingPreset, setSavingPreset] = React.useState(false);
   const [presetError, setPresetError] = React.useState<string | null>(null);
+  const [expandedRounds, setExpandedRounds] = React.useState<Set<string>>(new Set());
   const [cleaningMalformedRows, setCleaningMalformedRows] = React.useState(false);
   const [resettingBracketData, setResettingBracketData] = React.useState(false);
   const [advancerRoundIndex, setAdvancerRoundIndex] = React.useState(0);
@@ -698,15 +704,64 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
       seedingMethod,
       rounds,
       setupOpen,
+      includeBronzeMatch,
     };
     window.localStorage.setItem(storageKey, JSON.stringify(payload));
-  }, [storageKey, participantMode, manualParticipantCount, manualParticipantList, seedingMethod, rounds, setupOpen]);
+  }, [storageKey, participantMode, manualParticipantCount, manualParticipantList, seedingMethod, rounds, setupOpen, includeBronzeMatch]);
 
   React.useEffect(() => {
     if (!isPublic) {
       setNeedsRegenerate(true);
     }
-  }, [participantMode, manualParticipantCount, manualParticipantList, seedingMethod, rounds, isPublic]);
+  }, [participantMode, manualParticipantCount, manualParticipantList, seedingMethod, rounds, includeBronzeMatch, isPublic]);
+
+  // Auto-generate bronze round when 3rd place is toggled for eligible tournament types
+  React.useEffect(() => {
+    const isSingleElimOrPlayoffOrLadder = tournament.match_play_type === 'single_elimination' || tournament.match_play_type === 'playoff' || tournament.match_play_type === 'ladder';
+    
+    // Check if bronze round already exists (sourceOutcome === 'both' indicates a bronze-style round)
+    const hasBronzeRound = rounds.some((round) => round.sourceOutcome === 'both' && round.matchType === 'head-to-head');
+    
+    if (!includeBronzeMatch && !hasBronzeRound) {
+      // Neither include nor exists - nothing to do
+      return;
+    }
+    
+    if (!isSingleElimOrPlayoffOrLadder) {
+      // Not an eligible tournament type - nothing to do
+      return;
+    }
+
+    if (includeBronzeMatch && hasBronzeRound) {
+      // Already has bronze round - nothing to do
+      return;
+    }
+
+    if (includeBronzeMatch && !hasBronzeRound && rounds.length >= 2) {
+      // Need to add bronze round
+      const lastRound = rounds[rounds.length - 1];
+      const newBronzeRound: TournamentRoundConfig = {
+        id: `round-${Date.now()}`,
+        name: '3rd Place',
+        matchType: 'head-to-head',
+        sourceOutcome: 'both',
+        playersPerMatch: 2,
+        scoringType: 'pins',
+        bestOf: 1,
+        advancementCount: 0,
+        manualMatchCount: null,
+        reseed: false,
+      };
+      setRounds([...rounds.slice(0, -1), newBronzeRound, lastRound]);
+      return;
+    }
+
+    if (!includeBronzeMatch && hasBronzeRound) {
+      // Need to remove bronze round
+      setRounds(rounds.filter((round) => !(round.sourceOutcome === 'both' && round.matchType === 'head-to-head')));
+      return;
+    }
+  }, [includeBronzeMatch, tournament.match_play_type]);
 
   const refreshBracket = React.useCallback(async () => {
     setLoadingBracket(true);
@@ -970,11 +1025,12 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
     setSavingPreset(true);
     setPresetError(null);
     try {
-      const result = await apiCompat.createBuilderRulePreset({ name, description: savePresetDesc.trim() || undefined, seeding_method: seedingMethod, rounds });
+      const result = await apiCompat.createBuilderRulePreset({ name, description: savePresetDesc.trim() || undefined, seeding_method: seedingMethod, rounds, bracketCategory: savePresetCategory });
       if (result.preset) setRulePresets((prev) => [...prev, result.preset!]);
       setShowSavePresetModal(false);
       setSavePresetName('');
       setSavePresetDesc('');
+      setSavePresetCategory('custom');
     } catch (error: any) {
       setPresetError(error?.message || 'Failed to save preset');
     } finally {
@@ -1068,16 +1124,17 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
   const engineResult = React.useMemo(() => buildTournamentEngine({ participants: normalizedParticipants, rounds }), [normalizedParticipants, rounds]);
   const hasErrors = engineResult.issues.some((issue) => issue.level === 'error');
   const hasLoserRoute = React.useMemo(() => engineResult.matches.some((match) => match.slots.some((slot) => slot.outcome === 'loser')), [engineResult.matches]);
+  const hasBronzeRoundInBuilder = rounds.some((round) => round.sourceOutcome === 'both' && round.matchType === 'head-to-head');
   const builderWarnings = React.useMemo(() => {
     const warnings = [...engineResult.issues];
-    if (expectsBronzeMatch && !hasLoserRoute) {
+    if (includeBronzeMatch && !hasBronzeRoundInBuilder) {
       warnings.unshift({
         level: 'warning' as const,
-        message: 'This tournament is configured for 3 winners, but the builder does not currently define a bronze match between semifinal losers. The generated bracket will follow the builder exactly and will not add that match automatically.',
+        message: 'Bronze match (3rd place) is enabled but not found in rounds. It may be added automatically when you generate.',
       });
     }
     return warnings;
-  }, [engineResult.issues, expectsBronzeMatch, hasLoserRoute]);
+  }, [engineResult.issues, includeBronzeMatch, hasBronzeRoundInBuilder]);
 
   const liveGraph = React.useMemo(() => buildLiveMatchGraph(liveBracket), [liveBracket]);
   const participantNameById = React.useMemo(() => {
@@ -1266,7 +1323,11 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
     setRounds((prev) => prev.map((round) => (round.id === roundId ? { ...round, [key]: value } : round)));
   };
 
-  const addRound = () => setRounds((prev) => [...prev, createRound(prev.length)]);
+  const addRound = () => {
+    const newRound = createRound(rounds.length);
+    setRounds((prev) => [...prev, newRound]);
+    setExpandedRounds((prev) => { const next = new Set(prev); next.add(newRound.id); return next; });
+  };
   const removeRound = (roundId: string) => setRounds((prev) => (prev.length > 1 ? prev.filter((round) => round.id !== roundId) : prev));
 
   const materializeManualParticipants = React.useCallback(async (): Promise<TournamentParticipantNode[]> => {
@@ -1364,7 +1425,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
         round_match_counts: roundMatchCounts,
         round_rules: roundRules,
         engine_matches: engineMatches,
-        winners_mode: tournament.playoff_winners_count === 3 ? '3' : '1',
+        winners_mode: (includeBronzeMatch || tournament.playoff_winners_count === 3) ? '3' : '1',
       });
       setSuccessMessage(participantMode === 'registered'
         ? `Bracket generated successfully using ${rankedRegisteredParticipants.length} registered participants from standings.`
@@ -1593,14 +1654,14 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
               className="flex w-full items-center justify-between gap-3 border-b border-[#dfe4ff] bg-[#f5f3ff] px-4 py-3 text-left"
             >
               <div>
-                <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#33408a]">Setup And Rules</div>
-                <div className="mt-1 text-sm text-[#5b6795]">Admin-only configuration. Collapse this when scoring starts.</div>
+                <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#33408a]">Preset Editor</div>
+                <div className="mt-1 text-sm text-[#5b6795]">Design and save bracket structures. Only seed count matters — no live tournament data needed.</div>
               </div>
               {setupOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
             </button>
 
             {setupOpen && (
-              <div className="grid grid-cols-1 gap-4 p-4 xl:grid-cols-[680px_minmax(0,1fr)]">
+              <div className="grid grid-cols-1 gap-4 p-4 xl:grid-cols-[minmax(0,1.1fr)_520px]">
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-[#dfe4ff] bg-[#fbfbff] p-3">
                     <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-[#6672a8]">Setup</div>
@@ -1610,6 +1671,26 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                       </div>
                     )}
                     <div className="space-y-3">
+                      <div>
+                        <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Number Of Seeds</label>
+                        <input
+                          type="number"
+                          min="2"
+                          value={manualParticipantCount}
+                          onChange={(e) => {
+                            const nextCount = Math.max(2, Number.parseInt(e.target.value || '2', 10) || 2);
+                            setManualParticipantCount(nextCount);
+                            if (participantMode !== 'manual-count') {
+                              setParticipantMode('manual-count');
+                            }
+                          }}
+                          disabled={!canConfigure}
+                          className="h-10 w-full rounded-xl border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]"
+                        />
+                        <div className="mt-1 text-xs text-[#5b6795]">
+                          Set seed count first. This starts preset design in manual seed mode.
+                        </div>
+                      </div>
                       <div>
                         <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Participant Source</label>
                         <select value={participantMode} onChange={(e) => setParticipantMode(e.target.value as ParticipantMode)} disabled={!canConfigure} className="h-10 w-full rounded-xl border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]">
@@ -1626,10 +1707,22 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                           <option value="random">Stable Random</option>
                         </select>
                       </div>
-                      {participantMode === 'manual-count' && (
-                        <div>
-                          <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Manual Participant Count</label>
-                          <input type="number" min="2" value={manualParticipantCount} onChange={(e) => setManualParticipantCount(Math.max(2, Number.parseInt(e.target.value || '2', 10) || 2))} disabled={!canConfigure} className="h-10 w-full rounded-xl border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]" />
+                      {(tournament.match_play_type === 'single_elimination' || tournament.match_play_type === 'playoff' || tournament.match_play_type === 'ladder') && (
+                        <div className="flex items-center gap-3 rounded-xl border border-[#d8defe] bg-[#f8faff] px-3 py-3">
+                          <input
+                            type="checkbox"
+                            id="includeBronzeMatch"
+                            checked={includeBronzeMatch}
+                            onChange={(e) => setIncludeBronzeMatch(e.target.checked)}
+                            disabled={!canConfigure}
+                            className="h-5 w-5 rounded border-[#d6ddff] cursor-pointer"
+                          />
+                          <label htmlFor="includeBronzeMatch" className="text-sm font-semibold text-[#2f3966] cursor-pointer flex-1">
+                            Include 3rd Place Match
+                          </label>
+                          <div className="text-xs text-[#5b6795] font-medium">
+                            {tournament.match_play_type === 'ladder' ? 'Semifinal loser' : 'Semifinal losers'}
+                          </div>
                         </div>
                       )}
                       {participantMode === 'manual-list' && (
@@ -1714,99 +1807,125 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                     </div>
                   )}
 
-                  <div className="rounded-2xl border border-[#dfe4ff] bg-[#fbfbff] p-3">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#6672a8]">Rules</div>
-                      <div className="flex items-center gap-2">
-                        <button type="button" onClick={() => { setShowLoadPresetModal(true); }} className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#d6ddff] bg-white px-2.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#4e5d8b]">
-                          Load Preset
+                  <div className="rounded-2xl border border-[#1e2540]/10 bg-[#f8f9fc] overflow-hidden shadow-sm">
+                    {/* Toolbar */}
+                    <div className="flex items-center gap-1.5 border-b border-[#d0d6f0] bg-[#edf0fb] px-3 py-2">
+                      <div className="flex-1 text-[11px] font-black uppercase tracking-[0.12em] text-[#374785]">Round Structure</div>
+                      <button type="button" onClick={() => { setShowLoadPresetModal(true); }} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-[#ccd3ef] bg-white px-2.5 text-[10px] font-bold text-[#4e5d8b] hover:bg-[#f0f3ff]">
+                        Load Preset
+                      </button>
+                      {canConfigure && (
+                        <button type="button" onClick={() => { setSavePresetName(''); setSavePresetDesc(''); setSavePresetCategory('custom'); setPresetError(null); setShowSavePresetModal(true); }} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-[#4e6ce0]/30 bg-[#4e6ce0]/10 px-2.5 text-[10px] font-bold text-[#3550b8] hover:bg-[#4e6ce0]/20">
+                          Save Preset
                         </button>
-                        {canConfigure && (
-                          <button type="button" onClick={() => { setSavePresetName(''); setSavePresetDesc(''); setPresetError(null); setShowSavePresetModal(true); }} className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#b9c6ff] bg-[#eef2ff] px-2.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#3550b8]">
-                            Save as Preset
-                          </button>
-                        )}
-                        {canConfigure && (
-                          <button type="button" onClick={addRound} className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#b9c6ff] bg-[#eef2ff] px-2.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#3550b8]">
-                            <Plus size={12} />
-                            Add Round
-                          </button>
-                        )}
-                      </div>
+                      )}
+                      {canConfigure && (
+                        <button type="button" onClick={addRound} className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#ccd3ef] bg-white text-[#3550b8] hover:bg-[#f0f3ff]" title="Add Round">
+                          <Plus size={13} />
+                        </button>
+                      )}
                     </div>
-                    <div className="space-y-3 max-h-[480px] overflow-auto">
-                      {rounds.map((round, index) => (
-                        <div key={round.id} className="rounded-2xl border border-[#d7defe] bg-white p-3 shadow-[0_4px_14px_rgba(74,88,168,0.06)]">
-                          <div className="mb-2 flex items-start justify-between gap-2">
-                            <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#374785]">Round {index + 1} - {round.name}</div>
-                            {canConfigure && rounds.length > 1 && (
-                              <button type="button" onClick={() => removeRound(round.id)} className="inline-flex h-7 items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 text-[10px] font-bold uppercase tracking-wider text-red-700">
-                                <Trash2 size={12} />
-                              </button>
+                    {/* Round list */}
+                    <div className="divide-y divide-[#e4e8f8]">
+                      {rounds.map((round, index) => {
+                        const isExpanded = expandedRounds.has(round.id);
+                        const toggleExpand = () => setExpandedRounds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(round.id)) next.delete(round.id);
+                          else next.add(round.id);
+                          return next;
+                        });
+                        return (
+                          <div key={round.id} className="bg-white">
+                            {/* Round header row */}
+                            <div
+                              className="flex cursor-pointer select-none items-center gap-2 px-3 py-2 hover:bg-[#f5f7ff]"
+                              onClick={toggleExpand}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpand(); } }}
+                              aria-expanded={isExpanded}
+                            >
+                              {isExpanded ? <ChevronDown size={13} className="shrink-0 text-[#6070a8]" /> : <ChevronRight size={13} className="shrink-0 text-[#6070a8]" />}
+                              <span className="shrink-0 w-5 text-center text-[10px] font-black tabular-nums text-[#9aabd0]">R{index + 1}</span>
+                              <span className="flex-1 min-w-0 truncate text-[12px] font-bold text-[#2f3966]">{round.name}</span>
+                              <span className="shrink-0 rounded bg-[#eef1ff] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-[#5066b0]">{round.matchType}</span>
+                              <span className="shrink-0 rounded bg-[#f0f7ff] px-1.5 py-0.5 text-[9px] font-bold text-[#3b6ca8]">{round.playersPerMatch}p</span>
+                              {canConfigure && rounds.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); removeRound(round.id); }}
+                                  className="shrink-0 inline-flex h-6 w-6 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                                  title="Remove round"
+                                >
+                                  <Trash2 size={11} />
+                                </button>
+                              )}
+                            </div>
+                            {/* Expanded body */}
+                            {isExpanded && (
+                              <div className="border-t border-[#e8ecf8] bg-[#f9faff] px-3 py-3 space-y-2.5">
+                                <div>
+                                  <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Round Name</label>
+                                  <input value={round.name} onChange={(e) => updateRound(round.id, 'name', e.target.value)} disabled={!canRenameRounds} className="h-9 w-full rounded-lg border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]" />
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Match Type</label>
+                                    <select value={round.matchType} onChange={(e) => {
+                                      const nextMatchType = e.target.value as EngineMatchType;
+                                      updateRound(round.id, 'matchType', nextMatchType);
+                                    }} disabled={!canConfigure} className="h-9 w-full rounded-lg border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]">
+                                      {matchTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Feed From</label>
+                                    <select
+                                      value={round.sourceOutcome || 'winner'}
+                                      onChange={(e) => updateRound(round.id, 'sourceOutcome', e.target.value as 'winner' | 'loser' | 'both')}
+                                      disabled={!canConfigure || index === 0}
+                                      className="h-9 w-full rounded-lg border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966] disabled:bg-[#f3f5ff] disabled:text-[#7a86ae]"
+                                    >
+                                      <option value="winner">Winners</option>
+                                      <option value="loser">Losers</option>
+                                      <option value="both">Winners + Losers</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Players / Match</label>
+                                    <input type="number" min="2" value={round.playersPerMatch} onChange={(e) => updateRound(round.id, 'playersPerMatch', Math.max(2, Number.parseInt(e.target.value || '2', 10) || 2))} disabled={!canConfigure} className="h-9 w-full rounded-lg border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966] disabled:bg-[#f3f5ff] disabled:text-[#7a86ae]" />
+                                  </div>
+                                  <div>
+                                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Scoring</label>
+                                    <select value={round.scoringType} onChange={(e) => updateRound(round.id, 'scoringType', e.target.value as EngineScoringType)} disabled={!canConfigure} className="h-9 w-full rounded-lg border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]">
+                                      {scoringTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Advance / Match</label>
+                                    <input type="number" min="0" value={round.advancementCount} onChange={(e) => updateRound(round.id, 'advancementCount', Math.max(0, Number.parseInt(e.target.value || '0', 10) || 0))} disabled={!canConfigure} className="h-9 w-full rounded-lg border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]" />
+                                    {index === rounds.length - 1 && (
+                                      <div className="mt-1 text-[10px] font-semibold text-[#6b779f]">
+                                        Final: set <span className="font-black text-[#33408a]">0</span> to close the bracket.
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="rounded-lg border border-[#d8defe] bg-white px-3 py-2 text-[11px] text-[#62709b]">
+                                  <span className="font-bold text-[#33408a]">{round.matchType}</span> · <span className="font-bold text-[#33408a]">{round.playersPerMatch}p/match</span> · <span className="font-bold text-[#33408a]">{scoringTypeLabels[round.scoringType]}</span> · <span className="font-bold text-[#33408a]">{round.advancementCount}</span> advance
+                                </div>
+                              </div>
                             )}
                           </div>
-                          <div className="space-y-2.5">
-                            <div>
-                              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Round Name</label>
-                              <input value={round.name} onChange={(e) => updateRound(round.id, 'name', e.target.value)} disabled={!canConfigure} className="h-9 w-full rounded-xl border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Match Type</label>
-                                <select value={round.matchType} onChange={(e) => {
-                                  const nextMatchType = e.target.value as EngineMatchType;
-                                  updateRound(round.id, 'matchType', nextMatchType);
-                                }} disabled={!canConfigure} className="h-9 w-full rounded-xl border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]">
-                                  {matchTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                                </select>
-                              </div>
-                              <div>
-                                <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Feed From Previous</label>
-                                <select
-                                  value={round.sourceOutcome || 'winner'}
-                                  onChange={(e) => updateRound(round.id, 'sourceOutcome', e.target.value as 'winner' | 'loser' | 'both')}
-                                  disabled={!canConfigure || index === 0}
-                                  className="h-9 w-full rounded-xl border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966] disabled:bg-[#f3f5ff] disabled:text-[#7a86ae]"
-                                >
-                                  <option value="winner">Winners</option>
-                                  <option value="loser">Losers</option>
-                                  <option value="both">Winners + Losers</option>
-                                </select>
-                              </div>
-                              <div>
-                                <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Players Per Match</label>
-                                <input type="number" min="2" value={round.playersPerMatch} onChange={(e) => updateRound(round.id, 'playersPerMatch', Math.max(2, Number.parseInt(e.target.value || '2', 10) || 2))} disabled={!canConfigure} className="h-9 w-full rounded-xl border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966] disabled:bg-[#f3f5ff] disabled:text-[#7a86ae]" />
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Scoring Type</label>
-                                <select value={round.scoringType} onChange={(e) => updateRound(round.id, 'scoringType', e.target.value as EngineScoringType)} disabled={!canConfigure} className="h-9 w-full rounded-xl border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]">
-                                  {scoringTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                                </select>
-                              </div>
-                              <div>
-                                <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Advance Per Match</label>
-                                <input type="number" min="0" value={round.advancementCount} onChange={(e) => updateRound(round.id, 'advancementCount', Math.max(0, Number.parseInt(e.target.value || '0', 10) || 0))} disabled={!canConfigure} className="h-9 w-full rounded-xl border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]" />
-                                {index === rounds.length - 1 && (
-                                  <div className="mt-1 text-[10px] font-semibold text-[#6b779f]">
-                                    Final round tip: set <span className="font-black text-[#33408a]">Advance = 0</span> to complete tournament without creating next-round placeholders.
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            <div className="rounded-xl border border-[#d8defe] bg-[#f8faff] px-3 py-2 text-[11px] text-[#62709b]">
-                              This round is configured as <span className="font-bold text-[#33408a]">{round.matchType}</span> with <span className="font-bold text-[#33408a]">{round.playersPerMatch}</span> players in each match, scored by <span className="font-bold text-[#33408a]">{scoringTypeLabels[round.scoringType]}</span>, and <span className="font-bold text-[#33408a]">{round.advancementCount}</span> advancing from each match.
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-[#dfe4ff] bg-[#fbfbff] p-3">
+                <div className="space-y-4 xl:sticky xl:top-4 xl:self-start">
+                  <div className="rounded-2xl border border-[#cfe7d6] bg-[linear-gradient(180deg,#f7fff8_0%,#ffffff_100%)] p-3 shadow-[0_10px_24px_rgba(44,122,77,0.08)]">
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#33408a]">Generation Preview</div>
                       <div className="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
@@ -1823,11 +1942,11 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                       ))}
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <button type="button" onClick={handleGenerateBracket} disabled={!canConfigure || generating || hasErrors} className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-black text-white disabled:opacity-50">
+                      <button type="button" onClick={handleGenerateBracket} disabled={!canConfigure || generating || hasErrors} className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-black text-white disabled:opacity-50">
                         {generating ? <RefreshCw size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
                         Generate Actual Bracket
                       </button>
-                      <button type="button" onClick={refreshBracket} className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#d6ddff] bg-white px-4 text-sm font-bold text-[#4e5d8b]">
+                      <button type="button" onClick={refreshBracket} className="inline-flex h-10 items-center gap-2 rounded-xl border border-[#d6ddff] bg-white px-4 text-sm font-bold text-[#4e5d8b] xl:w-full xl:justify-center">
                         <RefreshCw size={14} />
                         Refresh Live Bracket
                       </button>
@@ -1839,6 +1958,40 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                         </div>
                       ))}
                     </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-[#dfe4ff] bg-[#fbfbff] p-3">
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#33408a]">Seed List</div>
+                        <div className="mt-1 text-[11px] text-[#6b779f]">Compact check only. Final structure is driven by the generation preview above.</div>
+                      </div>
+                      <div className="inline-flex items-center gap-1 rounded-full border border-[#d6ddff] bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#53608d]">
+                        <Users size={12} />
+                        {normalizedParticipants.length}
+                      </div>
+                    </div>
+
+                    {participantMode === 'registered' && loadingParticipants ? (
+                      <div className="py-5 text-center text-sm text-[#7a86ae]">Loading registered participants...</div>
+                    ) : normalizedParticipants.length === 0 ? (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        {participantMode === 'registered'
+                          ? 'No ranked registered participants available yet. Check standings and participant registration.'
+                          : 'Add at least 2 participants to preview the seeded list.'}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-[#d8defe] bg-white p-2">
+                        <div className="grid max-h-[260px] grid-cols-2 gap-1 overflow-auto md:grid-cols-3 xl:max-h-[170px] xl:grid-cols-4 xl:grid-rows-4">
+                          {normalizedParticipants.map((participant) => (
+                            <div key={participant.id} className="grid grid-cols-[42px_minmax(0,1fr)] items-center gap-2 rounded-md border border-[#eef1ff] bg-[#fcfcff] px-2 py-1.5 text-xs text-[#5c678f]">
+                              <div className="rounded-md bg-[#eef2ff] px-1.5 py-1 text-center font-black text-[#33408a]">#{participant.seed ?? '-'}</div>
+                              <div className="truncate font-semibold">{participant.name}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2027,7 +2180,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                                 )}
                                 {match.slots.map((slot) => {
                                   const participantId = slot.participantDbId ?? getFallbackSlotParticipantId(row, slot.slotIndex);
-                                  const isEditableSlot = !isPublic && slot.sourceType !== 'advance';
+                                  const isEditableSlot = canScore && !isPublic;
                                   const advanceCandidates = resolveAdvanceCandidates(slot);
                                   const pickerKey = `${row.id}-${slot.slotIndex}`;
                                   const isPickerOpen = slotPickerKey === pickerKey;
@@ -2223,7 +2376,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                             )}
                             {match.slots.map((slot) => {
                               const participantId = slot.participantDbId ?? getFallbackSlotParticipantId(row, slot.slotIndex);
-                              const isEditableSlot = !isPublic && slot.sourceType !== 'advance';
+                              const isEditableSlot = canScore && !isPublic;
                               const advanceCandidates = resolveAdvanceCandidates(slot);
                               const pickerKey = `${row.id}-${slot.slotIndex}`;
                               const isPickerOpen = slotPickerKey === pickerKey;
@@ -2507,36 +2660,57 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
     {/* Save Preset Modal */}
     {showSavePresetModal && (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
-        <div className="w-full max-w-md rounded-2xl border border-[#dfe4ff] bg-white shadow-2xl p-6">
-          <div className="mb-4 text-base font-black text-[#2f3966]">Save Current Rules as Preset</div>
-          <div className="space-y-3">
+        <div className="w-full max-w-md rounded-2xl border border-[#dfe4ff] bg-white shadow-2xl">
+          <div className="border-b border-[#e4e9ff] bg-[#f5f7ff] px-5 py-4 rounded-t-2xl">
+            <div className="text-[10px] font-black uppercase tracking-[0.1em] text-[#6070a8]">Preset Editor</div>
+            <div className="mt-0.5 text-base font-black text-[#2f3966]">Save Structure as Preset</div>
+          </div>
+          <div className="p-5 space-y-3">
             <div>
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Preset Name *</label>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Preset Name <span className="text-red-500">*</span></label>
               <input
                 autoFocus
                 type="text"
                 value={savePresetName}
                 onChange={(e) => setSavePresetName(e.target.value)}
-                className="h-10 w-full rounded-xl border border-[#d6ddff] bg-[#f8faff] px-3 text-sm text-[#2f3966] outline-none"
+                className="h-10 w-full rounded-lg border border-[#d6ddff] bg-[#f8faff] px-3 text-sm text-[#2f3966] outline-none focus:border-[#5066b0] focus:ring-1 focus:ring-[#5066b0]/20"
                 placeholder="e.g. Stepladder 10 Players"
+                onKeyDown={(e) => { if (e.key === 'Enter') void handleSavePreset(); }}
               />
             </div>
             <div>
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Description (optional)</label>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Category</label>
+              <select
+                value={savePresetCategory}
+                onChange={(e) => setSavePresetCategory(e.target.value as NonNullable<BuilderRulePreset['bracketCategory']>)}
+                className="h-10 w-full rounded-lg border border-[#d6ddff] bg-[#f8faff] px-3 text-sm text-[#2f3966] outline-none"
+              >
+                <option value="custom">Custom</option>
+                <option value="single-elim">Single Elimination</option>
+                <option value="stepladder">Stepladder</option>
+                <option value="playoff">Playoff</option>
+                <option value="ladder">Ladder</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Description <span className="text-[#9aabcc] normal-case font-normal">(optional)</span></label>
               <input
                 type="text"
                 value={savePresetDesc}
                 onChange={(e) => setSavePresetDesc(e.target.value)}
-                className="h-10 w-full rounded-xl border border-[#d6ddff] bg-[#f8faff] px-3 text-sm text-[#2f3966] outline-none"
+                className="h-10 w-full rounded-lg border border-[#d6ddff] bg-[#f8faff] px-3 text-sm text-[#2f3966] outline-none focus:border-[#5066b0] focus:ring-1 focus:ring-[#5066b0]/20"
                 placeholder="Short description"
               />
             </div>
+            <div className="rounded-lg border border-[#e0e8ff] bg-[#f2f5ff] px-3 py-2 text-[11px] text-[#6070a8]">
+              Saves <strong className="text-[#374785]">{rounds.length} round{rounds.length !== 1 ? 's' : ''}</strong> of structure. Seed counts come from the tournament at generation time — only structure is stored.
+            </div>
             {presetError && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">{presetError}</div>}
             <div className="flex gap-2 pt-1">
-              <button type="button" onClick={handleSavePreset} disabled={savingPreset} className="inline-flex h-10 flex-1 items-center justify-center rounded-xl bg-[#3550b8] text-sm font-black text-white disabled:opacity-50">
+              <button type="button" onClick={handleSavePreset} disabled={savingPreset} className="inline-flex h-10 flex-1 items-center justify-center rounded-lg bg-[#3550b8] text-sm font-black text-white disabled:opacity-50">
                 {savingPreset ? 'Saving…' : 'Save Preset'}
               </button>
-              <button type="button" onClick={() => setShowSavePresetModal(false)} className="inline-flex h-10 flex-1 items-center justify-center rounded-xl border border-[#d6ddff] text-sm font-bold text-[#4e5d8b]">
+              <button type="button" onClick={() => setShowSavePresetModal(false)} className="inline-flex h-10 flex-1 items-center justify-center rounded-lg border border-[#d6ddff] text-sm font-bold text-[#4e5d8b]">
                 Cancel
               </button>
             </div>
@@ -2548,39 +2722,59 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
     {/* Load Preset Modal */}
     {showLoadPresetModal && (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
-        <div className="w-full max-w-lg rounded-2xl border border-[#dfe4ff] bg-white shadow-2xl p-6">
-          <div className="mb-4 text-base font-black text-[#2f3966]">Load a Saved Preset</div>
-          {rulePresets.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-[#d6ddff] bg-[#f8faff] px-4 py-6 text-center text-sm text-[#67749f]">
-              No saved presets yet. Configure rounds and save using "Save as Preset".
+        <div className="w-full max-w-lg rounded-2xl border border-[#dfe4ff] bg-white shadow-2xl">
+          <div className="border-b border-[#e4e9ff] bg-[#f5f7ff] px-5 py-4 rounded-t-2xl flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.1em] text-[#6070a8]">Preset Editor</div>
+              <div className="mt-0.5 text-base font-black text-[#2f3966]">Load a Saved Preset</div>
             </div>
-          ) : (
-            <div className="max-h-96 space-y-2 overflow-y-auto">
-              {rulePresets.map((preset) => (
-                <div key={preset.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#dfe4ff] bg-[#f8faff] px-4 py-3">
-                  <div>
-                    <div className="text-sm font-bold text-[#2f3966]">{preset.name}</div>
-                    {preset.description && <div className="text-xs text-[#67749f]">{preset.description}</div>}
-                    <div className="mt-0.5 text-[10px] text-[#9aa3c2]">{preset.rounds?.length ?? 0} rounds · seeding: {preset.seeding_method}</div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <button type="button" onClick={() => handleLoadPreset(preset)} className="inline-flex h-8 items-center rounded-lg bg-[#3550b8] px-3 text-xs font-black text-white">
-                      Load
-                    </button>
-                    {role === 'admin' && (
-                      <button type="button" onClick={() => void handleDeletePreset(preset.id)} className="inline-flex h-8 items-center rounded-lg border border-red-200 bg-red-50 px-2 text-xs font-bold text-red-700">
-                        <Trash2 size={12} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="mt-4">
-            <button type="button" onClick={() => setShowLoadPresetModal(false)} className="inline-flex h-10 w-full items-center justify-center rounded-xl border border-[#d6ddff] text-sm font-bold text-[#4e5d8b]">
-              Close
+            <button type="button" onClick={() => setShowLoadPresetModal(false)} className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[#d6ddff] text-[#4e5d8b] hover:bg-[#f0f3ff]">
+              <X size={14} />
             </button>
+          </div>
+          <div className="p-5">
+            {rulePresets.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[#d6ddff] bg-[#f8faff] px-4 py-6 text-center text-sm text-[#67749f]">
+                No saved presets yet. Configure rounds and save using "Save Preset".
+              </div>
+            ) : (
+              <div className="max-h-[420px] divide-y divide-[#eef1ff] overflow-y-auto rounded-xl border border-[#dfe4ff] bg-white">
+                {rulePresets.map((preset) => {
+                  const catLabel = preset.bracketCategory
+                    ? { 'single-elim': 'Single Elim', stepladder: 'Stepladder', playoff: 'Playoff', ladder: 'Ladder', custom: 'Custom' }[preset.bracketCategory] ?? preset.bracketCategory
+                    : null;
+                  return (
+                    <div key={preset.id} className="flex items-center gap-3 px-4 py-3 hover:bg-[#f8f9ff]">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-[#2f3966] truncate">{preset.name}</span>
+                          {catLabel && (
+                            <span className="shrink-0 rounded bg-[#eef1ff] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-[#5066b0]">{catLabel}</span>
+                          )}
+                        </div>
+                        {preset.description && <div className="mt-0.5 text-xs text-[#67749f] truncate">{preset.description}</div>}
+                        <div className="mt-0.5 text-[10px] text-[#9aa3c2]">{preset.rounds?.length ?? 0} rounds · seeding: {preset.seeding_method}</div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button type="button" onClick={() => handleLoadPreset(preset)} className="inline-flex h-8 items-center rounded-lg bg-[#3550b8] px-3 text-xs font-black text-white hover:bg-[#2a3fa0]">
+                          Load
+                        </button>
+                        {role === 'admin' && (
+                          <button type="button" onClick={() => void handleDeletePreset(preset.id)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100">
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div className="mt-4">
+              <button type="button" onClick={() => setShowLoadPresetModal(false)} className="inline-flex h-10 w-full items-center justify-center rounded-lg border border-[#d6ddff] text-sm font-bold text-[#4e5d8b] hover:bg-[#f5f7ff]">
+                Close
+              </button>
+            </div>
           </div>
         </div>
       </div>

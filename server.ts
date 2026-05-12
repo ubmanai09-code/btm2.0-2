@@ -143,6 +143,7 @@ function initDb() {
       status TEXT DEFAULT 'draft',
       has_additional_scores INTEGER NOT NULL DEFAULT 0,
       has_bonus INTEGER NOT NULL DEFAULT 0,
+      show_player_style INTEGER NOT NULL DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -279,6 +280,17 @@ function initDb() {
       is_system INTEGER NOT NULL DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS bracket_v2_configs (
+      id TEXT NOT NULL,
+      tournament_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      config_json TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (tournament_id, id),
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+    );
   `);
 
   const accessTableInfo = db.prepare("PRAGMA table_info(moderator_tournament_access)").all() as any[];
@@ -330,7 +342,8 @@ function initDb() {
     { name: 'shifts_count', type: 'INTEGER DEFAULT 1' },
     { name: 'oil_pattern', type: 'TEXT' },
     { name: 'has_additional_scores', type: 'INTEGER NOT NULL DEFAULT 0' },
-    { name: 'has_bonus', type: 'INTEGER NOT NULL DEFAULT 0' }
+    { name: 'has_bonus', type: 'INTEGER NOT NULL DEFAULT 0' },
+    { name: 'show_player_style', type: 'INTEGER NOT NULL DEFAULT 1' }
   ];
 
   migrations.forEach(m => {
@@ -388,6 +401,7 @@ function initDb() {
     { name: 'participant2_source_outcome', type: 'TEXT' },
     { name: 'match_kind', type: "TEXT NOT NULL DEFAULT 'duel'" },
     { name: 'participants_json', type: 'TEXT' },
+    { name: 'structure_json', type: 'TEXT' },
     { name: 'scores_json', type: 'TEXT' },
   ];
   bracketMigrations.forEach(m => {
@@ -1059,7 +1073,7 @@ async function startServer() {
     },
   ] as const;
 
-  type KnownBracketFormatRule = 'duel' | 'survivor_cut';
+  type KnownBracketFormatRule = 'duel' | 'survivor_cut' | 'shootout';
   type KnownBracketFormatModel = {
     id: string;
     name: string;
@@ -1070,6 +1084,7 @@ async function startServer() {
       first?: string;
       second?: string;
       third?: string;
+      hybrid?: Array<{ type: 'shootout' | 'duel'; entering: number[]; eliminate?: number }>;
     };
     description?: string;
     min_qualified_count?: number;
@@ -1093,7 +1108,7 @@ async function startServer() {
     const roundRulesInput = Array.isArray(raw?.round_rules) ? raw.round_rules : [];
     const roundRules = roundRulesInput
       .map((rule: any) => String(rule || '').trim())
-      .map((rule: string) => (rule === 'survivor_cut' ? 'survivor_cut' : 'duel'));
+      .map((rule: string) => (rule === 'survivor_cut' || rule === 'shootout' ? rule : 'duel'));
     const effectiveRoundRules = roundRules.length > 0
       ? roundRules
       : Array.from({ length: roundMatchCounts.length }, () => 'duel' as const);
@@ -1103,6 +1118,7 @@ async function startServer() {
       : null;
     const placementRules = placementRulesRaw
       ? {
+          ...placementRulesRaw,
           first: String(placementRulesRaw.first || ''),
           second: String(placementRulesRaw.second || ''),
           third: String(placementRulesRaw.third || ''),
@@ -1375,7 +1391,10 @@ async function startServer() {
 
   const sanitizeBracketStateForDisplay = (tournamentId: string, matchPlayType: string | null | undefined, division: 'all' | 'male' | 'female' = 'all') => {
     const matches = db.prepare(`
-      SELECT id, division, round, match_index, participant1_id, participant2_id, participant3_id, winner_id,
+      SELECT id, division, round, match_index, match_kind,
+             participant1_id, participant2_id, participant3_id,
+             participant1_seed, participant2_seed, participant3_seed,
+             winner_id, participants_json, structure_json, scores_json,
              participant1_source_match_id, participant1_source_outcome,
              participant2_source_match_id, participant2_source_outcome
       FROM brackets
@@ -1389,11 +1408,146 @@ async function startServer() {
     const byKey = new Map<string, any>();
     matches.forEach((m) => byKey.set(keyFor(String(m.division || 'all'), Number(m.round) || 0, Number(m.match_index) || 0), m));
 
+    const parseStructure = (match: any) => {
+      if (!match?.structure_json) return null;
+      try {
+        const parsed = JSON.parse(String(match.structure_json));
+        return parsed && typeof parsed === 'object' ? parsed : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const structureByMatchId = new Map<number, any>();
+    const matchByEngineId = new Map<string, any>();
+    for (const match of matches) {
+      const structure = parseStructure(match);
+      if (!structure) continue;
+      structureByMatchId.set(Number(match.id), structure);
+      const engineId = String(structure?.engineId || '').trim();
+      if (engineId) {
+        matchByEngineId.set(engineId, match);
+      }
+    }
+
+    const getResolvedParticipantsForMatch = (match: any): Array<{ participantId: number; seed: number | null; score: number | null; rank: number }> => {
+      const structure = structureByMatchId.get(Number(match.id));
+      const advancementCount = Math.max(0, Number.parseInt(String(structure?.advancementCount ?? 1), 10) || 1);
+      const scoreEntriesRaw = (() => {
+        try {
+          const parsed = JSON.parse(String(match?.scores_json || '[]'));
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      })();
+
+      if (scoreEntriesRaw.length > 0) {
+        const normalized = scoreEntriesRaw
+          .map((entry: any, index: number) => ({
+            participantId: Number(entry?.participant_id ?? entry?.id ?? 0),
+            seed: Number.isFinite(Number(entry?.seed)) ? Number(entry.seed) : null,
+            score: Number.isFinite(Number(entry?.score)) ? Number(entry.score) : 0,
+            rank: index + 1,
+          }))
+          .filter((entry: any) => Number.isFinite(entry.participantId) && entry.participantId > 0)
+          .sort((left: any, right: any) => right.score - left.score || ((left.seed ?? Number.MAX_SAFE_INTEGER) - (right.seed ?? Number.MAX_SAFE_INTEGER)))
+          .map((entry: any, index: number) => ({ ...entry, rank: index + 1 }));
+        return normalized;
+      }
+
+      const seededParticipants = [
+        { participantId: Number(match.participant1_id) || 0, seed: Number.isFinite(Number(match.participant1_seed)) ? Number(match.participant1_seed) : null },
+        { participantId: Number(match.participant2_id) || 0, seed: Number.isFinite(Number(match.participant2_seed)) ? Number(match.participant2_seed) : null },
+        { participantId: Number(match.participant3_id) || 0, seed: Number.isFinite(Number(match.participant3_seed)) ? Number(match.participant3_seed) : null },
+      ].filter((entry) => entry.participantId > 0);
+
+      if (!seededParticipants.length) return [];
+
+      const winnerId = Number(match.winner_id) || 0;
+      const winner = winnerId > 0 ? seededParticipants.find((entry) => entry.participantId === winnerId) || null : null;
+      const losers = seededParticipants.filter((entry) => entry.participantId !== winnerId);
+      const ordered = winner ? [winner, ...losers] : seededParticipants;
+      return ordered.map((entry, index) => ({
+        participantId: entry.participantId,
+        seed: entry.seed,
+        score: null,
+        rank: index + 1,
+      }));
+    };
+
+    const resolveAdvancedSlotParticipant = (slot: any) => {
+      const fromEngineId = String(slot?.fromMatchId || '').trim();
+      if (!fromEngineId) return null;
+      const sourceMatch = matchByEngineId.get(fromEngineId);
+      if (!sourceMatch) return null;
+
+      const structure = structureByMatchId.get(Number(sourceMatch.id));
+      const advancementCount = Math.max(0, Number.parseInt(String(structure?.advancementCount ?? 1), 10) || 1);
+      const ranked = getResolvedParticipantsForMatch(sourceMatch);
+      if (!ranked.length) return null;
+
+      const outcome = String(slot?.outcome || 'winner').toLowerCase() === 'loser' ? 'loser' : 'winner';
+      if (outcome === 'loser') {
+        const loserOffset = (Number.parseInt(String(slot?.advanceRank ?? ''), 10) || 0) - advancementCount - 1;
+        if (loserOffset < 0) return null;
+        const loser = ranked.slice(advancementCount)[loserOffset] || null;
+        return loser;
+      }
+
+      const winnerRank = Math.max(1, Number.parseInt(String(slot?.advanceRank ?? ''), 10) || 1);
+      return ranked.slice(0, advancementCount)[winnerRank - 1] || null;
+    };
+
     const clearInvalidWinnerIfNeeded = (m: any) => {
+      const matchKind = String(m.match_kind || '').toLowerCase();
+      const winner = Number(m.winner_id) || 0;
+
+      if (matchKind === 'shootout' || matchKind === 'survivor_cut') {
+        let allowed: number[] = [];
+        try {
+          const parsed = JSON.parse(String(m.participants_json || '[]'));
+          allowed = Array.isArray(parsed)
+            ? parsed
+                .map((entry: any) => Number(entry?.id ?? entry?.participant_id ?? 0))
+                .filter((id: number) => Number.isFinite(id) && id > 0)
+            : [];
+        } catch {
+          allowed = [];
+        }
+
+        // If winner is missing but scores are present, recover winner from top ranked score.
+        if (!winner && allowed.length > 0) {
+          try {
+            const ranked = (JSON.parse(String(m.scores_json || '[]')) as any[])
+              .map((entry: any) => ({
+                id: Number(entry?.id ?? entry?.participant_id ?? 0),
+                seed: Number.isFinite(Number(entry?.seed)) ? Number(entry.seed) : Number.MAX_SAFE_INTEGER,
+                score: Number.isFinite(Number(entry?.score)) ? Number(entry.score) : -1,
+              }))
+              .filter((entry) => Number.isFinite(entry.id) && entry.id > 0 && allowed.includes(entry.id))
+              .sort((left, right) => right.score - left.score || left.seed - right.seed);
+            if (ranked.length > 0) {
+              db.prepare('UPDATE brackets SET winner_id = ? WHERE id = ?').run(ranked[0].id, m.id);
+              m.winner_id = ranked[0].id;
+            }
+          } catch {
+            // ignore malformed scores_json
+          }
+        }
+
+        const resolvedWinner = Number(m.winner_id) || 0;
+        if (!resolvedWinner) return;
+        if (allowed.includes(resolvedWinner)) return;
+
+        db.prepare('UPDATE brackets SET winner_id = NULL WHERE id = ?').run(m.id);
+        m.winner_id = null;
+        return;
+      }
+
       const p1 = Number(m.participant1_id) || 0;
       const p2 = Number(m.participant2_id) || 0;
       const p3 = Number(m.participant3_id) || 0;
-      const winner = Number(m.winner_id) || 0;
       if (!winner) return;
 
       const allowed = [p1, p2, p3].filter((id) => id > 0);
@@ -1406,8 +1560,104 @@ async function startServer() {
       m.winner_id = null;
     };
 
-    // Always remove winners that cannot be valid with current slots.
-    matches.forEach((m) => clearInvalidWinnerIfNeeded(m));
+    // Rebuild builder-driven downstream slots using persisted structure_json.
+    for (const match of matches) {
+      const structure = structureByMatchId.get(Number(match.id));
+      const slots = Array.isArray(structure?.slots) ? structure.slots : [];
+      if (!slots.length) continue;
+
+      let changed = false;
+      const nextSlots = slots.map((slot: any) => {
+        if (String(slot?.sourceType || '') !== 'advance') return slot;
+        const resolved = resolveAdvancedSlotParticipant(slot);
+        const currentParticipantId = Number(slot?.participantDbId) || 0;
+        const currentSeed = Number.isFinite(Number(slot?.seed)) ? Number(slot.seed) : null;
+        const nextParticipantId = resolved?.participantId || null;
+        const nextSeed = resolved?.seed ?? null;
+        if (currentParticipantId === (nextParticipantId || 0) && currentSeed === nextSeed) {
+          return slot;
+        }
+        changed = true;
+        return {
+          ...slot,
+          participantDbId: nextParticipantId,
+          seed: nextSeed,
+        };
+      });
+
+      const slot0 = nextSlots.find((slot: any) => Number(slot?.slotIndex) === 0) || null;
+      const slot1 = nextSlots.find((slot: any) => Number(slot?.slotIndex) === 1) || null;
+      const slot2 = nextSlots.find((slot: any) => Number(slot?.slotIndex) === 2) || null;
+      const participantSlots = nextSlots
+        .filter((slot: any) => Number(slot?.participantDbId) > 0)
+        .sort((left: any, right: any) => Number(left.slotIndex) - Number(right.slotIndex))
+        .map((slot: any) => ({
+          id: Number(slot.participantDbId),
+          seed: Number.isFinite(Number(slot.seed)) ? Number(slot.seed) : null,
+          slotIndex: Number(slot.slotIndex) || 0,
+          sourceLabel: String(slot.sourceLabel || ''),
+        }));
+
+      const nextParticipant1Id = Number(slot0?.participantDbId) > 0 ? Number(slot0.participantDbId) : null;
+      const nextParticipant2Id = Number(slot1?.participantDbId) > 0 ? Number(slot1.participantDbId) : null;
+      const nextParticipant3Id = Number(slot2?.participantDbId) > 0 ? Number(slot2.participantDbId) : null;
+      const nextParticipant1Seed = Number.isFinite(Number(slot0?.seed)) ? Number(slot0.seed) : null;
+      const nextParticipant2Seed = Number.isFinite(Number(slot1?.seed)) ? Number(slot1.seed) : null;
+      const nextParticipant3Seed = Number.isFinite(Number(slot2?.seed)) ? Number(slot2.seed) : null;
+      const nextParticipantsJson = (String(match.match_kind || '') === 'shootout' || String(match.match_kind || '') === 'survivor_cut')
+        ? JSON.stringify(participantSlots)
+        : match.participants_json;
+      const nextStructureJson = JSON.stringify({ ...structure, slots: nextSlots });
+
+      if (
+        changed
+        || (Number(match.participant1_id) || 0) !== (nextParticipant1Id || 0)
+        || (Number(match.participant2_id) || 0) !== (nextParticipant2Id || 0)
+        || (Number(match.participant3_id) || 0) !== (nextParticipant3Id || 0)
+        || (Number(match.participant1_seed) || 0) !== (nextParticipant1Seed || 0)
+        || (Number(match.participant2_seed) || 0) !== (nextParticipant2Seed || 0)
+        || (Number(match.participant3_seed) || 0) !== (nextParticipant3Seed || 0)
+        || String(match.structure_json || '') !== nextStructureJson
+        || String(match.participants_json || '') !== String(nextParticipantsJson || '')
+      ) {
+        db.prepare(`
+          UPDATE brackets
+          SET participant1_id = ?, participant2_id = ?, participant3_id = ?,
+              participant1_seed = ?, participant2_seed = ?, participant3_seed = ?,
+              participants_json = ?, structure_json = ?,
+              winner_id = CASE
+                WHEN winner_id IN (?, ?, ?) THEN winner_id
+                ELSE NULL
+              END
+          WHERE id = ?
+        `).run(
+          nextParticipant1Id,
+          nextParticipant2Id,
+          nextParticipant3Id,
+          nextParticipant1Seed,
+          nextParticipant2Seed,
+          nextParticipant3Seed,
+          nextParticipantsJson,
+          nextStructureJson,
+          nextParticipant1Id,
+          nextParticipant2Id,
+          nextParticipant3Id,
+          match.id,
+        );
+
+        match.participant1_id = nextParticipant1Id;
+        match.participant2_id = nextParticipant2Id;
+        match.participant3_id = nextParticipant3Id;
+        match.participant1_seed = nextParticipant1Seed;
+        match.participant2_seed = nextParticipant2Seed;
+        match.participant3_seed = nextParticipant3Seed;
+        match.participants_json = nextParticipantsJson;
+        match.structure_json = nextStructureJson;
+        if (![nextParticipant1Id, nextParticipant2Id, nextParticipant3Id].includes(Number(match.winner_id) || 0)) {
+          match.winner_id = null;
+        }
+      }
+    }
 
     // Rebuild downstream slots only when explicit source links are present.
     // This keeps manual slot edits persistent across all bracket types/presets.
@@ -1468,9 +1718,14 @@ async function startServer() {
         m.participant2_id = expectedP2;
       }
 
-      clearInvalidWinnerIfNeeded(m);
       byKey.set(keyFor(String(m.division || 'all'), Number(m.round) || 0, Number(m.match_index) || 0), m);
     }
+
+    // Validate winners only after participant slots have been fully rebuilt.
+    matches.forEach((m) => {
+      clearInvalidWinnerIfNeeded(m);
+      byKey.set(keyFor(String(m.division || 'all'), Number(m.round) || 0, Number(m.match_index) || 0), m);
+    });
   };
 
   await ensureSeedUser(adminUsername, 'admin', adminPassword);
@@ -1792,6 +2047,51 @@ async function startServer() {
     return res.json({ success: true });
   });
 
+  // ── Bracket V2 saved configs ──────────────────────────────────────────────
+
+  app.get('/api/tournaments/:id/bracket-v2-configs', (req, res) => {
+    const tournamentId = Number(req.params.id);
+    if (!Number.isFinite(tournamentId)) return res.status(400).json({ error: 'Invalid tournament id' });
+    const rows = db.prepare(
+      'SELECT id, tournament_id, name, config_json, created_at, updated_at FROM bracket_v2_configs WHERE tournament_id = ? ORDER BY updated_at DESC'
+    ).all(tournamentId) as any[];
+    const configs = rows.map(r => {
+      try { return { ...JSON.parse(r.config_json), id: r.id, name: r.name, createdAt: r.created_at }; }
+      catch { return { id: r.id, name: r.name, createdAt: r.created_at }; }
+    });
+    return res.json(configs);
+  });
+
+  app.post('/api/tournaments/:id/bracket-v2-configs', requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
+    const tournamentId = Number(req.params.id);
+    if (!Number.isFinite(tournamentId)) return res.status(400).json({ error: 'Invalid tournament id' });
+    const { id, name, ...rest } = req.body || {};
+    if (!id || typeof id !== 'string' || !id.trim()) return res.status(400).json({ error: 'Missing config id' });
+    if (!name || typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'Missing config name' });
+    const configJson = JSON.stringify({ id, name, ...rest });
+    const now = new Date().toISOString();
+    const existing = db.prepare('SELECT id FROM bracket_v2_configs WHERE tournament_id = ? AND id = ?').get(tournamentId, id.trim());
+    if (existing) {
+      db.prepare('UPDATE bracket_v2_configs SET name = ?, config_json = ?, updated_at = ? WHERE tournament_id = ? AND id = ?')
+        .run(name.trim(), configJson, now, tournamentId, id.trim());
+    } else {
+      db.prepare('INSERT INTO bracket_v2_configs (id, tournament_id, name, config_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(id.trim(), tournamentId, name.trim(), configJson, now, now);
+    }
+    return res.json({ success: true, id: id.trim() });
+  });
+
+  app.delete('/api/tournaments/:id/bracket-v2-configs/:configId', requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
+    const tournamentId = Number(req.params.id);
+    const configId = String(req.params.configId || '').trim();
+    if (!Number.isFinite(tournamentId)) return res.status(400).json({ error: 'Invalid tournament id' });
+    if (!configId) return res.status(400).json({ error: 'Invalid config id' });
+    const existing = db.prepare('SELECT id FROM bracket_v2_configs WHERE tournament_id = ? AND id = ?').get(tournamentId, configId);
+    if (!existing) return res.status(404).json({ error: 'Config not found' });
+    db.prepare('DELETE FROM bracket_v2_configs WHERE tournament_id = ? AND id = ?').run(tournamentId, configId);
+    return res.json({ success: true });
+  });
+
   app.get("/api/tournaments", (req, res) => {
     db.prepare(`
       UPDATE tournaments
@@ -1810,21 +2110,22 @@ async function startServer() {
       name, date, location, format, organizer, logo, match_play_type, qualified_count, playoff_winners_count, type, 
       games_count, genders_rule, lanes_count,
       players_per_lane, players_per_team, shifts_count, oil_pattern,
-      has_additional_scores, has_bonus
+      has_additional_scores, has_bonus, show_player_style
     } = req.body;
     const hasAdditional = toBinaryFlag(has_additional_scores, 0);
     const hasBonus = toBinaryFlag(has_bonus, 0);
+    const showPlayerStyle = show_player_style === undefined ? 1 : toBinaryFlag(show_player_style, 1);
     
     const info = db.prepare(`
       INSERT INTO tournaments (
         name, date, location, format, organizer, logo, match_play_type, qualified_count, playoff_winners_count, type, 
         games_count, genders_rule, lanes_count, 
-        players_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        players_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus, show_player_style
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       name, date, location, format, organizer, logo, match_play_type || 'single_elimination', Number.isFinite(Number.parseInt(qualified_count, 10)) ? Number.parseInt(qualified_count, 10) : 0, Number.isFinite(Number.parseInt(playoff_winners_count, 10)) ? Number.parseInt(playoff_winners_count, 10) : 1, type, 
       games_count || 3, genders_rule, lanes_count || 10, 
-      players_per_lane || 2, players_per_team || 1, shifts_count || 1, oil_pattern, hasAdditional, hasBonus
+      players_per_lane || 2, players_per_team || 1, shifts_count || 1, oil_pattern, hasAdditional, hasBonus, showPlayerStyle
     );
     res.json({ id: info.lastInsertRowid });
   });
@@ -1840,9 +2141,9 @@ async function startServer() {
       const { 
         name, date, location, format, organizer, logo, match_play_type, qualified_count, playoff_winners_count, type, 
         games_count, genders_rule, lanes_count, 
-        players_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus, status
+        players_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus, show_player_style, status
       } = req.body;
-      const existing = db.prepare("SELECT has_additional_scores, has_bonus FROM tournaments WHERE id = ?").get(req.params.id) as any;
+      const existing = db.prepare("SELECT has_additional_scores, has_bonus, show_player_style FROM tournaments WHERE id = ?").get(req.params.id) as any;
       if (!existing) {
         return res.status(404).json({ error: "Tournament not found" });
       }
@@ -1853,17 +2154,20 @@ async function startServer() {
       const hasBonus = has_bonus === undefined
         ? Number(existing.has_bonus) || 0
         : toBinaryFlag(has_bonus, Number(existing.has_bonus) || 0);
+      const showPlayerStyle = show_player_style === undefined
+        ? (existing.show_player_style === undefined ? 1 : Number(existing.show_player_style))
+        : toBinaryFlag(show_player_style, 1);
       
       const result = db.prepare(`
         UPDATE tournaments SET 
           name = ?, date = ?, location = ?, format = ?, organizer = ?, logo = ?, match_play_type = ?, qualified_count = ?, playoff_winners_count = ?, type = ?, 
           games_count = ?, genders_rule = ?, lanes_count = ?, 
-          players_per_lane = ?, players_per_team = ?, shifts_count = ?, oil_pattern = ?, has_additional_scores = ?, has_bonus = ?, status = ?
+          players_per_lane = ?, players_per_team = ?, shifts_count = ?, oil_pattern = ?, has_additional_scores = ?, has_bonus = ?, show_player_style = ?, status = ?
         WHERE id = ?
       `).run(
         name, date, location, format, organizer, logo, match_play_type || 'single_elimination', Number.isFinite(Number.parseInt(qualified_count, 10)) ? Number.parseInt(qualified_count, 10) : 0, Number.isFinite(Number.parseInt(playoff_winners_count, 10)) ? Number.parseInt(playoff_winners_count, 10) : 1, type, 
         games_count || 3, genders_rule, lanes_count || 10, 
-        players_per_lane || 2, players_per_team || 1, shifts_count || 1, oil_pattern, hasAdditional, hasBonus, status || 'draft', req.params.id
+        players_per_lane || 2, players_per_team || 1, shifts_count || 1, oil_pattern, hasAdditional, hasBonus, showPlayerStyle, status || 'draft', req.params.id
       );
       
       res.json({ success: true });
@@ -2805,6 +3109,39 @@ const existing = db
     res.json({ success: true, deleted: info.changes || 0 });
   });
 
+  app.post("/api/tournaments/:id/brackets/cleanup-malformed", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
+    const tournamentId = req.params.id;
+    const rows = db.prepare(`
+      SELECT id, round, match_index
+      FROM brackets
+      WHERE tournament_id = ?
+    `).all(tournamentId) as Array<{ id: number; round: unknown; match_index: unknown }>;
+
+    const isStrictInteger = (value: unknown) => /^-?\d+$/.test(String(value ?? '').trim());
+
+    const malformedIds = rows
+      .filter((row) => !isStrictInteger(row.round) || !isStrictInteger(row.match_index))
+      .map((row) => Number(row.id))
+      .filter((id) => Number.isFinite(id) && id > 0);
+
+    if (malformedIds.length === 0) {
+      return res.json({ success: true, scanned: rows.length, deleted: 0 });
+    }
+
+    const deleteMalformedRows = db.transaction((ids: number[]) => {
+      const deleteStmt = db.prepare("DELETE FROM brackets WHERE id = ?");
+      let removed = 0;
+      ids.forEach((id) => {
+        const info = deleteStmt.run(id) as any;
+        removed += Number(info?.changes) || 0;
+      });
+      return removed;
+    });
+
+    const deleted = deleteMalformedRows(malformedIds);
+    res.json({ success: true, scanned: rows.length, deleted });
+  });
+
   app.post("/api/tournaments/:id/brackets/generate", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
     const tournamentId = req.params.id;
     const tournament = db.prepare("SELECT type, match_play_type, qualified_count, playoff_winners_count FROM tournaments WHERE id = ?").get(tournamentId) as any;
@@ -3473,10 +3810,64 @@ const existing = db
       const requestedRoundMatchCounts = Array.isArray(req.body?.round_match_counts)
         ? req.body.round_match_counts.map((value: any) => Math.max(1, Number.parseInt(String(value), 10) || 1))
         : [];
+      const requestedRoundRules = Array.isArray(req.body?.round_rules)
+        ? req.body.round_rules.map((value: any) => String(value || '').trim().toLowerCase())
+        : [];
+      const rawEngineMatches = Array.isArray(req.body?.engine_matches) ? req.body.engine_matches : [];
       const roundMatchCounts: number[] = [];
       for (let index = 0; index < roundsCount; index += 1) {
         roundMatchCounts.push(requestedRoundMatchCounts[index] || (index === 0 ? round1Matches : 1));
       }
+
+      const normalizedEngineMatches = rawEngineMatches
+        .map((match: any, index: number) => {
+          const roundNumber = Number.parseInt(String(match?.roundNumber ?? ((Number.parseInt(String(match?.roundIndex), 10) || 0) + 1)), 10);
+          const matchIndex = Number.parseInt(String(match?.matchIndex), 10);
+          const rawMatchType = String(match?.matchType || '').trim().toLowerCase();
+          const matchKind = rawMatchType === 'shootout'
+            ? 'shootout'
+            : rawMatchType === 'group'
+              ? 'survivor_cut'
+              : 'duel';
+          const slots = Array.isArray(match?.slots)
+            ? match.slots.map((slot: any, slotIndex: number) => ({
+                slotIndex: Number.parseInt(String(slot?.slotIndex ?? slotIndex), 10),
+                sourceType: String(slot?.sourceType || 'empty'),
+                sourceLabel: String(slot?.sourceLabel || ''),
+                participantDbId: Number.parseInt(String(slot?.participantDbId ?? ''), 10) || null,
+                seed: Number.parseInt(String(slot?.seed ?? ''), 10) || null,
+                fromMatchId: typeof slot?.fromMatchId === 'string' && slot.fromMatchId.trim().length > 0 ? slot.fromMatchId.trim() : null,
+                advanceRank: Number.parseInt(String(slot?.advanceRank ?? ''), 10) || null,
+                outcome: slot?.outcome === 'loser' ? 'loser' : 'winner',
+              }))
+            : [];
+          const nextLinks = Array.isArray(match?.nextLinks)
+            ? match.nextLinks.map((link: any) => ({
+                targetMatchId: String(link?.targetMatchId || '').trim(),
+                targetSlotIndex: Number.parseInt(String(link?.targetSlotIndex ?? 0), 10) || 0,
+                advanceRank: Number.parseInt(String(link?.advanceRank ?? 1), 10) || 1,
+                outcome: link?.outcome === 'loser' ? 'loser' : 'winner',
+              })).filter((link: any) => link.targetMatchId.length > 0)
+            : [];
+
+          return {
+            engineId: String(match?.id || `manual-match-${index + 1}`),
+            label: String(match?.label || `M${(Number.isFinite(matchIndex) ? matchIndex : index) + 1}`),
+            roundId: String(match?.roundId || `round-${roundNumber}`),
+            roundName: String(match?.roundName || `Round ${roundNumber}`),
+            roundNumber,
+            roundIndex: Math.max(0, roundNumber - 1),
+            matchIndex,
+            matchKind,
+            matchType: rawMatchType === 'shootout' ? 'shootout' : rawMatchType === 'group' ? 'group' : 'head-to-head',
+            scoringType: String(match?.scoringType || 'pins'),
+            playersPerMatch: Math.max(2, Number.parseInt(String(match?.playersPerMatch ?? Math.max(2, slots.length)), 10) || Math.max(2, slots.length)),
+            advancementCount: Math.max(0, Number.parseInt(String(match?.advancementCount ?? 1), 10) || 1),
+            slots: slots.filter((slot: any) => Number.isFinite(slot.slotIndex) && slot.slotIndex >= 0),
+            nextLinks,
+          };
+        })
+        .filter((match: any) => Number.isFinite(match.roundNumber) && match.roundNumber > 0 && Number.isFinite(match.matchIndex) && match.matchIndex >= 0);
 
       db.prepare(`
         DELETE FROM brackets
@@ -3484,27 +3875,152 @@ const existing = db
           AND (? = 'all' OR division = ?)
       `).run(tournamentId, division, division);
 
-      for (let round = 1; round <= roundsCount; round += 1) {
-        const matchesInRound = Math.max(1, roundMatchCounts[round - 1] || 1);
-        for (let i = 0; i < matchesInRound; i++) {
-          db.prepare(`
-            INSERT INTO brackets (
-              tournament_id,
+      if (normalizedEngineMatches.length > 0) {
+        const insertStructuredMatch = db.prepare(`
+          INSERT INTO brackets (
+            tournament_id,
+            division,
+            round,
+            match_index,
+            match_kind,
+            participant1_id,
+            participant2_id,
+            participant3_id,
+            participant1_seed,
+            participant2_seed,
+            participant3_seed,
+            participant1_source_match_id,
+            participant1_source_outcome,
+            participant2_source_match_id,
+            participant2_source_outcome,
+            participants_json,
+            structure_json,
+            winner_id
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+        `);
+        const updateStructuredSources = db.prepare(`
+          UPDATE brackets
+          SET participant1_source_match_id = ?,
+              participant1_source_outcome = ?,
+              participant2_source_match_id = ?,
+              participant2_source_outcome = ?,
+              structure_json = ?
+          WHERE id = ?
+        `);
+
+        const insertStructuredMatches = db.transaction((matches: any[]) => {
+          const dbIdByEngineId = new Map<string, number>();
+          const pendingByDbId: Array<{ dbId: number; slots: any[]; structure: any }> = [];
+
+          const orderedMatches = [...matches].sort((left, right) => left.roundNumber - right.roundNumber || left.matchIndex - right.matchIndex);
+          for (const match of orderedMatches) {
+            const slotsByIndex = new Map<number, any>(match.slots.map((slot: any) => [slot.slotIndex, slot]));
+            const slot0 = slotsByIndex.get(0) || null;
+            const slot1 = slotsByIndex.get(1) || null;
+            const slot2 = slotsByIndex.get(2) || null;
+            const participantSlots = match.slots
+              .filter((slot: any) => Number.isFinite(Number(slot.participantDbId)) && Number(slot.participantDbId) > 0)
+              .map((slot: any) => ({
+                id: Number(slot.participantDbId),
+                seed: Number.isFinite(Number(slot.seed)) ? Number(slot.seed) : null,
+                slotIndex: Number(slot.slotIndex),
+                sourceLabel: String(slot.sourceLabel || ''),
+              }));
+
+            const info = insertStructuredMatch.run(
+              tournamentId,
               division,
-              round,
-              match_index,
-              participant1_id,
-              participant2_id,
-              participant1_seed,
-              participant2_seed,
-              participant1_source_match_id,
-              participant1_source_outcome,
-              participant2_source_match_id,
-              participant2_source_outcome,
-              winner_id
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(tournamentId, division, round, i, null, null, null, null, null, null, null, null, null);
+              match.roundNumber,
+              match.matchIndex,
+              match.matchKind,
+              Number(slot0?.participantDbId) > 0 ? Number(slot0.participantDbId) : null,
+              Number(slot1?.participantDbId) > 0 ? Number(slot1.participantDbId) : null,
+              Number(slot2?.participantDbId) > 0 ? Number(slot2.participantDbId) : null,
+              Number.isFinite(Number(slot0?.seed)) ? Number(slot0.seed) : null,
+              Number.isFinite(Number(slot1?.seed)) ? Number(slot1.seed) : null,
+              Number.isFinite(Number(slot2?.seed)) ? Number(slot2.seed) : null,
+              null,
+              null,
+              null,
+              null,
+              JSON.stringify(participantSlots),
+              null,
+            ) as any;
+
+            const dbId = Number(info?.lastInsertRowid);
+            if (dbId > 0) {
+              dbIdByEngineId.set(match.engineId, dbId);
+              pendingByDbId.push({
+                dbId,
+                slots: match.slots,
+                structure: {
+                  engineId: match.engineId,
+                  label: match.label,
+                  roundId: match.roundId,
+                  roundName: match.roundName,
+                  roundNumber: match.roundNumber,
+                  roundIndex: match.roundIndex,
+                  matchType: match.matchType,
+                  scoringType: match.scoringType,
+                  playersPerMatch: match.playersPerMatch,
+                  advancementCount: match.advancementCount,
+                  slots: match.slots,
+                  nextLinks: match.nextLinks,
+                },
+              });
+            }
+          }
+
+          for (const entry of pendingByDbId) {
+            const slot0 = entry.slots.find((slot: any) => Number(slot?.slotIndex) === 0) || null;
+            const slot1 = entry.slots.find((slot: any) => Number(slot?.slotIndex) === 1) || null;
+            const source1Id = slot0?.fromMatchId ? (dbIdByEngineId.get(String(slot0.fromMatchId)) || null) : null;
+            const source2Id = slot1?.fromMatchId ? (dbIdByEngineId.get(String(slot1.fromMatchId)) || null) : null;
+            updateStructuredSources.run(
+              source1Id,
+              source1Id ? (slot0?.outcome === 'loser' ? 'loser' : 'winner') : null,
+              source2Id,
+              source2Id ? (slot1?.outcome === 'loser' ? 'loser' : 'winner') : null,
+              JSON.stringify(entry.structure),
+              entry.dbId,
+            );
+          }
+        });
+
+        insertStructuredMatches(normalizedEngineMatches);
+      } else {
+        for (let round = 1; round <= roundsCount; round += 1) {
+          const matchesInRound = Math.max(1, roundMatchCounts[round - 1] || 1);
+          const roundRule = requestedRoundRules[round - 1] || 'duel';
+          const matchKind = roundRule === 'shootout'
+            ? 'shootout'
+            : roundRule === 'survivor_cut'
+              ? 'survivor_cut'
+              : 'duel';
+          const defaultParticipantsJson = matchKind === 'shootout' ? '[]' : null;
+          for (let i = 0; i < matchesInRound; i++) {
+            db.prepare(`
+              INSERT INTO brackets (
+                tournament_id,
+                division,
+                round,
+                match_index,
+                match_kind,
+                participant1_id,
+                participant2_id,
+                participant1_seed,
+                participant2_seed,
+                participant1_source_match_id,
+                participant1_source_outcome,
+                participant2_source_match_id,
+                participant2_source_outcome,
+                participants_json,
+                winner_id
+              )
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(tournamentId, division, round, i, matchKind, null, null, null, null, null, null, null, null, defaultParticipantsJson, null);
+          }
         }
       }
 
@@ -3648,6 +4164,84 @@ const existing = db
     res.json({ success: true });
   });
 
+  app.post("/api/tournaments/:id/brackets/:matchId/duel", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
+    const tournamentId = req.params.id;
+    const numericMatchId = Number.parseInt(req.params.matchId, 10);
+    if (!Number.isFinite(numericMatchId)) {
+      return res.status(400).json({ error: 'Invalid match id' });
+    }
+
+    const match = db.prepare(`
+      SELECT id, match_kind,
+             participant1_id, participant2_id, participant3_id,
+             participant1_seed, participant2_seed, participant3_seed
+      FROM brackets
+      WHERE id = ? AND tournament_id = ?
+      LIMIT 1
+    `).get(numericMatchId, tournamentId) as any;
+    if (!match) {
+      return res.status(404).json({ error: 'Match not found' });
+    }
+
+    const matchKind = String(match.match_kind || 'duel').toLowerCase();
+    if (matchKind !== 'duel') {
+      return res.status(400).json({ error: 'Not a duel match' });
+    }
+
+    const participants = [
+      { participantId: Number(match.participant1_id) || 0, seed: Number(match.participant1_seed) || 0 },
+      { participantId: Number(match.participant2_id) || 0, seed: Number(match.participant2_seed) || 0 },
+      { participantId: Number(match.participant3_id) || 0, seed: Number(match.participant3_seed) || 0 },
+    ].filter((entry) => entry.participantId > 0);
+
+    if (participants.length < 2) {
+      return res.status(400).json({ error: 'Match must have at least two participants before scoring' });
+    }
+
+    const scoreInputs: Array<{ participant_id: number; score: number }> = Array.isArray(req.body?.scores)
+      ? req.body.scores
+          .map((entry: any) => ({
+            participant_id: Number.parseInt(String(entry?.participant_id), 10),
+            score: Number.parseInt(String(entry?.score), 10),
+          }))
+          .filter((entry: any) => Number.isFinite(entry.participant_id) && Number.isFinite(entry.score))
+      : [];
+
+    const scoreByParticipantId = new Map<number, number>();
+    scoreInputs.forEach((entry) => {
+      if (!scoreByParticipantId.has(entry.participant_id)) {
+        scoreByParticipantId.set(entry.participant_id, entry.score);
+      }
+    });
+
+    const missingParticipants = participants.filter((entry) => !scoreByParticipantId.has(entry.participantId));
+    if (missingParticipants.length > 0) {
+      return res.status(400).json({ error: `Need scores for all ${participants.length} participants` });
+    }
+
+    const ranked = participants
+      .map((entry) => ({
+        participant_id: entry.participantId,
+        seed: entry.seed > 0 ? entry.seed : null,
+        score: scoreByParticipantId.get(entry.participantId) ?? 0,
+      }))
+      .sort((left, right) => right.score - left.score || ((left.seed ?? Number.MAX_SAFE_INTEGER) - (right.seed ?? Number.MAX_SAFE_INTEGER)));
+
+    if (ranked.length < 2) {
+      return res.status(400).json({ error: 'Enter at least two participant scores.' });
+    }
+    if (Number(ranked[0].score) === Number(ranked[1].score)) {
+      return res.status(400).json({ error: 'Tie scores are not supported. Please resolve the tie manually and set a winner.' });
+    }
+
+    const winnerId = Number(ranked[0].participant_id);
+    db.prepare('UPDATE brackets SET scores_json = ?, winner_id = ? WHERE id = ?')
+      .run(JSON.stringify(ranked), winnerId, numericMatchId);
+
+    advanceWinnerToNextRound(tournamentId, numericMatchId, winnerId);
+    res.json({ success: true, winner_id: winnerId });
+  });
+
   // ── Bowling Hybrid: submit shootout scores ────────────────────────────────
   app.post("/api/tournaments/:id/brackets/:matchId/shootout", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
     const tournamentId = req.params.id;
@@ -3655,11 +4249,15 @@ const existing = db
     if (!Number.isFinite(numericMatchId)) return res.status(400).json({ error: 'Invalid match id' });
 
     const match = db.prepare(`
-      SELECT id, round, match_index, match_kind, participants_json, division
+      SELECT id, round, match_index, match_kind, participants_json, division,
+             participant1_id, participant2_id, participant3_id,
+             participant1_seed, participant2_seed, participant3_seed
       FROM brackets WHERE id = ? AND tournament_id = ?
     `).get(numericMatchId, tournamentId) as any;
     if (!match) return res.status(404).json({ error: 'Match not found' });
-    if (String(match.match_kind) !== 'shootout') return res.status(400).json({ error: 'Not a shootout match' });
+    if (![ 'shootout', 'survivor_cut' ].includes(String(match.match_kind))) {
+      return res.status(400).json({ error: 'Not a score-based match' });
+    }
 
     const scoreInputs: Array<{ participant_id: number; score: number }> = Array.isArray(req.body?.scores)
       ? req.body.scores
@@ -3667,8 +4265,17 @@ const existing = db
           .filter((s: any) => Number.isFinite(s.participant_id) && Number.isFinite(s.score))
       : [];
 
+    // Build participants from actual bracket row (includes p3 advances materialized by sanitizer)
     let participants: Array<{ id: number; seed: number }> = [];
-    try { participants = JSON.parse(String(match.participants_json || '[]')); } catch {}
+    if (Number(match.participant1_id) > 0) {
+      participants.push({ id: Number(match.participant1_id), seed: Number(match.participant1_seed) || 0 });
+    }
+    if (Number(match.participant2_id) > 0) {
+      participants.push({ id: Number(match.participant2_id), seed: Number(match.participant2_seed) || 0 });
+    }
+    if (Number(match.participant3_id) > 0) {
+      participants.push({ id: Number(match.participant3_id), seed: Number(match.participant3_seed) || 0 });
+    }
 
     if (scoreInputs.length < participants.length) {
       return res.status(400).json({ error: `Need scores for all ${participants.length} participants` });
@@ -3761,7 +4368,9 @@ const existing = db
 
     const match = db.prepare("SELECT id, round, division, match_kind FROM brackets WHERE id = ? AND tournament_id = ?").get(numericMatchId, tournamentId) as any;
     if (!match) return res.status(404).json({ error: 'Match not found' });
-    if (String(match.match_kind) !== 'shootout') return res.status(400).json({ error: 'Not a shootout match' });
+    if (![ 'shootout', 'survivor_cut' ].includes(String(match.match_kind))) {
+      return res.status(400).json({ error: 'Not a score-based match' });
+    }
 
     const division = String(match.division || 'all');
     const currentRoundNo = Number(match.round);
@@ -3771,7 +4380,11 @@ const existing = db
     db.prepare(`
       UPDATE brackets
       SET participant1_id = NULL, participant2_id = NULL, participant1_seed = NULL, participant2_seed = NULL,
-          winner_id = NULL, scores_json = NULL, participants_json = CASE match_kind WHEN 'shootout' THEN '[]' ELSE participants_json END
+          winner_id = NULL, scores_json = NULL,
+          participants_json = CASE
+            WHEN match_kind IN ('shootout', 'survivor_cut') THEN '[]'
+            ELSE participants_json
+          END
       WHERE tournament_id = ? AND division = ? AND round > ?
     `).run(tournamentId, division, currentRoundNo);
 
