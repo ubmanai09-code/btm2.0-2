@@ -14952,14 +14952,41 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         setHasBonus(Boolean(latestTournamentConfig.has_bonus));
       }
 
-      const [standingsData, bracketsData, participantsData, scoresData, teamsData, manualWinnersData] = await Promise.all([
+      const [standingsResult, bracketsResult, participantsResult, scoresResult, teamsResult, manualWinnersResult] = await Promise.allSettled([
         api.getStandings(tournament.id),
         api.getBrackets(tournament.id),
         api.getParticipants(tournament.id),
         api.getScores(tournament.id),
         tournament.type === 'team' ? api.getTeams(tournament.id) : Promise.resolve([] as Team[]),
-        api.getManualWinners(tournament.id).catch(() => [] as ManualWinnerEntry[]),
+        api.getManualWinners(tournament.id),
       ]);
+
+      const standingsData = standingsResult.status === 'fulfilled' ? standingsResult.value : [];
+      const bracketsData = bracketsResult.status === 'fulfilled' ? bracketsResult.value : [];
+      const participantsData = participantsResult.status === 'fulfilled' ? participantsResult.value : [];
+      const scoresData = scoresResult.status === 'fulfilled' ? scoresResult.value : [];
+      const teamsData = teamsResult.status === 'fulfilled' ? teamsResult.value : [];
+      const manualWinnersData = manualWinnersResult.status === 'fulfilled' ? manualWinnersResult.value : [];
+
+      if (standingsResult.status === 'rejected') {
+        console.warn('Failed to load standings:', standingsResult.reason);
+      }
+      if (bracketsResult.status === 'rejected') {
+        console.warn('Failed to load brackets for standings screen:', bracketsResult.reason);
+      }
+      if (participantsResult.status === 'rejected') {
+        console.warn('Failed to load participants for standings screen:', participantsResult.reason);
+      }
+      if (scoresResult.status === 'rejected') {
+        console.warn('Failed to load scores for standings screen:', scoresResult.reason);
+      }
+      if (teamsResult.status === 'rejected') {
+        console.warn('Failed to load teams for standings screen:', teamsResult.reason);
+      }
+      if (manualWinnersResult.status === 'rejected') {
+        console.warn('Failed to load manual winners:', manualWinnersResult.reason);
+      }
+
       setStandings(standingsData);
       setBracketMatches(bracketsData);
       setParticipants(participantsData);
@@ -15333,8 +15360,26 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     })
     .sort((a, b) => a.label.localeCompare(b.label));
 
+  const participantTeamWinnerOptions = Array.from(
+    new Set(
+      participants
+        .map((participant) => String(participant.team_name || '').trim())
+        .filter((teamName) => teamName.length > 0)
+    )
+  )
+    .map((teamName) => ({
+      value: `manual-team:${teamName.toLowerCase()}`,
+      label: teamName,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
   const getWinnerOptionsForDivision = (division: 'all' | 'female' | 'male') => {
-    if (isTeamTournament) return teamWinnerOptions;
+    if (isTeamTournament) {
+      const combinedOptions = [...teamWinnerOptions, ...participantTeamWinnerOptions];
+      return combinedOptions.filter((option, index) => (
+        combinedOptions.findIndex((entry) => entry.label.toLowerCase() === option.label.toLowerCase()) === index
+      ));
+    }
     if (division === 'all') return participantWinnerOptions;
     return participantWinnerOptions.filter((option) => option.gender === division);
   };
