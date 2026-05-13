@@ -46,7 +46,7 @@ import {
   LayoutList,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
-import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset } from './services/api';
+import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry } from './services/api';
 import { buildKnownBracketTemplateDefaults } from './utils/bracketTemplates';
 import {
   buildTournamentEngine,
@@ -14644,6 +14644,38 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const standingsTableRef = useRef<HTMLTableElement | null>(null);
   const standingsScrollRef = useRef<HTMLDivElement | null>(null);
   const autoScrollSpeedRef = useRef<'slow' | 'medium' | 'fast'>('slow');
+  const [manualWinnersByKey, setManualWinnersByKey] = useState<Record<string, ManualWinnerEntry>>({});
+  const [savingManualWinnerKey, setSavingManualWinnerKey] = useState<string | null>(null);
+  const [winnerEditorTarget, setWinnerEditorTarget] = useState<{ division: 'all' | 'female' | 'male'; place: 'first' | 'second' | 'third' } | null>(null);
+  const [winnerEditorSelectValue, setWinnerEditorSelectValue] = useState('');
+  const [winnerEditorManualInput, setWinnerEditorManualInput] = useState('');
+  const [winnerEditorCandidatesText, setWinnerEditorCandidatesText] = useState('');
+
+  const toManualWinnerKey = (division: 'all' | 'female' | 'male', place: 'first' | 'second' | 'third') => `${division}:${place}`;
+  const parseWinnerNames = (raw: string) => {
+    const text = String(raw || '').trim();
+    if (!text) return [] as string[];
+    if (text.startsWith('[') && text.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) {
+          return Array.from(new Set(
+            parsed
+              .map((item) => String(item || '').trim())
+              .filter((item) => item.length > 0)
+          ));
+        }
+      } catch {
+        // fall back to line/comma parsing
+      }
+    }
+    return Array.from(new Set(
+      text
+        .split(/\r?\n|\s*,\s*/)
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+    ));
+  };
 
   const toBonusKey = (kind: 'participant' | 'team', id: number) => `${kind}-${id}`;
   const getBonus = (kind: 'participant' | 'team', id: number) => Number(bonusByKey[toBonusKey(kind, id)] || 0);
@@ -14825,18 +14857,28 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         setHasBonus(Boolean(latestTournamentConfig.has_bonus));
       }
 
-      const [standingsData, bracketsData, participantsData, scoresData, teamsData] = await Promise.all([
+      const [standingsData, bracketsData, participantsData, scoresData, teamsData, manualWinnersData] = await Promise.all([
         api.getStandings(tournament.id),
         api.getBrackets(tournament.id),
         api.getParticipants(tournament.id),
         api.getScores(tournament.id),
-        tournament.type === 'team' ? api.getTeams(tournament.id) : Promise.resolve([] as Team[])
+        tournament.type === 'team' ? api.getTeams(tournament.id) : Promise.resolve([] as Team[]),
+        api.getManualWinners(tournament.id).catch(() => [] as ManualWinnerEntry[]),
       ]);
       setStandings(standingsData);
       setBracketMatches(bracketsData);
       setParticipants(participantsData);
       setScores(scoresData);
       setTeams(teamsData);
+      const winnerMap: Record<string, ManualWinnerEntry> = {};
+      for (const entry of manualWinnersData || []) {
+        if (!entry) continue;
+        const division = entry.division === 'female' || entry.division === 'male' ? entry.division : 'all';
+        const place = entry.place === 'first' || entry.place === 'second' || entry.place === 'third' ? entry.place : null;
+        if (!place) continue;
+        winnerMap[toManualWinnerKey(division, place)] = entry;
+      }
+      setManualWinnersByKey(winnerMap);
 
       // Load bonus scores (backward-compatible)
       let bonusesData: Array<{ target_kind: 'participant' | 'team'; target_id: number; bonus: number }> = [];
@@ -15120,6 +15162,17 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const femaleLeader = scores
     .filter(score => participantGenderMap.get(score.participant_id) === 'female')
     .sort((a, b) => b.score - a.score)[0];
+
+  const topMaleScores = scores
+    .filter((score) => participantGenderMap.get(score.participant_id) === 'male')
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+
+  const topFemaleScores = scores
+    .filter((score) => participantGenderMap.get(score.participant_id) === 'female')
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+
   const maleLeaderCellKey = maleLeader ? `${maleLeader.participant_id}-${maleLeader.game_number}` : '';
   const femaleLeaderCellKey = femaleLeader ? `${femaleLeader.participant_id}-${femaleLeader.game_number}` : '';
 
@@ -15155,95 +15208,164 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const totalFemale = participants.filter((participant) => String(participant.gender || '').toLowerCase() === 'female').length;
   const totalMale = participants.filter((participant) => String(participant.gender || '').toLowerCase() === 'male').length;
 
-  const completedBracketMatches = bracketMatches
-    .filter(m => m.winner_id)
-    .sort((a, b) => (a.round - b.round) || (a.match_index - b.match_index));
-
-  const getBracketName = (match: any, slot: 'p1' | 'p2' | 'winner') => {
-    if (!match) return 'TBD';
-    if (tournament.type === 'team') {
-      return match[`${slot}_team_name`] || match[`${slot}_name`] || 'TBD';
-    }
-    return match[`${slot}_name`] || 'TBD';
-  };
-
-  const getBracketPodium = (matches: any[], matchPlayType: Tournament['match_play_type'] | string | undefined) => {
-    const finalRoundNumber = matches.reduce((max, m) => Math.max(max, Number(m.round) || 0), 0);
-    const finalMatch = matches.find((m: any) => Number(m.round) === finalRoundNumber && Number(m.match_index) === 0);
-    const bronzeMatch = matches.find((m: any) => Number(m.round) === finalRoundNumber && Number(m.match_index) === 1);
-    const stepladderSemifinalMatch =
-      String(matchPlayType || '') === 'stepladder'
-        ? matches.find((m: any) => Number(m.round) === Math.max(1, finalRoundNumber - 1) && Number(m.match_index) === 0)
-        : null;
-
-    const first = finalMatch?.winner_id ? getBracketName(finalMatch, 'winner') : 'TBD';
-    const second = finalMatch?.winner_id
-      ? (finalMatch.winner_id === finalMatch.participant1_id ? getBracketName(finalMatch, 'p2') : getBracketName(finalMatch, 'p1'))
-      : 'TBD';
-    const third = bronzeMatch?.winner_id
-      ? getBracketName(bronzeMatch, 'winner')
-      : (stepladderSemifinalMatch?.winner_id
-        ? (stepladderSemifinalMatch.winner_id === stepladderSemifinalMatch.participant1_id
-          ? getBracketName(stepladderSemifinalMatch, 'p2')
-          : getBracketName(stepladderSemifinalMatch, 'p1'))
-        : 'TBD');
-
-    return { first, second, third };
-  };
-
-  const getStandingsPodium = (gender: 'all' | 'female' | 'male') => {
-    const filteredRows = playerStandingsRows.filter((row) => {
-      if (gender === 'all') return true;
-      return participantGenderMap.get(row.participant_id) === gender;
-    });
-    return {
-      first: filteredRows[0]?.participant_name || 'TBD',
-      second: filteredRows[1]?.participant_name || 'TBD',
-      third: filteredRows[2]?.participant_name || 'TBD',
-    };
-  };
-
-  const getTeamStandingsPodium = () => ({
-    first: teamStandingsRows[0]?.team_name || 'TBD',
-    second: teamStandingsRows[1]?.team_name || 'TBD',
-    third: teamStandingsRows[2]?.team_name || 'TBD',
-  });
-
-  const getEmptyPodium = () => ({ first: 'TBD', second: 'TBD', third: 'TBD' });
-
   const tournamentFormat = String(tournament.format || '').trim();
-  const usesBracketWinnersOnly = tournamentFormat === 'Pre-Qualification & Bracket';
+  const usesBracketWinnersGrid = tournamentFormat === 'Pre-Qualification & Bracket';
 
   const bracketMatchesByDivision = {
     all: bracketMatches.filter((m: any) => String(m.division || 'all') === 'all'),
     female: bracketMatches.filter((m: any) => String(m.division || 'all') === 'female'),
     male: bracketMatches.filter((m: any) => String(m.division || 'all') === 'male'),
   };
-  const hasGenderBracketWinnersGrid = usesBracketWinnersOnly && (bracketMatchesByDivision.female.length > 0 || bracketMatchesByDivision.male.length > 0);
-  const allDivisionBracketPodium = getBracketPodium(bracketMatchesByDivision.all, tournament.match_play_type);
+  const hasGenderManualWinnersGrid = !isTeamTournament || (usesBracketWinnersGrid && (bracketMatchesByDivision.female.length > 0 || bracketMatchesByDivision.male.length > 0));
+  const winnerDivisions: Array<'all' | 'female' | 'male'> = hasGenderManualWinnersGrid ? ['female', 'male'] : ['all'];
+  const winnerPlaces: Array<'first' | 'second' | 'third'> = ['first', 'second', 'third'];
 
-  // Winners podium logic is now handled by the new 3x3 grid block, so this is removed.
+  const teamWinnerOptions = teams
+    .map((team) => ({
+      value: `team:${team.id}`,
+      label: String(team.name || '').trim() || `Team #${team.id}`,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
-  // Winners grid logic is now handled below; removed legacy variables.
+  const participantWinnerOptions = participants
+    .map((participant) => {
+      const label = `${String(participant.first_name || '').trim()} ${String(participant.last_name || '').trim()}`.trim() || `Participant #${participant.id}`;
+      return {
+        value: `participant:${participant.id}`,
+        label,
+        gender: normalizeGender(participant.gender),
+      };
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
 
-  const teamMembersByTeamName = new Map<string, string[]>();
-  if (isTeamTournament) {
-    for (const participant of participants) {
-      const teamName = (participant.team_name || '').trim();
-      if (!teamName) continue;
-      const fullName = `${participant.first_name || ''} ${participant.last_name || ''}`.trim();
-      if (!fullName) continue;
-      const members = teamMembersByTeamName.get(teamName) || [];
-      members.push(fullName);
-      teamMembersByTeamName.set(teamName, members);
-    }
-  }
-
-  const getWinnerMembersLabel = (winnerName: string) => {
-    if (!isTeamTournament) return winnerName;
-    const members = teamMembersByTeamName.get((winnerName || '').trim()) || [];
-    return members.length > 0 ? members.join(', ') : 'No members assigned';
+  const getWinnerOptionsForDivision = (division: 'all' | 'female' | 'male') => {
+    if (isTeamTournament) return teamWinnerOptions;
+    if (division === 'all') return participantWinnerOptions;
+    return participantWinnerOptions.filter((option) => option.gender === division);
   };
+
+  const getManualWinnerEntry = (division: 'all' | 'female' | 'male', place: 'first' | 'second' | 'third') => {
+    return manualWinnersByKey[toManualWinnerKey(division, place)] || null;
+  };
+
+  const getManualWinnerDisplay = (division: 'all' | 'female' | 'male', place: 'first' | 'second' | 'third') => {
+    const entry = getManualWinnerEntry(division, place);
+    const names = parseWinnerNames(String(entry?.display_name || ''));
+    return names.length > 0 ? names.join(', ') : 'TBD';
+  };
+
+  const openWinnerEditor = (division: 'all' | 'female' | 'male', place: 'first' | 'second' | 'third') => {
+    const existing = getManualWinnerEntry(division, place);
+    setWinnerEditorTarget({ division, place });
+    setWinnerEditorSelectValue('');
+    setWinnerEditorManualInput('');
+    setWinnerEditorCandidatesText(parseWinnerNames(String(existing?.display_name || '')).join('\n'));
+  };
+
+  const closeWinnerEditor = () => {
+    setWinnerEditorTarget(null);
+    setWinnerEditorSelectValue('');
+    setWinnerEditorManualInput('');
+    setWinnerEditorCandidatesText('');
+  };
+
+  const appendWinnerEditorName = (name: string) => {
+    const trimmed = String(name || '').trim();
+    if (!trimmed) return;
+    setWinnerEditorCandidatesText((prev) => {
+      const names = parseWinnerNames(prev);
+      if (names.some((item) => item.toLowerCase() === trimmed.toLowerCase())) return names.join('\n');
+      return [...names, trimmed].join('\n');
+    });
+  };
+
+  const removeWinnerEditorName = (name: string) => {
+    const target = String(name || '').trim().toLowerCase();
+    setWinnerEditorCandidatesText((prev) => {
+      const next = parseWinnerNames(prev).filter((item) => item.toLowerCase() !== target);
+      return next.join('\n');
+    });
+  };
+
+  const persistManualWinner = async (
+    division: 'all' | 'female' | 'male',
+    place: 'first' | 'second' | 'third',
+    payload: { target_kind: 'participant' | 'team' | 'manual'; target_id?: number | null; display_name?: string }
+  ) => {
+    const key = toManualWinnerKey(division, place);
+    setSavingManualWinnerKey(key);
+    try {
+      const response = await api.setManualWinner(tournament.id, {
+        division,
+        place,
+        target_kind: payload.target_kind,
+        target_id: payload.target_id,
+        display_name: payload.display_name,
+      });
+      setManualWinnersByKey((prev) => {
+        const next = { ...prev };
+        if (response.entry) {
+          next[key] = response.entry;
+        } else {
+          delete next[key];
+        }
+        return next;
+      });
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save winner';
+      alert(message);
+      return false;
+    } finally {
+      setSavingManualWinnerKey(null);
+    }
+  };
+
+  const saveWinnerEditor = async () => {
+    if (!winnerEditorTarget) return;
+    const { division, place } = winnerEditorTarget;
+
+    const selectedLabel = winnerEditorSelectValue
+      ? (winnerEditorOptions.find((option) => option.value === winnerEditorSelectValue)?.label || '')
+      : '';
+    const pendingManual = String(winnerEditorManualInput || '').trim();
+
+    const mergedNames = Array.from(new Set(
+      [
+        ...parseWinnerNames(winnerEditorCandidatesText),
+        selectedLabel,
+        pendingManual,
+      ]
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+    ));
+    if (mergedNames.length === 0) {
+      const ok = await persistManualWinner(division, place, { target_kind: 'manual', display_name: '' });
+      if (ok) closeWinnerEditor();
+      return;
+    }
+
+    const ok = await persistManualWinner(division, place, {
+      target_kind: 'manual',
+      display_name: JSON.stringify(mergedNames),
+    });
+    if (ok) closeWinnerEditor();
+  };
+
+  const clearWinnerEditorSlot = async () => {
+    if (!winnerEditorTarget) return;
+    const ok = await persistManualWinner(winnerEditorTarget.division, winnerEditorTarget.place, { target_kind: 'manual', display_name: '' });
+    if (ok) closeWinnerEditor();
+  };
+
+  const winnerEditorOptions = winnerEditorTarget
+    ? getWinnerOptionsForDivision(winnerEditorTarget.division)
+    : [];
+  const winnerEditorCandidateNames = parseWinnerNames(winnerEditorCandidatesText);
+  const winnerEditorKey = winnerEditorTarget
+    ? toManualWinnerKey(winnerEditorTarget.division, winnerEditorTarget.place)
+    : '';
+  const winnerEditorSaving = winnerEditorKey ? savingManualWinnerKey === winnerEditorKey : false;
 
   const handleSaveStandings = async () => {
     await loadStandings();
@@ -15522,149 +15644,294 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       {/* Gender filter segmented buttons for player standings */}
       <div className="space-y-6">
         {!isStandingsScreenMode && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <div className="p-6 border-b border-black/5">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div>
-                  <h4 className="font-bold">{tx('Tournament Winners')}</h4>
-                  {/* Removed winnersPodium.title reference; update or replace as needed for new winners grid. */}
-                </div>
-              </div>
-              {/* Redesigned winners block: 3x3 grid if gender brackets, else default */}
-              {hasGenderBracketWinnersGrid ? (
-                <div className="overflow-x-auto">
-                  <div className="grid grid-cols-3 border border-black/10 rounded-lg">
-                    <div className="bg-black/5 px-4 py-2 font-bold text-xs uppercase tracking-widest border-b border-black/10"></div>
-                    <div className="bg-black/5 px-4 py-2 font-bold text-xs uppercase tracking-widest border-b border-black/10">F</div>
-                    <div className="bg-black/5 px-4 py-2 font-bold text-xs uppercase tracking-widest border-b border-black/10">M</div>
-                    {['1st', '2nd', '3rd'].map((place, idx) => {
-                      // Alternate row backgrounds and use original font classes
-                      let rowBg = '';
-                      let textClass = '';
-                      let medalIcon = null;
-                      if (idx === 0) {
-                        rowBg = 'bg-emerald-50/70'; textClass = 'text-emerald-700';
-                        medalIcon = (
-                          <span className="relative inline-block align-middle" title="1st place">
-                            <Medal size={24} className="text-yellow-400" />
-                            <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-yellow-900" style={{ pointerEvents: 'none' }}>1</span>
-                          </span>
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <div className="p-6 border-b border-black/5">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div>
+                      <h4 className="font-bold">{tx('Tournament Winners')}</h4>
+                      <p className="text-xs text-black/45 mt-0.5">
+                        Compact manual winners grid. Double-click a medal to add, or click a winner name to edit or replace it.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto mt-2">
+                    <div className={`grid ${hasGenderManualWinnersGrid ? 'grid-cols-3' : 'grid-cols-2'} border border-black/10 rounded-xl overflow-hidden`}>
+                      <div className="bg-black/5 px-2.5 py-1.5 font-bold text-[10px] uppercase tracking-widest border-b border-black/10"></div>
+                      {winnerDivisions.map((division) => (
+                        <div key={`winner-head-${division}`} className="bg-black/5 px-2.5 py-1.5 font-bold text-[10px] uppercase tracking-widest border-b border-black/10 text-center">
+                          {division === 'female' ? 'F' : division === 'male' ? 'M' : 'All'}
+                        </div>
+                      ))}
+
+                      {winnerPlaces.map((place, idx) => {
+                        const rank = idx + 1;
+                        const rowBg = idx === 0
+                          ? 'bg-emerald-50/70 text-emerald-700'
+                          : (idx === 1 ? 'bg-slate-100/80 text-slate-700' : 'bg-amber-50/70 text-amber-700');
+                        const medalColor = idx === 0 ? 'text-yellow-400' : (idx === 1 ? 'text-gray-400' : 'text-amber-700');
+                        const medalTextColor = idx === 0 ? 'text-yellow-900' : (idx === 1 ? 'text-gray-700' : 'text-amber-900');
+
+                        return (
+                          <React.Fragment key={`winner-row-${place}`}>
+                            <button
+                              type="button"
+                              disabled={!canManageStandings}
+                              onDoubleClick={() => openWinnerEditor(winnerDivisions[0] ?? 'all', place)}
+                              className={`px-2 py-2 font-bold border-b border-black/10 ${rowBg} flex items-center justify-center disabled:cursor-default`}
+                              title={canManageStandings ? 'Double-click to edit this place' : `${rank} place`}
+                            >
+                              <span className="relative inline-block align-middle" title={`${rank} place`}>
+                                <Medal size={20} className={medalColor} />
+                                <span className={`absolute inset-0 flex items-center justify-center text-[10px] font-bold ${medalTextColor}`} style={{ pointerEvents: 'none' }}>{rank}</span>
+                              </span>
+                            </button>
+
+                            {winnerDivisions.map((division) => {
+                              const key = toManualWinnerKey(division, place);
+                              const cellDisabled = savingManualWinnerKey === key || !canManageStandings;
+                              const displayName = getManualWinnerDisplay(division, place);
+                              const isEmpty = displayName === 'TBD';
+
+                              return (
+                                <button
+                                  key={`winner-cell-${key}`}
+                                  type="button"
+                                  disabled={cellDisabled || isPublicView}
+                                  onClick={() => openWinnerEditor(division, place)}
+                                  className={`px-2.5 py-2 border-b border-black/10 ${rowBg} text-left min-h-[56px] ${!isPublicView ? 'hover:bg-white/50 transition-colors' : ''} disabled:cursor-default`}
+                                  title={isPublicView ? displayName : 'Click to edit or replace'}
+                                >
+                                  <div className={`text-sm font-semibold leading-tight ${isEmpty ? 'text-black/35 italic' : 'text-black/80'}`}>{displayName}</div>
+                                </button>
+                              );
+                            })}
+                          </React.Fragment>
                         );
-                      } else if (idx === 1) {
-                        rowBg = 'bg-slate-100/80'; textClass = 'text-slate-700';
-                        medalIcon = (
-                          <span className="relative inline-block align-middle" title="2nd place">
-                            <Medal size={24} className="text-gray-400" />
-                            <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-gray-700" style={{ pointerEvents: 'none' }}>2</span>
-                          </span>
-                        );
-                      } else if (idx === 2) {
-                        rowBg = 'bg-amber-50/70'; textClass = 'text-amber-700';
-                        medalIcon = (
-                          <span className="relative inline-block align-middle" title="3rd place">
-                            <Medal size={24} className="text-amber-700" />
-                            <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-amber-900" style={{ pointerEvents: 'none' }}>3</span>
-                          </span>
-                        );
-                      }
-                      return (
-                        <React.Fragment key={place}>
-                          <div className={`px-4 py-3 font-bold border-b border-black/10 ${rowBg} ${textClass}`}>{medalIcon}</div>
-                          <div className={`px-4 py-3 border-b border-black/10 ${rowBg} ${textClass}`}>{(getBracketPodium(bracketMatchesByDivision.female, tournament.match_play_type)[['first','second','third'][idx]] || 'TBD').replace(/\s*\([12]H\)$/, '')}</div>
-                          <div className={`px-4 py-3 border-b border-black/10 ${rowBg} ${textClass}`}>{(getBracketPodium(bracketMatchesByDivision.male, tournament.match_play_type)[['first','second','third'][idx]] || 'TBD').replace(/\s*\([12]H\)$/, '')}</div>
-                        </React.Fragment>
-                      );
-                    })}
+                      })}
+                    </div>
                   </div>
                 </div>
-              ) : usesBracketWinnersOnly ? (
-                <div className="overflow-x-auto">
-                  <div className="grid grid-cols-[64px_1fr] border border-black/10 rounded-lg">
-                    {['first', 'second', 'third'].map((slot, idx) => {
-                      const rank = idx + 1;
-                      const rowBg = idx === 0
-                        ? 'bg-emerald-50/70 text-emerald-700'
-                        : (idx === 1 ? 'bg-slate-100/80 text-slate-700' : 'bg-amber-50/70 text-amber-700');
-                      const medalColor = idx === 0 ? 'text-yellow-400' : (idx === 1 ? 'text-gray-400' : 'text-amber-700');
-                      const medalTextColor = idx === 0 ? 'text-yellow-900' : (idx === 1 ? 'text-gray-700' : 'text-amber-900');
-                      const winnerName = (allDivisionBracketPodium[slot as 'first' | 'second' | 'third'] || 'TBD').replace(/\s*\([12]H\)$/, '');
-                      return (
-                        <React.Fragment key={slot}>
-                          <div className={`px-4 py-3 font-bold border-b border-black/10 ${rowBg}`}>
-                            <span className="relative inline-block align-middle" title={`${rank} place`}>
-                              <Medal size={24} className={medalColor} />
-                              <span className={`absolute inset-0 flex items-center justify-center text-[11px] font-bold ${medalTextColor}`} style={{ pointerEvents: 'none' }}>{rank}</span>
-                            </span>
+              </Card>
+
+              <Card className="p-3">
+                <h4 className="font-bold text-sm mb-0.5">{tx('Tournament Highlights')}</h4>
+                <p className="text-xs text-black/40 mb-2">{tx('Quick stats and highest single game score by category')}</p>
+
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-2">
+                  <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Players</p>
+                    <p className="text-sm font-bold mt-0.5">{totalPlayers}</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Clubs</p>
+                    <p className="text-sm font-bold mt-0.5">{totalClubs}</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Teams</p>
+                    <p className="text-sm font-bold mt-0.5">{totalTeams}</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">F</p>
+                    <p className="text-sm font-bold mt-0.5">{totalFemale}</p>
+                  </div>
+                  <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">M</p>
+                    <p className="text-sm font-bold mt-0.5">{totalMale}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <div className="rounded-md border border-black/10 p-2.5 bg-black/[0.02]">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Top Score Male (Top 3)</p>
+                    {topMaleScores.length > 0 ? (
+                      <div className="mt-1 space-y-1">
+                        {topMaleScores.map((entry, index) => (
+                          <div key={`top-male-${entry.participant_id}-${entry.game_number}-${index}`} className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-bold truncate">{index + 1}. {participantNameMap.get(entry.participant_id) || entry.participant_name || 'N/A'}</p>
+                            <span className="text-base leading-none font-extrabold text-emerald-700">{entry.score}</span>
                           </div>
-                          <div className={`px-4 py-3 border-b border-black/10 ${rowBg}`}>{winnerName}</div>
-                        </React.Fragment>
-                      );
-                    })}
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-black/40 mt-0.5">No male result yet.</p>
+                    )}
+                  </div>
+                  <div className="rounded-md border border-black/10 p-2.5 bg-black/[0.02]">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Top Score Female (Top 3)</p>
+                    {topFemaleScores.length > 0 ? (
+                      <div className="mt-1 space-y-1">
+                        {topFemaleScores.map((entry, index) => (
+                          <div key={`top-female-${entry.participant_id}-${entry.game_number}-${index}`} className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-bold truncate">{index + 1}. {participantNameMap.get(entry.participant_id) || entry.participant_name || 'N/A'}</p>
+                            <span className="text-base leading-none font-extrabold text-violet-700">{entry.score}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-black/40 mt-0.5">No female result yet.</p>
+                    )}
                   </div>
                 </div>
-              ) : null}
-            </div>
-            {/* Removed secondary winners table as per user request. */}
-          </Card>
-
-          <Card className="p-3">
-            <h4 className="font-bold text-sm mb-0.5">{tx('Tournament Highlights')}</h4>
-            <p className="text-xs text-black/40 mb-2">{tx('Quick stats and highest single game score by category')}</p>
-
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-2">
-              <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Players</p>
-                <p className="text-sm font-bold mt-0.5">{totalPlayers}</p>
-              </div>
-              <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Clubs</p>
-                <p className="text-sm font-bold mt-0.5">{totalClubs}</p>
-              </div>
-              <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Teams</p>
-                <p className="text-sm font-bold mt-0.5">{totalTeams}</p>
-              </div>
-              <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">F</p>
-                <p className="text-sm font-bold mt-0.5">{totalFemale}</p>
-              </div>
-              <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">M</p>
-                <p className="text-sm font-bold mt-0.5">{totalMale}</p>
-              </div>
+              </Card>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              <div className="rounded-md border border-black/10 p-2.5 bg-black/[0.02]">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Highest Score Male</p>
-                {maleLeader ? (
-                  <>
-                    <div className="mt-0.5 flex items-center justify-between gap-2">
-                      <p className="text-sm font-bold truncate">{participantNameMap.get(maleLeader.participant_id) || maleLeader.participant_name || 'N/A'}</p>
-                      <span className="text-xl leading-none font-extrabold text-emerald-700">{maleLeader.score}</span>
+            {winnerEditorTarget && !isPublicView && (
+          <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center p-4" onClick={closeWinnerEditor}>
+            <div className="w-full max-w-md rounded-2xl border border-black/10 bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-center justify-between gap-3 border-b border-black/10 px-4 py-3">
+                <div>
+                  <h5 className="text-sm font-bold text-black/80">Edit Winner</h5>
+                  <p className="text-[11px] text-black/45 mt-0.5">
+                    {winnerEditorTarget.place === 'first' ? '1st' : winnerEditorTarget.place === 'second' ? '2nd' : '3rd'} place
+                    {' · '}
+                    {winnerEditorTarget.division === 'female' ? 'Female' : winnerEditorTarget.division === 'male' ? 'Male' : 'Open'} division
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeWinnerEditor}
+                  className="h-8 w-8 rounded-full border border-black/10 bg-white text-black/55 hover:text-black/80"
+                  title="Close"
+                >
+                  <X size={16} className="mx-auto" />
+                </button>
+              </div>
+
+              <div className="space-y-4 px-4 py-4">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-widest text-black/45 mb-1">Add Registered {isTeamTournament ? 'Team' : 'Participant'}</label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={winnerEditorSelectValue}
+                      disabled={winnerEditorSaving}
+                      onChange={(event) => {
+                        setWinnerEditorSelectValue(event.target.value);
+                      }}
+                      className="flex-1 h-10 rounded-lg border border-black/15 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                    >
+                      <option value="">Choose {isTeamTournament ? 'team' : 'participant'}...</option>
+                      {winnerEditorOptions.map((option) => (
+                        <option key={`winner-editor-${option.value}`} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={winnerEditorSaving || !winnerEditorSelectValue}
+                      onClick={() => {
+                        const selected = winnerEditorOptions.find((option) => option.value === winnerEditorSelectValue);
+                        if (!selected) return;
+                        appendWinnerEditorName(selected.label);
+                        setWinnerEditorSelectValue('');
+                      }}
+                      className="h-10 px-3 rounded-lg border border-emerald-300 bg-emerald-50 text-xs font-bold uppercase tracking-wide text-emerald-700 disabled:opacity-50"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-widest text-black/45 mb-1">Add Manual Candidate</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={winnerEditorManualInput}
+                      disabled={winnerEditorSaving}
+                      onChange={(event) => {
+                        setWinnerEditorManualInput(event.target.value);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          const value = String(winnerEditorManualInput || '').trim();
+                          if (!value) return;
+                          appendWinnerEditorName(value);
+                          setWinnerEditorManualInput('');
+                        }
+                      }}
+                      placeholder="Type winner name"
+                      className="flex-1 h-10 rounded-lg border border-black/15 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                    />
+                    <button
+                      type="button"
+                      disabled={winnerEditorSaving || !String(winnerEditorManualInput || '').trim()}
+                      onClick={() => {
+                        const value = String(winnerEditorManualInput || '').trim();
+                        if (!value) return;
+                        appendWinnerEditorName(value);
+                        setWinnerEditorManualInput('');
+                      }}
+                      className="h-10 px-3 rounded-lg border border-emerald-300 bg-emerald-50 text-xs font-bold uppercase tracking-wide text-emerald-700 disabled:opacity-50"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-widest text-black/45 mb-1">Candidates ({winnerEditorCandidateNames.length})</label>
+                  <textarea
+                    value={winnerEditorCandidatesText}
+                    disabled={winnerEditorSaving}
+                    onChange={(event) => setWinnerEditorCandidatesText(event.target.value)}
+                    placeholder="One candidate per line"
+                    className="w-full min-h-[84px] rounded-lg border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                  {winnerEditorCandidateNames.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-black/15 bg-black/[0.02] px-3 py-2 text-xs text-black/45">No candidates added yet.</div>
+                  ) : (
+                    <div className="max-h-40 overflow-auto space-y-1.5 rounded-lg border border-black/10 bg-black/[0.02] p-2">
+                      {winnerEditorCandidateNames.map((name) => (
+                        <div key={`winner-candidate-${name}`} className="flex items-center justify-between gap-2 rounded-md border border-black/10 bg-white px-2 py-1.5">
+                          <div className="text-sm text-black/80 truncate">{name}</div>
+                          <button
+                            type="button"
+                            disabled={winnerEditorSaving}
+                            onClick={() => removeWinnerEditorName(name)}
+                            className="h-7 px-2 rounded-md border border-rose-200 bg-rose-50 text-[10px] font-bold uppercase tracking-wide text-rose-700 disabled:opacity-50"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  </>
-                ) : (
-                  <p className="text-xs text-black/40 mt-0.5">No male result yet.</p>
-                )}
-              </div>
-              <div className="rounded-md border border-black/10 p-2.5 bg-black/[0.02]">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Highest Score Female</p>
-                {femaleLeader ? (
-                  <>
-                    <div className="mt-0.5 flex items-center justify-between gap-2">
-                      <p className="text-sm font-bold truncate">{participantNameMap.get(femaleLeader.participant_id) || femaleLeader.participant_name || 'N/A'}</p>
-                      <span className="text-xl leading-none font-extrabold text-violet-700">{femaleLeader.score}</span>
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-xs text-black/40 mt-0.5">No female result yet.</p>
-                )}
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => { void clearWinnerEditorSlot(); }}
+                    disabled={winnerEditorSaving}
+                    className="h-9 px-3 rounded-lg border border-rose-200 bg-rose-50 text-xs font-bold uppercase tracking-wide text-rose-700 disabled:opacity-50"
+                  >
+                    Clear
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={closeWinnerEditor}
+                      disabled={winnerEditorSaving}
+                      className="h-9 px-3 rounded-lg border border-black/10 bg-white text-xs font-bold uppercase tracking-wide text-black/60 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { void saveWinnerEditor(); }}
+                      disabled={winnerEditorSaving}
+                      className="h-9 px-3 rounded-lg border border-emerald-300 bg-emerald-50 text-xs font-bold uppercase tracking-wide text-emerald-700 disabled:opacity-50"
+                    >
+                      {winnerEditorSaving ? 'Saving...' : 'Save Winner'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-          </Card>
-        </div>
+          </div>
+            )}
+          </>
         )}
 
         <Card className="overflow-visible relative">
