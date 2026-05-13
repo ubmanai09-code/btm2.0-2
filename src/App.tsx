@@ -15012,6 +15012,31 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           })
         : participantsData;
 
+      const fallbackParticipants: Participant[] = fallbackParticipantsFromStandings.length > 0
+        ? fallbackParticipantsFromStandings
+        : Array.from(new Map(
+            (scoresData || []).map((score, index) => {
+              const id = Number(score.participant_id) || 0;
+              const fullName = String(score.participant_name || '').trim();
+              const parts = fullName.split(/\s+/).filter(Boolean);
+              const firstName = parts.shift() || `Participant ${id || index + 1}`;
+              const lastName = parts.join(' ');
+              return [id || (index + 1), {
+                id: id || (index + 1),
+                tournament_id: tournament.id,
+                first_name: firstName,
+                last_name: lastName,
+                gender: '',
+                hands: '1H',
+                club: '',
+                average: 0,
+                email: '',
+                team_id: null,
+                team_order: 0,
+              } as Participant];
+            })
+          ).values());
+
       const fallbackScoresFromStandings: Score[] = scoresData.length === 0
         ? (standingsData || [])
             .filter((row) => Number(row.total_score) > 0)
@@ -15056,7 +15081,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
       setStandings(standingsData);
       setBracketMatches(bracketsData);
-      setParticipants(fallbackParticipantsFromStandings);
+      setParticipants(fallbackParticipants);
       setScores(fallbackScoresFromStandings);
       setTeams(fallbackTeamsFromStandings);
       const winnerMap: Record<string, ManualWinnerEntry> = {};
@@ -15352,13 +15377,19 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     .filter(score => participantGenderMap.get(score.participant_id) === 'female')
     .sort((a, b) => b.score - a.score)[0];
 
-  const topMaleScores = scores
-    .filter((score) => participantGenderMap.get(score.participant_id) === 'male')
+  const topMaleSourceScores = scores.filter((score) => participantGenderMap.get(score.participant_id) === 'male');
+  const topFemaleSourceScores = scores.filter((score) => participantGenderMap.get(score.participant_id) === 'female');
+  const fallbackTopSourceScores = scores
+    .slice()
+    .sort((a, b) => b.score - a.score);
+
+  const topMaleScores = (topMaleSourceScores.length > 0 ? topMaleSourceScores : fallbackTopSourceScores)
+    .slice()
     .sort((a, b) => b.score - a.score)
     .slice(0, 3);
 
-  const topFemaleScores = scores
-    .filter((score) => participantGenderMap.get(score.participant_id) === 'female')
+  const topFemaleScores = (topFemaleSourceScores.length > 0 ? topFemaleSourceScores : fallbackTopSourceScores)
+    .slice()
     .sort((a, b) => b.score - a.score)
     .slice(0, 3);
 
