@@ -14961,12 +14961,33 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         api.getManualWinners(tournament.id),
       ]);
 
-      const standingsData = standingsResult.status === 'fulfilled' ? standingsResult.value : [];
-      const bracketsData = bracketsResult.status === 'fulfilled' ? bracketsResult.value : [];
-      const participantsData = participantsResult.status === 'fulfilled' ? participantsResult.value : [];
-      const scoresData = scoresResult.status === 'fulfilled' ? scoresResult.value : [];
-      const teamsData = teamsResult.status === 'fulfilled' ? teamsResult.value : [];
-      const manualWinnersData = manualWinnersResult.status === 'fulfilled' ? manualWinnersResult.value : [];
+      const toArray = <T,>(value: unknown): T[] => Array.isArray(value) ? (value as T[]) : [];
+
+      const standingsData = standingsResult.status === 'fulfilled' ? toArray<Standing>(standingsResult.value) : [];
+      const bracketsData = bracketsResult.status === 'fulfilled' ? toArray<any>(bracketsResult.value) : [];
+      const participantsData = participantsResult.status === 'fulfilled' ? toArray<Participant>(participantsResult.value) : [];
+      const scoresData = scoresResult.status === 'fulfilled' ? toArray<Score>(scoresResult.value) : [];
+      const teamsData = teamsResult.status === 'fulfilled' ? toArray<Team>(teamsResult.value) : [];
+      const manualWinnersData = manualWinnersResult.status === 'fulfilled' ? toArray<ManualWinnerEntry>(manualWinnersResult.value) : [];
+
+      if (standingsResult.status === 'fulfilled' && !Array.isArray(standingsResult.value)) {
+        console.warn('Unexpected standings payload (expected array):', standingsResult.value);
+      }
+      if (bracketsResult.status === 'fulfilled' && !Array.isArray(bracketsResult.value)) {
+        console.warn('Unexpected brackets payload (expected array):', bracketsResult.value);
+      }
+      if (participantsResult.status === 'fulfilled' && !Array.isArray(participantsResult.value)) {
+        console.warn('Unexpected participants payload (expected array):', participantsResult.value);
+      }
+      if (scoresResult.status === 'fulfilled' && !Array.isArray(scoresResult.value)) {
+        console.warn('Unexpected scores payload (expected array):', scoresResult.value);
+      }
+      if (teamsResult.status === 'fulfilled' && !Array.isArray(teamsResult.value)) {
+        console.warn('Unexpected teams payload (expected array):', teamsResult.value);
+      }
+      if (manualWinnersResult.status === 'fulfilled' && !Array.isArray(manualWinnersResult.value)) {
+        console.warn('Unexpected manual winners payload (expected array):', manualWinnersResult.value);
+      }
 
       const fallbackParticipantsFromStandings: Participant[] = participantsData.length === 0
         ? (standingsData || []).map((row, index) => {
