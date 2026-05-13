@@ -6234,6 +6234,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   const [loading, setLoading] = useState(true);
   const [currentShift, setCurrentShift] = useState(1);
   const [presentShiftFilter, setPresentShiftFilter] = useState<number[] | null>(null);
+  const [mobileExpandedScoreRow, setMobileExpandedScoreRow] = useState<string | null>(null);
   const importScoresInputRef = useRef<HTMLInputElement | null>(null);
   const scoringHeaderScrollRef = useRef<HTMLDivElement | null>(null);
   const scoringBodyScrollRef = useRef<HTMLDivElement | null>(null);
@@ -7210,11 +7211,105 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
       )}
 
       <Card ref={scoringTableRef} className="border-[#AFDDE5]/60 overflow-visible relative">
+        <div className="sm:hidden px-3 py-2 flex items-center gap-1.5 bg-[#f0fafb] border-b border-[#AFDDE5]/60">
+          <span className="text-[10px] text-black/40 leading-snug">Tap a row to expand details. Expanded data is compacted into 2 rows.</span>
+        </div>
+        <div className="sm:hidden divide-y divide-black/5">
+          {scoringShiftSections.map((section) => (
+            <div key={`score-mobile-shift-${section.shiftNumber}`}>
+              {isScoreScreenMode && (
+                <div className="px-3 py-1.5 bg-[#AFDDE5]/20 text-[10px] font-bold uppercase tracking-widest text-emerald-700">
+                  {tx('Shift')} {section.shiftNumber}
+                </div>
+              )}
+              {section.participants.map((p) => {
+                const rowKey = `${section.shiftNumber}-${p.id}`;
+                const isExpanded = mobileExpandedScoreRow === rowKey;
+                const laneBadge = getLaneBadgeForShift(p, section.shiftNumber, section.laneMaps);
+                const { total, average } = getParticipantStats(p.id);
+                const teamHeaderKey = p.team_id !== null
+                  ? `${section.shiftNumber}-team-${p.team_id}`
+                  : `${section.shiftNumber}-unassigned-${p.team_name || 'Unassigned'}`;
+                const teamTotalScore = teamTotalsByHeaderKey.get(teamHeaderKey) || 0;
+                return (
+                  <div key={`score-mobile-row-${rowKey}`}>
+                    <button
+                      type="button"
+                      onClick={() => setMobileExpandedScoreRow(isExpanded ? null : rowKey)}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-[#AFDDE5]/20 active:bg-[#AFDDE5]/40 transition-colors"
+                    >
+                      <span className="flex-1 text-xs font-bold leading-tight truncate">
+                        {renderFemaleInitialUnderline(formatScoringName(p), p.gender?.toLowerCase() === 'female')}
+                      </span>
+                      <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded border border-[#AFDDE5]/70 bg-white text-[10px] font-bold text-emerald-700">{laneBadge}</span>
+                      <span className="shrink-0 text-right">
+                        <span className="text-[9px] text-black/30 block leading-none">Tot</span>
+                        <span className="text-sm font-extrabold leading-tight">{total}</span>
+                      </span>
+                      <span className="shrink-0 text-right w-10">
+                        <span className="text-[9px] text-black/30 block leading-none">Avg</span>
+                        <span className="text-xs font-bold leading-tight text-emerald-700">{average.toFixed(1)}</span>
+                      </span>
+                      <span className="shrink-0 text-black/30">{isExpanded ? '▲' : '▼'}</span>
+                    </button>
+                    {isExpanded && (
+                      <div className="px-3 pb-2.5 pt-1.5 bg-[#f7fcfd] text-xs space-y-2">
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <div className="rounded-md border border-black/10 bg-white px-2 py-1"><span className="text-black/40">Lane</span> <span className="font-semibold">{laneBadge}</span></div>
+                          <div className="rounded-md border border-black/10 bg-white px-2 py-1"><span className="text-black/40">Total</span> <span className="font-semibold">{total}</span></div>
+                          {tournament.type === 'team' && <div className="rounded-md border border-black/10 bg-white px-2 py-1 col-span-2"><span className="text-black/40">Team Total</span> <span className="font-semibold text-emerald-700">{teamTotalScore}</span></div>}
+                        </div>
+                        <div className="overflow-x-auto no-scrollbar">
+                          <div className="inline-flex items-center gap-1.5 min-w-full">
+                            {gameNumbers.map((gameNumber) => {
+                              const scoreKey = `${p.id}-${gameNumber}`;
+                              const currentScore = draftScores[scoreKey] !== undefined
+                                ? draftScores[scoreKey]
+                                : (scoreMap.get(scoreKey) ?? '');
+                              return (
+                                <div key={`mobile-score-${rowKey}-${gameNumber}`} className="shrink-0 rounded-md border border-black/10 bg-white px-2 py-1 flex items-center gap-1">
+                                  <span className="text-black/40 text-[11px]">G{gameNumber}</span>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    min="0"
+                                    max="300"
+                                    value={currentScore}
+                                    onChange={(e) => handleScoreChange(p.id, gameNumber, e.target.value)}
+                                    onBlur={(e) => handleScoreBlur(p.id, gameNumber, e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
+                                    }}
+                                    disabled={!canManageScores}
+                                    className="w-12 px-1 py-0.5 rounded border border-[#AFDDE5]/80 focus:outline-none focus:ring-2 focus:ring-emerald-200 font-bold text-[11px] text-center"
+                                    placeholder="0"
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {section.participants.length === 0 && (
+                <p className="px-4 py-5 text-center text-black/40 text-xs">
+                  {tournament.type === 'team'
+                    ? `No team participants assigned to Shift ${section.shiftNumber}.`
+                    : `No participants assigned to Shift ${section.shiftNumber}.`}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
         <div
           ref={scoringHeaderScrollRef}
           className={isScoreScreenMode
-            ? 'overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]'
-            : 'sticky top-[7.25rem] sm:top-[10.5rem] z-[25] overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]'}
+            ? 'hidden sm:block overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]'
+            : 'hidden sm:block sticky top-[7.25rem] sm:top-[10.5rem] z-[25] overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]'}
         >
           <table className="w-full text-left border-separate border-spacing-0 text-[11px] sm:text-sm table-fixed">
             {renderScoringColGroup()}
@@ -7226,7 +7321,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
             scoringScrollRef.current = node;
             scoringBodyScrollRef.current = node;
           }}
-          className={isScoreScreenMode ? 'overflow-auto max-h-[calc(100vh-14rem)]' : 'overflow-x-auto'}
+          className={isScoreScreenMode ? 'hidden sm:block overflow-auto max-h-[calc(100vh-14rem)]' : 'hidden sm:block overflow-x-auto'}
           onMouseEnter={() => {
             if (isScoreScreenMode) setIsAutoScrollPaused(true);
           }}
@@ -16083,22 +16178,25 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     <span className="shrink-0 text-black/30">{isExpanded ? '▲' : '▼'}</span>
                   </button>
                   {isExpanded && (
-                    <div className="px-4 pb-3 pt-1 bg-[#f7fcfd] text-xs space-y-1.5">
-                      {s.club ? <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Club</span><span>{s.club}</span></div> : null}
-                      {showPlayerStyle && s.hands ? <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Style</span><span>{s.hands}</span></div> : null}
-                      {isTeamTournament && s.team_name ? <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Team</span><span>{s.team_name}</span></div> : null}
-                      <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                        {gameNumbers.map((gn, gi) => (
-                          <div key={gn} className="flex gap-1">
-                            <span className="text-black/40">G{gn}</span>
-                            <span className="font-semibold">{s.games[gi] ?? 0}</span>
-                          </div>
-                        ))}
+                    <div className="px-3 pb-2.5 pt-1.5 bg-[#f7fcfd] text-xs space-y-2">
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {s.club ? <div className="rounded-md border border-black/10 bg-white px-2 py-1"><span className="text-black/40">Club</span> <span className="font-semibold">{s.club}</span></div> : null}
+                        {showPlayerStyle && s.hands ? <div className="rounded-md border border-black/10 bg-white px-2 py-1"><span className="text-black/40">Style</span> <span className="font-semibold">{s.hands}</span></div> : null}
+                        {isTeamTournament && s.team_name ? <div className="rounded-md border border-black/10 bg-white px-2 py-1"><span className="text-black/40">Team</span> <span className="font-semibold">{s.team_name}</span></div> : null}
+                        <div className="rounded-md border border-black/10 bg-white px-2 py-1"><span className="text-black/40">Total</span> <span className="font-semibold">{s.total}</span></div>
+                        {hasAdditionalScores ? <div className="rounded-md border border-black/10 bg-white px-2 py-1"><span className="text-black/40">Add</span> <span className="font-semibold text-violet-700">{s.additional}</span></div> : null}
+                        {hasBonus ? <div className="rounded-md border border-black/10 bg-white px-2 py-1"><span className="text-black/40">Bonus</span> <span className="font-semibold text-emerald-700">{s.bonus}</span></div> : null}
+                        <div className="rounded-md border border-black/10 bg-white px-2 py-1"><span className="text-black/40">Avg</span> <span className="font-semibold">{s.average.toFixed(1)}</span></div>
                       </div>
-                      <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Total</span><span className="font-semibold">{s.total}</span></div>
-                      {hasAdditionalScores ? <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Additional</span><span className="font-semibold text-violet-700">{s.additional}</span></div> : null}
-                      {hasBonus ? <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Bonus</span><span className="font-semibold text-emerald-700">{s.bonus}</span></div> : null}
-                      <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Avg</span><span className="font-semibold">{s.average.toFixed(1)}</span></div>
+                      <div className="overflow-x-auto no-scrollbar">
+                        <div className="inline-flex items-center gap-1.5 min-w-full">
+                          {gameNumbers.map((gn, gi) => (
+                            <div key={gn} className="shrink-0 rounded-md border border-black/10 bg-white px-2 py-1 text-[11px]">
+                              <span className="text-black/40">G{gn}</span> <span className="font-semibold">{s.games[gi] ?? 0}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -16123,19 +16221,25 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     <span className="shrink-0 text-black/30">{isExpanded ? '▲' : '▼'}</span>
                   </button>
                   {isExpanded && (
-                    <div className="px-4 pb-3 pt-1 bg-[#f7fcfd] text-xs space-y-1.5">
-                      {s.members.length > 0 ? <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Members</span><span>{s.members.join(', ')}</span></div> : null}
-                      <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                        {gameNumbers.map((gn, gi) => (
-                          <div key={gn} className="flex gap-1">
-                            <span className="text-black/40">G{gn}</span>
-                            <span className="font-semibold">{s.games[gi] ?? 0}</span>
-                          </div>
-                        ))}
+                    <div className="px-3 pb-2.5 pt-1.5 bg-[#f7fcfd] text-xs space-y-2">
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div className="rounded-md border border-black/10 bg-white px-2 py-1 col-span-2">
+                          <span className="text-black/40">Members</span>{' '}
+                          <span className="font-semibold">{s.members.length > 0 ? s.members.join(', ') : 'No members'}</span>
+                        </div>
+                        <div className="rounded-md border border-black/10 bg-white px-2 py-1"><span className="text-black/40">Total</span> <span className="font-semibold">{s.total}</span></div>
+                        {hasAdditionalScores ? <div className="rounded-md border border-black/10 bg-white px-2 py-1"><span className="text-black/40">Add</span> <span className="font-semibold text-violet-700">{s.additional}</span></div> : null}
+                        {hasBonus ? <div className="rounded-md border border-black/10 bg-white px-2 py-1"><span className="text-black/40">Bonus</span> <span className="font-semibold text-emerald-700">{s.bonus}</span></div> : null}
                       </div>
-                      <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Total</span><span className="font-semibold">{s.total}</span></div>
-                      {hasAdditionalScores ? <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Additional</span><span className="font-semibold text-violet-700">{s.additional}</span></div> : null}
-                      {hasBonus ? <div className="flex gap-2"><span className="text-black/40 font-semibold w-14">Bonus</span><span className="font-semibold text-emerald-700">{s.bonus}</span></div> : null}
+                      <div className="overflow-x-auto no-scrollbar">
+                        <div className="inline-flex items-center gap-1.5 min-w-full">
+                          {gameNumbers.map((gn, gi) => (
+                            <div key={gn} className="shrink-0 rounded-md border border-black/10 bg-white px-2 py-1 text-[11px]">
+                              <span className="text-black/40">G{gn}</span> <span className="font-semibold">{s.games[gi] ?? 0}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
