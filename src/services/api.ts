@@ -884,6 +884,36 @@ const api = {
     }
     return data;
   },
+  async setBracketShootoutScores(
+    tournamentId: number,
+    matchId: number,
+    scores: Array<{ participant_id: number; score: number }>
+  ): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/brackets/${matchId}/shootout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scores }),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to submit shootout scores');
+    }
+    return data;
+  },
+  async resetBracketMatchScores(
+    tournamentId: number,
+    matchId: number
+  ): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/brackets/${matchId}/scores-reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to reset match scores');
+    }
+    return data;
+  },
   async setStepladderShootoutWinner(
     tournamentId: number,
     matchId: number,

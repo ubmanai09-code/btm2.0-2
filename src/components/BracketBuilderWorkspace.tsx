@@ -671,6 +671,8 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
   const [resettingBracketData, setResettingBracketData] = React.useState(false);
   const [advancerRoundIndex, setAdvancerRoundIndex] = React.useState(0);
   const [mobileRoundIndex, setMobileRoundIndex] = React.useState(0);
+  const [editingMatchIds, setEditingMatchIds] = React.useState<Set<number>>(new Set());
+  const [resettingMatchId, setResettingMatchId] = React.useState<number | null>(null);
   const savedBadgeTimeoutRef = React.useRef<number | null>(null);
   const liveBracketSurfaceRef = React.useRef<HTMLDivElement | null>(null);
   const presentSurfaceRef = React.useRef<HTMLDivElement | null>(null);
@@ -931,6 +933,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
       const result = await api.clearBrackets(tournament.id, { division: 'all' });
       setLiveBracket([]);
       setScoreDrafts({});
+      setEditingMatchIds(new Set());
       setNeedsRegenerate(!isPublic);
       setSuccessMessage(`Bracket data reset complete. Removed ${result.deleted || 0} matches.`);
       await refreshBracket();
@@ -1236,6 +1239,14 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
     return { first, second, third };
   }, [liveBracket, liveChampionshipRound, tournament.type]);
 
+  const bracketComplete = React.useMemo(() => {
+    const hasFirst = livePodium.first !== 'TBD';
+    const hasSecond = livePodium.second !== 'TBD';
+    const needsBronze = tournament.playoff_winners_count === 3;
+    const hasThird = !needsBronze || livePodium.third !== 'TBD';
+    return hasFirst && hasSecond && hasThird;
+  }, [livePodium, tournament.playoff_winners_count]);
+
   const advancerRoundOptions = React.useMemo(() => {
     const seen = new Set<number>();
     const rows: Array<{ roundIndex: number; roundName: string }> = [];
@@ -1485,6 +1496,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
         await api.setBracketWinner(tournament.id, row.id, Number(ranked[0].participant_id));
       }
       markMatchSaved(row.id);
+      setEditingMatchIds((prev) => { const next = new Set(prev); next.delete(row.id); return next; });
       await refreshBracket();
     } catch (error: any) {
       setErrorMessage(error?.message || 'Failed to submit match scores.');
@@ -1507,27 +1519,28 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
     setErrorMessage(null);
     setSuccessMessage(null);
     try {
-      if (typeof apiCompat.setBracketShootoutScores === 'function') {
-        await apiCompat.setBracketShootoutScores(tournament.id, row.id, scores);
-      } else {
-        const response = await fetch(`/api/tournaments/${tournament.id}/brackets/${row.id}/shootout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ scores }),
-        });
-        const data = typeof apiCompat.safeJson === 'function'
-          ? await apiCompat.safeJson(response)
-          : await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(data?.error || 'Failed to submit shootout scores.');
-        }
-      }
+      await api.setBracketShootoutScores(tournament.id, row.id, scores);
       markMatchSaved(row.id);
+      setEditingMatchIds((prev) => { const next = new Set(prev); next.delete(row.id); return next; });
       await refreshBracket();
     } catch (error: any) {
       setErrorMessage(error?.message || 'Failed to submit shootout scores.');
     } finally {
       setSavingMatchId(null);
+    }
+  };
+
+  const handleResetMatchScores = async (row: BracketRow) => {
+    setResettingMatchId(row.id);
+    setErrorMessage(null);
+    try {
+      await api.resetBracketMatchScores(tournament.id, row.id);
+      setEditingMatchIds((prev) => { const next = new Set(prev); next.add(row.id); return next; });
+      await refreshBracket();
+    } catch (error: any) {
+      setErrorMessage(error?.message || 'Failed to reset match scores.');
+    } finally {
+      setResettingMatchId(null);
     }
   };
 
@@ -2005,6 +2018,9 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
               <div>
                 <div className="text-[13px] font-black uppercase tracking-[0.08em] text-[#33408a]">Generated Bracket</div>
                 <div className="text-sm text-[#5b6795]">One bracket surface for scoring, moderation, and public viewing.</div>
+                <div className={`mt-1 inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] ${bracketComplete ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                  {bracketComplete ? 'Bracket Complete' : 'Bracket In Progress'}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 {!isPublic && canConfigure && (
@@ -2117,6 +2133,15 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                       )}
                     </div>
                   </div>
+                  <div className="mb-3 rounded-xl border border-[#d6ddff] bg-white px-3 py-2 text-xs text-[#5b6795]">
+                    Final result: <span className="font-black text-[#2f3966]">{livePodium.first}</span>
+                    {' · '}Runner-up: <span className="font-black text-[#2f3966]">{livePodium.second}</span>
+                    {tournament.playoff_winners_count === 3 ? (
+                      <>
+                        {' · '}3rd: <span className="font-black text-[#2f3966]">{livePodium.third}</span>
+                      </>
+                    ) : null}
+                  </div>
                   <div className="md:hidden space-y-3">
                     <div className="rounded-xl border border-[#d6ddff] bg-white px-3 py-2.5">
                       <div className="flex items-center justify-between gap-2">
@@ -2152,6 +2177,17 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                           const isScoreBasedMatch = row.match_kind === 'shootout' || row.match_kind === 'survivor_cut';
                           const isDuel = !isScoreBasedMatch;
                           const draft = scoreDrafts[row.id] || {};
+                          const persistedDraft = getScoreDraftFromRow(row);
+                          let persistedScoreEntries: any[] = [];
+                          try {
+                            const parsed = JSON.parse(String(row.scores_json || '[]'));
+                            persistedScoreEntries = Array.isArray(parsed) ? parsed : [];
+                          } catch {
+                            persistedScoreEntries = [];
+                          }
+                          const hasPersistedScores = persistedScoreEntries.length > 0;
+                          const isLockedMatch = hasPersistedScores && Number(row.winner_id) > 0 && !editingMatchIds.has(row.id);
+                          const canEditScores = canScore && !isPublic;
                           const missingScorableParticipants = isScoreBasedMatch && match.slots.some((slot) => !(slot.participantDbId ?? getFallbackSlotParticipantId(row, slot.slotIndex)));
                           const scoreableSlots = match.slots.filter((slot) => (slot.participantDbId ?? getFallbackSlotParticipantId(row, slot.slotIndex)));
                           return (
@@ -2170,6 +2206,48 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                                       Saved
                                     </div>
                                   ) : null}
+                                  {isLockedMatch ? (
+                                    <div className="inline-flex items-center rounded-full border border-[#d6ddff] bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#4e5d8b]">
+                                      Locked
+                                    </div>
+                                  ) : null}
+                                  {canEditScores && hasPersistedScores ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (isLockedMatch) {
+                                          setEditingMatchIds((prev) => {
+                                            const next = new Set(prev);
+                                            next.add(row.id);
+                                            return next;
+                                          });
+                                          return;
+                                        }
+                                        setEditingMatchIds((prev) => {
+                                          const next = new Set(prev);
+                                          next.delete(row.id);
+                                          return next;
+                                        });
+                                        setScoreDrafts((prev) => ({
+                                          ...prev,
+                                          [row.id]: getScoreDraftFromRow(row),
+                                        }));
+                                      }}
+                                      className="inline-flex items-center rounded-full border border-[#d6ddff] bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#4e5d8b]"
+                                    >
+                                      {isLockedMatch ? 'Edit Scores' : 'Cancel Edit'}
+                                    </button>
+                                  ) : null}
+                                  {canEditScores && !isLockedMatch && hasPersistedScores ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleResetMatchScores(row)}
+                                      disabled={resettingMatchId === row.id}
+                                      className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-rose-700 disabled:opacity-50"
+                                    >
+                                      {resettingMatchId === row.id ? 'Resetting...' : 'Reset'}
+                                    </button>
+                                  ) : null}
                                 </div>
                               </div>
                               <div className="space-y-1.5 p-3">
@@ -2180,11 +2258,12 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                                 )}
                                 {match.slots.map((slot) => {
                                   const participantId = slot.participantDbId ?? getFallbackSlotParticipantId(row, slot.slotIndex);
-                                  const isEditableSlot = canScore && !isPublic;
+                                  const isEditableSlot = canScore && !isPublic && !isLockedMatch;
                                   const advanceCandidates = resolveAdvanceCandidates(slot);
                                   const pickerKey = `${row.id}-${slot.slotIndex}`;
                                   const isPickerOpen = slotPickerKey === pickerKey;
                                   const isAssigning = assigningSlotKey === pickerKey;
+                                  const slotScore = draft[slot.slotIndex] || persistedDraft[slot.slotIndex] || '';
                                   const pickerList = participants.filter((p) => {
                                     const q = slotPickerSearch.toLowerCase();
                                     return !q || getParticipantDisplayName(p).toLowerCase().includes(q);
@@ -2211,6 +2290,11 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                                               <span className="truncate">{getLiveSlotName(row, slot, participantNameById)}</span>
                                             </div>
                                           </div>
+                                          {slotScore ? (
+                                            <div className="shrink-0 rounded-md border border-[#d6ddff] bg-white px-1.5 py-0.5 text-[10px] font-black text-[#2f3966]">
+                                              {slotScore}
+                                            </div>
+                                          ) : null}
                                           {isEditableSlot && (
                                             <div className="shrink-0 text-[9px] font-bold uppercase tracking-widest text-black/25">edit</div>
                                           )}
@@ -2232,7 +2316,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                                             ))}
                                           </div>
                                         )}
-                                        {canScore && !isPublic && (
+                                        {canScore && !isPublic && !isLockedMatch && (
                                           <div className="mt-1.5 flex flex-wrap gap-2">
                                             {(isScoreBasedMatch || isDuel) && participantId ? (
                                               <input
@@ -2348,6 +2432,17 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                       const isScoreBasedMatch = row.match_kind === 'shootout' || row.match_kind === 'survivor_cut';
                       const isDuel = !isScoreBasedMatch;
                       const draft = scoreDrafts[row.id] || {};
+                      const persistedDraft = getScoreDraftFromRow(row);
+                      let persistedScoreEntries: any[] = [];
+                      try {
+                        const parsed = JSON.parse(String(row.scores_json || '[]'));
+                        persistedScoreEntries = Array.isArray(parsed) ? parsed : [];
+                      } catch {
+                        persistedScoreEntries = [];
+                      }
+                      const hasPersistedScores = persistedScoreEntries.length > 0;
+                      const isLockedMatch = hasPersistedScores && Number(row.winner_id) > 0 && !editingMatchIds.has(row.id);
+                      const canEditScores = canScore && !isPublic;
                       const missingScorableParticipants = isScoreBasedMatch && match.slots.some((slot) => !(slot.participantDbId ?? getFallbackSlotParticipantId(row, slot.slotIndex)));
                       const scoreableSlots = match.slots.filter((slot) => (slot.participantDbId ?? getFallbackSlotParticipantId(row, slot.slotIndex)));
                       return (
@@ -2366,6 +2461,48 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                                   Saved
                                 </div>
                               ) : null}
+                              {isLockedMatch ? (
+                                <div className="inline-flex items-center rounded-full border border-[#d6ddff] bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#4e5d8b]">
+                                  Locked
+                                </div>
+                              ) : null}
+                              {canEditScores && hasPersistedScores ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (isLockedMatch) {
+                                      setEditingMatchIds((prev) => {
+                                        const next = new Set(prev);
+                                        next.add(row.id);
+                                        return next;
+                                      });
+                                      return;
+                                    }
+                                    setEditingMatchIds((prev) => {
+                                      const next = new Set(prev);
+                                      next.delete(row.id);
+                                      return next;
+                                    });
+                                    setScoreDrafts((prev) => ({
+                                      ...prev,
+                                      [row.id]: getScoreDraftFromRow(row),
+                                    }));
+                                  }}
+                                  className="inline-flex items-center rounded-full border border-[#d6ddff] bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#4e5d8b] hover:bg-[#f3f6ff]"
+                                >
+                                  {isLockedMatch ? 'Edit Scores' : 'Cancel Edit'}
+                                </button>
+                              ) : null}
+                              {canEditScores && !isLockedMatch && hasPersistedScores ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleResetMatchScores(row)}
+                                  disabled={resettingMatchId === row.id}
+                                  className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                                >
+                                  {resettingMatchId === row.id ? 'Resetting...' : 'Reset'}
+                                </button>
+                              ) : null}
                             </div>
                           </div>
                           <div className="space-y-1.5 p-3">
@@ -2376,11 +2513,12 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                             )}
                             {match.slots.map((slot) => {
                               const participantId = slot.participantDbId ?? getFallbackSlotParticipantId(row, slot.slotIndex);
-                              const isEditableSlot = canScore && !isPublic;
+                              const isEditableSlot = canScore && !isPublic && !isLockedMatch;
                               const advanceCandidates = resolveAdvanceCandidates(slot);
                               const pickerKey = `${row.id}-${slot.slotIndex}`;
                               const isPickerOpen = slotPickerKey === pickerKey;
                               const isAssigning = assigningSlotKey === pickerKey;
+                              const slotScore = draft[slot.slotIndex] || persistedDraft[slot.slotIndex] || '';
                               const pickerList = participants.filter((p) => {
                                 const q = slotPickerSearch.toLowerCase();
                                 return !q || getParticipantDisplayName(p).toLowerCase().includes(q);
@@ -2407,6 +2545,11 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                                           <span className="truncate">{getLiveSlotName(row, slot, participantNameById)}</span>
                                         </div>
                                       </div>
+                                      {slotScore ? (
+                                        <div className="shrink-0 rounded-md border border-[#d6ddff] bg-white px-1.5 py-0.5 text-[10px] font-black text-[#2f3966]">
+                                          {slotScore}
+                                        </div>
+                                      ) : null}
                                       {isEditableSlot && (
                                         <div className="shrink-0 text-[9px] font-bold uppercase tracking-widest text-black/25">edit</div>
                                       )}
@@ -2428,7 +2571,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                                         ))}
                                       </div>
                                     )}
-                                    {canScore && !isPublic && (
+                                    {canScore && !isPublic && !isLockedMatch && (
                                       <div className="mt-1.5 flex flex-wrap gap-2">
                                         {(isScoreBasedMatch || isDuel) && participantId ? (
                                           <input

@@ -4360,6 +4360,60 @@ const existing = db
     res.json({ success: true, advancing: advancing.map(p => p.id), eliminated: eliminatedIds });
   });
 
+  // ── Universal match scores reset (duel + shootout) ────────────────────────
+  app.post("/api/tournaments/:id/brackets/:matchId/scores-reset", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
+    const tournamentId = req.params.id;
+    const numericMatchId = Number.parseInt(req.params.matchId, 10);
+    if (!Number.isFinite(numericMatchId)) return res.status(400).json({ error: 'Invalid match id' });
+
+    const match = db.prepare("SELECT id, round, division, match_kind FROM brackets WHERE id = ? AND tournament_id = ?").get(numericMatchId, tournamentId) as any;
+    if (!match) return res.status(404).json({ error: 'Match not found' });
+
+    const matchKind = String(match.match_kind || 'duel').toLowerCase();
+    const division = String(match.division || 'all');
+    const currentRoundNo = Number(match.round);
+
+    // Clear scores and winner for the match itself
+    db.prepare('UPDATE brackets SET scores_json = NULL, winner_id = NULL WHERE id = ?').run(numericMatchId);
+
+    if (matchKind === 'shootout' || matchKind === 'survivor_cut') {
+      // For shootout/survivor_cut: also clear downstream advancement
+      db.prepare(`
+        UPDATE brackets
+        SET participant1_id = NULL, participant2_id = NULL, participant1_seed = NULL, participant2_seed = NULL,
+            winner_id = NULL, scores_json = NULL,
+            participants_json = CASE
+              WHEN match_kind IN ('shootout', 'survivor_cut') THEN '[]'
+              ELSE participants_json
+            END
+        WHERE tournament_id = ? AND division = ? AND round > ?
+      `).run(tournamentId, division, currentRoundNo);
+    } else {
+      // For duel: clear winner_id in all downstream matches that came from this match
+      // Simpler: just clear forward propagation for linked matches
+      const nextRoundLinked = db.prepare(
+        'SELECT id FROM brackets WHERE tournament_id = ? AND (participant1_source_match_id = ? OR participant2_source_match_id = ?)'
+      ).all(tournamentId, numericMatchId, numericMatchId) as any[];
+      if (nextRoundLinked.length > 0) {
+        const ids = nextRoundLinked.map((r: any) => Number(r.id));
+        for (const linkedId of ids) {
+          const linked = db.prepare('SELECT participant1_source_match_id, participant2_source_match_id FROM brackets WHERE id = ?').get(linkedId) as any;
+          const updates: string[] = [];
+          if (Number(linked?.participant1_source_match_id) === numericMatchId) {
+            updates.push('participant1_id = NULL', 'participant1_seed = NULL');
+          }
+          if (Number(linked?.participant2_source_match_id) === numericMatchId) {
+            updates.push('participant2_id = NULL', 'participant2_seed = NULL');
+          }
+          updates.push('winner_id = NULL', 'scores_json = NULL');
+          db.prepare(`UPDATE brackets SET ${updates.join(', ')} WHERE id = ?`).run(linkedId);
+        }
+      }
+    }
+
+    res.json({ success: true });
+  });
+
   // ── Reset shootout results ─────────────────────────────────────────────────
   app.post("/api/tournaments/:id/brackets/:matchId/shootout-reset", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
     const tournamentId = req.params.id;
@@ -4411,7 +4465,9 @@ const existing = db
     }
 
     const match = db.prepare(`
-      SELECT id, round, match_index, participant1_id, participant2_id, participant3_id
+      SELECT id, round, match_index,
+             participant1_id, participant2_id, participant3_id,
+             participant1_seed, participant2_seed, participant3_seed
       FROM brackets
       WHERE id = ? AND tournament_id = ?
       LIMIT 1
@@ -4433,9 +4489,9 @@ const existing = db
     }
 
     const scoreRows = [
-      { participantId: Number(match.participant1_id), score: score1 },
-      { participantId: Number(match.participant2_id), score: score2 },
-      { participantId: Number(match.participant3_id), score: score3 },
+      { participantId: Number(match.participant1_id), seed: Number(match.participant1_seed) || null, score: score1 },
+      { participantId: Number(match.participant2_id), seed: Number(match.participant2_seed) || null, score: score2 },
+      { participantId: Number(match.participant3_id), seed: Number(match.participant3_seed) || null, score: score3 },
     ].sort((a, b) => (b.score - a.score) || (a.participantId - b.participantId));
 
     if (scoreRows[0].score === scoreRows[1].score) {
@@ -4443,7 +4499,11 @@ const existing = db
     }
 
     const winnerId = scoreRows[0].participantId;
-    db.prepare("UPDATE brackets SET winner_id = ? WHERE id = ?").run(winnerId, numericMatchId);
+    const scoresJson = JSON.stringify(
+      scoreRows.map((s, idx) => ({ participant_id: s.participantId, seed: s.seed, score: s.score, rank: idx + 1 }))
+    );
+    db.prepare('UPDATE brackets SET scores_json = ?, winner_id = ? WHERE id = ?')
+      .run(scoresJson, winnerId, numericMatchId);
     advanceWinnerToNextRound(req.params.id, numericMatchId, winnerId);
     return res.json({ success: true, winner_id: winnerId });
   });

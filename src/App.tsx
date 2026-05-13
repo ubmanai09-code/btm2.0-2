@@ -11859,6 +11859,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   const [activeBracketId, setActiveBracketId] = React.useState<string | null>(null);
   const [savedBrackets, setSavedBrackets] = React.useState<SavedBracketConfig[]>([]);
   const [savedBracketsLoading, setSavedBracketsLoading] = React.useState(false);
+  const [editingBracketId, setEditingBracketId] = React.useState<string | null>(null);
+  const [editingBracketName, setEditingBracketName] = React.useState('');
+  const [savingBracketRename, setSavingBracketRename] = React.useState(false);
   const [loadBracketId, setLoadBracketId] = React.useState('');
 
   // ── Seeds ─────────────────────────────────────────────────────────────────
@@ -12591,8 +12594,12 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
   // ── Bracket save / load ───────────────────────────────────────────────────
   const handleNewBracket = () => {
-    if (!bracketName.trim()) return;
-    setActiveBracketName(bracketName.trim());
+    const nextName = bracketName.trim();
+    if (!nextName) return;
+    if (activeBracketName && !confirm(`Create new bracket "${nextName}" and close "${activeBracketName}"? Unsaved changes may be lost.`)) {
+      return;
+    }
+    setActiveBracketName(nextName);
     setActiveBracketId(null); // new unsaved bracket — no persisted id yet
     setRounds([]);
     setSeedImportMode('top-seeds');
@@ -12686,6 +12693,56 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     setLoadBracketId('');
     setActiveBracketName(bkt.name);
     setActiveBracketId(bkt.id);
+  };
+
+  const handleEditBracket = (id: string) => {
+    const bkt = savedBrackets.find((b) => b.id === id);
+    if (!bkt) return;
+
+    setEditingBracketId(id);
+    setEditingBracketName(bkt.name);
+  };
+
+  const handleCancelEditBracket = () => {
+    setEditingBracketId(null);
+    setEditingBracketName('');
+  };
+
+  const handleSaveEditedBracket = async (id: string) => {
+    const bkt = savedBrackets.find((b) => b.id === id);
+    if (!bkt) return;
+
+    const trimmed = editingBracketName.trim();
+    if (!trimmed || trimmed === bkt.name) {
+      handleCancelEditBracket();
+      return;
+    }
+
+    const updated: SavedBracketConfig = {
+      ...bkt,
+      name: trimmed,
+    };
+
+    setSavingBracketRename(true);
+    try {
+      await api.saveBracketV2Config(tournament.id, updated);
+    } catch {
+      try {
+        localStorage.setItem(
+          savedBracketsKey,
+          JSON.stringify([...savedBrackets.filter((entry) => entry.id !== id), updated]),
+        );
+      } catch {
+        // ignore local fallback errors
+      }
+    }
+
+    setSavedBrackets((prev) => prev.map((entry) => (entry.id === id ? updated : entry)));
+    if (activeBracketId === id) {
+      setActiveBracketName(trimmed);
+    }
+    handleCancelEditBracket();
+    setSavingBracketRename(false);
   };
 
   const handleDeleteBracket = async (id: string) => {
@@ -13210,7 +13267,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                     onClick={() => handleSaveBracket()}
                     className="text-[10px] text-emerald-700 font-semibold hover:text-emerald-900 shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded border border-emerald-300 bg-white hover:bg-emerald-100 transition-colors"
                     title="Save bracket to server">
-
+                    <Save size={10} /> Save
                   </button>
                   <button
                     onClick={() => {
@@ -13222,41 +13279,100 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                 </div>
               )}
 
-              {/* New bracket form */}
-              {!activeBracketName && (
-                <div className="flex gap-1.5 mb-2">
+              {/* New bracket section */}
+              <div className="mb-3 rounded-lg border border-black/10 bg-white p-2">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-1">New Bracket</div>
+                <div className="flex gap-1.5">
                   <input
                     value={bracketName}
                     onChange={e => setBracketName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') handleNewBracket(); }}
-                    placeholder="New bracket name…"
+                    placeholder="Bracket name"
                     className="flex-1 h-8 px-2 rounded-md border border-black/15 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 bg-white"
                   />
                   <button
                     onClick={handleNewBracket}
                     disabled={!bracketName.trim()}
                     className="h-8 px-2.5 rounded-md border border-black/15 text-[10px] font-semibold bg-white hover:bg-emerald-50 hover:border-emerald-300 disabled:opacity-40 transition-colors flex items-center gap-1">
-                    <Plus size={11} /> Create
+                    <Plus size={11} /> New
                   </button>
                 </div>
-              )}
+              </div>
 
               {/* Save-as-preset inline dialog (moved to Preset Editor section) */}
 
               {/* Saved brackets list */}
+              <div className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-1">Tournament Brackets</div>
+              {savedBracketsLoading && (
+                <div className="text-[10px] text-black/35 mb-2">Loading brackets...</div>
+              )}
               {savedBrackets.length > 0 ? (
                 <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
                   {savedBrackets.map(bkt => (
                     <div key={bkt.id} className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border bg-gray-50 hover:border-emerald-200 group ${activeBracketName === bkt.name ? 'border-emerald-300' : 'border-black/[0.08]'}`}>
-                      <span className="flex-1 text-xs text-black/70 truncate">{bkt.name}</span>
+                      {editingBracketId === bkt.id ? (
+                        <input
+                          autoFocus
+                          value={editingBracketName}
+                          onChange={(e) => setEditingBracketName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              void handleSaveEditedBracket(bkt.id);
+                            }
+                            if (e.key === 'Escape') {
+                              e.preventDefault();
+                              handleCancelEditBracket();
+                            }
+                          }}
+                          className="flex-1 h-7 px-2 rounded-md border border-blue-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-100"
+                        />
+                      ) : (
+                        <span className="flex-1 text-xs text-black/70 truncate">{bkt.name}</span>
+                      )}
                       <span className="text-[9px] text-black/30 shrink-0">{new Date(bkt.createdAt).toLocaleDateString()}</span>
-                      <button onClick={() => handleLoadBracket(bkt.id)} className="text-[10px] text-emerald-600 hover:text-emerald-800 font-semibold shrink-0 px-1">Edit</button>
-                      <button onClick={() => handleDeleteBracket(bkt.id)} className="text-black/20 hover:text-red-500 shrink-0"><X size={10} /></button>
+                      {editingBracketId === bkt.id ? (
+                        <>
+                          <button
+                            onClick={() => void handleSaveEditedBracket(bkt.id)}
+                            disabled={savingBracketRename}
+                            className="text-[10px] text-blue-700 hover:text-blue-900 font-semibold shrink-0 px-1 disabled:opacity-50"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={handleCancelEditBracket}
+                            disabled={savingBracketRename}
+                            className="text-[10px] text-black/45 hover:text-black/70 font-semibold shrink-0 px-1 disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => handleEditBracket(bkt.id)}
+                          className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold shrink-0 px-1"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleLoadBracket(bkt.id)}
+                        className="text-[10px] text-emerald-600 hover:text-emerald-800 font-semibold shrink-0 px-1"
+                      >
+                        Load
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBracket(bkt.id)}
+                        className="text-[10px] text-red-500 hover:text-red-700 font-semibold shrink-0 px-1"
+                      >
+                        Delete
+                      </button>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-[10px] text-black/30">Enter a name and click New to start.</p>
+                <p className="text-[10px] text-black/30">No saved brackets yet.</p>
               )}
             </Card>
           )}
