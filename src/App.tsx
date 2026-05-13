@@ -14936,6 +14936,21 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       setLoading(true);
     }
     try {
+      const withTimeout = async <T,>(promise: Promise<T>, label: string, timeoutMs = 8000): Promise<T> => {
+        return await new Promise<T>((resolve, reject) => {
+          const timeoutId = window.setTimeout(() => reject(new Error(`${label} request timeout after ${timeoutMs}ms`)), timeoutMs);
+          promise
+            .then((value) => {
+              window.clearTimeout(timeoutId);
+              resolve(value);
+            })
+            .catch((error) => {
+              window.clearTimeout(timeoutId);
+              reject(error);
+            });
+        });
+      };
+
       let latestTournamentConfig: Tournament | null = null;
       try {
         latestTournamentConfig = await api.getTournament(tournament.id);
@@ -14953,30 +14968,26 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         setHasBonus(Boolean(latestTournamentConfig.has_bonus));
       }
 
-      const [standingsResult, bracketsResult, participantsResult, scoresResult, teamsResult, manualWinnersResult] = await Promise.allSettled([
-        api.getStandings(tournament.id),
-        api.getBrackets(tournament.id),
-        api.getParticipants(tournament.id),
-        api.getScores(tournament.id),
-        tournament.type === 'team' ? api.getTeams(tournament.id) : Promise.resolve([] as Team[]),
-        api.getManualWinners(tournament.id),
+      const [standingsResult, participantsResult, scoresResult, teamsResult] = await Promise.allSettled([
+        withTimeout(api.getStandings(tournament.id), 'standings'),
+        withTimeout(api.getParticipants(tournament.id), 'participants'),
+        withTimeout(api.getScores(tournament.id), 'scores'),
+        tournament.type === 'team'
+          ? withTimeout(api.getTeams(tournament.id), 'teams')
+          : Promise.resolve([] as Team[]),
       ]);
 
       const toArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
       const payloadKind = (value: unknown) => Array.isArray(value) ? `array(${value.length})` : typeof value;
 
       const standingsData = standingsResult.status === 'fulfilled' ? (toArray(standingsResult.value) as Standing[]) : [];
-      const bracketsData = bracketsResult.status === 'fulfilled' ? (toArray(bracketsResult.value) as any[]) : [];
       const participantsData = participantsResult.status === 'fulfilled' ? (toArray(participantsResult.value) as Participant[]) : [];
       const scoresData = scoresResult.status === 'fulfilled' ? (toArray(scoresResult.value) as Score[]) : [];
       const teamsData = teamsResult.status === 'fulfilled' ? (toArray(teamsResult.value) as Team[]) : [];
-      const manualWinnersData = manualWinnersResult.status === 'fulfilled' ? (toArray(manualWinnersResult.value) as ManualWinnerEntry[]) : [];
+      const manualWinnersData: ManualWinnerEntry[] = [];
 
       if (standingsResult.status === 'fulfilled' && !Array.isArray(standingsResult.value)) {
         console.warn('Unexpected standings payload (expected array):', standingsResult.value);
-      }
-      if (bracketsResult.status === 'fulfilled' && !Array.isArray(bracketsResult.value)) {
-        console.warn('Unexpected brackets payload (expected array):', bracketsResult.value);
       }
       if (participantsResult.status === 'fulfilled' && !Array.isArray(participantsResult.value)) {
         console.warn('Unexpected participants payload (expected array):', participantsResult.value);
@@ -14987,18 +14998,14 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       if (teamsResult.status === 'fulfilled' && !Array.isArray(teamsResult.value)) {
         console.warn('Unexpected teams payload (expected array):', teamsResult.value);
       }
-      if (manualWinnersResult.status === 'fulfilled' && !Array.isArray(manualWinnersResult.value)) {
-        console.warn('Unexpected manual winners payload (expected array):', manualWinnersResult.value);
-      }
-
       setStandingsDebugSummary([
         `tid:${tournament.id}`,
         `standings:${standingsResult.status === 'fulfilled' ? payloadKind(standingsResult.value) : 'ERR'}`,
         `participants:${participantsResult.status === 'fulfilled' ? payloadKind(participantsResult.value) : 'ERR'}`,
         `scores:${scoresResult.status === 'fulfilled' ? payloadKind(scoresResult.value) : 'ERR'}`,
         `teams:${teamsResult.status === 'fulfilled' ? payloadKind(teamsResult.value) : 'ERR'}`,
-        `brackets:${bracketsResult.status === 'fulfilled' ? payloadKind(bracketsResult.value) : 'ERR'}`,
-        `manualWinners:${manualWinnersResult.status === 'fulfilled' ? payloadKind(manualWinnersResult.value) : 'ERR'}`,
+        `brackets:deferred`,
+        `manualWinners:deferred`,
       ].join(' | '));
 
       const fallbackParticipantsFromStandings: Participant[] = participantsData.length === 0
@@ -15075,9 +15082,6 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       if (standingsResult.status === 'rejected') {
         console.warn('Failed to load standings:', standingsResult.reason);
       }
-      if (bracketsResult.status === 'rejected') {
-        console.warn('Failed to load brackets for standings screen:', bracketsResult.reason);
-      }
       if (participantsResult.status === 'rejected') {
         console.warn('Failed to load participants for standings screen:', participantsResult.reason);
       }
@@ -15087,12 +15091,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       if (teamsResult.status === 'rejected') {
         console.warn('Failed to load teams for standings screen:', teamsResult.reason);
       }
-      if (manualWinnersResult.status === 'rejected') {
-        console.warn('Failed to load manual winners:', manualWinnersResult.reason);
-      }
-
       setStandings(standingsData);
-      setBracketMatches(bracketsData);
       setParticipants(fallbackParticipants);
       setScores(fallbackScoresFromStandings);
       setTeams(fallbackTeamsFromStandings);
@@ -15105,6 +15104,37 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         winnerMap[toManualWinnerKey(division, place)] = entry;
       }
       setManualWinnersByKey(winnerMap);
+
+      // Non-critical requests are loaded separately so they can't block standings.
+      withTimeout(api.getBrackets(tournament.id), 'brackets')
+        .then((value) => {
+          setBracketMatches(Array.isArray(value) ? value : []);
+          setStandingsDebugSummary((prev) => `${prev} | brackets:${Array.isArray(value) ? `array(${value.length})` : typeof value}`);
+        })
+        .catch((error) => {
+          console.warn('Failed to load brackets for standings screen:', error);
+          setBracketMatches([]);
+          setStandingsDebugSummary((prev) => `${prev} | brackets:ERR`);
+        });
+
+      withTimeout(api.getManualWinners(tournament.id), 'manual winners')
+        .then((value) => {
+          const rows = Array.isArray(value) ? value as ManualWinnerEntry[] : [];
+          const nextMap: Record<string, ManualWinnerEntry> = {};
+          for (const entry of rows) {
+            if (!entry) continue;
+            const division = entry.division === 'female' || entry.division === 'male' ? entry.division : 'all';
+            const place = entry.place === 'first' || entry.place === 'second' || entry.place === 'third' ? entry.place : null;
+            if (!place) continue;
+            nextMap[toManualWinnerKey(division, place)] = entry;
+          }
+          setManualWinnersByKey(nextMap);
+          setStandingsDebugSummary((prev) => `${prev} | manualWinners:${Array.isArray(value) ? `array(${value.length})` : typeof value}`);
+        })
+        .catch((error) => {
+          console.warn('Failed to load manual winners:', error);
+          setStandingsDebugSummary((prev) => `${prev} | manualWinners:ERR`);
+        });
 
       // Load bonus scores (backward-compatible)
       let bonusesData: Array<{ target_kind: 'participant' | 'team'; target_id: number; bonus: number }> = [];
