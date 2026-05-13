@@ -14961,14 +14961,14 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         api.getManualWinners(tournament.id),
       ]);
 
-      const toArray = <T,>(value: unknown): T[] => Array.isArray(value) ? (value as T[]) : [];
+      const toArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 
-      const standingsData = standingsResult.status === 'fulfilled' ? toArray<Standing>(standingsResult.value) : [];
-      const bracketsData = bracketsResult.status === 'fulfilled' ? toArray<any>(bracketsResult.value) : [];
-      const participantsData = participantsResult.status === 'fulfilled' ? toArray<Participant>(participantsResult.value) : [];
-      const scoresData = scoresResult.status === 'fulfilled' ? toArray<Score>(scoresResult.value) : [];
-      const teamsData = teamsResult.status === 'fulfilled' ? toArray<Team>(teamsResult.value) : [];
-      const manualWinnersData = manualWinnersResult.status === 'fulfilled' ? toArray<ManualWinnerEntry>(manualWinnersResult.value) : [];
+      const standingsData = standingsResult.status === 'fulfilled' ? (toArray(standingsResult.value) as Standing[]) : [];
+      const bracketsData = bracketsResult.status === 'fulfilled' ? (toArray(bracketsResult.value) as any[]) : [];
+      const participantsData = participantsResult.status === 'fulfilled' ? (toArray(participantsResult.value) as Participant[]) : [];
+      const scoresData = scoresResult.status === 'fulfilled' ? (toArray(scoresResult.value) as Score[]) : [];
+      const teamsData = teamsResult.status === 'fulfilled' ? (toArray(teamsResult.value) as Team[]) : [];
+      const manualWinnersData = manualWinnersResult.status === 'fulfilled' ? (toArray(manualWinnersResult.value) as ManualWinnerEntry[]) : [];
 
       if (standingsResult.status === 'fulfilled' && !Array.isArray(standingsResult.value)) {
         console.warn('Unexpected standings payload (expected array):', standingsResult.value);
