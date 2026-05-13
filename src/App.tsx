@@ -14745,6 +14745,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const [winnerEditorSelectValue, setWinnerEditorSelectValue] = useState('');
   const [winnerEditorManualInput, setWinnerEditorManualInput] = useState('');
   const [winnerEditorCandidatesText, setWinnerEditorCandidatesText] = useState('');
+  const [standingsDebugSummary, setStandingsDebugSummary] = useState('');
 
   const toManualWinnerKey = (division: 'all' | 'female' | 'male', place: 'first' | 'second' | 'third') => `${division}:${place}`;
   const parseWinnerNames = (raw: string) => {
@@ -14962,6 +14963,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       ]);
 
       const toArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+      const payloadKind = (value: unknown) => Array.isArray(value) ? `array(${value.length})` : typeof value;
 
       const standingsData = standingsResult.status === 'fulfilled' ? (toArray(standingsResult.value) as Standing[]) : [];
       const bracketsData = bracketsResult.status === 'fulfilled' ? (toArray(bracketsResult.value) as any[]) : [];
@@ -14988,6 +14990,16 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       if (manualWinnersResult.status === 'fulfilled' && !Array.isArray(manualWinnersResult.value)) {
         console.warn('Unexpected manual winners payload (expected array):', manualWinnersResult.value);
       }
+
+      setStandingsDebugSummary([
+        `tid:${tournament.id}`,
+        `standings:${standingsResult.status === 'fulfilled' ? payloadKind(standingsResult.value) : 'ERR'}`,
+        `participants:${participantsResult.status === 'fulfilled' ? payloadKind(participantsResult.value) : 'ERR'}`,
+        `scores:${scoresResult.status === 'fulfilled' ? payloadKind(scoresResult.value) : 'ERR'}`,
+        `teams:${teamsResult.status === 'fulfilled' ? payloadKind(teamsResult.value) : 'ERR'}`,
+        `brackets:${bracketsResult.status === 'fulfilled' ? payloadKind(bracketsResult.value) : 'ERR'}`,
+        `manualWinners:${manualWinnersResult.status === 'fulfilled' ? payloadKind(manualWinnersResult.value) : 'ERR'}`,
+      ].join(' | '));
 
       const fallbackParticipantsFromStandings: Participant[] = participantsData.length === 0
         ? (standingsData || []).map((row, index) => {
@@ -16204,6 +16216,11 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 <>
                   <h4 className="font-bold">{tx('Tournament Standings')}</h4>
                   <p className="text-sm text-black/40">{tx('Rankings sorted from highest to lowest total score')}</p>
+                  {standingsDebugSummary && (
+                    <p className="text-[10px] mt-1 text-amber-700 break-all">
+                      Debug: {standingsDebugSummary}
+                    </p>
+                  )}
                   {standingsMode === 'teams' && isTeamTournament && (
                     <p className={`text-xs mt-1 ${teamsCountValid ? 'text-emerald-700' : 'text-amber-700'}`}>
                       Team check: ranked teams = {rankedTeamsCount} (real teams only), assigned players = {assignedPlayersCount}, unassigned players = {unassignedPlayersCount}.
