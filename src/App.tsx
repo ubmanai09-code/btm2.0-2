@@ -14968,6 +14968,52 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       const teamsData = teamsResult.status === 'fulfilled' ? teamsResult.value : [];
       const manualWinnersData = manualWinnersResult.status === 'fulfilled' ? manualWinnersResult.value : [];
 
+      const fallbackParticipantsFromStandings: Participant[] = participantsData.length === 0
+        ? (standingsData || []).map((row, index) => {
+            const fullName = String(row.participant_name || '').trim();
+            const parts = fullName.split(/\s+/).filter(Boolean);
+            const firstName = parts.shift() || `Participant ${row.participant_id}`;
+            const lastName = parts.join(' ');
+            return {
+              id: Number(row.participant_id) || (index + 1),
+              tournament_id: tournament.id,
+              first_name: firstName,
+              last_name: lastName,
+              gender: '',
+              hands: '1H',
+              club: '',
+              average: Number(row.average_score) || 0,
+              email: '',
+              team_id: null,
+              team_order: 0,
+              team_name: String(row.team_name || '').trim() || undefined,
+            };
+          })
+        : participantsData;
+
+      const fallbackScoresFromStandings: Score[] = scoresData.length === 0
+        ? (standingsData || [])
+            .filter((row) => Number(row.total_score) > 0)
+            .map((row, index) => ({
+              id: -(index + 1),
+              tournament_id: tournament.id,
+              participant_id: Number(row.participant_id) || 0,
+              game_number: 1,
+              score: Number(row.total_score) || 0,
+              participant_name: String(row.participant_name || '').trim() || undefined,
+            }))
+        : scoresData;
+
+      const fallbackTeamsFromStandings: Team[] = (teamsData.length === 0 && tournament.type === 'team')
+        ? Array.from(new Map(
+            (standingsData || []).map((row) => {
+              const id = Number(row.participant_id) || 0;
+              const name = String(row.team_name || row.participant_name || '').trim() || `Team #${id || 0}`;
+              return [name.toLowerCase(), { id: id || 0, tournament_id: tournament.id, name } as Team];
+            })
+          ).values())
+        : teamsData;
+
       if (standingsResult.status === 'rejected') {
         console.warn('Failed to load standings:', standingsResult.reason);
       }
@@ -14989,9 +15035,9 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
       setStandings(standingsData);
       setBracketMatches(bracketsData);
-      setParticipants(participantsData);
-      setScores(scoresData);
-      setTeams(teamsData);
+      setParticipants(fallbackParticipantsFromStandings);
+      setScores(fallbackScoresFromStandings);
+      setTeams(fallbackTeamsFromStandings);
       const winnerMap: Record<string, ManualWinnerEntry> = {};
       for (const entry of manualWinnersData || []) {
         if (!entry) continue;
