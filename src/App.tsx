@@ -15300,6 +15300,30 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     filteredPlayerStandingsRows = filteredPlayerStandingsRows.filter((row) => row.grand_total > 0 || row.total > 0);
   }
 
+  const directPlayerStandingsFallbackRows = standings
+    .map((row) => {
+      const total = Number(row.total_score) || 0;
+      const average = Number(row.average_score) || 0;
+      return {
+        participant_id: Number(row.participant_id) || 0,
+        participant_name: formatStandingsName(Number(row.participant_id) || 0, String(row.participant_name || 'Unknown')),
+        team_name: String(row.team_name || '-'),
+        club: '-',
+        hands: null as string | null,
+        games: gameNumbers.map((_, index) => (index === 0 ? total : 0)),
+        additional: 0,
+        bonus: 0,
+        total,
+        grand_total: total,
+        average,
+      };
+    })
+    .sort((a, b) => (b.total - a.total) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name));
+
+  const standingsRowsForDisplay = filteredPlayerStandingsRows.length > 0
+    ? filteredPlayerStandingsRows
+    : directPlayerStandingsFallbackRows;
+
   const formatTeamMemberCompact = (participant: Participant) => {
     const firstName = (participant.first_name || '').trim().toLowerCase() || 'unknown';
     const lastInitial = (participant.last_name || '').trim().charAt(0).toLowerCase();
@@ -16295,7 +16319,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
             </span>
           </div>
           <div className="sm:hidden divide-y divide-black/5">
-            {standingsMode === 'players' && filteredPlayerStandingsRows.map((s, idx) => {
+            {standingsMode === 'players' && standingsRowsForDisplay.map((s, idx) => {
               const rowKey = String(s.participant_id);
               const isExpanded = mobileExpandedRow === rowKey;
               const isFemale = (participantGenderMap.get(s.participant_id) || '').startsWith('f');
@@ -16388,7 +16412,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 </div>
               );
             })}
-            {((standingsMode === 'players' && filteredPlayerStandingsRows.length === 0) || (standingsMode === 'teams' && teamStandingsRows.length === 0)) && (
+            {((standingsMode === 'players' && standingsRowsForDisplay.length === 0) || (standingsMode === 'teams' && teamStandingsRows.length === 0)) && (
               <p className="px-4 py-8 text-center text-black/40 italic text-xs">No scores recorded yet.</p>
             )}
           </div>
@@ -16419,7 +16443,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           <table ref={standingsTableRef} className="w-full min-w-[760px] text-left border-collapse table-fixed">
             {renderStandingsColGroup()}
             <tbody className="divide-y divide-black/5">
-              {standingsMode === 'players' && filteredPlayerStandingsRows.map((s, idx) => (
+              {standingsMode === 'players' && standingsRowsForDisplay.map((s, idx) => (
                 <tr key={s.participant_id} className="hover:bg-[#AFDDE5]/20 transition-colors">
                   <td className="px-2 py-1.5 text-xs font-bold text-black/60 sticky left-0 z-[2] bg-white">{idx + 1}</td>
                   <td className="px-2 py-1.5 text-xs font-bold leading-tight sticky left-12 z-[2] bg-white">
@@ -16566,7 +16590,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                   <td className="px-2.5 py-1.5 text-right font-bold text-sm">{s.grand_total}</td>
                 </tr>
               ))}
-              {((standingsMode === 'players' && filteredPlayerStandingsRows.length === 0) || (standingsMode === 'teams' && teamStandingsRows.length === 0)) && (
+              {((standingsMode === 'players' && standingsRowsForDisplay.length === 0) || (standingsMode === 'teams' && teamStandingsRows.length === 0)) && (
                 <tr>
                   {(() => {
                     // players: Rank + Name + Club + (Team if team tournament) + games + Total + [optional extras] + GrandTotal + Avg
