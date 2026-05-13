@@ -15366,6 +15366,13 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     ? filteredPlayerStandingsRows
     : directPlayerStandingsFallbackRows;
 
+  const hasMeaningfulClub = (value: unknown) => {
+    const normalized = String(value || '').trim();
+    return normalized.length > 0 && normalized !== '-';
+  };
+
+  const hasClubData = standingsRowsForDisplay.some((row) => hasMeaningfulClub(row.club));
+
   const formatTeamMemberCompact = (participant: Participant) => {
     const firstName = (participant.first_name || '').trim().toLowerCase() || 'unknown';
     const lastInitial = (participant.last_name || '').trim().charAt(0).toLowerCase();
@@ -15685,7 +15692,16 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     ];
     const headers = standingsMode === 'teams'
       ? ['rank', 'team', ...gameHeaders, 'total', ...extraHeaders]
-      : ['rank', 'participant', 'club', 'team', ...gameHeaders, 'total', ...extraHeaders, 'avg'];
+      : [
+          'rank',
+          'participant',
+          ...(hasClubData ? ['club'] : []),
+          'team',
+          ...gameHeaders,
+          'total',
+          ...extraHeaders,
+          'avg',
+        ];
     const rows = standingsMode === 'teams'
       ? teamStandingsRows.map((s, idx) => [
           idx + 1,
@@ -15699,7 +15715,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       : playerStandingsRows.map((s, idx) => [
           idx + 1,
           s.participant_name,
-          s.club,
+          ...(hasClubData ? [s.club] : []),
           s.team_name,
           ...s.games,
           s.total,
@@ -15801,7 +15817,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           {standingsMode === 'players' && (
             <>
               {showPlayerStyle && <th className={`${headerBaseClass} text-center`}>1H/2H</th>}
-              <th className={headerBaseClass}>Club</th>
+              {hasClubData && <th className={headerBaseClass}>Club</th>}
             </>
           )}
           {standingsMode === 'players' && isTeamTournament && (
@@ -15839,7 +15855,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       {standingsMode === 'players' && (
         <>
           {showPlayerStyle && <col style={{ width: '68px' }} />}
-          <col style={{ width: '150px' }} />
+          {hasClubData && <col style={{ width: '150px' }} />}
         </>
       )}
       {standingsMode === 'players' && isTeamTournament && <col style={{ width: '120px' }} />}
@@ -16394,7 +16410,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                   {isExpanded && (
                     <div className="px-3 pb-2.5 pt-1.5 bg-[#f7fcfd] text-xs space-y-2">
                       <div className="grid grid-cols-2 gap-1.5">
-                        {s.club ? <div className="rounded-md border border-black/10 bg-white px-2 py-1"><span className="text-black/40">Club</span> <span className="font-semibold">{s.club}</span></div> : null}
+                        {hasClubData && hasMeaningfulClub(s.club) ? <div className="rounded-md border border-black/10 bg-white px-2 py-1"><span className="text-black/40">Club</span> <span className="font-semibold">{s.club}</span></div> : null}
                         {showPlayerStyle && s.hands ? <div className="rounded-md border border-black/10 bg-white px-2 py-1"><span className="text-black/40">Style</span> <span className="font-semibold">{s.hands}</span></div> : null}
                         {isTeamTournament && s.team_name ? <div className="rounded-md border border-black/10 bg-white px-2 py-1"><span className="text-black/40">Team</span> <span className="font-semibold">{s.team_name}</span></div> : null}
                         <div className="rounded-md border border-black/10 bg-white px-2 py-1"><span className="text-black/40">Total</span> <span className="font-semibold">{s.total}</span></div>
@@ -16506,9 +16522,11 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     {s.hands}
                   </td>
                   )}
-                  <td className="px-2.5 py-1.5 text-black/70 text-[13px] font-medium leading-tight">
-                    {s.club}
-                  </td>
+                  {hasClubData && (
+                    <td className="px-2.5 py-1.5 text-black/70 text-[13px] font-medium leading-tight">
+                      {s.club}
+                    </td>
+                  )}
                   {/* Only show team column if team tournament and standingsMode is players */}
                   {standingsMode === 'players' && isTeamTournament && (
                     <td className="px-2.5 py-1.5 text-black/40 text-xs">{s.team_name}</td>
@@ -16640,9 +16658,9 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
               {((standingsMode === 'players' && standingsRowsForDisplay.length === 0) || (standingsMode === 'teams' && teamStandingsRows.length === 0)) && (
                 <tr>
                   {(() => {
-                    // players: Rank + Name + Club + (Team if team tournament) + games + Total + [optional extras] + GrandTotal + Avg
+                    // players: Rank + Name + [optional Club] + (Team if team tournament) + games + Total + [optional extras] + GrandTotal + Avg
                     const colSpan = standingsMode === 'players'
-                      ? (3 + (isTeamTournament ? 1 : 0) + gameNumbers.length + 2 + (hasAdditionalScores ? 1 : 0) + (hasBonus ? 1 : 0) + 1)
+                      ? ((hasClubData ? 3 : 2) + (isTeamTournament ? 1 : 0) + gameNumbers.length + 2 + (hasAdditionalScores ? 1 : 0) + (hasBonus ? 1 : 0) + 1)
                       : (2 + gameNumbers.length + 2 + (hasAdditionalScores ? 1 : 0) + (hasBonus ? 1 : 0));
                     return (
                       <td colSpan={colSpan} className="px-6 py-12 text-center text-black/40 italic">
