@@ -378,7 +378,7 @@ const buildPrintDocument = ({
         <div class="app-header">
           <img class="app-logo" src="${escapePrintHtml(logoSrc)}" alt="BTM Logo" />
           <div class="app-title-wrap">
-            <div class="app-title">BTM 2.0</div>
+            <div class="app-title">BTM 2.1</div>
             <div class="app-subtitle">BOWLING TOURNAMENT MANAGER</div>
           </div>
         </div>
@@ -3307,7 +3307,7 @@ export default function App() {
           <div className="flex items-center gap-2 font-medium flex-wrap">
             <span className="font-semibold uppercase tracking-wide text-orange-500">{t('app.footer_tagline', 'Total tournament control. From first frame to final payout.')}</span>
             <span className="text-white/40">|</span>
-            <span>BTM <span className="text-orange-500">v2.0</span></span>
+            <span>BTM <span className="text-orange-500">v2.1</span></span>
             <span className="text-white/40">|</span>
             <span>{t('app.footer_copyright', '© Murat D. 2026')}</span>
           </div>
@@ -14572,7 +14572,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 20px 12px', borderBottom: '2px solid #d1fae5' }}>
               <img src="/logo.png" alt="BTM Logo" style={{ width: 32, height: 32, objectFit: 'contain' }} />
               <div>
-                <div style={{ fontSize: 15, fontWeight: 900, color: '#065f46', letterSpacing: '0.02em' }}>BTM 2.0</div>
+                <div style={{ fontSize: 15, fontWeight: 900, color: '#065f46', letterSpacing: '0.02em' }}>BTM 2.1</div>
                 <div style={{ fontSize: 9, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Bowling Tournament Manager</div>
               </div>
               <div style={{ marginLeft: 'auto', fontSize: 10, color: '#9ca3af' }}>{new Date().toLocaleDateString()}</div>
@@ -14682,7 +14682,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
             </div>
             {/* Footer */}
             <div style={{ padding: '8px 20px', borderTop: '1px solid #e5e7eb', fontSize: 10, color: '#9ca3af', textAlign: 'right' }}>
-              Bowling Tournament Manager · btm2.0
+              Bowling Tournament Manager · btm2.1
             </div>
           </div>,
           document.body
