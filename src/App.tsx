@@ -16271,11 +16271,6 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 <>
                   <h4 className="font-bold">{tx('Tournament Standings')}</h4>
                   <p className="text-sm text-black/40">{tx('Rankings sorted from highest to lowest total score')}</p>
-                  {standingsDebugSummary && (
-                    <p className="text-[10px] mt-1 text-amber-700 break-all">
-                      Debug: {standingsDebugSummary}
-                    </p>
-                  )}
                   {standingsMode === 'teams' && isTeamTournament && (
                     <p className={`text-xs mt-1 ${teamsCountValid ? 'text-emerald-700' : 'text-amber-700'}`}>
                       Team check: ranked teams = {rankedTeamsCount} (real teams only), assigned players = {assignedPlayersCount}, unassigned players = {unassignedPlayersCount}.
