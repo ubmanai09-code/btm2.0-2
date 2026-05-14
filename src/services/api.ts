@@ -91,6 +91,16 @@ export interface StandingAdditionalScore {
   additional_score: number;
 }
 
+export interface ManualWinnerEntry {
+  id: number;
+  tournament_id: number;
+  division: 'all' | 'female' | 'male';
+  place: 'first' | 'second' | 'third';
+  target_kind: 'participant' | 'team' | 'manual';
+  target_id: number | null;
+  display_name: string;
+}
+
 export interface SeedItem {
   seed: number;
   id: number;
@@ -675,6 +685,35 @@ const api = {
     }
     return res.json();
   },
+  async getManualWinners(tournamentId: number): Promise<ManualWinnerEntry[]> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/manual-winners`);
+    if (!res.ok) {
+      const error = await this.safeJson(res);
+      throw new Error(error?.error || `Failed to load manual winners (${res.status})`);
+    }
+    return res.json();
+  },
+  async setManualWinner(
+    tournamentId: number,
+    payload: {
+      division: 'all' | 'female' | 'male';
+      place: 'first' | 'second' | 'third';
+      target_kind: 'participant' | 'team' | 'manual';
+      target_id?: number | null;
+      display_name?: string;
+    }
+  ): Promise<{ success: boolean; entry?: ManualWinnerEntry }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/manual-winners`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const error = await this.safeJson(res);
+      throw new Error(error?.error || `Failed to save manual winner (${res.status})`);
+    }
+    return res.json();
+  },
   async getBrackets(tournamentId: number, options?: { division?: 'all' | 'male' | 'female' }): Promise<any[]> {
     const params = new URLSearchParams();
     if (options?.division && options.division !== 'all') {
@@ -718,6 +757,16 @@ const api = {
       throw new Error(error.error || 'Failed to clear brackets');
     }
     return res.json();
+  },
+  async cleanupMalformedBrackets(tournamentId: number): Promise<{ success: boolean; scanned: number; deleted: number }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/brackets/cleanup-malformed`, {
+      method: 'POST',
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to cleanup malformed bracket rows');
+    }
+    return data;
   },
   async updateBracketSettings(
     tournamentId: number,
@@ -827,6 +876,35 @@ const api = {
         to_match_index: number;
         to_slot: 'p1' | 'p2';
       }>;
+      engine_matches?: Array<{
+        id: string;
+        label: string;
+        roundId: string;
+        roundName: string;
+        roundIndex: number;
+        roundNumber: number;
+        matchIndex: number;
+        matchType: string;
+        scoringType: string;
+        playersPerMatch: number;
+        advancementCount: number;
+        slots: Array<{
+          slotIndex: number;
+          sourceType: string;
+          sourceLabel: string;
+          participantDbId: number | null;
+          seed: number | null;
+          fromMatchId: string | null;
+          advanceRank: number | null;
+          outcome?: 'winner' | 'loser';
+        }>;
+        nextLinks: Array<{
+          targetMatchId: string;
+          targetSlotIndex: number;
+          advanceRank: number;
+          outcome?: 'winner' | 'loser';
+        }>;
+      }>;
     }
   ): Promise<{ success: boolean; error?: string }> {
     const res = await fetch(`/api/tournaments/${tournamentId}/brackets/generate-manual`, {
@@ -843,7 +921,7 @@ const api = {
   async assignBracketSeed(
     tournamentId: number,
     matchId: number,
-    options: { slot: 'p1' | 'p2'; seed_id: number; seed_kind: 'team' | 'participant'; seed?: number }
+    options: { slot: 'p1' | 'p2'; slot_index?: number; seed_id: number; seed_kind: 'team' | 'participant'; seed?: number }
   ): Promise<{ success: boolean; error?: string }> {
     const res = await fetch(`/api/tournaments/${tournamentId}/brackets/${matchId}/assign`, {
       method: 'POST',

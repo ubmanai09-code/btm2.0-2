@@ -797,7 +797,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
 
           let changed = false;
           const mergedSlots = nextStructure.slots.map((slot) => {
-            const prevSlot = prevStructure.slots.find((candidate) => Number(candidate?.slotIndex) === Number(slot?.slotIndex));
+            const prevSlot = prevStructure.slots?.find((candidate) => Number(candidate?.slotIndex) === Number(slot?.slotIndex));
             const incomingPid = Number(slot?.participantDbId || 0);
             const prevPid = Number(prevSlot?.participantDbId || 0);
             if (incomingPid > 0 || prevPid <= 0) return slot;
@@ -1357,9 +1357,9 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
       throw new Error('Add at least 2 manual participants before generating the bracket.');
     }
 
-    await api.bulkAddParticipants(
+      await api.bulkAddParticipants(
       tournament.id,
-      manualNames.map((name) => ({ name })),
+        manualNames.map((name) => ({ first_name: name, last_name: '' })),
       { replaceExisting: false },
     );
 
@@ -1419,8 +1419,8 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
             const participant = slot.participantId ? generationParticipants.find((candidate) => candidate.id === slot.participantId) : null;
             return participant?.seed ?? null;
           })(),
-          fromMatchId: slot.fromMatchId,
-          advanceRank: slot.advanceRank,
+          fromMatchId: slot.fromMatchId ?? null,
+          advanceRank: slot.advanceRank ?? null,
           outcome: slot.outcome,
         })),
         nextLinks: match.nextLinks.map((link) => ({
@@ -1549,7 +1549,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
     setAssigningSlotKey(key);
     setErrorMessage(null);
     try {
-      const slot = slotIndex === 0 ? 'p1' : slotIndex === 1 ? 'p2' : 'p3';
+      const slot = slotIndex === 1 ? 'p2' : 'p1';
       await api.assignBracketSeed(tournament.id, row.id, {
         slot,
         slot_index: slotIndex,
@@ -1640,35 +1640,35 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
   return (
     <>
     <div className="space-y-4">
-      <div className="rounded-[28px] border border-[#cfd7ff] bg-[linear-gradient(180deg,#f8f7ff_0%,#ffffff_72%)] p-4 shadow-[0_18px_40px_rgba(122,132,214,0.08)] lg:p-5">
-        <div className="flex flex-col gap-3 border-b border-[#dfe4ff] pb-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="rounded-[28px] border border-gray-200 bg-white p-4 shadow-sm lg:p-5">
+        <div className="flex flex-col gap-3 border-b border-gray-200 pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#6570a6]">Bracket Control Room</div>
-            <h2 className="mt-1 text-2xl font-black tracking-tight text-[#263268]">{tournament.name}</h2>
-            <p className="mt-1 max-w-3xl text-sm text-[#5c678f]">
+            <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-gray-500">Bracket Control Room</div>
+            <h2 className="mt-1 text-2xl font-black tracking-tight text-gray-800">{tournament.name}</h2>
+            <p className="mt-1 max-w-3xl text-sm text-gray-600">
               Configure once, generate once, then use the same bracket for scoring, moderation, and public viewing.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-wider text-[#53608d]">
-            <div className="rounded-full border border-[#d6ddff] bg-white px-3 py-1.5">{liveBracket.length} Live Matches</div>
-            <div className="rounded-full border border-[#d6ddff] bg-white px-3 py-1.5">{engineResult.matches.length} Preview Nodes</div>
-            <div className="rounded-full border border-[#d6ddff] bg-white px-3 py-1.5">{role}</div>
+          <div className="flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-wider text-gray-500">
+            <div className="rounded-full border border-gray-200 bg-white px-3 py-1.5">{liveBracket.length} Live Matches</div>
+            <div className="rounded-full border border-gray-200 bg-white px-3 py-1.5">{engineResult.matches.length} Preview Nodes</div>
+            <div className="rounded-full border border-gray-200 bg-white px-3 py-1.5">{role}</div>
           </div>
         </div>
         {successMessage && (
-          <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{successMessage}</div>
+          <div className="mt-4 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">{successMessage}</div>
         )}
 
         {!isPublic && (
-          <section className="mt-4 rounded-[22px] border border-[#cfd7ff] bg-white shadow-sm overflow-hidden">
+          <section className="mt-4 rounded-[22px] border border-gray-200 bg-white shadow-sm overflow-hidden">
             <button
               type="button"
               onClick={() => setSetupOpen((prev) => !prev)}
-              className="flex w-full items-center justify-between gap-3 border-b border-[#dfe4ff] bg-[#f5f3ff] px-4 py-3 text-left"
+              className="flex w-full items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-4 py-3 text-left"
             >
               <div>
-                <div className="text-[11px] font-black uppercase tracking-[0.08em] text-[#33408a]">Preset Editor</div>
-                <div className="mt-1 text-sm text-[#5b6795]">Design and save bracket structures. Only seed count matters — no live tournament data needed.</div>
+                <div className="text-[11px] font-black uppercase tracking-[0.08em] text-gray-700">Preset Editor</div>
+                <div className="mt-1 text-sm text-gray-500">Design and save bracket structures. Only seed count matters — no live tournament data needed.</div>
               </div>
               {setupOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
             </button>
@@ -1949,13 +1949,13 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                     <div className="space-y-2">
                       {engineResult.rounds.map((round) => (
                         <div key={round.roundId} className="rounded-xl border border-[#d8defe] bg-white px-3 py-2">
-                          <div className="text-sm font-bold text-[#2f3966]">{round.roundName}</div>
-                          <div className="text-xs text-[#62709b] mt-0.5">{round.inputCount} players {'->'} {round.outputCount} via {round.matchCount} matches</div>
+                          <div className="text-sm font-bold text-gray-800">{round.roundName}</div>
+                          <div className="text-xs text-gray-600 mt-0.5">{round.inputCount} players {'->'} {round.outputCount} via {round.matchCount} matches</div>
                         </div>
                       ))}
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <button type="button" onClick={handleGenerateBracket} disabled={!canConfigure || generating || hasErrors} className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-black text-white disabled:opacity-50">
+                      <button type="button" onClick={handleGenerateBracket} disabled={!canConfigure || generating || hasErrors} className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-gray-800 px-4 text-sm font-black text-white disabled:opacity-50">
                         {generating ? <RefreshCw size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
                         Generate Actual Bracket
                       </button>
@@ -2233,7 +2233,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                                           [row.id]: getScoreDraftFromRow(row),
                                         }));
                                       }}
-                                      className="inline-flex items-center rounded-full border border-[#d6ddff] bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#4e5d8b]"
+                                      className="inline-flex items-center rounded-full border border-[#d6ddff] bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#4e5d8b] hover:bg-[#f3f6ff]"
                                     >
                                       {isLockedMatch ? 'Edit Scores' : 'Cancel Edit'}
                                     </button>
@@ -2428,225 +2428,58 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                     </svg>
                     {liveGraph.matches.map((match) => {
                       const row = match.row;
-                      const isShootout = row.match_kind === 'shootout';
-                      const isScoreBasedMatch = row.match_kind === 'shootout' || row.match_kind === 'survivor_cut';
-                      const isDuel = !isScoreBasedMatch;
-                      const draft = scoreDrafts[row.id] || {};
-                      const persistedDraft = getScoreDraftFromRow(row);
-                      let persistedScoreEntries: any[] = [];
-                      try {
-                        const parsed = JSON.parse(String(row.scores_json || '[]'));
-                        persistedScoreEntries = Array.isArray(parsed) ? parsed : [];
-                      } catch {
-                        persistedScoreEntries = [];
-                      }
-                      const hasPersistedScores = persistedScoreEntries.length > 0;
-                      const isLockedMatch = hasPersistedScores && Number(row.winner_id) > 0 && !editingMatchIds.has(row.id);
-                      const canEditScores = canScore && !isPublic;
-                      const missingScorableParticipants = isScoreBasedMatch && match.slots.some((slot) => !(slot.participantDbId ?? getFallbackSlotParticipantId(row, slot.slotIndex)));
-                      const scoreableSlots = match.slots.filter((slot) => (slot.participantDbId ?? getFallbackSlotParticipantId(row, slot.slotIndex)));
+                      const winnerId = Number(row.winner_id) || 0;
                       return (
-                        <div key={row.id} className="absolute overflow-visible rounded-2xl border border-[#cfd7ff] bg-white shadow-[0_10px_24px_rgba(99,114,193,0.10)]" style={{ left: match.x, top: match.y + 40, width: match.width, minHeight: match.height, zIndex: match.roundIndex + 1 }}>
-                          <div className="border-b border-[#dce3ff] bg-[#f7f8ff] px-3 py-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="text-sm font-black text-[#2f3966]">
-                                {`${match.label} ${getLiveMatchTypeLabel(row)}`}
-                              </div>
-                              {savingMatchId === row.id ? (
-                                <div className="inline-flex items-center rounded-full border border-[#bfcef8] bg-[#eef3ff] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#3d59b1]">
-                                  Saving...
-                                </div>
-                              ) : recentlySavedMatchId === row.id ? (
-                                <div className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-emerald-700">
-                                  Saved
-                                </div>
-                              ) : null}
-                              {isLockedMatch ? (
-                                <div className="inline-flex items-center rounded-full border border-[#d6ddff] bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#4e5d8b]">
-                                  Locked
-                                </div>
-                              ) : null}
-                              {canEditScores && hasPersistedScores ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (isLockedMatch) {
-                                      setEditingMatchIds((prev) => {
-                                        const next = new Set(prev);
-                                        next.add(row.id);
-                                        return next;
-                                      });
-                                      return;
-                                    }
-                                    setEditingMatchIds((prev) => {
-                                      const next = new Set(prev);
-                                      next.delete(row.id);
-                                      return next;
-                                    });
-                                    setScoreDrafts((prev) => ({
-                                      ...prev,
-                                      [row.id]: getScoreDraftFromRow(row),
-                                    }));
-                                  }}
-                                  className="inline-flex items-center rounded-full border border-[#d6ddff] bg-white px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#4e5d8b] hover:bg-[#f3f6ff]"
-                                >
-                                  {isLockedMatch ? 'Edit Scores' : 'Cancel Edit'}
-                                </button>
-                              ) : null}
-                              {canEditScores && !isLockedMatch && hasPersistedScores ? (
-                                <button
-                                  type="button"
-                                  onClick={() => void handleResetMatchScores(row)}
-                                  disabled={resettingMatchId === row.id}
-                                  className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-rose-700 hover:bg-rose-100 disabled:opacity-50"
-                                >
-                                  {resettingMatchId === row.id ? 'Resetting...' : 'Reset'}
-                                </button>
-                              ) : null}
+                        <div
+                          key={`pm-${row.id}`}
+                          className="absolute overflow-visible rounded-2xl border border-white/10 bg-white/[0.04] shadow-xl"
+                          style={{ left: match.x, top: match.y + 40, width: match.width }}
+                        >
+                          <div className="border-b border-white/10 bg-white/5 px-3 py-2">
+                            <div className="text-[11px] font-black uppercase tracking-[0.06em] text-white/40">
+                              {match.label} · {match.roundName}
                             </div>
                           </div>
-                          <div className="space-y-1.5 p-3">
-                            {missingScorableParticipants && (
-                              <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
-                                Score entry is unavailable for placeholder seeds. Generate this bracket from registered participants to score this round.
-                              </div>
-                            )}
+                          <div className="p-2 space-y-1">
                             {match.slots.map((slot) => {
                               const participantId = slot.participantDbId ?? getFallbackSlotParticipantId(row, slot.slotIndex);
-                              const isEditableSlot = canScore && !isPublic && !isLockedMatch;
-                              const advanceCandidates = resolveAdvanceCandidates(slot);
-                              const pickerKey = `${row.id}-${slot.slotIndex}`;
-                              const isPickerOpen = slotPickerKey === pickerKey;
-                              const isAssigning = assigningSlotKey === pickerKey;
-                              const slotScore = draft[slot.slotIndex] || persistedDraft[slot.slotIndex] || '';
-                              const pickerList = participants.filter((p) => {
-                                const q = slotPickerSearch.toLowerCase();
-                                return !q || getParticipantDisplayName(p).toLowerCase().includes(q);
-                              });
+                              const name = getLiveSlotName(row, slot, participantNameById);
+                              const isWinner = Boolean(participantId && participantId === winnerId);
+                              const seed = getLiveSlotSeed(row, slot);
+                              let scoreDisplay: string | null = null;
+                              if (participantId && row.scores_json) {
+                                try {
+                                  const arr = JSON.parse(row.scores_json as string);
+                                  if (Array.isArray(arr)) {
+                                    const entry = arr.find((s: any) => Number(s.participant_id ?? s.id) === participantId);
+                                    if (entry != null) scoreDisplay = String(entry.score ?? '');
+                                  }
+                                } catch { /* ignore */ }
+                              }
                               return (
-                                <div key={pickerKey} className="relative">
-                                  <div
-                                    className={`rounded-lg border px-2.5 py-1.5 text-xs ${isLiveSlotWinner(row, slot) ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : slot.sourceType === 'participant' ? 'border-sky-200 bg-sky-50 text-sky-800' : slot.sourceType === 'advance' ? 'border-orange-200 bg-orange-50 text-orange-700' : 'border-black/10 bg-black/[0.03] text-black/45'} ${isEditableSlot ? 'cursor-pointer select-none' : ''}`}
-                                    onDoubleClick={() => {
-                                      if (!isEditableSlot) return;
-                                      setSlotPickerKey(isPickerOpen ? null : pickerKey);
-                                      setSlotPickerSearch('');
-                                    }}
-                                    title={isEditableSlot ? 'Double-click to assign participant' : undefined}
-                                  >
-                                    <div className="flex items-center justify-between gap-1">
-                                      <div className="min-w-0 leading-snug text-black/80">
-                                        <div className="flex items-center gap-1.5 min-w-0">
-                                          {getLiveSlotSeed(row, slot) ? (
-                                            <span className="inline-flex items-center rounded-md border border-[#d6ddff] bg-white px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-[#4c5f99] shrink-0">
-                                              S{getLiveSlotSeed(row, slot)}
-                                            </span>
-                                          ) : null}
-                                          <span className="truncate">{getLiveSlotName(row, slot, participantNameById)}</span>
-                                        </div>
-                                      </div>
-                                      {slotScore ? (
-                                        <div className="shrink-0 rounded-md border border-[#d6ddff] bg-white px-1.5 py-0.5 text-[10px] font-black text-[#2f3966]">
-                                          {slotScore}
-                                        </div>
-                                      ) : null}
-                                      {isEditableSlot && (
-                                        <div className="shrink-0 text-[9px] font-bold uppercase tracking-widest text-black/25">edit</div>
-                                      )}
-                                    </div>
-                                    {canScore && !isPublic && slot.sourceType === 'advance' && !participantId && advanceCandidates.length > 0 && (
-                                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                                        {advanceCandidates.map((candidate) => (
-                                          <button
-                                            key={`${pickerKey}-advance-${candidate.participantId}`}
-                                            type="button"
-                                            disabled={isAssigning}
-                                            onClick={() => void handleAssignSlotParticipant(row, slot.slotIndex, { id: candidate.participantId }, candidate.seed)}
-                                            className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1 text-[10px] font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50"
-                                            title={`Select scored feeder candidate (score ${candidate.score})`}
-                                          >
-                                            <span>{candidate.name}</span>
-                                            <span className="text-[9px] text-amber-700/80">{candidate.score}</span>
-                                          </button>
-                                        ))}
-                                      </div>
-                                    )}
-                                    {canScore && !isPublic && !isLockedMatch && (
-                                      <div className="mt-1.5 flex flex-wrap gap-2">
-                                        {(isScoreBasedMatch || isDuel) && participantId ? (
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            max="300"
-                                            value={draft[slot.slotIndex] || ''}
-                                            onChange={(e) => setScoreDrafts((prev) => ({
-                                              ...prev,
-                                              [row.id]: {
-                                                ...(prev[row.id] || {}),
-                                                [slot.slotIndex]: e.target.value,
-                                              },
-                                            }))}
-                                            onBlur={(e) => {
-                                              const nextDraft = {
-                                                ...(scoreDrafts[row.id] || {}),
-                                                [slot.slotIndex]: e.currentTarget.value,
-                                              };
-                                              void maybeAutoSubmitScores(row, scoreableSlots, isScoreBasedMatch, nextDraft);
-                                            }}
-                                            onKeyDown={(e) => {
-                                              if (e.key !== 'Enter') return;
-                                              e.preventDefault();
-                                              const nextDraft = {
-                                                ...(scoreDrafts[row.id] || {}),
-                                                [slot.slotIndex]: (e.currentTarget as HTMLInputElement).value,
-                                              };
-                                              void maybeAutoSubmitScores(row, scoreableSlots, isScoreBasedMatch, nextDraft);
-                                              (e.currentTarget as HTMLInputElement).blur();
-                                            }}
-                                            className="h-8 w-24 rounded-lg border border-[#d6ddff] bg-white px-2.5 text-xs text-[#2f3966]"
-                                            placeholder="Score"
-                                          />
-                                        ) : isScoreBasedMatch ? (
-                                          <div className="inline-flex h-8 items-center rounded-lg border border-dashed border-amber-300 bg-amber-50 px-2.5 text-[11px] font-semibold text-amber-800">
-                                            TBD
-                                          </div>
-                                        ) : null}
-                                      </div>
-                                    )}
-                                  </div>
-                                  {isPickerOpen && (
-                                    <div className="absolute z-50 left-0 top-full mt-1 w-56 rounded-xl border border-[#d6ddff] bg-white shadow-lg overflow-hidden">
-                                      <div className="p-2 border-b border-[#eef0ff]">
-                                        <input
-                                          autoFocus
-                                          type="text"
-                                          value={slotPickerSearch}
-                                          onChange={(e) => setSlotPickerSearch(e.target.value)}
-                                          onKeyDown={(e) => { if (e.key === 'Escape') { setSlotPickerKey(null); setSlotPickerSearch(''); } }}
-                                          placeholder="Search participant…"
-                                          className="h-7 w-full rounded-lg border border-[#d6ddff] bg-[#f8faff] px-2 text-xs text-[#2f3966] outline-none"
-                                        />
-                                      </div>
-                                      <div className="max-h-48 overflow-y-auto">
-                                        {pickerList.length === 0 ? (
-                                          <div className="px-3 py-2 text-[11px] text-black/40">No participants found</div>
-                                        ) : pickerList.map((p) => (
-                                          <button
-                                            key={p.id}
-                                            type="button"
-                                            disabled={isAssigning}
-                                            onClick={() => void handleAssignSlotParticipant(row, slot.slotIndex, p)}
-                                            className="block w-full px-3 py-1.5 text-left text-xs text-[#2f3966] hover:bg-[#eef3ff] disabled:opacity-50"
-                                          >
-                                            {getParticipantDisplayName(p)}
-                                          </button>
-                                        ))}
-                                      </div>
-                                      <div className="border-t border-[#eef0ff] px-3 py-1.5">
-                                        <button type="button" onClick={() => { setSlotPickerKey(null); setSlotPickerSearch(''); }} className="text-[10px] text-black/40 hover:text-black/60">Cancel</button>
-                                      </div>
-                                    </div>
-                                  )}
+                                <div
+                                  key={`ps-${slot.slotIndex}`}
+                                  className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm ${
+                                    isWinner
+                                      ? 'border-l-[3px] border-emerald-400 bg-emerald-500/10 border border-emerald-400/20'
+                                      : 'border border-white/[0.06] bg-white/[0.03]'
+                                  }`}
+                                >
+                                  {seed ? (
+                                    <span className="w-5 shrink-0 text-right text-[10px] font-black text-white/25">{seed}</span>
+                                  ) : null}
+                                  <span className={`flex-1 truncate font-medium ${
+                                    isWinner ? 'text-emerald-300' : 'text-white/70'
+                                  }`}>
+                                    {name}
+                                  </span>
+                                  {scoreDisplay ? (
+                                    <span className={`shrink-0 font-black tabular-nums ${
+                                      isWinner ? 'text-emerald-300' : 'text-white/40'
+                                    }`}>
+                                      {scoreDisplay}
+                                    </span>
+                                  ) : null}
                                 </div>
                               );
                             })}
@@ -2884,7 +2717,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
               <div className="max-h-[420px] divide-y divide-[#eef1ff] overflow-y-auto rounded-xl border border-[#dfe4ff] bg-white">
                 {rulePresets.map((preset) => {
                   const catLabel = preset.bracketCategory
-                    ? { 'single-elim': 'Single Elim', stepladder: 'Stepladder', playoff: 'Playoff', ladder: 'Ladder', custom: 'Custom' }[preset.bracketCategory] ?? preset.bracketCategory
+                    ? { 'single-elim': 'Single Elim', stepladder: 'Stepladder', playoff: 'Playoff', ladder: 'Ladder', custom: 'Custom', mixed: 'Mixed' }[preset.bracketCategory] ?? preset.bracketCategory
                     : null;
                   return (
                     <div key={preset.id} className="flex items-center gap-3 px-4 py-3 hover:bg-[#f8f9ff]">
