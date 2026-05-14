@@ -1,5 +1,5 @@
-public.tab.participants,Participants,Тамирчид
-tab.participants,Participants,Тамирчид
+public.tab.participants,Participants,Оролцогчид
+tab.participants,Participants,Оролцогчид
 tab.lane_assignments,Lanes,Зам хуваарилалт
 tab.scoring,Score,Оноо
 tab.brackets,Brackets,Бракетууд
@@ -31,7 +31,7 @@ public.status.draft,draft,Ноорог
 public.status.active,active,Идэвхтэй
 public.status.finished,finished,Дууссан
 public.tournament.games,Games,Тоглолт
-public.tournament.players_per_lane,Players / Lane,Тамирчид / Зам
+public.tournament.players_per_lane,Players / Lane,Оролцогч / Зам
 public.tournament.teams_per_lane,Teams / Lane,Баг / Зам
 public.tournament.type.individual,individual,ганцаарчилсан
 public.tournament.type.team,team,баг
@@ -69,7 +69,7 @@ brackets.results.first_place,1st place,1-р байр
 brackets.results.second_place,2nd place,2-р байр
 brackets.results.third_place,3rd place,3-р байр
 standings.title,Tournament Standings,Тэмцээний дараах жагсаалт
-standings.player_standings,Player Standings,Тамирчид
+standings.player_standings,Player Standings,Оролцогчдын чансаа
 standings.team_standings,Team Standings,Багууд
 standings.place,Place,Байр
 standings.participant,Participant,Оролцогч
@@ -86,7 +86,7 @@ moderator.access.title,Moderator Access,Модераторын эрх
 moderator.access.subtitle,Assign one or more moderator accounts to this tournament.,Энэ тэмцээнд нэг буюу хэд хэдэн модераторын эрх онооно.
 moderator.not_active,Moderator access is not active for this tournament.,Энэ тэмцээнд модераторын эрх идэвхгүй байна.
 moderator.ask_admin,Ask admin to grant access for this tournament or wait for a new assignment.,Админаас энэ тэмцээнд эрх олгохыг хүсэх эсвэл шинэ эрхийн хуваарилалт хүлээнэ үү.
-public.tournament.players,Players,Тамирчид
+public.tournament.players,Players,Оролцогчид
 public.tournament.teams,Teams,Багууд
 app.nav.language,Language,Хэл
 app.status.loading,Loading...,Ачаалж байна...
@@ -138,9 +138,9 @@ tournament.type.team,Team,Баг
 tournament.games_count,Games #,Тоглолтын тоо
 tournament.genders_rule,Genders Rule,Хүйсийн дүрэм
 tournament.lanes_count,Lane #,Замын тоо
-tournament.players_per_lane,Players per Lane,Нэг замд тоглох тамирчид
+tournament.players_per_lane,Players per Lane,Нэг замд тоглох оролцогчдын тоо
 tournament.teams_per_lane,Teams per Lane,Нэг замд тоглох багууд
-tournament.players_per_team,Players per Team,Нэг багийн тамирчид
+tournament.players_per_team,Players per Team,Нэг багт тоглох оролцогчдны тоо
 tournament.shifts_count,Shift #,Ээлжийн тоо
 tournament.oil_pattern,Oil Pattern Info,Тосолгооны мэдээлэл
 tournament.oil_pattern_placeholder,e.g. House Shot,ж.нь. House Shot

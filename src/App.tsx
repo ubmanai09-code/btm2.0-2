@@ -674,14 +674,23 @@ export default function App() {
   })();
 
   useEffect(() => {
-    fetch('/i18n-en-mn.csv')
-      .then((res) => res.text())
-      .then((text) => {
-        setPublicDictionary(parseBilingualCsv(text));
-      })
-      .catch(() => {
-        setPublicDictionary(new Map());
-      });
+    const loadPublicDictionary = async () => {
+      const sources = ['/i18n-mn-manual.csv', '/i18n-en-mn.csv'];
+      for (const source of sources) {
+        try {
+          const res = await fetch(source);
+          if (!res.ok) continue;
+          const text = await res.text();
+          setPublicDictionary(parseBilingualCsv(text));
+          return;
+        } catch {
+          // Try the next source.
+        }
+      }
+      setPublicDictionary(new Map());
+    };
+
+    loadPublicDictionary();
   }, []);
 
   useEffect(() => {
