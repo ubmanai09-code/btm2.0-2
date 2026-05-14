@@ -15346,7 +15346,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
   // Filter by gender if selected
   let filteredPlayerStandingsRows = playerStandingsRows;
-  if (!isTeamTournament && standingsMode === 'players' && typeof genderFilter !== 'undefined' && genderFilter !== 'all') {
+  if (standingsMode === 'players' && typeof genderFilter !== 'undefined' && genderFilter !== 'all') {
     filteredPlayerStandingsRows = playerStandingsRows.filter(row => (participantGenderMap.get(row.participant_id) || '').toLowerCase() === genderFilter);
   }
   // In present mode hide participants with no scores entered yet
@@ -15929,6 +15929,31 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 </div>
               </div>
             )}
+            {standingsMode === 'players' && (
+              <div className="inline-flex items-center gap-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Gender</span>
+                <div className={segmentedTabContainerClass}>
+                  <button
+                    onClick={() => setGenderFilter('all')}
+                    className={getSegmentedTabButtonClass(genderFilter === 'all', 'compact')}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setGenderFilter('female')}
+                    className={getSegmentedTabButtonClass(genderFilter === 'female', 'compact')}
+                  >
+                    F
+                  </button>
+                  <button
+                    onClick={() => setGenderFilter('male')}
+                    className={getSegmentedTabButtonClass(genderFilter === 'male', 'compact')}
+                  >
+                    M
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="inline-flex items-center gap-1.5">
               <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Scroll</span>
               <select
@@ -15993,7 +16018,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       <div className="bg-black/5 px-2.5 py-1.5 font-bold text-[10px] uppercase tracking-widest border-b border-black/10"></div>
                       {winnerDivisions.map((division) => (
                         <div key={`winner-head-${division}`} className="bg-black/5 px-2.5 py-1.5 font-bold text-[10px] uppercase tracking-widest border-b border-black/10 text-center">
-                          {division === 'female' ? 'F' : division === 'male' ? 'M' : 'All'}
+                          {division === 'female' ? 'F' : division === 'male' ? 'M' : (isTeamTournament ? '' : 'Open')}
                         </div>
                       ))}
 
@@ -16304,7 +16329,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     Players
                   </button>
 
-                  {standingsMode === 'players' && !isTeamTournament && (
+                  {standingsMode === 'players' && (
                     <div className="flex items-center gap-1 ml-0.5">
                       <button
                         onClick={() => setGenderFilter('all')}
@@ -16476,7 +16501,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           {/* Desktop full table — hidden on mobile */}
           <div
             ref={standingsHeaderScrollRef}
-            className={`hidden sm:block ${isStandingsScreenMode ? 'overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]' : 'sticky top-[7.25rem] z-30 overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]'}`}
+            className={`hidden sm:block ${isStandingsScreenMode ? 'sticky top-0 z-30 overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]' : 'sticky top-[7.25rem] z-30 overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]'}`}
           >
             <table className="ui-table-minimal w-full min-w-[760px] text-left border-collapse table-fixed">
               {renderStandingsColGroup()}
@@ -16496,13 +16521,13 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
               if (isStandingsScreenMode) setIsAutoScrollPaused(false);
             }}
           >
-          <table ref={standingsTableRef} className="ui-table-minimal w-full min-w-[760px] text-left border-collapse table-fixed">
+          <table ref={standingsTableRef} className="ui-table-minimal standings-zebra w-full min-w-[760px] text-left border-collapse table-fixed">
             {renderStandingsColGroup()}
             <tbody>
               {standingsMode === 'players' && standingsRowsForDisplay.map((s, idx) => (
                 <tr key={s.participant_id} className="hover:bg-[#AFDDE5]/20 transition-colors">
-                  <td className="px-2 py-1.5 text-xs font-bold text-black/60 sticky left-0 z-[2] bg-white">{idx + 1}</td>
-                  <td className="px-2 py-1.5 text-xs font-bold leading-tight sticky left-12 z-[2] bg-white">
+                  <td className="standings-sticky-col px-2 py-1.5 text-xs font-bold text-black/60 sticky left-0 z-[2]">{idx + 1}</td>
+                  <td className="standings-sticky-col px-2 py-1.5 text-xs font-bold leading-tight sticky left-12 z-[2]">
                     <span className="inline-flex items-center gap-1.5">
                       {renderFemaleInitialUnderline(
                         s.participant_name,
@@ -16595,8 +16620,8 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
               ))}
               {standingsMode === 'teams' && teamStandingsRows.map((s, idx) => (
                 <tr key={s.key} className="hover:bg-[#AFDDE5]/20 transition-colors">
-                  <td className="px-2 py-1.5 text-xs font-bold text-black/60 sticky left-0 z-[2] bg-white">{idx + 1}</td>
-                  <td className="px-2 py-1.5 leading-tight sticky left-12 z-[2] bg-white">
+                  <td className="standings-sticky-col px-2 py-1.5 text-xs font-bold text-black/60 sticky left-0 z-[2]">{idx + 1}</td>
+                  <td className="standings-sticky-col px-2 py-1.5 leading-tight sticky left-12 z-[2]">
                     <div className="text-xs font-bold">{s.team_name}</div>
                     <div className="text-[10px] text-black/50 lowercase mt-0.5">
                       {s.members.length > 0 ? s.members.join(', ') : 'no members'}

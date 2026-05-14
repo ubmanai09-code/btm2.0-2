@@ -258,6 +258,15 @@ body {
   opacity: 0.5;
 }
 
+/* Standings table readability improvements */
+.standings-zebra tbody tr:nth-child(even) {
+  background: #FAFAFA;
+}
+
+.standings-zebra tbody tr > td.standings-sticky-col {
+  background: inherit;
+}
+
 [data-theme="dark"] .bg-slate-700 {
   background-color: #334155;
 }
