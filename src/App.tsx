@@ -49,7 +49,7 @@ import {
   Sun,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
-import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry } from './services/api';
+import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry, LeagueRankingResponse } from './services/api';
 import { buildKnownBracketTemplateDefaults } from './utils/bracketTemplates';
 import {
   buildTournamentEngine,
@@ -643,7 +643,7 @@ export default function App() {
   const [showArchivedTournaments, setShowArchivedTournaments] = useState(false);
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
   const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
-  const [activeTab, setActiveTab] = useState<'participants' | 'lanes' | 'scoring' | 'brackets' | 'brackets-v2' | 'brc' | 'standings'>(() => {
+  const [activeTab, setActiveTab] = useState<'participants' | 'lanes' | 'scoring' | 'brackets' | 'brackets-v2' | 'brc' | 'standings' | 'league'>(() => {
     return (localStorage.getItem('btm_tab') as any) || 'participants';
   });
   const [loading, setLoading] = useState(true);
@@ -661,7 +661,7 @@ export default function App() {
     if (typeof window === 'undefined') {
       return {
         tournamentId: null as number | null,
-        tab: null as 'participants' | 'lanes' | 'scoring' | 'brackets' | 'brackets-v2' | 'brc' | 'standings' | null,
+        tab: null as 'participants' | 'lanes' | 'scoring' | 'brackets' | 'brackets-v2' | 'brc' | 'standings' | 'league' | null,
         forcePublic: false,
         scoreScreen: false,
         standingsScreen: false,
@@ -671,7 +671,7 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const tournamentIdRaw = Number.parseInt(String(params.get('tournament') || ''), 10);
     const tabRaw = String(params.get('tab') || '').trim().toLowerCase();
-    const tab = tabRaw === 'participants' || tabRaw === 'lanes' || tabRaw === 'scoring' || tabRaw === 'brackets' || tabRaw === 'brackets-v2' || tabRaw === 'brc' || tabRaw === 'standings'
+    const tab = tabRaw === 'participants' || tabRaw === 'lanes' || tabRaw === 'scoring' || tabRaw === 'brackets' || tabRaw === 'brackets-v2' || tabRaw === 'brc' || tabRaw === 'standings' || tabRaw === 'league'
       ? tabRaw
       : null;
     const forcePublic = params.get('public') === '1';
@@ -3488,6 +3488,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       { id: 'brackets', label: tPublic('public.tab.brackets', 'Brackets'), icon: GitBranch },
       { id: 'brackets-v2', label: tPublic('public.tab.brackets_v2', 'Brackets V2'), icon: BracketsV2TabIcon },
       { id: 'standings', label: tPublic('public.tab.tournament_result', 'Standing'), icon: Trophy },
+      { id: 'league', label: tPublic('public.tab.league', 'League'), icon: BarChart3 },
     ]
     : [
       { id: 'participants', label: t('tab.participants', 'Participants'), icon: Users },
@@ -3496,6 +3497,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       { id: 'brackets', label: t('tab.brackets', 'Brackets'), icon: GitBranch },
       ...(effectiveRole === 'admin' ? [{ id: 'brackets-v2', label: t('tab.brackets_v2', 'Brackets V2'), icon: BracketsV2TabIcon }] : []),
       { id: 'standings', label: t('tab.tournament_result', 'Standing'), icon: Trophy },
+      { id: 'league', label: t('tab.league', 'League'), icon: BarChart3 },
     ];
 
   useEffect(() => {
@@ -3707,7 +3709,182 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
         {activeTab === 'brackets' && <BracketsView tournament={tournament} role={effectiveRole} onTournamentUpdated={onTournamentUpdated} />}
         {activeTab === 'brackets-v2' && <BracketsViewV2 tournament={tournament} role={effectiveRole} onTournamentUpdated={onTournamentUpdated} />}
         {activeTab === 'standings' && <StandingsView tournament={tournament} role={effectiveRole} sponsorsConfig={sponsorsConfig} onPresentStandingsScreen={openStandingsScreenMode} standingsScreenMode={isStandingsScreenMode} />}
+        {activeTab === 'league' && <LeagueView tournament={tournament} role={effectiveRole} />}
       </div>
+    </div>
+  );
+}
+
+function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRole }) {
+  const tx = React.useContext(UiTranslationContext);
+  const initialLeague: 'mba' | 'b-bowling' = /b\s*pro/i.test(String(tournament.name || '')) ? 'b-bowling' : 'mba';
+  const [league, setLeague] = useState<'mba' | 'b-bowling'>(initialLeague);
+  const [mode, setMode] = useState<'players' | 'teams'>(tournament.type === 'team' ? 'teams' : 'players');
+  const [division, setDivision] = useState<'all' | 'male' | 'female'>('all');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [data, setData] = useState<LeagueRankingResponse | null>(null);
+
+  const loadLeagueRankings = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const payload = await api.getLeagueRankings({
+        league,
+        mode,
+        division: mode === 'teams' ? 'all' : division,
+      });
+      setData(payload);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to load league rankings');
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadLeagueRankings();
+  }, [league, mode, division]);
+
+  const canManage = role === 'admin' || role === 'moderator';
+  const rows = data?.rows || [];
+  const includedTournaments = data?.tournaments || [];
+
+  const exportCsv = () => {
+    if (!data || rows.length === 0) return;
+    const headers = mode === 'teams'
+      ? ['rank', 'team', 'total_score', 'events_played', 'average_event_score', 'tournaments']
+      : ['rank', 'name', 'gender', 'club', 'total_score', 'events_played', 'average_event_score', 'tournaments'];
+    const csvRows = rows.map((row) => mode === 'teams'
+      ? [row.rank, row.name, row.total_score, row.events_played, row.average_event_score, row.tournament_names.join(' | ')]
+      : [row.rank, row.name, row.gender || 'unknown', row.club || '', row.total_score, row.events_played, row.average_event_score, row.tournament_names.join(' | ')]
+    );
+    const csv = [headers.join(','), ...csvRows.map((line) => line.map((item) => `"${String(item).replace(/"/g, '""')}"`).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const suffix = mode === 'teams' ? 'teams' : division;
+    link.download = `${data.league_code}-rankings-${suffix}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h3 className="text-lg font-bold">{tx('League Rankings')}</h3>
+            <p className="text-xs text-black/45 mt-0.5">
+              {tx('Aggregated standings from multiple tournaments by league and division.')}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={league}
+              onChange={(e) => setLeague(e.target.value === 'b-bowling' ? 'b-bowling' : 'mba')}
+              className="h-8 rounded-md border border-black/15 bg-white px-2 text-xs"
+              aria-label="League"
+            >
+              <option value="mba">MBA (Mixed tournaments)</option>
+              <option value="b-bowling">B Bowling (B Pro league)</option>
+            </select>
+            <select
+              value={mode}
+              onChange={(e) => setMode(e.target.value === 'teams' ? 'teams' : 'players')}
+              className="h-8 rounded-md border border-black/15 bg-white px-2 text-xs"
+              aria-label="Mode"
+            >
+              <option value="players">Players</option>
+              <option value="teams">Teams</option>
+            </select>
+            <select
+              value={mode === 'teams' ? 'all' : division}
+              onChange={(e) => setDivision(e.target.value === 'male' ? 'male' : e.target.value === 'female' ? 'female' : 'all')}
+              disabled={mode === 'teams'}
+              className="h-8 rounded-md border border-black/15 bg-white px-2 text-xs disabled:opacity-50"
+              aria-label="Division"
+            >
+              <option value="all">All</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+            </select>
+            <Button variant="outline" onClick={() => void loadLeagueRankings()} title="Refresh" ariaLabel="Refresh">
+              <RefreshCw size={14} />
+            </Button>
+            <Button variant="outline" onClick={exportCsv} title="Export CSV" ariaLabel="Export CSV" disabled={rows.length === 0}>
+              <Download size={14} />
+            </Button>
+          </div>
+        </div>
+
+        {error && <p className="text-sm text-rose-700 mt-3">{error}</p>}
+
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-black/55">
+          <span className="inline-flex items-center rounded-md border border-black/10 bg-black/[0.02] px-2 py-1">
+            League: {data?.league_name || (league === 'mba' ? 'MBA' : 'B Bowling')}
+          </span>
+          <span className="inline-flex items-center rounded-md border border-black/10 bg-black/[0.02] px-2 py-1">
+            Included tournaments: {includedTournaments.length}
+          </span>
+          <span className="inline-flex items-center rounded-md border border-black/10 bg-black/[0.02] px-2 py-1">
+            Ranked entries: {rows.length}
+          </span>
+        </div>
+
+        {includedTournaments.length > 0 && (
+          <p className="mt-2 text-xs text-black/45">
+            {includedTournaments.map((item) => item.name).join(' • ')}
+          </p>
+        )}
+      </Card>
+
+      <Card className="overflow-hidden">
+        {loading ? (
+          <p className="px-4 py-6 text-sm text-black/50">Loading league rankings...</p>
+        ) : rows.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-black/50">No league rankings yet for selected filters.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] border-collapse text-sm">
+              <thead className="bg-[#e3f3f6]">
+                <tr>
+                  <th className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-black/60">Rank</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-black/60">{mode === 'teams' ? 'Team' : 'Participant'}</th>
+                  {mode === 'players' && <th className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-black/60">Gender</th>}
+                  {mode === 'players' && <th className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-black/60">Club</th>}
+                  <th className="px-3 py-2 text-right text-[11px] font-bold uppercase tracking-wide text-black/60">Total</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-bold uppercase tracking-wide text-black/60">Events</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-bold uppercase tracking-wide text-black/60">Avg/Event</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, idx) => (
+                  <tr key={row.key} className={idx % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'}>
+                    <td className="px-3 py-2 font-semibold text-black/60">{row.rank}</td>
+                    <td className="px-3 py-2 font-semibold text-black/80">{row.name}</td>
+                    {mode === 'players' && <td className="px-3 py-2 text-black/60">{row.gender || 'unknown'}</td>}
+                    {mode === 'players' && <td className="px-3 py-2 text-black/60">{row.club || '-'}</td>}
+                    <td className="px-3 py-2 text-right font-bold text-black/80">{row.total_score}</td>
+                    <td className="px-3 py-2 text-right text-black/60">{row.events_played}</td>
+                    <td className="px-3 py-2 text-right text-black/60">{row.average_event_score.toFixed(1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {!canManage && (
+        <p className="text-xs text-black/45">
+          Public view is read-only.
+        </p>
+      )}
     </div>
   );
 }

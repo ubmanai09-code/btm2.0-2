@@ -75,6 +75,27 @@ export interface Standing {
   games_played: number;
 }
 
+export interface LeagueRankingRow {
+  rank: number;
+  key: string;
+  name: string;
+  gender?: 'male' | 'female' | 'unknown';
+  club?: string | null;
+  total_score: number;
+  events_played: number;
+  average_event_score: number;
+  tournament_names: string[];
+}
+
+export interface LeagueRankingResponse {
+  league_code: string;
+  league_name: string;
+  mode: 'players' | 'teams';
+  division: 'all' | 'male' | 'female';
+  tournaments: Array<{ id: number; name: string; date?: string; type?: Tournament['type'] }>;
+  rows: LeagueRankingRow[];
+}
+
 export interface StandingBonus {
   id: number;
   tournament_id: number;
@@ -623,6 +644,22 @@ const api = {
   async getStandings(tournamentId: number): Promise<Standing[]> {
     const res = await fetch(`/api/tournaments/${tournamentId}/standings`);
     return res.json();
+  },
+  async getLeagueRankings(options: {
+    league: 'mba' | 'b-bowling';
+    mode?: 'players' | 'teams';
+    division?: 'all' | 'male' | 'female';
+  }): Promise<LeagueRankingResponse> {
+    const params = new URLSearchParams();
+    params.set('league', options.league);
+    if (options.mode) params.set('mode', options.mode);
+    if (options.division) params.set('division', options.division);
+    const res = await fetch(`/api/league-rankings?${params.toString()}`);
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || `Failed to load league rankings (${res.status})`);
+    }
+    return data;
   },
   async getStandingsBonuses(tournamentId: number): Promise<StandingBonus[]> {
     const res = await fetch(`/api/tournaments/${tournamentId}/bonuses`);

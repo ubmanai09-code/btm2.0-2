@@ -2744,6 +2744,228 @@ const existing = db
     }
   });
 
+  // League rankings aggregation across multiple tournaments
+  app.get("/api/league-rankings", (req, res) => {
+    try {
+      const leagueRaw = String(req.query.league || '').trim().toLowerCase();
+      const mode = String(req.query.mode || 'players').trim().toLowerCase() === 'teams' ? 'teams' : 'players';
+      const divisionRaw = String(req.query.division || 'all').trim().toLowerCase();
+      const division: 'all' | 'male' | 'female' = divisionRaw === 'male' || divisionRaw === 'female' ? divisionRaw : 'all';
+
+      const normalizeTextKey = (value: unknown) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const normalizeGender = (raw: unknown): 'male' | 'female' | 'unknown' => {
+        const value = String(raw || '').trim().toLowerCase();
+        if (value === 'm' || value === 'male' || value === 'men' || value === 'man' || value === 'boy') return 'male';
+        if (value === 'f' || value === 'female' || value === 'women' || value === 'woman' || value === 'girl') return 'female';
+        return 'unknown';
+      };
+
+      const resolveLeagueMatcher = (leagueValue: string) => {
+        const compact = leagueValue.replace(/\s+/g, '');
+        if (compact === 'mba') {
+          return {
+            code: 'mba',
+            name: 'MBA',
+            matchesTournament: (tournamentName: string) => /mixed/i.test(tournamentName),
+          };
+        }
+        if (compact === 'bbowling' || compact === 'b-bowling' || compact === 'bpro' || compact === 'bproleague') {
+          return {
+            code: 'b-bowling',
+            name: 'B Bowling',
+            matchesTournament: (tournamentName: string) => /b\s*pro/i.test(tournamentName),
+          };
+        }
+        return null;
+      };
+
+      const league = resolveLeagueMatcher(leagueRaw);
+      if (!league) {
+        return res.status(400).json({
+          error: 'Unsupported league. Use league=mba or league=b-bowling',
+        });
+      }
+
+      const allTournaments = db.prepare(`
+        SELECT id, name, date, type
+        FROM tournaments
+        ORDER BY date DESC, id DESC
+      `).all() as any[];
+
+      const selectedTournaments = allTournaments.filter((row) => league.matchesTournament(String(row.name || '')));
+      if (selectedTournaments.length === 0) {
+        return res.json({
+          league_code: league.code,
+          league_name: league.name,
+          mode,
+          division,
+          tournaments: [],
+          rows: [],
+        });
+      }
+
+      if (mode === 'teams') {
+        const perTournamentTeamRows = db.prepare(`
+          SELECT
+            tm.id as team_id,
+            tm.name as team_name,
+            COALESCE(SUM(s.score), 0) as score_sum,
+            COALESCE(extra.additional_score, 0) as additional_score,
+            COALESCE(bonus.bonus, 0) as bonus_score
+          FROM teams tm
+          LEFT JOIN participants p ON p.team_id = tm.id
+          LEFT JOIN scores s ON s.participant_id = p.id AND s.tournament_id = tm.tournament_id
+          LEFT JOIN standings_additional_scores extra
+            ON extra.tournament_id = tm.tournament_id
+            AND extra.target_kind = 'team'
+            AND extra.target_id = tm.id
+          LEFT JOIN standings_bonus bonus
+            ON bonus.tournament_id = tm.tournament_id
+            AND bonus.target_kind = 'team'
+            AND bonus.target_id = tm.id
+          WHERE tm.tournament_id = ?
+          GROUP BY tm.id
+          ORDER BY tm.name COLLATE NOCASE ASC
+        `);
+
+        const aggregate = new Map<string, {
+          key: string;
+          name: string;
+          total_score: number;
+          events_played: number;
+          tournament_names: Set<string>;
+        }>();
+
+        for (const tournament of selectedTournaments) {
+          const rows = perTournamentTeamRows.all(tournament.id) as any[];
+          for (const row of rows) {
+            const name = String(row.team_name || '').trim() || `Team #${row.team_id}`;
+            const key = normalizeTextKey(name);
+            const tournamentTotal = Number(row.score_sum || 0) + Number(row.additional_score || 0) + Number(row.bonus_score || 0);
+            const current = aggregate.get(key) || {
+              key,
+              name,
+              total_score: 0,
+              events_played: 0,
+              tournament_names: new Set<string>(),
+            };
+            current.total_score += tournamentTotal;
+            current.events_played += 1;
+            current.tournament_names.add(String(tournament.name || `Tournament #${tournament.id}`));
+            aggregate.set(key, current);
+          }
+        }
+
+        const rows = Array.from(aggregate.values())
+          .sort((a, b) => (b.total_score - a.total_score) || a.name.localeCompare(b.name))
+          .map((row, index) => ({
+            rank: index + 1,
+            key: row.key,
+            name: row.name,
+            total_score: row.total_score,
+            events_played: row.events_played,
+            average_event_score: row.events_played > 0 ? Number((row.total_score / row.events_played).toFixed(1)) : 0,
+            tournament_names: Array.from(row.tournament_names),
+          }));
+
+        return res.json({
+          league_code: league.code,
+          league_name: league.name,
+          mode,
+          division,
+          tournaments: selectedTournaments,
+          rows,
+        });
+      }
+
+      const perTournamentPlayerRows = db.prepare(`
+        SELECT
+          p.id as participant_id,
+          p.first_name,
+          p.last_name,
+          p.gender,
+          p.club,
+          COALESCE(SUM(s.score), 0) as score_sum,
+          COALESCE(extra.additional_score, 0) as additional_score,
+          COALESCE(bonus.bonus, 0) as bonus_score
+        FROM participants p
+        LEFT JOIN scores s ON s.participant_id = p.id AND s.tournament_id = p.tournament_id
+        LEFT JOIN standings_additional_scores extra
+          ON extra.tournament_id = p.tournament_id
+          AND extra.target_kind = 'participant'
+          AND extra.target_id = p.id
+        LEFT JOIN standings_bonus bonus
+          ON bonus.tournament_id = p.tournament_id
+          AND bonus.target_kind = 'participant'
+          AND bonus.target_id = p.id
+        WHERE p.tournament_id = ?
+        GROUP BY p.id
+        ORDER BY p.id ASC
+      `);
+
+      const aggregate = new Map<string, {
+        key: string;
+        name: string;
+        gender: 'male' | 'female' | 'unknown';
+        club: string | null;
+        total_score: number;
+        events_played: number;
+        tournament_names: Set<string>;
+      }>();
+
+      for (const tournament of selectedTournaments) {
+        const rows = perTournamentPlayerRows.all(tournament.id) as any[];
+        for (const row of rows) {
+          const name = `${String(row.first_name || '').trim()} ${String(row.last_name || '').trim()}`.trim() || `Participant #${row.participant_id}`;
+          const gender = normalizeGender(row.gender);
+          if (division !== 'all' && gender !== division) continue;
+
+          const key = normalizeTextKey(name);
+          const tournamentTotal = Number(row.score_sum || 0) + Number(row.additional_score || 0) + Number(row.bonus_score || 0);
+          const current = aggregate.get(key) || {
+            key,
+            name,
+            gender,
+            club: String(row.club || '').trim() || null,
+            total_score: 0,
+            events_played: 0,
+            tournament_names: new Set<string>(),
+          };
+          current.total_score += tournamentTotal;
+          current.events_played += 1;
+          current.tournament_names.add(String(tournament.name || `Tournament #${tournament.id}`));
+          aggregate.set(key, current);
+        }
+      }
+
+      const rows = Array.from(aggregate.values())
+        .sort((a, b) => (b.total_score - a.total_score) || a.name.localeCompare(b.name))
+        .map((row, index) => ({
+          rank: index + 1,
+          key: row.key,
+          name: row.name,
+          gender: row.gender,
+          club: row.club,
+          total_score: row.total_score,
+          events_played: row.events_played,
+          average_event_score: row.events_played > 0 ? Number((row.total_score / row.events_played).toFixed(1)) : 0,
+          tournament_names: Array.from(row.tournament_names),
+        }));
+
+      return res.json({
+        league_code: league.code,
+        league_name: league.name,
+        mode,
+        division,
+        tournaments: selectedTournaments,
+        rows,
+      });
+    } catch (err: any) {
+      console.error('Error aggregating league rankings:', err);
+      return res.status(500).json({ error: err.message || 'Failed to aggregate league rankings' });
+    }
+  });
+
   // Standings
   app.get("/api/tournaments/:id/standings", (req, res) => {
     const tournament = db.prepare("SELECT type FROM tournaments WHERE id = ?").get(req.params.id) as any;
