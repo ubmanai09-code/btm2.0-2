@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
+import { useTheme } from './context/ThemeContext';
 import { 
   Trophy, Medal, 
   Users, 
@@ -44,6 +45,8 @@ import {
   ZoomOut,
   Maximize2,
   LayoutList,
+  Moon,
+  Sun,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry } from './services/api';
@@ -445,8 +448,8 @@ const Button = ({
   const variants = {
     primary: 'ui-accent',
     secondary: 'bg-slate-700 text-white hover:bg-slate-800',
-    outline: 'border border-[var(--border)] text-[color:var(--text)] hover:bg-black/[0.02]',
-    ghost: 'text-[color:var(--text)] hover:bg-black/[0.03]',
+    outline: 'border border-[var(--border)] text-[color:var(--text)] hover:bg-[color:var(--text)]/[0.03]',
+    ghost: 'text-[color:var(--text)] hover:bg-[color:var(--text)]/[0.05]',
     manage: 'ui-accent'
   };
 
@@ -466,6 +469,21 @@ const Button = ({
       className={`rounded-md font-semibold uppercase tracking-wide transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2 shadow-[0_1px_1px_rgba(15,23,42,0.06)] ${variants[variant]} ${sizes[size]} ${className}`}
     >
       {typeof children === 'string' ? translate(children) : children}
+    </button>
+  );
+};
+
+const ThemeToggleButton = () => {
+  const { theme, toggleTheme } = useTheme();
+  
+  return (
+    <button
+      onClick={toggleTheme}
+      className="flex items-center justify-center h-8 w-8 rounded-md border border-white/25 bg-white/10 hover:bg-white/20 transition-colors text-white"
+      title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+      aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+    >
+      {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
     </button>
   );
 };
@@ -508,7 +526,7 @@ const getSegmentedTabButtonClass = (
 
   const activeClass = 'text-[color:var(--accent)] border-b-2 border-[color:var(--accent)]';
 
-  const inactiveClass = 'text-[#6B7280] bg-transparent border-none hover:text-[color:var(--text)]';
+  const inactiveClass = 'text-[color:var(--text-muted)] bg-transparent border-none hover:text-[color:var(--text)]';
 
   return `${sizeClass} font-bold uppercase tracking-wider transition-colors ${
     active ? activeClass : inactiveClass
@@ -541,7 +559,7 @@ const Input = ({ label, placeholder, ...props }: any) => {
   const translate = React.useContext(UiTranslationContext);
   return (
     <div className="space-y-2">
-      {label && <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 px-2">{translate(label)}</label>}
+      {label && <label className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--text-subtle)] px-2">{translate(label)}</label>}
       <input 
         {...props}
         placeholder={typeof placeholder === 'string' ? translate(placeholder) : placeholder}
@@ -555,7 +573,7 @@ const Select = ({ label, options, ...props }: any) => {
   const translate = React.useContext(UiTranslationContext);
   return (
     <div className="space-y-2">
-      {label && <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 px-2">{translate(label)}</label>}
+      {label && <label className="text-[10px] font-bold uppercase tracking-widest text-[color:var(--text-subtle)] px-2">{translate(label)}</label>}
       <select 
         {...props}
         className="ui-input w-full px-3 py-2 rounded-md transition-all appearance-none text-sm"
@@ -1852,7 +1870,7 @@ export default function App() {
   const getStatusPillClass = (status: 'active' | 'incoming' | 'finished' | 'archived') => {
     if (status === 'active') return 'bg-emerald-100 text-emerald-700';
     if (status === 'incoming') return 'bg-amber-100 text-amber-700';
-    if (status === 'finished') return 'bg-black/5 text-black/45';
+    if (status === 'finished') return 'bg-[color:var(--text)]/5 text-[color:var(--text-muted)]';
     return 'bg-slate-200 text-slate-700';
   };
 
@@ -1888,7 +1906,7 @@ export default function App() {
 
   return (
     <UiTranslationContext.Provider value={translateUiText}>
-    <div className="min-h-screen bg-gradient-to-b from-white to-emerald-50/30 text-black">
+    <div className="min-h-screen bg-gradient-to-b from-[color:var(--bg)] to-[color:var(--card)]/50 text-[color:var(--text)]">
       {/* Sidebar / Nav */}
       <nav className="fixed top-0 left-0 right-0 h-16 bg-black/95 backdrop-blur-sm border-b border-white/10 z-50 px-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -1920,6 +1938,7 @@ export default function App() {
           >
             <span>{publicLanguage === 'mn' ? 'Mn' : 'En'}</span>
           </button>
+          <ThemeToggleButton />
           {lockedRole ? (
             <span className="px-2 py-1.5 rounded-md border border-white/20 text-xs font-bold uppercase tracking-wider bg-white/10 text-white">
               {t(`role.${lockedRole}`, lockedRole)}
@@ -3467,7 +3486,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       { id: 'lanes', label: tPublic('public.tab.lane_assignments', 'Lanes'), icon: Columns4 },
       { id: 'scoring', label: tPublic('public.tab.scoring', 'Score'), icon: ClipboardList },
       { id: 'brackets', label: tPublic('public.tab.brackets', 'Brackets'), icon: GitBranch },
-      { id: 'brackets-v2', label: 'Brackets V2', icon: BracketsV2TabIcon },
+      { id: 'brackets-v2', label: tPublic('public.tab.brackets_v2', 'Brackets V2'), icon: BracketsV2TabIcon },
       { id: 'standings', label: tPublic('public.tab.tournament_result', 'Standing'), icon: Trophy },
     ]
     : [
@@ -3475,7 +3494,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       { id: 'lanes', label: t('tab.lane_assignments', 'Lanes'), icon: Columns4 },
       { id: 'scoring', label: t('tab.scoring', 'Score'), icon: ClipboardList },
       { id: 'brackets', label: t('tab.brackets', 'Brackets'), icon: GitBranch },
-      ...(effectiveRole === 'admin' ? [{ id: 'brackets-v2', label: 'Brackets V2', icon: BracketsV2TabIcon }] : []),
+      ...(effectiveRole === 'admin' ? [{ id: 'brackets-v2', label: t('tab.brackets_v2', 'Brackets V2'), icon: BracketsV2TabIcon }] : []),
       { id: 'standings', label: t('tab.tournament_result', 'Standing'), icon: Trophy },
     ];
 
@@ -14053,6 +14072,12 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
       {/* ── RIGHT PANEL — Visual Bracket Workspace ──────────────────────────── */}
       <div className={`flex-1 flex flex-col gap-3 min-w-0 ${role !== 'public' ? 'pl-3' : ''}`}>
+
+        {/* Page Title */}
+        <div className="flex flex-col">
+          <h3 className="text-xl font-bold text-emerald-800">{tx('Bracket Generation')}</h3>
+          <p className="text-xs text-black/50 mt-0.5">{tx('Generate and manage tournament brackets')}</p>
+        </div>
 
         {/* Empty state — no active bracket */}
         {!activeBracketName && (

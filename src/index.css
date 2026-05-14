@@ -11,14 +11,33 @@
   --border: #E6E8EB;
   --text: #1F2937;
   --text-muted: #6B7280;
+  --text-subtle: #9CA3AF;
   --accent: #F97316;
   --success: #16A34A;
+  --danger: #DC2626;
+  --warning: #F59E0B;
+  --info: #0EA5E9;
   --ui-radius: 6px;
   --ui-space-8: 8px;
   --ui-space-12: 12px;
   --ui-space-16: 16px;
   --ui-space-24: 24px;
   --ui-icon-opacity: 0.6;
+}
+
+[data-theme="dark"] {
+  --bg: #0F172A;
+  --card: #1E293B;
+  --border: #334155;
+  --text: #F1F5F9;
+  --text-muted: #94A3B8;
+  --text-subtle: #64748B;
+  --accent: #F97316;
+  --success: #22C55E;
+  --danger: #EF4444;
+  --warning: #FCD34D;
+  --info: #38BDF8;
+  --ui-icon-opacity: 0.7;
 }
 
 @layer utilities {
@@ -46,11 +65,11 @@ body {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--ui-radius);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
 .ui-input {
-  background: #F9FAFB;
+  background: color-mix(in srgb, var(--card) 95%, var(--bg));
   border: 1px solid transparent;
   border-radius: var(--ui-radius);
   color: var(--text);
@@ -169,7 +188,7 @@ body {
 .ui-input:focus {
   outline: none;
   border-color: var(--accent);
-  background: #FFFFFF;
+  background: var(--card);
   box-shadow: none;
 }
 
@@ -191,6 +210,89 @@ body {
 
 .ui-success {
   color: var(--success);
+}
+
+/* Dark mode specific adjustments */
+[data-theme="dark"] .ui-input {
+  background: color-mix(in srgb, var(--card) 90%, var(--bg));
+  border-color: color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+[data-theme="dark"] .ui-input:focus {
+  border-color: var(--accent);
+  background: var(--card);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* Text contrast in dark mode */
+[data-theme="dark"] .text-black\/50 {
+  color: var(--text-subtle) !important;
+}
+
+[data-theme="dark"] .bg-black\/5 {
+  background: color-mix(in srgb, var(--text) 5%, var(--bg)) !important;
+}
+
+[data-theme="dark"] .text-black\/45 {
+  color: var(--text-muted) !important;
+}
+
+[data-theme="dark"] .hover\:bg-black\/\[0\.02\] {
+  background: color-mix(in srgb, var(--text) 2%, var(--bg)) !important;
+}
+
+[data-theme="dark"] .hover\:bg-black\/\[0\.03\] {
+  background: color-mix(in srgb, var(--text) 3%, var(--bg)) !important;
+}
+
+/* Additional dark mode contrast improvements */
+[data-theme="dark"] a {
+  color: var(--info);
+}
+
+[data-theme="dark"] a:hover {
+  color: color-mix(in srgb, var(--info) 110%, white);
+}
+
+[data-theme="dark"] button:disabled {
+  opacity: 0.5;
+}
+
+[data-theme="dark"] .bg-slate-700 {
+  background-color: #334155;
+}
+
+[data-theme="dark"] .hover\:bg-slate-800:hover {
+  background-color: #1E293B;
+}
+
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: color-mix(in srgb, var(--card) 95%, var(--bg));
+  color: var(--text);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] select:focus,
+[data-theme="dark"] textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+/* Improve table visibility in dark mode */
+[data-theme="dark"] .ui-table-minimal thead th {
+  background: color-mix(in srgb, var(--text) 10%, var(--card));
+  color: var(--text);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .ui-table-minimal tbody td {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+[data-theme="dark"] .ui-table-minimal tbody tr {
+  border-color: var(--border);
 }
 
 .ui-table-minimal {
@@ -224,7 +326,8 @@ body {
     left: 0 !important;
     top: 0 !important;
     width: 100% !important;
-    background: #fff !important;
+    background: white !important;
     overflow: visible !important;
+    color: black !important;
   }
 }

@@ -1,6 +1,7 @@
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
+import { ThemeProvider } from './context/ThemeContext';
 import './index.css';
 
 type ErrorBoundaryState = {
@@ -51,6 +52,8 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, ErrorBou
 
 createRoot(document.getElementById('root')!).render(
   <AppErrorBoundary>
-    <App />
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>
   </AppErrorBoundary>,
 );
