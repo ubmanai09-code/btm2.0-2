@@ -224,84 +224,215 @@ body {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
-/* Text contrast in dark mode */
-[data-theme="dark"] .text-black\/50 {
-  color: var(--text-subtle) !important;
+/* ── Text contrast ── */
+/* Pure black text (no opacity) — invisible on dark bg */
+[data-theme="dark"] .text-black { color: var(--text) !important; }
+
+[data-theme="dark"] .text-black\/90,
+[data-theme="dark"] .text-black\/85,
+[data-theme="dark"] .text-black\/80,
+[data-theme="dark"] .text-black\/75 { color: var(--text) !important; }
+
+[data-theme="dark"] .text-black\/70,
+[data-theme="dark"] .text-black\/65,
+[data-theme="dark"] .text-black\/60,
+[data-theme="dark"] .text-black\/55 { color: var(--text-muted) !important; }
+
+[data-theme="dark"] .text-black\/50,
+[data-theme="dark"] .text-black\/45,
+[data-theme="dark"] .text-black\/40,
+[data-theme="dark"] .text-black\/35,
+[data-theme="dark"] .text-black\/30 { color: var(--text-subtle) !important; }
+
+/* ── Background overrides ── */
+/* Hard white backgrounds → card color */
+[data-theme="dark"] .bg-white { background-color: var(--card) !important; }
+[data-theme="dark"] .bg-white\/90,
+[data-theme="dark"] .bg-white\/95 { background-color: color-mix(in srgb, var(--card) 92%, var(--bg)) !important; }
+
+/* Light tinted surfaces */
+[data-theme="dark"] .bg-black\/\[0\.02\],
+[data-theme="dark"] .bg-black\/\[0\.03\],
+[data-theme="dark"] .bg-black\/\[0\.04\],
+[data-theme="dark"] .bg-black\/\[0\.05\] {
+  background-color: color-mix(in srgb, var(--text) 4%, var(--card)) !important;
+}
+[data-theme="dark"] .bg-black\/5  { background-color: color-mix(in srgb, var(--text) 6%, var(--card)) !important; }
+[data-theme="dark"] .bg-black\/10 { background-color: color-mix(in srgb, var(--text) 10%, var(--card)) !important; }
+
+/* ── Row dividers ── */
+[data-theme="dark"] .divide-black\/10 > :not([hidden]) ~ :not([hidden]),
+[data-theme="dark"] .divide-black\/5 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border) !important;
 }
 
-[data-theme="dark"] .bg-black\/5 {
-  background: color-mix(in srgb, var(--text) 5%, var(--bg)) !important;
+/* BTM teal header/row tints */
+[data-theme="dark"] .bg-\[\#e3f3f6\],
+[data-theme="dark"] .bg-\[\#f0fafb\],
+[data-theme="dark"] .bg-\[\#f7fcfd\] {
+  background-color: color-mix(in srgb, #0ea5e9 8%, var(--card)) !important;
+}
+[data-theme="dark"] .bg-\[\#AFDDE5\]\/35,
+[data-theme="dark"] .bg-\[\#AFDDE5\]\/30,
+[data-theme="dark"] .bg-\[\#AFDDE5\]\/20,
+[data-theme="dark"] [class*="bg-\[#AFDDE5\]"] {
+  background-color: color-mix(in srgb, #0ea5e9 12%, var(--card)) !important;
+}
+[data-theme="dark"] .hover\:bg-\[\#AFDDE5\]\/20:hover,
+[data-theme="dark"] .hover\:bg-\[\#AFDDE5\]\/30:hover {
+  background-color: color-mix(in srgb, #0ea5e9 14%, var(--card)) !important;
+}
+[data-theme="dark"] .border-\[\#AFDDE5\]\/60,
+[data-theme="dark"] .border-\[\#AFDDE5\]\/70 {
+  border-color: var(--border) !important;
 }
 
-[data-theme="dark"] .text-black\/45 {
-  color: var(--text-muted) !important;
+/* ── Issue / error rows ── */
+[data-theme="dark"] .bg-red-50\/60,
+[data-theme="dark"] .bg-red-50\/40,
+[data-theme="dark"] .bg-red-50 {
+  background-color: color-mix(in srgb, #ef4444 12%, var(--card)) !important;
+}
+[data-theme="dark"] .hover\:bg-red-50:hover {
+  background-color: color-mix(in srgb, #ef4444 16%, var(--card)) !important;
+}
+[data-theme="dark"] .border-red-200 { border-color: color-mix(in srgb, #ef4444 40%, var(--border)) !important; }
+[data-theme="dark"] .text-red-700 { color: #fca5a5 !important; }
+
+/* ── Colored text labels ── */
+[data-theme="dark"] .text-emerald-700,
+[data-theme="dark"] .hover\:text-emerald-700:hover,
+[data-theme="dark"] .text-emerald-600 { color: #6ee7b7 !important; }
+
+/* ── Gender badges ── */
+[data-theme="dark"] .bg-pink-100 { background-color: color-mix(in srgb, #f472b6 20%, var(--card)) !important; }
+[data-theme="dark"] .text-pink-700 { color: #f9a8d4 !important; }
+[data-theme="dark"] .border-pink-200 { border-color: color-mix(in srgb, #f472b6 30%, var(--border)) !important; }
+[data-theme="dark"] .bg-blue-100 { background-color: color-mix(in srgb, #60a5fa 20%, var(--card)) !important; }
+[data-theme="dark"] .text-blue-700 { color: #93c5fd !important; }
+[data-theme="dark"] .border-blue-200 { border-color: color-mix(in srgb, #60a5fa 30%, var(--border)) !important; }
+
+/* ── League / zebra rows ── */
+[data-theme="dark"] .bg-\[\#FAFAFA\] {
+  background-color: color-mix(in srgb, var(--text) 4%, var(--card)) !important;
 }
 
-[data-theme="dark"] .hover\:bg-black\/\[0\.02\] {
-  background: color-mix(in srgb, var(--text) 2%, var(--bg)) !important;
+/* ── Emerald/orange card borders ── */
+[data-theme="dark"] .border-emerald-200 { border-color: color-mix(in srgb, #16a34a 30%, var(--border)) !important; }
+[data-theme="dark"] .border-orange-200 { border-color: color-mix(in srgb, #f97316 30%, var(--border)) !important; }
+
+/* ── Scoring team-total circle cell ── */
+/* Remove the standout green cell background — match card */
+[data-theme="dark"] .bg-emerald-50\/60 { background-color: transparent !important; }
+[data-theme="dark"] .bg-emerald-50\/70 { background-color: transparent !important; }
+/* Circle border → white; circle bg → card color */
+[data-theme="dark"] .rounded-full.border-emerald-200 {
+  border-color: rgba(255, 255, 255, 0.65) !important;
+  background-color: var(--card) !important;
 }
 
-[data-theme="dark"] .hover\:bg-black\/\[0\.03\] {
-  background: color-mix(in srgb, var(--text) 3%, var(--bg)) !important;
+/* ── Slate-100 tinted surfaces ── */
+[data-theme="dark"] .bg-slate-100,
+[data-theme="dark"] .bg-slate-100\/80 { background-color: color-mix(in srgb, #94a3b8 12%, var(--card)) !important; }
+[data-theme="dark"] .hover\:bg-slate-100:hover { background-color: color-mix(in srgb, #94a3b8 14%, var(--card)) !important; }
+
+/* Sticky cell backgrounds (table headers, score cells) */
+[data-theme="dark"] .bg-\[\#e3f3f6\].sticky,
+[data-theme="dark"] .sticky.bg-\[\#e3f3f6\] {
+  background-color: color-mix(in srgb, #0ea5e9 10%, var(--card)) !important;
+}
+[data-theme="dark"] .sticky.bg-white,
+[data-theme="dark"] .bg-white.sticky {
+  background-color: var(--card) !important;
 }
 
-/* Additional dark mode contrast improvements */
-[data-theme="dark"] a {
-  color: var(--info);
+/* backdrop overlay (toolbar blur bar) */
+[data-theme="dark"] .bg-white\/95 {
+  background-color: color-mix(in srgb, var(--card) 95%, var(--bg)) !important;
 }
 
-[data-theme="dark"] a:hover {
-  color: color-mix(in srgb, var(--info) 110%, white);
+/* ── Border overrides ── */
+[data-theme="dark"] .border-black\/5,
+[data-theme="dark"] .border-black\/10,
+[data-theme="dark"] .border-black\/15,
+[data-theme="dark"] .border-black\/20 {
+  border-color: var(--border) !important;
 }
 
-[data-theme="dark"] button:disabled {
-  opacity: 0.5;
+/* ── Hover states ── */
+[data-theme="dark"] .hover\:bg-black\/\[0\.02\]:hover,
+[data-theme="dark"] .hover\:bg-black\/\[0\.03\]:hover {
+  background-color: color-mix(in srgb, var(--text) 5%, var(--card)) !important;
+}
+[data-theme="dark"] .hover\:bg-white\/50:hover {
+  background-color: color-mix(in srgb, var(--text) 8%, var(--card)) !important;
 }
 
-/* Standings table readability improvements */
-.standings-zebra tbody tr:nth-child(even) {
-  background: #FAFAFA;
+/* ── Links ── */
+[data-theme="dark"] a { color: var(--info); }
+[data-theme="dark"] a:hover { color: color-mix(in srgb, var(--info) 110%, white); }
+
+/* ── Disabled ── */
+[data-theme="dark"] button:disabled { opacity: 0.5; }
+
+/* ── Lucide icons ── */
+[data-theme="dark"] .lucide { opacity: 0.85; }
+
+/* ── Emerald / teal accent surfaces ── */
+[data-theme="dark"] .bg-emerald-50 { background-color: color-mix(in srgb, #16a34a 15%, var(--card)) !important; }
+[data-theme="dark"] .bg-emerald-50\/70 { background-color: color-mix(in srgb, #16a34a 10%, var(--card)) !important; }
+
+/* ── Amber accent surfaces ── */
+[data-theme="dark"] .bg-amber-50 { background-color: color-mix(in srgb, #d97706 15%, var(--card)) !important; }
+
+/* ── Rose accent surfaces ── */
+[data-theme="dark"] .bg-rose-50 { background-color: color-mix(in srgb, #e11d48 15%, var(--card)) !important; }
+
+/* ── Slate ── */
+[data-theme="dark"] .bg-slate-700 { background-color: #334155; }
+[data-theme="dark"] .hover\:bg-slate-800:hover { background-color: #1E293B; }
+[data-theme="dark"] .bg-slate-100\/80 { background-color: color-mix(in srgb, #94a3b8 12%, var(--card)) !important; }
+
+/* ── Segmented tab container ── */
+[data-theme="dark"] [class*="segmented-tab"],
+[data-theme="dark"] .bg-black\/\[0\.04\] { background-color: color-mix(in srgb, var(--text) 6%, var(--card)) !important; }
+
+/* ── Standings table ── */
+.standings-zebra tbody tr:nth-child(even) { background: #FAFAFA; }
+.standings-zebra tbody tr > td.standings-sticky-col { background: inherit; }
+
+[data-theme="dark"] .standings-zebra tbody tr:nth-child(even) {
+  background-color: color-mix(in srgb, var(--text) 4%, var(--card)) !important;
 }
 
-.standings-zebra tbody tr > td.standings-sticky-col {
-  background: inherit;
-}
-
-[data-theme="dark"] .bg-slate-700 {
-  background-color: #334155;
-}
-
-[data-theme="dark"] .hover\:bg-slate-800:hover {
-  background-color: #1E293B;
-}
-
+/* ── Form elements ── */
 [data-theme="dark"] select,
 [data-theme="dark"] textarea {
   background-color: color-mix(in srgb, var(--card) 95%, var(--bg));
   color: var(--text);
   border-color: var(--border);
 }
-
 [data-theme="dark"] select:focus,
 [data-theme="dark"] textarea:focus {
   border-color: var(--accent);
   outline: none;
 }
 
-/* Improve table visibility in dark mode */
+/* ── Table ── */
 [data-theme="dark"] .ui-table-minimal thead th {
-  background: color-mix(in srgb, var(--text) 10%, var(--card));
+  background: color-mix(in srgb, #0ea5e9 10%, var(--card));
   color: var(--text);
   border-color: var(--border);
 }
-
 [data-theme="dark"] .ui-table-minimal tbody td {
   border-color: var(--border);
   color: var(--text);
 }
-
 [data-theme="dark"] .ui-table-minimal tbody tr {
   border-color: var(--border);
+}
+[data-theme="dark"] .ui-table-minimal tbody tr:hover td {
+  background-color: color-mix(in srgb, var(--text) 5%, var(--card)) !important;
 }
 
 .ui-table-minimal {

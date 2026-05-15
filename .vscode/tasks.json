@@ -20,6 +20,17 @@
 				"build"
 			],
 			"isBackground": false
+		},
+		{
+			"label": "dev server",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"dev"
+			],
+			"isBackground": true,
+			"problemMatcher": []
 		}
 	]
 }

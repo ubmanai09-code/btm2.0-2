@@ -16139,7 +16139,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       <thead>
         <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
           <th className={`px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-black/70 w-12 bg-[#e3f3f6] sticky left-0 ${headerTopClass} z-[6]`}>Rank</th>
-          <th className={`px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-black/70 bg-[#e3f3f6] sticky left-12 ${headerTopClass} z-[6]`}>{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
+          <th className={`px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-900 bg-[#e3f3f6] sticky left-12 ${headerTopClass} z-[6]`}>{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
           {standingsMode === 'players' && (
             <>
               {showPlayerStyle && <th className={`${headerBaseClass} text-center`}>1H/2H</th>}
@@ -16154,7 +16154,6 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
               G{gameNumber}
             </th>
           ))}
-          <th className={`${headerBaseClass} text-right`}>Total</th>
           {hasAdditionalScores && (
             <th key="additional-th" className={`px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-violet-700 bg-[#e3f3f6] sticky ${headerTopClass} z-[4] text-center`}>
               +score
@@ -16165,9 +16164,9 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
               Bonus
             </th>
           )}
-          <th className={`${headerBaseClass} text-right`}>Grand Total</th>
+          <th className={`${headerBaseClass} text-right text-emerald-700`}>{totalColumnLabel}</th>
           {standingsMode === 'players' && (
-            <th key="avg-th" className={`${headerBaseClass} text-center`}>Avg</th>
+            <th key="avg-th" className={`${headerBaseClass} text-center text-sky-700`}>Avg</th>
           )}
         </tr>
       </thead>
@@ -16188,13 +16187,14 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       {gameNumbers.map((gameNumber) => (
         <col key={`game-col-${gameNumber}`} style={{ width: '56px' }} />
       ))}
-      <col style={{ width: '78px' }} />
       {hasAdditionalScores && <col style={{ width: '96px' }} />}
       {hasBonus && <col style={{ width: '96px' }} />}
       <col style={{ width: '96px' }} />
       {standingsMode === 'players' && <col style={{ width: '68px' }} />}
     </colgroup>
   );
+
+  const totalColumnLabel = hasAdditionalScores || hasBonus ? 'Grand Total' : 'Total';
 
   return (
     <div className="space-y-6">
@@ -16459,42 +16459,42 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 </div>
               </Card>
 
-              <Card className="p-3">
+              <Card className="p-2.5 md:p-3">
                 <h4 className="font-bold text-sm mb-0.5">{tx('Tournament Highlights')}</h4>
-                <p className="text-xs text-black/40 mb-2">{tx('Quick stats and highest single game score by category')}</p>
+                <p className="text-[11px] md:text-xs text-black/40 mb-1.5 md:mb-2">{tx('Quick stats and highest single game score by category')}</p>
 
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-2">
-                  <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Players</p>
-                    <p className="text-sm font-bold mt-0.5">{totalPlayers}</p>
+                <div className="grid grid-cols-3 gap-1.5 md:grid-cols-5 md:gap-2 mb-1.5 md:mb-2">
+                  <div className="rounded-md border border-black/10 p-1.5 md:p-2 bg-black/[0.02] text-center">
+                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">Players</p>
+                    <p className="text-xs md:text-sm font-bold mt-0.5">{totalPlayers}</p>
                   </div>
-                  <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Clubs</p>
-                    <p className="text-sm font-bold mt-0.5">{totalClubs}</p>
+                  <div className="rounded-md border border-black/10 p-1.5 md:p-2 bg-black/[0.02] text-center">
+                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">Clubs</p>
+                    <p className="text-xs md:text-sm font-bold mt-0.5">{totalClubs}</p>
                   </div>
-                  <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Teams</p>
-                    <p className="text-sm font-bold mt-0.5">{totalTeams}</p>
+                  <div className="rounded-md border border-black/10 p-1.5 md:p-2 bg-black/[0.02] text-center">
+                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">Teams</p>
+                    <p className="text-xs md:text-sm font-bold mt-0.5">{totalTeams}</p>
                   </div>
-                  <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">F</p>
-                    <p className="text-sm font-bold mt-0.5">{totalFemale}</p>
+                  <div className="rounded-md border border-black/10 p-1.5 md:p-2 bg-black/[0.02] text-center">
+                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">F</p>
+                    <p className="text-xs md:text-sm font-bold mt-0.5">{totalFemale}</p>
                   </div>
-                  <div className="rounded-md border border-black/10 p-2 bg-black/[0.02] text-center">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">M</p>
-                    <p className="text-sm font-bold mt-0.5">{totalMale}</p>
+                  <div className="rounded-md border border-black/10 p-1.5 md:p-2 bg-black/[0.02] text-center">
+                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">M</p>
+                    <p className="text-xs md:text-sm font-bold mt-0.5">{totalMale}</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  <div className="rounded-md border border-black/10 p-2.5 bg-black/[0.02]">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Top Score Male (Top 3)</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 md:gap-2">
+                  <div className="rounded-md border border-black/10 p-2 bg-black/[0.02]">
+                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">Top Score Male (Top 3)</p>
                     {topMaleScores.length > 0 ? (
-                      <div className="mt-1 space-y-1">
+                      <div className="mt-1 space-y-0.5 md:space-y-1">
                         {topMaleScores.map((entry, index) => (
-                          <div key={`top-male-${entry.participant_id}-${entry.game_number}-${index}`} className="flex items-center justify-between gap-2">
-                            <p className="text-sm font-bold truncate">{index + 1}. {participantNameMap.get(entry.participant_id) || entry.participant_name || 'N/A'}</p>
-                            <span className="text-base leading-none font-extrabold text-emerald-700">{entry.score}</span>
+                          <div key={`top-male-${entry.participant_id}-${entry.game_number}-${index}`} className="flex items-center justify-between gap-1.5">
+                            <p className="min-w-0 flex-1 truncate text-[11px] md:text-sm font-bold leading-tight">{index + 1}. {participantNameMap.get(entry.participant_id) || entry.participant_name || 'N/A'}</p>
+                            <span className="shrink-0 text-sm md:text-base leading-none font-extrabold text-emerald-700 tabular-nums">{entry.score}</span>
                           </div>
                         ))}
                       </div>
@@ -16502,14 +16502,14 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       <p className="text-xs text-black/40 mt-0.5">No male result yet.</p>
                     )}
                   </div>
-                  <div className="rounded-md border border-black/10 p-2.5 bg-black/[0.02]">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Top Score Female (Top 3)</p>
+                  <div className="rounded-md border border-black/10 p-2 bg-black/[0.02]">
+                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">Top Score Female (Top 3)</p>
                     {topFemaleScores.length > 0 ? (
-                      <div className="mt-1 space-y-1">
+                      <div className="mt-1 space-y-0.5 md:space-y-1">
                         {topFemaleScores.map((entry, index) => (
-                          <div key={`top-female-${entry.participant_id}-${entry.game_number}-${index}`} className="flex items-center justify-between gap-2">
-                            <p className="text-sm font-bold truncate">{index + 1}. {participantNameMap.get(entry.participant_id) || entry.participant_name || 'N/A'}</p>
-                            <span className="text-base leading-none font-extrabold text-violet-700">{entry.score}</span>
+                          <div key={`top-female-${entry.participant_id}-${entry.game_number}-${index}`} className="flex items-center justify-between gap-1.5">
+                            <p className="min-w-0 flex-1 truncate text-[11px] md:text-sm font-bold leading-tight">{index + 1}. {participantNameMap.get(entry.participant_id) || entry.participant_name || 'N/A'}</p>
+                            <span className="shrink-0 text-sm md:text-base leading-none font-extrabold text-rose-600 tabular-nums">{entry.score}</span>
                           </div>
                         ))}
                       </div>
@@ -16817,12 +16817,12 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       {isFemale ? <span style={{ textDecorationLine: 'underline', textDecorationStyle: 'dotted' }}>{s.participant_name}</span> : s.participant_name}
                     </span>
                     <span className="shrink-0 flex flex-col items-end">
-                      <span className="text-[9px] font-semibold uppercase tracking-wider text-black/30 leading-none">Total</span>
-                      <span className="text-sm font-extrabold tabular-nums leading-tight">{s.grand_total}</span>
+                      <span className="text-[9px] font-semibold uppercase tracking-wider text-emerald-600 leading-none">{totalColumnLabel}</span>
+                      <span className="text-sm font-extrabold tabular-nums leading-tight text-emerald-700">{s.grand_total}</span>
                     </span>
                     <span className="shrink-0 flex flex-col items-end">
-                      <span className="text-[9px] font-semibold uppercase tracking-wider text-black/30 leading-none">Avg</span>
-                      <span className="text-xs font-bold tabular-nums text-black/50 leading-tight">{s.average.toFixed(1)}</span>
+                      <span className="text-[9px] font-semibold uppercase tracking-wider text-sky-600 leading-none">Avg</span>
+                      <span className="text-xs font-bold tabular-nums text-sky-700 leading-tight">{s.average.toFixed(1)}</span>
                     </span>
                     <span className="shrink-0 text-black/30">{isExpanded ? '▲' : '▼'}</span>
                   </button>
@@ -16832,9 +16832,9 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                         {isFemale ? <span style={{ textDecorationLine: 'underline', textDecorationStyle: 'dotted' }}>{s.participant_name}</span> : s.participant_name}
                       </p>
                       <p className="mt-1 text-[11px] leading-snug text-black/75">
-                        <span className="font-semibold">Total:</span> {s.grand_total}
+                        <span className="font-semibold text-emerald-700">{totalColumnLabel}:</span> {s.grand_total}
                         {' | '}
-                        <span className="font-semibold">Avg:</span> {s.average.toFixed(1)}
+                        <span className="font-semibold text-sky-700">Avg:</span> {s.average.toFixed(1)}
                         {gameNumbers.map((gn, gi) => {
                           const score = s.games[gi];
                           const display = score === null || score === undefined || score === '' ? '-' : score;
@@ -16859,8 +16859,8 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     <span className="w-6 shrink-0 text-xs font-bold text-black/40 text-center">{idx + 1}</span>
                     <span className="flex-1 text-xs font-bold leading-tight truncate">{s.team_name}</span>
                     <span className="shrink-0 flex flex-col items-end">
-                      <span className="text-[9px] font-semibold uppercase tracking-wider text-black/30 leading-none">Total</span>
-                      <span className="text-sm font-extrabold tabular-nums leading-tight">{s.grand_total}</span>
+                      <span className="text-[9px] font-semibold uppercase tracking-wider text-emerald-600 leading-none">{totalColumnLabel}</span>
+                      <span className="text-sm font-extrabold tabular-nums leading-tight text-emerald-700">{s.grand_total}</span>
                     </span>
                     <span className="shrink-0 text-black/30">{isExpanded ? '▲' : '▼'}</span>
                   </button>
@@ -16868,7 +16868,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     <div className="px-3 pb-2.5 pt-1.5 bg-[#f7fcfd]">
                       <p className="text-xs font-bold leading-tight">{s.team_name}</p>
                       <p className="mt-1 text-[11px] leading-snug text-black/75">
-                        <span className="font-semibold">Total:</span> {s.grand_total}
+                        <span className="font-semibold text-emerald-700">{totalColumnLabel}:</span> {s.grand_total}
                         {gameNumbers.map((gn, gi) => {
                           const score = s.games[gi];
                           const display = score === null || score === undefined || score === '' ? '-' : score;
@@ -16928,7 +16928,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                   )}
                   {/* Only show team column if team tournament and standingsMode is players */}
                   {standingsMode === 'players' && isTeamTournament && (
-                    <td className="px-2.5 py-1.5 text-black/40 text-xs">{s.team_name}</td>
+                    <td className="px-2.5 py-1.5 text-slate-800 text-xs font-semibold">{s.team_name}</td>
                   )}
                   {gameNumbers.map((gameNumber, gameIndex) => {
                     const value = s.games[gameIndex] ?? 0;
@@ -16946,8 +16946,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       </td>
                     );
                   })}
-                  <td className="px-2.5 py-1.5 text-right text-black/50 text-sm">{s.total}</td>
-                  {hasAdditionalScores && <td className="px-2.5 py-1.5 text-center text-violet-700">
+                  {hasAdditionalScores && <td className="px-2.5 py-1.5 text-center text-violet-700 font-medium">
                     {(() => {
                       const aKey = toBonusKey('participant', s.participant_id);
                       const liveValue = additionalDrafts[aKey] !== undefined ? additionalDrafts[aKey] : String(s.additional);
@@ -16964,7 +16963,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       ) : s.additional;
                     })()}
                   </td>}
-                  {hasBonus && <td className="px-2.5 py-1.5 text-center text-[color:var(--text)]">
+                  {hasBonus && <td className="px-2.5 py-1.5 text-center text-slate-800 font-medium">
                     {(() => {
                       const bonusKey = toBonusKey('participant', s.participant_id);
                       const liveValue = bonusDrafts[bonusKey] !== undefined ? bonusDrafts[bonusKey] : String(s.bonus);
@@ -16982,17 +16981,17 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     })()}
                   </td>}
                   <td
-                      className="px-2.5 py-1.5 text-right font-bold text-sm"
+                      className="px-2.5 py-1.5 text-right font-bold text-sm text-emerald-700"
                     >
                       {s.grand_total}
                     </td>
                   <td
-                    className={`px-2.5 py-1.5 text-center text-black/60 text-sm ${
+                    className={`px-2.5 py-1.5 text-center text-sm ${
                       maleTopAvgIds.has(s.participant_id)
-                        ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200 font-bold'
+                        ? 'bg-sky-700 text-white ring-2 ring-sky-300 font-black'
                         : femaleTopAvgIds.has(s.participant_id)
-                          ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200 font-bold'
-                          : ''
+                          ? 'bg-rose-700 text-white ring-2 ring-rose-300 font-black'
+                          : 'text-sky-700 font-semibold'
                     }`}
                   >
                     {s.average.toFixed(1)}
@@ -17003,8 +17002,8 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 <tr key={s.key} className="hover:bg-[#AFDDE5]/20 transition-colors">
                   <td className="standings-sticky-col px-2 py-1.5 text-xs font-bold text-black/60 sticky left-0 z-[2]">{idx + 1}</td>
                   <td className="standings-sticky-col px-2 py-1.5 leading-tight sticky left-12 z-[2]">
-                    <div className="text-xs font-bold">{s.team_name}</div>
-                    <div className="text-[10px] text-black/50 lowercase mt-0.5">
+                    <div className="text-xs font-bold text-slate-900">{s.team_name}</div>
+                    <div className="text-[10px] text-slate-600 lowercase mt-0.5">
                       {s.members.length > 0 ? s.members.join(', ') : 'no members'}
                     </div>
                   </td>
@@ -17014,8 +17013,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       <td key={`game-td-${s.key}-${gameNumber}`} className="px-2.5 py-1.5 text-center text-sm">{value}</td>
                     );
                   })}
-                  <td className="px-2.5 py-1.5 text-right text-black/50 text-sm">{s.total}</td>
-                  {hasAdditionalScores && <td className="px-2.5 py-1.5 text-center text-violet-700">
+                  {hasAdditionalScores && <td className="px-2.5 py-1.5 text-center text-violet-700 font-medium">
                     {(() => {
                       if (!s.team_id) return s.additional;
                       const aKey = toBonusKey('team', s.team_id);
@@ -17033,7 +17031,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       ) : s.additional;
                     })()}
                   </td>}
-                  {hasBonus && <td className="px-2.5 py-1.5 text-center text-[color:var(--text)]">
+                  {hasBonus && <td className="px-2.5 py-1.5 text-center text-slate-800 font-medium">
                     {(() => {
                       if (!s.team_id) return s.bonus;
                       const bonusKey = toBonusKey('team', s.team_id);
@@ -17051,7 +17049,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       ) : s.bonus;
                     })()}
                   </td>}
-                  <td className="px-2.5 py-1.5 text-right font-bold text-sm">{s.grand_total}</td>
+                  <td className="px-2.5 py-1.5 text-right font-bold text-sm text-emerald-700">{s.grand_total}</td>
                 </tr>
               ))}
               {((standingsMode === 'players' && standingsRowsForDisplay.length === 0) || (standingsMode === 'teams' && teamStandingsRows.length === 0)) && (
@@ -17059,7 +17057,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                   {(() => {
                     // players: Rank + Name + [optional Club] + (Team if team tournament) + games + Total + [optional extras] + GrandTotal + Avg
                     const colSpan = standingsMode === 'players'
-                      ? ((hasClubData ? 3 : 2) + (isTeamTournament ? 1 : 0) + gameNumbers.length + 2 + (hasAdditionalScores ? 1 : 0) + (hasBonus ? 1 : 0) + 1)
+                      ? ((hasClubData ? 3 : 2) + (isTeamTournament ? 1 : 0) + gameNumbers.length + 1 + (hasAdditionalScores ? 1 : 0) + (hasBonus ? 1 : 0) + 1)
                       : (2 + gameNumbers.length + 2 + (hasAdditionalScores ? 1 : 0) + (hasBonus ? 1 : 0));
                     return (
                       <td colSpan={colSpan} className="px-6 py-12 text-center text-black/40 italic">
