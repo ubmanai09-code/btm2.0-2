@@ -75,6 +75,25 @@ const syncTopLevelLogoAssets = (fromDir: string, toDir: string): string[] => {
   return synced;
 };
 
+const getTournamentCountIfReadable = (candidatePath: string): number | null => {
+  if (!fs.existsSync(candidatePath)) return null;
+  let probe: Database.Database | null = null;
+  try {
+    probe = new Database(candidatePath, { readonly: true });
+    const hasTournamentsTable = probe
+      .prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'tournaments'")
+      .get() as { count: number };
+
+    if (!hasTournamentsTable?.count) return 0;
+    const row = probe.prepare("SELECT COUNT(*) AS count FROM tournaments").get() as { count: number };
+    return Number(row?.count ?? 0);
+  } catch {
+    return null;
+  } finally {
+    if (probe) probe.close();
+  }
+};
+
 const resolveDbPath = (): string => {
   const configuredDbPath = (process.env.BTM_DB_PATH || '').trim();
   if (configuredDbPath) return path.resolve(configuredDbPath);
@@ -101,15 +120,71 @@ const resolveDbPath = (): string => {
     return persistentDbPath;
   }
 
+  const dataDbTournamentCount = getTournamentCountIfReadable(legacyDataDbPath);
+  const rootDbTournamentCount = getTournamentCountIfReadable(legacyRootDbPath);
+
+  if (
+    rootDbTournamentCount !== null &&
+    rootDbTournamentCount > 0 &&
+    (dataDbTournamentCount === null || dataDbTournamentCount === 0)
+  ) {
+    console.warn(
+      `Using legacy development database path because it contains tournaments: ${legacyRootDbPath}`
+    );
+    return legacyRootDbPath;
+  }
+
   return legacyDataDbPath;
 };
 
 const configuredDbPath = (process.env.BTM_DB_PATH || '').trim();
 const dbPath = resolveDbPath();
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-const db = new Database(dbPath);
-db.pragma('journal_mode = WAL');
-db.pragma('synchronous = NORMAL');
+
+const backupCorruptDb = (targetDbPath: string) => {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupBase = `${targetDbPath}.corrupt-${timestamp}`;
+  const candidates = [
+    targetDbPath,
+    `${targetDbPath}-wal`,
+    `${targetDbPath}-shm`,
+  ];
+
+  for (const sourcePath of candidates) {
+    if (!fs.existsSync(sourcePath)) continue;
+    const suffix = sourcePath.slice(targetDbPath.length);
+    const backupPath = `${backupBase}${suffix}`;
+    fs.renameSync(sourcePath, backupPath);
+    console.warn(`Backed up corrupt database artifact: ${backupPath}`);
+  }
+};
+
+const createDbConnection = (targetDbPath: string): Database.Database => {
+  const conn = new Database(targetDbPath);
+  conn.pragma('journal_mode = WAL');
+  conn.pragma('synchronous = NORMAL');
+  return conn;
+};
+
+const openDatabaseWithRecovery = (targetDbPath: string): Database.Database => {
+  try {
+    return createDbConnection(targetDbPath);
+  } catch (err) {
+    const error = err as NodeJS.ErrnoException & { code?: string; message?: string };
+    const message = `${error?.message || ''}`;
+    const isCorrupt =
+      error?.code === 'SQLITE_CORRUPT' ||
+      /malformed database schema|database disk image is malformed|SQLITE_CORRUPT/i.test(message);
+
+    if (!isCorrupt) throw err;
+
+    console.error(`Detected corrupt SQLite database at ${targetDbPath}. Attempting automatic recovery.`);
+    backupCorruptDb(targetDbPath);
+    return createDbConnection(targetDbPath);
+  }
+};
+
+const db = openDatabaseWithRecovery(dbPath);
 
 if (!configuredDbPath) {
   const mode = process.env.NODE_ENV === 'production' ? 'production' : 'development';
@@ -2093,12 +2168,29 @@ async function startServer() {
   });
 
   app.get("/api/tournaments", (req, res) => {
+    // Keep historical tournaments with real competition data visible by default.
     db.prepare(`
       UPDATE tournaments
       SET status = 'archived'
       WHERE status = 'finished'
         AND date IS NOT NULL
         AND date(date) <= date('now', '-30 day')
+        AND NOT EXISTS (
+          SELECT 1
+          FROM participants p
+          WHERE p.tournament_id = tournaments.id
+        )
+    `).run();
+
+    db.prepare(`
+      UPDATE tournaments
+      SET status = 'finished'
+      WHERE status = 'archived'
+        AND EXISTS (
+          SELECT 1
+          FROM participants p
+          WHERE p.tournament_id = tournaments.id
+        )
     `).run();
 
     const rows = db.prepare("SELECT * FROM tournaments ORDER BY created_at DESC").all();
@@ -2698,18 +2790,41 @@ async function startServer() {
   });
 
   app.post("/api/tournaments/:id/scores", requirePermission('scores:manage', (req) => req.params.id), (req, res) => {
-    const { participant_id, game_number, score } = req.body;
-const existing = db
-  .prepare("SELECT id FROM scores WHERE tournament_id = ? AND participant_id = ? AND game_number = ?")
-  .get(req.params.id, participant_id, game_number) as { id: number } | undefined;
-    
-    if (existing) {
-      db.prepare("UPDATE scores SET score = ? WHERE id = ?").run(score, existing.id);
-      res.json({ id: existing.id });
-    } else {
-      const info = db.prepare("INSERT INTO scores (tournament_id, participant_id, game_number, score) VALUES (?, ?, ?, ?)")
-        .run(req.params.id, participant_id, game_number, score);
-      res.json({ id: info.lastInsertRowid });
+    try {
+      const tournamentId = Number.parseInt(String(req.params.id), 10);
+      const participantId = Number.parseInt(String(req.body?.participant_id), 10);
+      const gameNumber = Number.parseInt(String(req.body?.game_number), 10);
+      const score = Number.parseInt(String(req.body?.score), 10);
+
+      if (!Number.isFinite(tournamentId) || !Number.isFinite(participantId) || !Number.isFinite(gameNumber) || !Number.isFinite(score)) {
+        return res.status(400).json({ error: 'Invalid score payload' });
+      }
+
+      const participant = db.prepare(
+        "SELECT id FROM participants WHERE id = ? AND tournament_id = ? LIMIT 1"
+      ).get(participantId, tournamentId) as { id: number } | undefined;
+
+      if (!participant?.id) {
+        return res.status(400).json({ error: 'Participant does not belong to this tournament' });
+      }
+
+      const existing = db
+        .prepare("SELECT id FROM scores WHERE tournament_id = ? AND participant_id = ? AND game_number = ?")
+        .get(tournamentId, participantId, gameNumber) as { id: number } | undefined;
+
+      if (existing) {
+        db.prepare("UPDATE scores SET score = ? WHERE id = ?").run(score, existing.id);
+        return res.json({ id: existing.id });
+      }
+
+      const info = db
+        .prepare("INSERT INTO scores (tournament_id, participant_id, game_number, score) VALUES (?, ?, ?, ?)")
+        .run(tournamentId, participantId, gameNumber, score);
+      return res.json({ id: info.lastInsertRowid });
+    } catch (err: any) {
+      console.error('Failed to save score', err);
+      const message = String(err?.message || 'Failed to save score');
+      return res.status(400).json({ error: message });
     }
   });
 

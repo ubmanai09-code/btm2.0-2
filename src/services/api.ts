@@ -597,7 +597,14 @@ const api = {
   },
   async getScores(tournamentId: number): Promise<Score[]> {
     const res = await fetch(`/api/tournaments/${tournamentId}/scores`);
-    return res.json();
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || `Failed to load scores (${res.status})`);
+    }
+    if (!Array.isArray(data)) {
+      throw new Error('Failed to load scores: API did not return JSON array');
+    }
+    return data;
   },
   async addScore(tournamentId: number, data: Partial<Score>): Promise<{ id: number }> {
     const res = await fetch(`/api/tournaments/${tournamentId}/scores`, {
@@ -605,7 +612,14 @@ const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    return res.json();
+    const body = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(body?.error || `Failed to save score (${res.status})`);
+    }
+    if (!body || typeof body !== 'object' || typeof body.id !== 'number') {
+      throw new Error('Failed to save score: API did not return a valid JSON payload');
+    }
+    return body;
   },
   async clearScores(tournamentId: number): Promise<{ success: boolean; deleted: number }> {
     const res = await fetch(`/api/tournaments/${tournamentId}/scores`, {

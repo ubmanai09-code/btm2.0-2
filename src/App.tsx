@@ -3488,7 +3488,6 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       { id: 'brackets', label: tPublic('public.tab.brackets', 'Brackets'), icon: GitBranch },
       { id: 'brackets-v2', label: tPublic('public.tab.brackets_v2', 'Brackets V2'), icon: BracketsV2TabIcon },
       { id: 'standings', label: tPublic('public.tab.tournament_result', 'Standing'), icon: Trophy },
-      { id: 'league', label: tPublic('public.tab.league', 'League'), icon: BarChart3 },
     ]
     : [
       { id: 'participants', label: t('tab.participants', 'Participants'), icon: Users },
@@ -6784,6 +6783,50 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
     .map(([key, total]) => `${key}:${total}`)
     .join('|');
 
+  const normalizeScoringGender = (raw: unknown): 'male' | 'female' | '' => {
+    const value = String(raw || '').trim().toLowerCase();
+    if (value === 'm' || value === 'male' || value === 'men' || value === 'man' || value === 'boy') return 'male';
+    if (value === 'f' || value === 'female' || value === 'women' || value === 'woman' || value === 'girl') return 'female';
+    return '';
+  };
+
+  const scoringHighlightRows = participants
+    .map((participant) => ({
+      participantId: participant.id,
+      participantName: formatScoringName(participant),
+      gender: normalizeScoringGender(participant.gender),
+      total: getParticipantStats(participant.id).total,
+    }))
+    .filter((row) => row.total > 0);
+
+  const topMaleScoringHighlights = scoringHighlightRows
+    .filter((row) => row.gender === 'male')
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 3);
+
+  const topFemaleScoringHighlights = scoringHighlightRows
+    .filter((row) => row.gender === 'female')
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 3);
+
+  const topTeamScoringHighlights = tournament.type === 'team'
+    ? Array.from(
+      participants.reduce((acc, participant) => {
+        if (participant.team_id === null) return acc;
+        const teamKey = String(participant.team_id);
+        const nextTotal = (acc.get(teamKey)?.total || 0) + getParticipantStats(participant.id).total;
+        acc.set(teamKey, {
+          teamName: participant.team_name || `Team ${participant.team_id}`,
+          total: nextTotal,
+        });
+        return acc;
+      }, new Map<string, { teamName: string; total: number }>()).values()
+    )
+      .filter((row) => row.total > 0)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 3)
+    : [];
+
   useEffect(() => {
     if (tournament.type !== 'team') return;
 
@@ -7144,7 +7187,9 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
 
         const participantsByFullName = new Map<string, Participant>();
         const participantsByShortName = new Map<string, Participant>();
+        const validParticipantIds = new Set<number>();
         participants.forEach((participant) => {
+          validParticipantIds.add(participant.id);
           const fullNameKey = formatParticipantFullName(participant).toLowerCase();
           const shortNameKey = formatScoringName(participant).toLowerCase();
           if (fullNameKey && !participantsByFullName.has(fullNameKey)) {
@@ -7161,7 +7206,10 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
 
           let participantId = NaN;
           if (participantIdIndex !== -1) {
-            participantId = Number.parseInt(columns[participantIdIndex], 10);
+            const parsedId = Number.parseInt(columns[participantIdIndex], 10);
+            if (Number.isFinite(parsedId) && validParticipantIds.has(parsedId)) {
+              participantId = parsedId;
+            }
           }
 
           if (!Number.isFinite(participantId) && participantNameIndex !== -1) {
@@ -7190,7 +7238,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
           console.warn('Failed to clear participant scores before import, continuing with upsert.', clearErr);
         }
 
-        const tasks: Promise<any>[] = [];
+        const scorePayloads: Array<{ participant_id: number; game_number: number; score: number }> = [];
         for (const row of resolvedRows) {
           const { participantId, columns } = row;
 
@@ -7200,15 +7248,19 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
             const value = Number.parseInt(columns[gameColumn], 10);
             if (!Number.isFinite(value) || value < 0 || value > 300) continue;
 
-            tasks.push(api.addScore(tournament.id, {
+            scorePayloads.push({
               participant_id: participantId,
               game_number: gameNumber,
-              score: value
-            }));
+              score: value,
+            });
           }
         }
 
-        await Promise.all(tasks);
+        const BATCH_SIZE = 30;
+        for (let offset = 0; offset < scorePayloads.length; offset += BATCH_SIZE) {
+          const batch = scorePayloads.slice(offset, offset + BATCH_SIZE);
+          await Promise.all(batch.map((payload) => api.addScore(tournament.id, payload)));
+        }
         await loadData();
       } catch (err) {
         console.error('Failed to import scores:', err);
@@ -7297,6 +7349,71 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
           </p>
         </div>
         {isScoreScreenMode && (
+          <div className="flex-1 min-w-0">
+            <div className={`grid ${tournament.type === 'team' ? 'grid-cols-1 lg:grid-cols-3' : 'grid-cols-1 lg:grid-cols-2'} gap-2` }>
+              {tournament.type === 'team' && (
+                <div className="rounded-md border border-black/10 bg-white/90 px-2.5 py-1.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-black/45">Top 3 Team Score</p>
+                  {topTeamScoringHighlights.length > 0 ? (
+                    <div className="mt-1 space-y-0.5">
+                      {topTeamScoringHighlights.map((entry, index) => (
+                        <div key={`score-team-highlight-${entry.teamName}-${index}`} className="flex items-center justify-between gap-2 text-xs">
+                          <span className="font-semibold truncate">{index + 1}. {entry.teamName}</span>
+                          <span className="font-black text-emerald-700 tabular-nums">{entry.total}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-black/45 mt-1">No team score yet.</p>
+                  )}
+                </div>
+              )}
+              <div className="rounded-md border border-black/10 bg-white/90 px-2.5 py-1.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-black/45">Top 3 F Score</p>
+                {topFemaleScoringHighlights.length > 0 ? (
+                  <div className="mt-1 space-y-0.5">
+                    {topFemaleScoringHighlights.map((entry, index) => (
+                      <div key={`score-f-highlight-${entry.participantId}-${index}`} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-semibold truncate">{index + 1}. {entry.participantName}</span>
+                        <span className="font-black text-violet-700 tabular-nums">{entry.total}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-black/45 mt-1">No female score yet.</p>
+                )}
+              </div>
+              <div className="rounded-md border border-black/10 bg-white/90 px-2.5 py-1.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-black/45">Top 3 M Score</p>
+                {topMaleScoringHighlights.length > 0 ? (
+                  <div className="mt-1 space-y-0.5">
+                    {topMaleScoringHighlights.map((entry, index) => (
+                      <div key={`score-m-highlight-${entry.participantId}-${index}`} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-semibold truncate">{index + 1}. {entry.participantName}</span>
+                        <span className="font-black text-sky-700 tabular-nums">{entry.total}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-black/45 mt-1">No male score yet.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        {isScoreScreenMode && !isAutoScrollPaused && (
+          <div className="self-start md:self-auto">
+            <button
+              type="button"
+              onClick={() => setIsAutoScrollPaused(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-sm transition-colors"
+              title="Pause auto scroll"
+            >
+              {tx('Pause')}
+            </button>
+          </div>
+        )}
+        {isScoreScreenMode && isAutoScrollPaused && (
           <div className="flex flex-wrap items-center gap-3 self-start md:self-auto">
             <button
               type="button"
@@ -7326,6 +7443,14 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
               </div>
             )}
             <div className="inline-flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setIsAutoScrollPaused(false)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs transition-colors"
+                title="Resume auto scroll"
+              >
+                {tx('Resume')}
+              </button>
               <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Scroll</span>
               <select
                 value={autoScrollSpeed}
@@ -7504,12 +7629,6 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
             scoringBodyScrollRef.current = node;
           }}
           className={isScoreScreenMode ? 'hidden sm:block overflow-auto max-h-[calc(100vh-14rem)]' : 'hidden sm:block overflow-x-auto'}
-          onMouseEnter={() => {
-            if (isScoreScreenMode) setIsAutoScrollPaused(true);
-          }}
-          onMouseLeave={() => {
-            if (isScoreScreenMode) setIsAutoScrollPaused(false);
-          }}
         >
         <table className="ui-table-minimal w-full text-left border-collapse text-[11px] sm:text-sm table-fixed">
           {renderScoringColGroup()}
@@ -15624,6 +15743,24 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const teamStandingsRows = isStandingsScreenMode
     ? teamStandingsRowsAll.filter((row) => row.grand_total > 0 || row.total > 0)
     : teamStandingsRowsAll;
+
+  const topTeamStandingsHighlights = teamStandingsRows
+    .filter((row) => row.grand_total > 0)
+    .slice()
+    .sort((a, b) => b.grand_total - a.grand_total)
+    .slice(0, 3);
+
+  const topFemaleStandingsHighlights = playerStandingsRows
+    .filter((row) => (participantGenderMap.get(row.participant_id) || '') === 'female' && row.grand_total > 0)
+    .slice()
+    .sort((a, b) => b.grand_total - a.grand_total)
+    .slice(0, 3);
+
+  const topMaleStandingsHighlights = playerStandingsRows
+    .filter((row) => (participantGenderMap.get(row.participant_id) || '') === 'male' && row.grand_total > 0)
+    .slice()
+    .sort((a, b) => b.grand_total - a.grand_total)
+    .slice(0, 3);
   const registeredPlayersCount = participants.length;
   const assignedPlayersCount = participants.filter((p) => p.team_id !== null).length;
   const unassignedPlayersCount = Math.max(0, registeredPlayersCount - assignedPlayersCount);
@@ -16078,6 +16215,71 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           </p>
         </div>
         {isStandingsScreenMode && (
+          <div className="flex-1 min-w-0">
+            <div className={`grid ${isTeamTournament ? 'grid-cols-1 lg:grid-cols-3' : 'grid-cols-1 lg:grid-cols-2'} gap-2`}>
+              {isTeamTournament && (
+                <div className="rounded-md border border-black/10 bg-white/90 px-2.5 py-1.5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-black/45">Top 3 Team Score</p>
+                  {topTeamStandingsHighlights.length > 0 ? (
+                    <div className="mt-1 space-y-0.5">
+                      {topTeamStandingsHighlights.map((entry, index) => (
+                        <div key={`standings-team-highlight-${entry.key}`} className="flex items-center justify-between gap-2 text-xs">
+                          <span className="font-semibold truncate">{index + 1}. {entry.team_name}</span>
+                          <span className="font-black text-emerald-700 tabular-nums">{entry.grand_total}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-black/45 mt-1">No team score yet.</p>
+                  )}
+                </div>
+              )}
+              <div className="rounded-md border border-black/10 bg-white/90 px-2.5 py-1.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-black/45">Top 3 F Score</p>
+                {topFemaleStandingsHighlights.length > 0 ? (
+                  <div className="mt-1 space-y-0.5">
+                    {topFemaleStandingsHighlights.map((entry, index) => (
+                      <div key={`standings-f-highlight-${entry.participant_id}`} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-semibold truncate">{index + 1}. {entry.participant_name}</span>
+                        <span className="font-black text-violet-700 tabular-nums">{entry.grand_total}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-black/45 mt-1">No female score yet.</p>
+                )}
+              </div>
+              <div className="rounded-md border border-black/10 bg-white/90 px-2.5 py-1.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-black/45">Top 3 M Score</p>
+                {topMaleStandingsHighlights.length > 0 ? (
+                  <div className="mt-1 space-y-0.5">
+                    {topMaleStandingsHighlights.map((entry, index) => (
+                      <div key={`standings-m-highlight-${entry.participant_id}`} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-semibold truncate">{index + 1}. {entry.participant_name}</span>
+                        <span className="font-black text-sky-700 tabular-nums">{entry.grand_total}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-black/45 mt-1">No male score yet.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        {isStandingsScreenMode && !isAutoScrollPaused && (
+          <div className="self-start md:self-auto">
+            <button
+              type="button"
+              onClick={() => setIsAutoScrollPaused(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-sm transition-colors"
+              title="Pause auto scroll"
+            >
+              {tx('Pause')}
+            </button>
+          </div>
+        )}
+        {isStandingsScreenMode && isAutoScrollPaused && (
           <div className="flex flex-wrap items-center gap-3 self-start md:self-auto">
             <button
               type="button"
@@ -16132,6 +16334,14 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
               </div>
             )}
             <div className="inline-flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setIsAutoScrollPaused(false)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs transition-colors"
+                title="Resume auto scroll"
+              >
+                {tx('Resume')}
+              </button>
               <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Scroll</span>
               <select
                 value={autoScrollSpeed}
@@ -16691,12 +16901,6 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
               standingsBodyScrollRef.current = node;
             }}
             className={`hidden sm:block ${isStandingsScreenMode ? 'overflow-auto max-h-[calc(100vh-14rem)]' : 'overflow-x-auto'}`}
-            onMouseEnter={() => {
-              if (isStandingsScreenMode) setIsAutoScrollPaused(true);
-            }}
-            onMouseLeave={() => {
-              if (isStandingsScreenMode) setIsAutoScrollPaused(false);
-            }}
           >
           <table ref={standingsTableRef} className="ui-table-minimal standings-zebra w-full min-w-[760px] text-left border-collapse table-fixed">
             {renderStandingsColGroup()}
