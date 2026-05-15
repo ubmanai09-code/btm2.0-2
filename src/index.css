@@ -31,7 +31,7 @@
   --border: #334155;
   --text: #F1F5F9;
   --text-muted: #94A3B8;
-  --text-subtle: #64748B;
+  --text-subtle: #94A3B8;
   --accent: #F97316;
   --success: #22C55E;
   --danger: #EF4444;
@@ -361,6 +361,18 @@ body {
 [data-theme="dark"] .sticky.bg-white,
 [data-theme="dark"] .bg-white.sticky {
   background-color: var(--card) !important;
+}
+
+/* Participants table: keep sticky columns visually identical to the row surface */
+[data-theme="dark"] .bg-white.sticky.left-0,
+[data-theme="dark"] .bg-white.sticky.left-10,
+[data-theme="dark"] .bg-white.sticky.left-12,
+[data-theme="dark"] .bg-white.sticky.right-0,
+[data-theme="dark"] .sticky.left-0.bg-white,
+[data-theme="dark"] .sticky.left-10.bg-white,
+[data-theme="dark"] .sticky.left-12.bg-white,
+[data-theme="dark"] .sticky.right-0.bg-white {
+  background-color: inherit !important;
 }
 
 /* backdrop overlay (toolbar blur bar) */
