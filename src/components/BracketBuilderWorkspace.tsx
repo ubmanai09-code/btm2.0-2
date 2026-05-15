@@ -2271,7 +2271,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                                   return (
                                     <div key={pickerKey} className="relative">
                                       <div
-                                        className={`rounded-lg border px-2.5 py-1.5 text-xs ${isLiveSlotWinner(row, slot) ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : slot.sourceType === 'participant' ? 'border-sky-200 bg-sky-50 text-sky-800' : slot.sourceType === 'advance' ? 'border-orange-200 bg-orange-50 text-orange-700' : 'border-black/10 bg-black/[0.03] text-black/45'} ${isEditableSlot ? 'cursor-pointer select-none' : ''}`}
+                                        className={`rounded-lg border px-2.5 py-1.5 text-xs ${isLiveSlotWinner(row, slot) ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : slot.sourceType === 'participant' ? 'border-sky-200 bg-sky-50 text-sky-800' : slot.sourceType === 'advance' ? 'border-orange-200 bg-orange-50 text-gray-400' : 'border-black/10 bg-black/[0.03] text-black/45'} ${isEditableSlot ? 'cursor-pointer select-none' : ''}`}
                                         onDoubleClick={() => {
                                           if (!isEditableSlot) return;
                                           setSlotPickerKey(isPickerOpen ? null : pickerKey);

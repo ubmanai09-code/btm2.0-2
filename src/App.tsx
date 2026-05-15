@@ -6221,7 +6221,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
               <div key={shift} className={`rounded-lg p-2 ${shiftSectionClass}`}>
                 {tournament.shifts_count > 1 && (
                   <div className="mb-2 flex items-center gap-2 px-1">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-700 whitespace-nowrap">
+                    <span className="lane-shift-label text-[10px] font-bold uppercase tracking-widest text-black/50 whitespace-nowrap">
                       {tx('Shift')} {shift}
                     </span>
                     <span className="h-px flex-1 bg-slate-300/80" />
@@ -7568,6 +7568,11 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                         {renderFemaleInitialUnderline(formatScoringName(p), p.gender?.toLowerCase() === 'female')}
                       </span>
                       <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded border border-[#AFDDE5]/70 bg-white text-[10px] font-bold text-emerald-700">{laneBadge}</span>
+                      {tournament.type === 'team' && (
+                        <span className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-emerald-200 bg-white text-[11px] font-black tabular-nums text-emerald-700">
+                          {teamTotalScore}
+                        </span>
+                      )}
                       <span className="shrink-0 text-right">
                         <span className="text-[9px] text-black/30 block leading-none">Tot</span>
                         <span className="text-sm font-extrabold leading-tight">{total}</span>
