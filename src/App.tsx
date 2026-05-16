@@ -3849,7 +3849,7 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
           <p className="px-4 py-6 text-sm text-black/50">No league rankings yet for selected filters.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] border-collapse text-sm">
+            <table className="dashboard-setup-table w-full min-w-[760px] border-collapse text-sm">
               <thead className="bg-[#e3f3f6]">
                 <tr>
                   <th className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-black/60">Rank</th>
@@ -13763,6 +13763,18 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     return Math.max(1100, engineResult.layout.width + 40);
   }, [engineResult]);
 
+  const exportRoundsBounds = React.useMemo(() => {
+    if (!engineResult || engineResult.matches.length === 0) {
+      return { left: 0, width: 0 };
+    }
+    const minX = Math.min(...engineResult.matches.map((match) => (topAlignedPos.get(match.id)?.x ?? match.x)));
+    const maxX = Math.max(...engineResult.matches.map((match) => (topAlignedPos.get(match.id)?.x ?? match.x) + match.width));
+    return {
+      left: Math.max(0, minX),
+      width: Math.max(0, maxX - minX),
+    };
+  }, [engineResult, topAlignedPos]);
+
   const visualRoundHeaderHeight = 32;
   const visualCardsTopOffset = 48;
 
@@ -15101,17 +15113,51 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               </div>
             )}
             {/* Podium */}
-            {podium?.first && (
-              <div style={{ padding: '10px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 24 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6b7280', marginRight: 4 }}>Result</div>
-                {podium.first && <span style={{ fontSize: 13, fontWeight: 800, color: '#d97706' }}>🥇 {podiumDisplayName(podium.first)}</span>}
-                {podium?.second && <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>🥈 {podiumDisplayName(podium.second)}</span>}
-                {podium?.thirds?.[0] && <span style={{ fontSize: 12, fontWeight: 600, color: '#9a3412' }}>🥉 {podiumDisplayName(podium.thirds[0])}</span>}
+            {podium && (
+              <div style={{ padding: '12px 20px', borderBottom: '1px solid #e5e7eb' }}>
+                <div style={{ width: engineResult.layout.width, maxWidth: '100%', margin: '0 auto' }}>
+                  <div style={{ marginLeft: exportRoundsBounds.left, width: exportRoundsBounds.width || engineResult.layout.width }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6b7280', marginBottom: 10, textAlign: 'center' }}>
+                      Results / Podium
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 14 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                        <div style={{ width: 48, height: 48, borderRadius: 999, background: '#f3f4f6', border: '2px solid #d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🥈</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#4b5563', maxWidth: 90, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{podiumDisplayName(podium?.second || '-')}</div>
+                        <div style={{ width: 64, height: 38, borderRadius: '6px 6px 0 0', background: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#4b5563' }}>2nd</div>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                        <div style={{ width: 56, height: 56, borderRadius: 999, background: '#fefce8', border: '2px solid #facc15', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>🥇</div>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: '#1f2937', maxWidth: 110, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{podiumDisplayName(podium?.first || '-')}</div>
+                        <div style={{ width: 80, height: 52, borderRadius: '6px 6px 0 0', background: '#facc15', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#713f12' }}>1st</div>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                        <div style={{ width: 48, height: 48, borderRadius: 999, background: '#fff7ed', border: '2px solid #fdba74', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🥉</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#4b5563', maxWidth: 90, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{podiumDisplayName(podium?.thirds?.[0] || '-')}</div>
+                        <div style={{ width: 64, height: 32, borderRadius: '6px 6px 0 0', background: '#fdba74', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#7c2d12' }}>3rd</div>
+                      </div>
+                    </div>
+                    {podium?.thirds && podium.thirds.length > 1 && (
+                      <div style={{ marginTop: 10, textAlign: 'center' }}>
+                        <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 5 }}>Also 3rd place:</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
+                          {podium.thirds.slice(1).map((name, i) => (
+                            <span key={i} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 999, background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412' }}>
+                              {podiumDisplayName(name)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
             {/* Bracket canvas */}
             <div style={{ padding: '16px 20px' }}>
-              <div style={{ position: 'relative', height: canvasHeight + visualCardsTopOffset, width: engineResult.layout.width, background: 'transparent', border: '1px solid #e3e3e3', borderRadius: 6 }}>
+              <div style={{ position: 'relative', height: canvasHeight + visualCardsTopOffset, width: engineResult.layout.width, margin: '0 auto', background: 'transparent', border: '1px solid #e3e3e3', borderRadius: 6 }}>
                 {engineResult.rounds.map((round) => {
                   const roundMatches = engineResult.matches.filter(m => m.roundId === round.roundId);
                   if (roundMatches.length === 0) return null;

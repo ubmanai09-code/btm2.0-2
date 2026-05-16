@@ -30,8 +30,8 @@
   --card: #1E293B;
   --border: #334155;
   --text: #F1F5F9;
-  --text-muted: #94A3B8;
-  --text-subtle: #94A3B8;
+  --text-muted: #B2BED1;
+  --text-subtle: #8C99AD;
   --accent: #F97316;
   --success: #22C55E;
   --danger: #EF4444;
@@ -236,14 +236,17 @@ body {
 
 [data-theme="dark"] .text-black\/70,
 [data-theme="dark"] .text-black\/65,
-[data-theme="dark"] .text-black\/60,
-[data-theme="dark"] .text-black\/55 { color: var(--text-muted) !important; }
+[data-theme="dark"] .text-black\/60 { color: var(--text) !important; }
 
+[data-theme="dark"] .text-black\/55,
 [data-theme="dark"] .text-black\/50,
-[data-theme="dark"] .text-black\/45,
+[data-theme="dark"] .text-black\/45 { color: var(--text-muted) !important; }
+
 [data-theme="dark"] .text-black\/40,
 [data-theme="dark"] .text-black\/35,
-[data-theme="dark"] .text-black\/30 { color: var(--text-subtle) !important; }
+[data-theme="dark"] .text-black\/30,
+[data-theme="dark"] .text-black\/25,
+[data-theme="dark"] .text-black\/20 { color: var(--text-subtle) !important; }
 
 /* ── Background overrides ── */
 /* Hard white backgrounds → card color */
@@ -260,6 +263,32 @@ body {
 }
 [data-theme="dark"] .bg-black\/5  { background-color: color-mix(in srgb, var(--text) 6%, var(--card)) !important; }
 [data-theme="dark"] .bg-black\/10 { background-color: color-mix(in srgb, var(--text) 10%, var(--card)) !important; }
+
+/* Neutral grayscale surfaces used in bracket cards/toolbars */
+[data-theme="dark"] .bg-gray-50 { background-color: color-mix(in srgb, var(--text) 5%, var(--card)) !important; }
+[data-theme="dark"] .bg-gray-100 { background-color: color-mix(in srgb, var(--text) 8%, var(--card)) !important; }
+[data-theme="dark"] .hover\:bg-gray-50:hover { background-color: color-mix(in srgb, var(--text) 7%, var(--card)) !important; }
+[data-theme="dark"] .hover\:bg-gray-100:hover { background-color: color-mix(in srgb, var(--text) 10%, var(--card)) !important; }
+
+/* Hardcoded light surfaces in bracket round headers */
+[data-theme="dark"] .bg-\[\#ececec\] { background-color: color-mix(in srgb, var(--text) 10%, var(--card)) !important; }
+[data-theme="dark"] .bg-\[\#f0f0f0\] { background-color: color-mix(in srgb, var(--text) 12%, var(--card)) !important; }
+[data-theme="dark"] .bg-\[\#f2f2f2\] { background-color: color-mix(in srgb, var(--text) 8%, var(--card)) !important; }
+[data-theme="dark"] .bg-\[\#f6f6f6\] { background-color: color-mix(in srgb, var(--text) 10%, var(--card)) !important; }
+[data-theme="dark"] .bg-\[\#d9dde2\] { background-color: color-mix(in srgb, var(--text) 14%, var(--card)) !important; }
+[data-theme="dark"] .bg-\[\#ececec\],
+[data-theme="dark"] .bg-\[\#f0f0f0\],
+[data-theme="dark"] .bg-\[\#f2f2f2\],
+[data-theme="dark"] .bg-\[\#f6f6f6\],
+[data-theme="dark"] .bg-\[\#d9dde2\] { color: var(--text) !important; }
+
+/* Some bracket elements still use hardcoded dark hex text utilities. */
+[data-theme="dark"] .text-\[\#2f2f2f\],
+[data-theme="dark"] .text-\[\#2d2d2d\],
+[data-theme="dark"] .text-\[\#222\],
+[data-theme="dark"] .text-\[\#111\] {
+  color: var(--text) !important;
+}
 
 /* ── Row dividers ── */
 [data-theme="dark"] .divide-black\/10 > :not([hidden]) ~ :not([hidden]),
@@ -387,6 +416,10 @@ body {
 [data-theme="dark"] .border-black\/20 {
   border-color: var(--border) !important;
 }
+[data-theme="dark"] .border-\[\#d8d8d8\],
+[data-theme="dark"] .border-\[\#e3e3e3\] {
+  border-color: color-mix(in srgb, var(--border) 90%, var(--text) 10%) !important;
+}
 
 /* ── Hover states ── */
 [data-theme="dark"] .hover\:bg-black\/\[0\.02\]:hover,
@@ -480,6 +513,16 @@ body {
 
 .ui-table-minimal tbody tr:last-child td {
   border-bottom: 0;
+}
+
+.dashboard-setup-table thead th,
+.dashboard-setup-table tbody td {
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+}
+
+[data-theme="dark"] .dashboard-setup-table thead th,
+[data-theme="dark"] .dashboard-setup-table tbody td {
+  border-color: color-mix(in srgb, var(--border) 78%, white 22%);
 }
 
 @media print {
