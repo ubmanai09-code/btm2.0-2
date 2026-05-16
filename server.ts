@@ -7,6 +7,7 @@ import net from "net";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import type { Server as HttpServer } from "http";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -664,6 +665,9 @@ const resequenceTeamMembers = (teamId: number) => {
 
 async function startServer() {
   const app = express();
+  let viteServer: Awaited<ReturnType<typeof createViteServer>> | null = null;
+  let httpServer: HttpServer | null = null;
+  let isShuttingDown = false;
   const PORT = Number.parseInt(process.env.PORT || '3000', 10) || 3000;
   const rootDir = path.resolve(__dirname, "..");
   const clientDist = path.join(rootDir, "dist");
@@ -1465,6 +1469,21 @@ async function startServer() {
   };
 
   const sanitizeBracketStateForDisplay = (tournamentId: string, matchPlayType: string | null | undefined, division: 'all' | 'male' | 'female' = 'all') => {
+    const validParticipantRows = db.prepare(`
+      SELECT id
+      FROM participants
+      WHERE tournament_id = ?
+    `).all(tournamentId) as Array<{ id: number }>;
+    const validParticipantIds = new Set<number>(
+      validParticipantRows
+        .map((row) => Number(row.id))
+        .filter((value) => Number.isFinite(value) && value > 0),
+    );
+    const isValidParticipantId = (value: unknown) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed > 0 && validParticipantIds.has(parsed);
+    };
+
     const matches = db.prepare(`
       SELECT id, division, round, match_index, match_kind,
              participant1_id, participant2_id, participant3_id,
@@ -1505,6 +1524,30 @@ async function startServer() {
       }
     }
 
+    const clearInvalidSeededParticipantsIfNeeded = (m: any) => {
+      const nextParticipant1Id = isValidParticipantId(m.participant1_id) ? Number(m.participant1_id) : null;
+      const nextParticipant2Id = isValidParticipantId(m.participant2_id) ? Number(m.participant2_id) : null;
+      const nextWinnerId = isValidParticipantId(m.winner_id) ? Number(m.winner_id) : null;
+      if (nextParticipant1Id === Number(m.participant1_id) && nextParticipant2Id === Number(m.participant2_id) && nextWinnerId === Number(m.winner_id)) {
+        return;
+      }
+
+      db.prepare(`
+        UPDATE brackets
+        SET participant1_id = ?, participant2_id = ?, winner_id = ?
+        WHERE id = ?
+      `).run(nextParticipant1Id, nextParticipant2Id, nextWinnerId, m.id);
+
+      m.participant1_id = nextParticipant1Id;
+      m.participant2_id = nextParticipant2Id;
+      m.winner_id = nextWinnerId;
+    };
+
+    matches.forEach((m) => {
+      clearInvalidSeededParticipantsIfNeeded(m);
+      byKey.set(keyFor(String(m.division || 'all'), Number(m.round) || 0, Number(m.match_index) || 0), m);
+    });
+
     const getResolvedParticipantsForMatch = (match: any): Array<{ participantId: number; seed: number | null; score: number | null; rank: number }> => {
       const structure = structureByMatchId.get(Number(match.id));
       const advancementCount = Math.max(0, Number.parseInt(String(structure?.advancementCount ?? 1), 10) || 1);
@@ -1525,7 +1568,7 @@ async function startServer() {
             score: Number.isFinite(Number(entry?.score)) ? Number(entry.score) : 0,
             rank: index + 1,
           }))
-          .filter((entry: any) => Number.isFinite(entry.participantId) && entry.participantId > 0)
+          .filter((entry: any) => Number.isFinite(entry.participantId) && entry.participantId > 0 && validParticipantIds.has(entry.participantId))
           .sort((left: any, right: any) => right.score - left.score || ((left.seed ?? Number.MAX_SAFE_INTEGER) - (right.seed ?? Number.MAX_SAFE_INTEGER)))
           .map((entry: any, index: number) => ({ ...entry, rank: index + 1 }));
         return normalized;
@@ -1600,7 +1643,7 @@ async function startServer() {
                 seed: Number.isFinite(Number(entry?.seed)) ? Number(entry.seed) : Number.MAX_SAFE_INTEGER,
                 score: Number.isFinite(Number(entry?.score)) ? Number(entry.score) : -1,
               }))
-              .filter((entry) => Number.isFinite(entry.id) && entry.id > 0 && allowed.includes(entry.id))
+              .filter((entry) => Number.isFinite(entry.id) && entry.id > 0 && allowed.includes(entry.id) && isValidParticipantId(entry.id))
               .sort((left, right) => right.score - left.score || left.seed - right.seed);
             if (ranked.length > 0) {
               db.prepare('UPDATE brackets SET winner_id = ? WHERE id = ?').run(ranked[0].id, m.id);
@@ -1664,7 +1707,7 @@ async function startServer() {
       const slot1 = nextSlots.find((slot: any) => Number(slot?.slotIndex) === 1) || null;
       const slot2 = nextSlots.find((slot: any) => Number(slot?.slotIndex) === 2) || null;
       const participantSlots = nextSlots
-        .filter((slot: any) => Number(slot?.participantDbId) > 0)
+        .filter((slot: any) => isValidParticipantId(slot?.participantDbId))
         .sort((left: any, right: any) => Number(left.slotIndex) - Number(right.slotIndex))
         .map((slot: any) => ({
           id: Number(slot.participantDbId),
@@ -1673,9 +1716,9 @@ async function startServer() {
           sourceLabel: String(slot.sourceLabel || ''),
         }));
 
-      const nextParticipant1Id = Number(slot0?.participantDbId) > 0 ? Number(slot0.participantDbId) : null;
-      const nextParticipant2Id = Number(slot1?.participantDbId) > 0 ? Number(slot1.participantDbId) : null;
-      const nextParticipant3Id = Number(slot2?.participantDbId) > 0 ? Number(slot2.participantDbId) : null;
+      const nextParticipant1Id = isValidParticipantId(slot0?.participantDbId) ? Number(slot0.participantDbId) : null;
+      const nextParticipant2Id = isValidParticipantId(slot1?.participantDbId) ? Number(slot1.participantDbId) : null;
+      const nextParticipant3Id = isValidParticipantId(slot2?.participantDbId) ? Number(slot2.participantDbId) : null;
       const nextParticipant1Seed = Number.isFinite(Number(slot0?.seed)) ? Number(slot0.seed) : null;
       const nextParticipant2Seed = Number.isFinite(Number(slot1?.seed)) ? Number(slot1.seed) : null;
       const nextParticipant3Seed = Number.isFinite(Number(slot2?.seed)) ? Number(slot2.seed) : null;
@@ -1769,6 +1812,9 @@ async function startServer() {
               ? (srcWinner === srcP1 ? (srcP2 > 0 ? srcP2 : null) : (srcP1 > 0 ? srcP1 : null))
               : null);
       }
+
+              expectedP1 = isValidParticipantId(expectedP1) ? expectedP1 : null;
+              expectedP2 = isValidParticipantId(expectedP2) ? expectedP2 : null;
 
       const currentP1 = Number(m.participant1_id) > 0 ? Number(m.participant1_id) : null;
       const currentP2 = Number(m.participant2_id) > 0 ? Number(m.participant2_id) : null;
@@ -4213,6 +4259,23 @@ async function startServer() {
       `).run(tournamentId, division, division);
 
       if (normalizedEngineMatches.length > 0) {
+        const validParticipantIdRows = db.prepare(`
+          SELECT id
+          FROM participants
+          WHERE tournament_id = ?
+        `).all(tournamentId) as Array<{ id: number }>;
+        const validParticipantIds = new Set<number>(
+          validParticipantIdRows
+            .map((row) => Number(row.id))
+            .filter((value) => Number.isFinite(value) && value > 0),
+        );
+
+        const sanitizeParticipantId = (value: any): number | null => {
+          const parsed = Number(value);
+          if (!Number.isFinite(parsed) || parsed <= 0) return null;
+          return validParticipantIds.has(parsed) ? parsed : null;
+        };
+
         const insertStructuredMatch = db.prepare(`
           INSERT INTO brackets (
             tournament_id,
@@ -4256,14 +4319,22 @@ async function startServer() {
             const slot0 = slotsByIndex.get(0) || null;
             const slot1 = slotsByIndex.get(1) || null;
             const slot2 = slotsByIndex.get(2) || null;
+            const slot0ParticipantId = sanitizeParticipantId(slot0?.participantDbId);
+            const slot1ParticipantId = sanitizeParticipantId(slot1?.participantDbId);
+            const slot2ParticipantId = sanitizeParticipantId(slot2?.participantDbId);
             const participantSlots = match.slots
-              .filter((slot: any) => Number.isFinite(Number(slot.participantDbId)) && Number(slot.participantDbId) > 0)
-              .map((slot: any) => ({
-                id: Number(slot.participantDbId),
-                seed: Number.isFinite(Number(slot.seed)) ? Number(slot.seed) : null,
-                slotIndex: Number(slot.slotIndex),
-                sourceLabel: String(slot.sourceLabel || ''),
-              }));
+              .map((slot: any) => {
+                const participantId = sanitizeParticipantId(slot.participantDbId);
+                if (!participantId) return null;
+                return {
+                  id: participantId,
+                  seed: Number.isFinite(Number(slot.seed)) ? Number(slot.seed) : null,
+                  slotIndex: Number(slot.slotIndex),
+                  sourceLabel: String(slot.sourceLabel || ''),
+                };
+              })
+              .filter((slot): slot is { id: number; seed: number | null; slotIndex: number; sourceLabel: string } => Boolean(slot))
+              ;
 
             const info = insertStructuredMatch.run(
               tournamentId,
@@ -4271,9 +4342,9 @@ async function startServer() {
               match.roundNumber,
               match.matchIndex,
               match.matchKind,
-              Number(slot0?.participantDbId) > 0 ? Number(slot0.participantDbId) : null,
-              Number(slot1?.participantDbId) > 0 ? Number(slot1.participantDbId) : null,
-              Number(slot2?.participantDbId) > 0 ? Number(slot2.participantDbId) : null,
+              slot0ParticipantId,
+              slot1ParticipantId,
+              slot2ParticipantId,
               Number.isFinite(Number(slot0?.seed)) ? Number(slot0.seed) : null,
               Number.isFinite(Number(slot1?.seed)) ? Number(slot1.seed) : null,
               Number.isFinite(Number(slot2?.seed)) ? Number(slot2.seed) : null,
@@ -4855,14 +4926,14 @@ async function startServer() {
       console.warn(`HMR port ${preferredHmrPort} busy, using ${resolvedHmrPort} instead.`);
     }
 
-    const vite = await createViteServer({
+    viteServer = await createViteServer({
       server: {
         middlewareMode: true,
         hmr: hmrEnabled ? { port: resolvedHmrPort } : false,
       },
       appType: "spa",
     });
-    app.use(vite.middlewares);
+    app.use(viteServer.middlewares);
   } else {
     app.use(express.static(clientDist));
     app.get("*", (req, res) => {
@@ -4870,9 +4941,63 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  httpServer = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+
+  const shutdown = (signal: NodeJS.Signals) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    console.log(`Received ${signal}. Shutting down server gracefully...`);
+
+    try {
+      db.pragma('wal_checkpoint(TRUNCATE)');
+    } catch {
+      // Ignore checkpoint failures during shutdown.
+    }
+
+    if (httpServer) {
+      httpServer.close(() => {
+        try {
+          db.close();
+        } catch {
+          // Ignore close errors while exiting.
+        }
+        process.exit(0);
+      });
+
+      // Ensure process exits even if some sockets stay open.
+      setTimeout(() => {
+        try {
+          db.close();
+        } catch {
+          // Ignore close errors while forcing exit.
+        }
+        process.exit(1);
+      }, 5000).unref();
+      return;
+    }
+
+    try {
+      db.close();
+    } catch {
+      // Ignore close errors while exiting.
+    }
+    process.exit(0);
+  };
+
+  process.once('SIGINT', () => shutdown('SIGINT'));
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
+
+  if (viteServer) {
+    process.once('beforeExit', async () => {
+      try {
+        await viteServer?.close();
+      } catch {
+        // Ignore vite close errors during process exit.
+      }
+    });
+  }
 }
 
 startServer();

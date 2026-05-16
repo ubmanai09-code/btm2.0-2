@@ -3626,34 +3626,34 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                 </div>
 
                 {!isTournamentCardCollapsed && (
-                  <div className="mt-0.5 grid grid-cols-3 xl:auto-rows-fr gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-black/60">
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0 h-full">
+                  <div className="mt-0.5 grid grid-cols-3 xl:auto-rows-fr gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--text)]/80">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
                       <Calendar size={12} />
                       {new Date(tournament.date).toLocaleDateString()}
                     </span>
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0 h-full">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
                       <Users size={12} />
                       <span>{(tournament.type === 'team' ? tPublic('public.tournament.type.team', 'team') : tPublic('public.tournament.type.individual', 'individual')).replace(/^([a-z])/, (m) => m.toUpperCase())}</span>
                       {tournament.type === 'team' && <span>({tournament.players_per_team}/team)</span>}
                     </span>
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0 h-full">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
                       <ClipboardList size={12} />
                       {getTournamentFormatLabel(tournament.format)}
                     </span>
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0 h-full">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
                       <GitBranch size={12} />
                       {getMatchPlayTypeLabel(tournament.match_play_type)}
                     </span>
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0 h-full">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
                       <Target size={12} />
                       {tournament.games_count} {tPublic('public.tournament.games', 'Games')}
                     </span>
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0 h-full">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
                       <Columns4 size={12} />
                       {tournament.players_per_lane} {tournament.type === 'team' ? tPublic('public.tournament.teams', 'Teams') : tPublic('public.tournament.players', 'Players')} / {tPublic('lanes.lane', 'Lane')}
                     </span>
                     {tournament.location && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-black/10 bg-white/70 min-w-0 col-span-3 h-full">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 col-span-3 h-full">
                         <MapPin size={12} />
                         {tournament.location}
                       </span>
@@ -12055,7 +12055,7 @@ function BracketsView({ tournament, role, onTournamentUpdated }: { tournament: T
 // ─── Bracket Generator V2 ────────────────────────────────────────────────────
 
 type V2SeedImportMode = 'top-seeds' | 'manual' | 'create-list';
-type SavedBracketConfig = { id: string; name: string; createdAt: string; rounds: TournamentRoundConfig[]; seedImportMode: V2SeedImportMode; topSeedsCount: number; manualPickedIds: number[]; customSeedList: string[]; matchOverrides: Record<string, unknown>; selectedBracketPreset?: 'single-elim' | 'stepladder' | 'playoff' | 'ladder' | 'custom' | 'mixed'; include3rdPlace?: boolean; scoreDrafts?: Record<string, Record<number, string>>; slotOverrides?: Record<string, string | number>; };
+type SavedBracketConfig = { id: string; name: string; createdAt: string; rounds: TournamentRoundConfig[]; seedImportMode: V2SeedImportMode; topSeedsCount: number; manualPickedIds: number[]; customSeedList: string[]; matchOverrides: Record<string, unknown>; selectedBracketPreset?: 'single-elim' | 'stepladder' | 'playoff' | 'ladder' | 'custom' | 'mixed'; selectedPresetId?: string; include3rdPlace?: boolean; scoreDrafts?: Record<string, Record<number, string>>; slotOverrides?: Record<string, string | number>; };
 
 const v2MatchTypeOptions: Array<{ value: EngineMatchType; label: string }> = [
   { value: 'head-to-head', label: 'Head-to-Head' },
@@ -12395,6 +12395,16 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   const [slotOverrides, setSlotOverrides] = React.useState<Record<string, string | number>>({});
   const [editingSlotKey, setEditingSlotKey] = React.useState<string | null>(null);
 
+  // ── Actual bracket generation ─────────────────────────────────────────────
+  const [generating, setGenerating] = React.useState(false);
+  const [generateError, setGenerateError] = React.useState<string | null>(null);
+  const [generateSuccess, setGenerateSuccess] = React.useState<string | null>(null);
+
+  // ── Live bracket scoring (DB rows) ────────────────────────────────────────
+  const [liveScoreDrafts, setLiveScoreDrafts] = React.useState<Record<number, Record<string, string>>>({});
+  const [savingLiveMatchId, setSavingLiveMatchId] = React.useState<number | null>(null);
+  const [liveMatchFeedback, setLiveMatchFeedback] = React.useState<Record<number, string>>({});
+
   // ── Persist ───────────────────────────────────────────────────────────────
   React.useLayoutEffect(() => {
     try {
@@ -12416,6 +12426,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       if (s.selectedBracketPreset === 'single-elim' || s.selectedBracketPreset === 'stepladder' || s.selectedBracketPreset === 'playoff' || s.selectedBracketPreset === 'ladder' || s.selectedBracketPreset === 'custom' || s.selectedBracketPreset === 'mixed') {
         setSelectedBracketPreset(s.selectedBracketPreset);
       }
+      if (typeof s.selectedPresetId === 'string') setSelectedPresetId(s.selectedPresetId);
     } catch { /* ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -12435,10 +12446,11 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         activeBracketName,
         activeBracketId,
         selectedBracketPreset,
+        selectedPresetId,
         include3rdPlace,
       }));
     } catch { /* quota */ }
-  }, [storageKey, rounds, seedImportMode, topSeedsCount, manualPickedIds, customSeedList, autoGenerate, scoreDrafts, matchOverrides, slotOverrides, activeBracketName, activeBracketId, selectedBracketPreset, include3rdPlace]);
+  }, [storageKey, rounds, seedImportMode, topSeedsCount, manualPickedIds, customSeedList, autoGenerate, scoreDrafts, matchOverrides, slotOverrides, activeBracketName, activeBracketId, selectedBracketPreset, selectedPresetId, include3rdPlace]);
 
   // ── Load data ─────────────────────────────────────────────────────────────
   React.useEffect(() => {
@@ -12863,8 +12875,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     const rounds = [...byRound.keys()].sort((a, b) => a - b);
 
     // ── Stepladder staircase layout ──────────────────────────────────────
-    // Only apply for stepladder/ladder standard presets — not the preset editor.
-    const isStaircaseCategory = bracketTypeMode === 'available' && (selectedBracketPreset === 'stepladder' || selectedBracketPreset === 'ladder');
+    // Apply for stepladder/ladder regardless of available vs preset-editor mode.
+    const isStaircaseCategory = (selectedBracketPreset === 'stepladder' || selectedBracketPreset === 'ladder');
     const isStepladder = isStaircaseCategory && rounds.every(ri => (byRound.get(ri) || []).length === 1);
     if (isStepladder && rounds.length >= 2) {
       const STEP_GAP = 20;
@@ -13003,7 +13015,12 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     }
     setActiveBracketName(nextName);
     setActiveBracketId(null); // new unsaved bracket — no persisted id yet
-    setRounds([]);
+    setBracketTypeMode('available');
+    setSelectedBracketPreset('single-elim');
+    setSelectedPresetId('');
+    setInclude3rdPlace(true);
+    // Apply default single-elim rounds so the bracket isn't empty from the start
+    setRounds(buildStandardPresetRounds('single-elim', true));
     setSeedImportMode('top-seeds');
     setTopSeedsCount(16);
     setManualPickedIds([]);
@@ -13011,8 +13028,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     setMatchOverrides({});
     setSlotOverrides({});
     setScoreDrafts({});
-    setSelectedBracketPreset('single-elim');
-    setInclude3rdPlace(true);
+    setGenerateSuccess(null);
+    setGenerateError(null);
     setBracketName('');
   };
 
@@ -13031,6 +13048,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       customSeedList,
       matchOverrides,
       selectedBracketPreset,
+      selectedPresetId,
       include3rdPlace,
     };
     entry.scoreDrafts = scoreDrafts;
@@ -13087,7 +13105,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     if (Array.isArray(bkt.customSeedList)) setCustomSeedList(bkt.customSeedList);
     if (bkt.selectedBracketPreset === 'single-elim' || bkt.selectedBracketPreset === 'stepladder' || bkt.selectedBracketPreset === 'playoff' || bkt.selectedBracketPreset === 'ladder' || bkt.selectedBracketPreset === 'custom' || bkt.selectedBracketPreset === 'mixed') {
       setSelectedBracketPreset(bkt.selectedBracketPreset);
+      setBracketTypeMode(bkt.selectedBracketPreset === 'custom' ? 'custom' : 'available');
     }
+    setSelectedPresetId(String(bkt.selectedPresetId || ''));
     if (typeof bkt.include3rdPlace === 'boolean') setInclude3rdPlace(bkt.include3rdPlace);
     setMatchOverrides(bkt.matchOverrides as typeof matchOverrides || {});
     setSlotOverrides(bkt.slotOverrides || {});
@@ -13156,6 +13176,152 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       // Best effort — still remove from local state
     }
     setSavedBrackets(prev => prev.filter(b => b.id !== id));
+  };
+
+  // ── Generate actual bracket in DB ─────────────────────────────────────────
+  const handleGenerateActualBracket = async () => {
+    if (!engineResult || engineResult.matches.length === 0) {
+      setGenerateError('Generate a preview first before creating the actual bracket.');
+      return;
+    }
+    if (!window.confirm('This will replace all current bracket data for this tournament. Continue?')) return;
+
+    setGenerating(true);
+    setGenerateError(null);
+    setGenerateSuccess(null);
+    setLiveScoreDrafts({});
+    setLiveMatchFeedback({});
+
+    try {
+      const roundMatchCounts = rounds.map(round => {
+        if (round.manualMatchCount != null) return round.manualMatchCount;
+        const roundMatches = engineResult.matches.filter(m => m.roundId === round.id);
+        return Math.max(1, roundMatches.length);
+      });
+
+      const roundRules = rounds.map(round => {
+        if (round.matchType === 'shootout') return 'shootout';
+        if (round.matchType === 'group') return 'survivor_cut';
+        return 'duel';
+      });
+
+      const engineMatchesPayload = engineResult.matches.map(match => {
+        const slotPayload = match.slots.map(slot => {
+          const slotKey = `${match.id}:${slot.slotIndex}`;
+          const overrideVal = slotOverrides[slotKey];
+          const effectiveId = overrideVal != null ? String(overrideVal) : (slot.participantId != null ? String(slot.participantId) : null);
+          let dbId: number | null = null;
+          if (effectiveId) {
+            if (effectiveId.startsWith('participant-')) dbId = Number(effectiveId.slice('participant-'.length));
+            else { const n = Number(effectiveId); if (Number.isFinite(n) && n > 0) dbId = n; }
+          }
+          const participant = effectiveId ? participantNodes.find(p => p.id === effectiveId || String(p.id) === effectiveId) : null;
+          return {
+            slotIndex: slot.slotIndex,
+            sourceType: slot.sourceType,
+            sourceLabel: slot.sourceLabel || '',
+            participantDbId: dbId,
+            seed: participant?.seed ?? null,
+            fromMatchId: slot.fromMatchId ?? null,
+            advanceRank: slot.advanceRank ?? null,
+            outcome: slot.outcome,
+          };
+        });
+        return {
+          id: match.id,
+          label: match.label,
+          roundId: match.roundId,
+          roundName: match.roundName,
+          roundIndex: match.roundIndex,
+          roundNumber: match.roundIndex + 1,
+          matchIndex: match.matchIndex,
+          matchType: match.matchType,
+          scoringType: match.scoringType,
+          playersPerMatch: match.playersPerMatch,
+          advancementCount: match.advancementCount,
+          slots: slotPayload,
+          nextLinks: (match.nextLinks || []).map((link: any) => ({
+            targetMatchId: link.targetMatchId,
+            targetSlotIndex: link.targetSlotIndex,
+            advanceRank: link.advanceRank,
+            outcome: link.outcome,
+          })),
+        };
+      });
+
+      await api.generateManualBrackets(tournament.id, {
+        rounds_count: rounds.length,
+        round1_matches: roundMatchCounts[0] || 1,
+        round_match_counts: roundMatchCounts,
+        round_rules: roundRules,
+        winners_mode: include3rdPlace ? '3' : '1',
+        engine_matches: engineMatchesPayload,
+      });
+
+      const rows = await api.getBrackets(tournament.id);
+      setBracketRows(Array.isArray(rows) ? rows : []);
+      setGenerateSuccess('Bracket generated! Score each match below, then save the bracket.');
+    } catch (e: any) {
+      setGenerateError(e?.message || 'Failed to generate bracket.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // ── Live bracket scoring handlers ─────────────────────────────────────────
+  const handleSubmitLiveScore = async (matchRow: any) => {
+    const rowId = Number(matchRow.id);
+    const draft = liveScoreDrafts[rowId] || {};
+    const p1Id = matchRow.participant1_id;
+    const p2Id = matchRow.participant2_id;
+    if (!p1Id || !p2Id) { setLiveMatchFeedback(prev => ({ ...prev, [rowId]: 'Missing participants.' })); return; }
+    const s1 = draft['p1'] !== undefined ? Number(draft['p1']) : null;
+    const s2 = draft['p2'] !== undefined ? Number(draft['p2']) : null;
+    if (s1 == null || isNaN(s1) || s2 == null || isNaN(s2)) {
+      setLiveMatchFeedback(prev => ({ ...prev, [rowId]: 'Enter scores for both participants.' }));
+      return;
+    }
+    setSavingLiveMatchId(rowId);
+    setLiveMatchFeedback(prev => ({ ...prev, [rowId]: '' }));
+    try {
+      const matchKind = String(matchRow.match_kind || 'duel').toLowerCase();
+      if (matchKind === 'shootout') {
+        await api.setBracketShootoutScores(tournament.id, rowId, [
+          { participant_id: Number(p1Id), score: s1 },
+          { participant_id: Number(p2Id), score: s2 },
+        ]);
+      } else {
+        await api.setBracketDuelScores(tournament.id, rowId, [
+          { participant_id: Number(p1Id), score: s1 },
+          { participant_id: Number(p2Id), score: s2 },
+        ]);
+      }
+      const rows = await api.getBrackets(tournament.id);
+      setBracketRows(Array.isArray(rows) ? rows : []);
+      setLiveMatchFeedback(prev => ({ ...prev, [rowId]: 'Saved!' }));
+      setLiveScoreDrafts(prev => { const n = { ...prev }; delete n[rowId]; return n; });
+    } catch (e: any) {
+      setLiveMatchFeedback(prev => ({ ...prev, [rowId]: e?.message || 'Failed to save.' }));
+    } finally {
+      setSavingLiveMatchId(null);
+    }
+  };
+
+  const handleResetLiveMatch = async (matchRow: any) => {
+    const rowId = Number(matchRow.id);
+    if (!window.confirm('Reset scores for this match?')) return;
+    setSavingLiveMatchId(rowId);
+    try {
+      await api.resetBracketMatchScores(tournament.id, rowId);
+      const rows = await api.getBrackets(tournament.id);
+      setBracketRows(Array.isArray(rows) ? rows : []);
+      setLiveMatchFeedback(prev => ({ ...prev, [rowId]: 'Reset.' }));
+      setLiveScoreDrafts(prev => { const n = { ...prev }; delete n[rowId]; return n; });
+    } catch (e: any) {
+      setLiveMatchFeedback(prev => ({ ...prev, [rowId]: e?.message || 'Failed to reset.' }));
+    } finally {
+      setSavingLiveMatchId(null);
+    }
   };
 
   // ── Podium ────────────────────────────────────────────────────────────────
@@ -13299,15 +13465,18 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     setScoreDrafts({});
     setSelectedMatchId(null);
     setSelectedBracketPreset(type);
+    setSelectedPresetId('');
   }, [buildStandardPresetRounds, include3rdPlace]);
 
   React.useEffect(() => {
     if (bracketTypeMode !== 'available') return;
     if (selectedBracketPreset === 'custom') return;
+    // Keep explicitly selected category presets intact (do not overwrite with base template).
+    if (selectedPresetId) return;
     setRounds(buildStandardPresetRounds(selectedBracketPreset, include3rdPlace));
     setScoreDrafts({});
     setSelectedMatchId(null);
-  }, [bracketTypeMode, selectedBracketPreset, include3rdPlace, buildStandardPresetRounds]);
+  }, [bracketTypeMode, selectedBracketPreset, include3rdPlace, buildStandardPresetRounds, selectedPresetId]);
 
   React.useEffect(() => {
     if (bracketTypeMode !== 'custom') return;
@@ -13659,7 +13828,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           {/* ── Bracket Management ──────────────────────────────────────── */}
           {isAdmin && (
             <Card className="p-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2">Bracket</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">1</span>Bracket</p>
 
               {/* Active bracket indicator */}
               {activeBracketName && (
@@ -13782,7 +13951,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           {/* Seeds List */}
           {isAdmin && activeBracketName && (
             <Card className="p-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2">Seeds List</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">2</span>Seeds List</p>
               <div className="flex flex-col gap-1.5 mb-3">
                 {([
                   { value: 'top-seeds', label: 'Auto Import', desc: 'Top N from standings, by score' },
@@ -13906,7 +14075,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           {/* Bracket Type */}
           {isAdmin && activeBracketName && (
             <Card className="p-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2">Bracket Type</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">3</span>Bracket Type</p>
               <div className="flex gap-1.5 mb-2">
                 <button
                   onClick={() => setBracketTypeMode('available')}
@@ -13916,7 +14085,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   Available Tournament
                 </button>
                 <button
-                  onClick={() => { setBracketTypeMode('custom'); setSelectedBracketPreset('custom'); setPresetEditorStep('pick'); }}
+                  onClick={() => { setBracketTypeMode('custom'); setSelectedBracketPreset('custom'); setSelectedPresetId(''); setPresetEditorStep('pick'); }}
                   className={`flex-1 h-8 rounded-md border text-xs font-semibold transition-colors ${bracketTypeMode === 'custom'
                     ? 'bg-emerald-600 border-emerald-500 text-white'
                     : 'bg-white border-black/10 text-black/55 hover:border-emerald-200 hover:text-emerald-700'}`}>
@@ -13944,7 +14113,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                         <div className="flex items-center">
                           <button
                             onClick={() => { applyStandardPreset(typeItem.id); setExpandedBracketType(isExpanded ? null : typeItem.id); }}
-                            className={`flex-1 text-left px-3 py-2 rounded-lg border text-xs transition-colors font-medium flex items-center justify-between ${isSelected ? 'bg-emerald-600 border-emerald-500 text-white' : 'border-black/10 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 bg-white text-black/60'}`}>
+                            className={`flex-1 text-left px-3 py-2 ${isSelected ? 'rounded-l-lg' : 'rounded-lg'} border text-xs transition-colors font-medium flex items-center justify-between ${isSelected ? 'bg-emerald-600 border-emerald-500 text-white' : 'border-black/10 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 bg-white text-black/60'}`}>
                             <div className="flex flex-col gap-0.5">
                               <span className="font-semibold">{typeItem.label}</span>
                               {isSelected && <span className="text-[9px] text-white/70 font-normal">{typeItem.desc}</span>}
@@ -13954,6 +14123,22 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                               {typePresets.length > 0 && <span className={`text-[10px] ${isSelected ? 'text-white/50' : 'text-black/25'}`}>{isExpanded ? '▲' : '▼'}</span>}
                             </span>
                           </button>
+                          {isSelected && (
+                            <button
+                              title="Edit structure of this tournament type"
+                              onClick={() => {
+                                setBracketTypeMode('custom');
+                                setSelectedBracketPreset(typeItem.id as any);
+                                setSelectedPresetId('');
+                                setEditingPresetSource(null);
+                                setSaveAsPresetName('');
+                                setSaveAsPresetCategory(typeItem.id as any);
+                                setPresetEditorStep('edit');
+                              }}
+                              className="h-full px-2 py-2 rounded-r-lg border border-l-0 border-emerald-500 bg-emerald-600 text-white hover:bg-emerald-700 transition-colors flex items-center" >
+                              <Pencil size={11} />
+                            </button>
+                          )}
                         </div>
                         {isExpanded && typePresets.length > 0 && (
                           <div className="ml-3 mt-0.5 flex flex-col gap-0.5">
@@ -14004,8 +14189,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                                       if (Array.isArray(p.rounds) && p.rounds.length > 0) {
                                         setRounds(p.rounds.map((r: any, i: number) => ({ ...v2CreateRound(i), ...r, id: r.id || `preset-${i}` })));
                                         setSelectedBracketPreset(typeItem.id);
-                                        setBracketTypeMode('custom');
-                                        setPresetEditorStep('edit');
+                                        setSelectedPresetId(String(p.id));
+                                        setBracketTypeMode('available');
                                       }
                                     }} className="flex-1 text-left px-3 py-1.5 text-xs text-sky-700 font-medium flex items-center justify-between hover:bg-sky-50 transition-colors">
                                       <span>{p.name}</span>
@@ -14303,7 +14488,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           {/* Generate Bracket */}
           {isAdmin && activeBracketName && (
             <Card className="p-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2">Generate Bracket</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">4</span>Generate Bracket</p>
               <div className="grid grid-cols-3 gap-1.5 mb-2">
                 <div className="rounded-md border border-black/10 bg-gray-50 px-2 py-1">
                   <div className="text-[9px] uppercase tracking-wider text-black/35">Seeds</div>
@@ -14335,6 +14520,21 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               <p className="text-[10px] text-black/35">
                 Build a fresh preview after seeds and bracket type are configured.
               </p>
+              {/* ── Generate Actual Bracket ── */}
+              {isAdmin && engineResult && engineResult.matches.length > 0 && errors.length === 0 && (
+                <div className="mt-3 border-t border-black/10 pt-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 mb-1.5">Step 4 — Create Live Bracket</p>
+                  <p className="text-[10px] text-black/40 mb-2">Preview looks good? Generate the actual bracket for scoring.</p>
+                  <button
+                    onClick={handleGenerateActualBracket}
+                    disabled={generating || generationBlockers.length > 0}
+                    className="w-full h-9 rounded-md bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                    {generating ? <><RefreshCw size={13} className="animate-spin" /> Generating…</> : <><GitBranch size={13} /> Generate Actual Bracket</>}
+                  </button>
+                  {generateError && <p className="mt-1.5 text-[10px] text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{generateError}</p>}
+                  {generateSuccess && <p className="mt-1.5 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-1">{generateSuccess}</p>}
+                </div>
+              )}
               {generationBlockers.length > 0 && (
                 <div className="mt-2 space-y-1">
                   {generationBlockers.map((blocker, i) => (

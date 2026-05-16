@@ -12,22 +12,23 @@
 			"isBackground": false
 		},
 		{
-			"label": "build project",
-			"type": "shell",
-			"command": "npm",
-			"args": [
-				"run",
-				"build"
-			],
-			"isBackground": false
-		},
-		{
 			"label": "dev server",
 			"type": "shell",
 			"command": "npm",
 			"args": [
 				"run",
 				"dev"
+			],
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "stable preview server",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"dev:stable"
 			],
 			"isBackground": true,
 			"problemMatcher": []

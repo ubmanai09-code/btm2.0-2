@@ -772,7 +772,11 @@ const api = {
     }
     const query = params.toString();
     const res = await fetch(`/api/tournaments/${tournamentId}/brackets${query ? `?${query}` : ''}`);
-    return res.json();
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to load brackets');
+    }
+    return Array.isArray(data) ? data : (Array.isArray(data?.brackets) ? data.brackets : []);
   },
   async getSeeds(
     tournamentId: number,
@@ -788,11 +792,11 @@ const api = {
     }
     const query = params.toString();
     const res = await fetch(`/api/tournaments/${tournamentId}/seeds${query ? `?${query}` : ''}`);
+    const data = await this.safeJson(res);
     if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error || 'Failed to fetch seeds');
+      throw new Error(data?.error || 'Failed to fetch seeds');
     }
-    return res.json();
+    return data;
   },
   async clearBrackets(tournamentId: number, options?: { division?: 'all' | 'male' | 'female' }): Promise<{ success: boolean; deleted: number }> {
     const params = new URLSearchParams();
@@ -803,11 +807,11 @@ const api = {
     const res = await fetch(`/api/tournaments/${tournamentId}/brackets${query ? `?${query}` : ''}`, {
       method: 'DELETE',
     });
+    const data = await this.safeJson(res);
     if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error || 'Failed to clear brackets');
+      throw new Error(data?.error || 'Failed to clear brackets');
     }
-    return res.json();
+    return data;
   },
   async cleanupMalformedBrackets(tournamentId: number): Promise<{ success: boolean; scanned: number; deleted: number }> {
     const res = await fetch(`/api/tournaments/${tournamentId}/brackets/cleanup-malformed`, {
@@ -899,11 +903,11 @@ const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(options || {}),
     });
+    const data = await this.safeJson(res);
     if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error || 'Failed to generate brackets');
+      throw new Error(data?.error || 'Failed to generate brackets');
     }
-    return res.json();
+    return data;
   },
   async generateManualBrackets(
     tournamentId: number,
@@ -1079,6 +1083,17 @@ const api = {
       };
     });
     const cat = builderState?.bracketCategory;
+    const normalizedCategory = (cat === 'single-elim' || cat === 'stepladder' || cat === 'playoff' || cat === 'ladder' || cat === 'custom' || cat === 'mixed')
+      ? cat
+      : undefined;
+    const inferredCategoryFromMatchPlayType: BuilderRulePreset['bracketCategory'] | undefined =
+      format.match_play_type === 'stepladder'
+        ? 'stepladder'
+        : (format.match_play_type === 'ladder'
+          ? 'ladder'
+          : (format.match_play_type === 'single_elimination'
+            ? 'single-elim'
+            : undefined));
     return {
       id: String(format.id),
       name: String(format.name || 'Preset'),
@@ -1087,7 +1102,7 @@ const api = {
         ? builderState.seeding_method
         : 'registration',
       rounds: savedRounds && savedRounds.length > 0 ? savedRounds : fallbackRounds,
-      bracketCategory: (cat === 'single-elim' || cat === 'stepladder' || cat === 'playoff' || cat === 'ladder' || cat === 'custom' || cat === 'mixed') ? cat : undefined,
+      bracketCategory: normalizedCategory || inferredCategoryFromMatchPlayType,
     };
   },
   toBuilderFormatPayload(payload: {
@@ -1109,10 +1124,20 @@ const api = {
       if (matchType === 'group') return 'survivor_cut';
       return 'duel';
     });
+    // Map bracketCategory to match_play_type
+    const matchPlayTypeMap: Record<string, string> = {
+      'single-elim': 'single_elimination',
+      'stepladder': 'stepladder',
+      'playoff': 'playoff',
+      'ladder': 'ladder',
+      'custom': 'playoff',
+      'mixed': 'playoff',
+    };
+    const match_play_type = matchPlayTypeMap[payload.bracketCategory || 'custom'] || 'playoff';
     return {
       id: payload.id,
       name: payload.name,
-      match_play_type: 'playoff',
+      match_play_type,
       round_match_counts,
       round_rules,
       placement_rules: {

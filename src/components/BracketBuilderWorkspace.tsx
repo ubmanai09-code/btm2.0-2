@@ -121,6 +121,8 @@ const LIVE_HEADER_HEIGHT = 56;
 const LIVE_SLOT_HEIGHT = 72;
 const LIVE_CARD_PADDING = 20;
 
+type LiveGraphResult = { matches: LiveGraphMatch[]; width: number; height: number; isStepladder?: boolean };
+
 const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
 
 const matchTypeOptions: Array<{ value: EngineMatchType; label: string }> = [
@@ -513,7 +515,7 @@ const applySeeding = (items: TournamentParticipantNode[], method: SeedingMethod)
   return ordered.map((participant, index) => ({ ...participant, seed: index + 1 }));
 };
 
-const buildLiveMatchGraph = (rows: BracketRow[]): { matches: LiveGraphMatch[]; width: number; height: number } => {
+const buildLiveMatchGraph = (rows: BracketRow[]): LiveGraphResult => {
   const matches: LiveGraphMatch[] = rows.map((row) => {
     const structure = parseLiveStructure(row);
     const slots = getLiveSlots(row);
@@ -626,6 +628,56 @@ const buildLiveMatchGraph = (rows: BracketRow[]): { matches: LiveGraphMatch[]; w
   return { matches, width, height: Math.max(620, layoutHeight) };
 };
 
+/* ─────────────────────────────────────────────────────────
+   STEPLADDER STAIRCASE LAYOUT
+   Positions matches diagonally: round 1 (lowest seeds) at
+   bottom-left, each subsequent rung higher and to the right,
+   final (seed 1 waits at top) at top-right.
+   ───────────────────────────────────────────────────────── */
+const buildStepladderGraph = (rows: BracketRow[]): LiveGraphResult => {
+  const base = buildLiveMatchGraph(rows);
+  const { matches } = base;
+  if (matches.length === 0) return { ...base, isStepladder: true };
+
+  // Ascending by round: round 1 is the lowest rung (first match), final is highest
+  const sorted = [...matches].sort((a, b) => a.roundIndex - b.roundIndex || a.matchIndex - b.matchIndex);
+  const n = sorted.length;
+
+  // Wire up winner-advances connectors between consecutive rungs
+  for (let i = 0; i < n - 1; i++) {
+    if (sorted[i].nextLinks.length === 0) {
+      sorted[i].nextLinks = [{
+        targetMatchId: sorted[i + 1].engineId,
+        targetSlotIndex: 0,
+        advanceRank: 1,
+        outcome: 'winner' as const,
+      }];
+    }
+  }
+
+  const maxH = Math.max(...sorted.map((m) => m.height));
+  // STEP_Y controls how far up each rung is relative to the previous one
+  const STEP_Y = Math.max(90, Math.round(maxH * 0.42));
+  const STEP_X = LIVE_COLUMN_WIDTH;
+  const BASE_X = 32;
+  const BASE_Y = 32;
+
+  // match[0] = bottom-left; match[n-1] = top-right
+  sorted.forEach((match, i) => {
+    match.x = BASE_X + i * STEP_X;
+    match.y = BASE_Y + (n - 1 - i) * STEP_Y;
+  });
+
+  const canvasH = BASE_Y + (n - 1) * STEP_Y + maxH + 80;
+  const width = Math.max(900, BASE_X + n * STEP_X + LIVE_NODE_WIDTH + 80);
+  return {
+    matches,
+    width,
+    height: Math.max(500, canvasH),
+    isStepladder: true,
+  };
+};
+
 export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
   const apiCompat = api as any;
   const canConfigure = role === 'admin';
@@ -664,6 +716,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
   const [savePresetName, setSavePresetName] = React.useState('');
   const [savePresetDesc, setSavePresetDesc] = React.useState('');
   const [savePresetCategory, setSavePresetCategory] = React.useState<NonNullable<BuilderRulePreset['bracketCategory']>>('custom');
+  const [loadedPresetCategory, setLoadedPresetCategory] = React.useState<BuilderRulePreset['bracketCategory'] | null>(null);
   const [savingPreset, setSavingPreset] = React.useState(false);
   const [presetError, setPresetError] = React.useState<string | null>(null);
   const [expandedRounds, setExpandedRounds] = React.useState<Set<string>>(new Set());
@@ -1062,6 +1115,14 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
       : DEFAULT_ROUNDS;
     setRounds(loadedRounds);
     setSeedingMethod(isSeedingMethod(preset.seeding_method) ? preset.seeding_method : 'registration');
+    // Force bracketCategory for stepladder/ladder presets if not set
+    let forcedCategory = preset.bracketCategory || null;
+    if (!forcedCategory && (preset as any).match_play_type) {
+      const mpt = (preset as any).match_play_type;
+      if (mpt === 'stepladder') forcedCategory = 'stepladder';
+      if (mpt === 'ladder') forcedCategory = 'ladder';
+    }
+    setLoadedPresetCategory(forcedCategory);
     setNeedsRegenerate(true);
     setShowLoadPresetModal(false);
   };
@@ -1139,7 +1200,25 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
     return warnings;
   }, [engineResult.issues, includeBronzeMatch, hasBronzeRoundInBuilder]);
 
-  const liveGraph = React.useMemo(() => buildLiveMatchGraph(liveBracket), [liveBracket]);
+  const liveGraph = React.useMemo(
+    () => {
+      // Force staircase rendering for Stepladder and Ladder categories (including their presets)
+      const isStepladderOrLadder = (
+        tournament.match_play_type === 'stepladder' ||
+        tournament.match_play_type === 'ladder' ||
+        loadedPresetCategory === 'stepladder' ||
+        loadedPresetCategory === 'ladder'
+      );
+      // Also detect stepladder by rounds pattern: each round has exactly 1 match (manualMatchCount === 1)
+      const isStepladderByRounds = rounds.length >= 2 && rounds.every((round: any) => 
+        (round.manualMatchCount === 1 || round.manualMatchCount === undefined) &&
+        (round.matchType === 'head-to-head' || round.matchType === 'duel')
+      );
+      const isStepladder = isStepladderOrLadder || isStepladderByRounds;
+      return isStepladder ? buildStepladderGraph(liveBracket) : buildLiveMatchGraph(liveBracket);
+    },
+    [liveBracket, tournament.match_play_type, loadedPresetCategory, rounds],
+  );
   const participantNameById = React.useMemo(() => {
     const mapping = new Map<number, string>();
     participants.forEach((participant) => {
@@ -1190,12 +1269,15 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
     return winnerPool;
   }, [liveMatchByEngineId, participantNameById]);
   const liveRoundHeaders = React.useMemo(() => {
-    const byRound = new Map<number, { roundName: string; x: number }>();
+    const byRound = new Map<number, { roundName: string; x: number; y: number }>();
     liveGraph.matches.forEach((match) => {
       if (!byRound.has(match.roundIndex)) {
         byRound.set(match.roundIndex, {
           roundName: match.roundName,
           x: match.x,
+          // For staircase layout each header sits just above its match card;
+          // for standard column layout all headers sit at the canvas top (y=0).
+          y: liveGraph.isStepladder ? Math.max(0, match.y + 12) : 0,
         });
       }
     });
@@ -2407,7 +2489,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                       <div
                         key={`live-round-header-${header.roundName}-${header.x}`}
                         className="absolute rounded-full border border-[#cfd7ff] bg-white/90 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.08em] text-[#33408a] shadow-sm"
-                        style={{ left: header.x, top: 0 }}
+                        style={{ left: header.x, top: header.y }}
                       >
                         {header.roundName}
                       </div>
@@ -2538,7 +2620,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                   <div
                     key={`ph-${header.roundName}-${header.x}`}
                     className="absolute rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.08em] text-white/40"
-                    style={{ left: header.x, top: 0 }}
+                    style={{ left: header.x, top: header.y }}
                   >
                     {header.roundName}
                   </div>
