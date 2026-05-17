@@ -13,6 +13,7 @@ import {
   ArrowLeft,
   Save,
   RefreshCw,
+  RotateCw,
   UserPlus,
   Target,
   GitBranch,
@@ -6421,6 +6422,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
 function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, scoreScreenMode }: { tournament: Tournament; role: UserRole; sponsorsConfig?: SponsorsConfig; onPresentScoreScreen?: () => void; scoreScreenMode?: boolean }) {
   const canManageScores = role === 'admin' || role === 'moderator';
+  const isPublicUser = role === 'public';
   const isScoreScreenMode = Boolean(scoreScreenMode);
   const tx = React.useContext(UiTranslationContext);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -7294,38 +7296,48 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
     }));
   };
 
+  const scoringTableWidths = {
+    participant: 152,
+    teamTotal: 88,
+    lane: 76,
+    game: 64,
+    total: 74,
+    avg: 66,
+  };
+
   const renderScoringColGroup = () => (
     <colgroup>
-      <col style={{ width: '128px' }} />
-      {tournament.type === 'team' && <col style={{ width: '72px' }} />}
-      <col style={{ width: '64px' }} />
+      <col style={{ width: `${scoringTableWidths.participant}px` }} />
+      {tournament.type === 'team' && <col style={{ width: `${scoringTableWidths.teamTotal}px` }} />}
+      <col style={{ width: `${scoringTableWidths.lane}px` }} />
       {gameNumbers.map((gameNumber) => (
-        <col key={`col-${gameNumber}`} style={{ width: '58px' }} />
+        <col key={`col-${gameNumber}`} style={{ width: `${scoringTableWidths.game}px` }} />
       ))}
-      <col style={{ width: '60px' }} />
-      <col style={{ width: '56px' }} />
+      <col style={{ width: `${scoringTableWidths.total}px` }} />
+      <col style={{ width: `${scoringTableWidths.avg}px` }} />
     </colgroup>
   );
 
   const renderScoringHeader = () => (
     <thead>
       <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
-        <th className="px-2 py-2 sm:px-4 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 sticky left-0 z-[5] bg-[#e3f3f6] min-w-[112px] sm:min-w-[180px]">Participant</th>
+        <th className="px-2 py-2 sm:px-4 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 sticky left-0 z-[5] scoring-table-surface min-w-[152px]">Participant</th>
         {tournament.type === 'team' && (
-          <th className="px-1 py-2 sm:px-1.5 sm:py-3 text-[8px] sm:text-[9px] font-bold uppercase tracking-[0.14em] sm:tracking-[0.16em] text-black/70 text-center bg-[#e3f3f6] min-w-[64px] sm:min-w-[72px]">Tot</th>
+          <th className="px-1 py-2 sm:px-1.5 sm:py-3 text-[8px] sm:text-[9px] font-bold uppercase tracking-[0.14em] sm:tracking-[0.16em] text-black/70 text-center scoring-table-surface min-w-[88px]">Tot</th>
         )}
-        <th className="px-2 py-2 sm:px-4 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 bg-[#e3f3f6] min-w-[54px] sm:min-w-[84px]">Lane</th>
+        <th className="px-2 py-2 sm:px-4 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 scoring-table-surface min-w-[76px]">Lane</th>
         {gameNumbers.map(gameNumber => (
-          <th key={gameNumber} className="px-1.5 py-2 sm:px-3 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 text-center bg-[#e3f3f6] min-w-[56px] sm:min-w-[110px]">
-            <span className="sm:hidden">G{gameNumber}</span>
-            <span className="hidden sm:inline">Game {gameNumber}</span>
+          <th key={gameNumber} className="px-1 py-2 sm:px-2 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 text-center scoring-table-surface min-w-[64px]">
+            <span>G{gameNumber}</span>
           </th>
         ))}
-        <th className="px-2 py-2 sm:px-4 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 text-right sticky right-[52px] sm:right-[82px] z-[6] bg-[#e3f3f6] min-w-[58px] sm:min-w-[88px]">
-          <span className="sm:hidden">Tot</span>
-          <span className="hidden sm:inline">Total</span>
+        <th
+          className="px-2 py-2 sm:px-4 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 text-right sticky z-[6] scoring-table-surface min-w-[74px]"
+          style={{ right: `${scoringTableWidths.avg}px` }}
+        >
+          <span>Tot</span>
         </th>
-        <th className="px-2 py-2 sm:px-4 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 text-right sticky right-0 z-[7] bg-[#e3f3f6] min-w-[52px] sm:min-w-[82px]">Avg</th>
+        <th className="px-2 py-2 sm:px-4 sm:py-3 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] sm:tracking-widest text-black/70 text-right sticky right-0 z-[7] scoring-table-surface min-w-[66px]">Avg</th>
       </tr>
     </thead>
   );
@@ -7538,7 +7550,17 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
 
       <Card ref={scoringTableRef} className="border-[#AFDDE5]/60 overflow-visible relative">
         <div className="sm:hidden px-3 py-2 flex items-center gap-1.5 bg-[#f0fafb] border-b border-[#AFDDE5]/60">
-          <span className="text-[10px] text-black/40 leading-snug">Tap a row to show compact details.</span>
+          {isPublicUser ? (
+            <span className="inline-flex items-center gap-1.5 text-[10px] text-black/50 leading-snug">
+              <span>Tap score to see details</span>
+              <span className="inline-flex items-center gap-1 text-black/40">
+                <RotateCw size={11} />
+                <span>or rotate screen</span>
+              </span>
+            </span>
+          ) : (
+            <span className="text-[10px] text-black/40 leading-snug">Tap a row to show compact details.</span>
+          )}
         </div>
         <div className="sm:hidden divide-y divide-black/5">
           {scoringShiftSections.map((section) => (
@@ -7567,7 +7589,9 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                       <span className="flex-1 text-xs font-bold leading-tight truncate">
                         {renderFemaleInitialUnderline(formatScoringName(p), p.gender?.toLowerCase() === 'female')}
                       </span>
-                      <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded border border-[#AFDDE5]/70 bg-white text-[10px] font-bold text-emerald-700">{laneBadge}</span>
+                      {!isPublicUser && (
+                        <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded border border-[#AFDDE5]/70 bg-white text-[10px] font-bold text-emerald-700">{laneBadge}</span>
+                      )}
                       {tournament.type === 'team' && (
                         <span className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-emerald-200 bg-white text-[11px] font-black tabular-nums text-emerald-700">
                           {teamTotalScore}
@@ -7581,7 +7605,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                         <span className="text-[9px] text-black/30 block leading-none">Avg</span>
                         <span className="text-xs font-bold leading-tight text-emerald-700">{average.toFixed(1)}</span>
                       </span>
-                      <span className="shrink-0 text-black/30">{isExpanded ? '▲' : '▼'}</span>
+                      <span className="shrink-0 text-[10px] font-bold text-black/35">{isExpanded ? 'Hide' : 'Tap'}</span>
                     </button>
                     {isExpanded && (
                       <div className="px-3 pb-2.5 pt-1.5 bg-[#f7fcfd]">
@@ -7592,6 +7616,8 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                           <span className="font-semibold">Total:</span> {total}
                           {' | '}
                           <span className="font-semibold">Avg:</span> {average.toFixed(1)}
+                          {' | '}
+                          <span className="font-semibold">Lane:</span> {laneBadge}
                           {gameNumbers.map((gameNumber) => {
                             const scoreKey = `${p.id}-${gameNumber}`;
                             const currentScore = draftScores[scoreKey] !== undefined
@@ -7620,10 +7646,10 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
         <div
           ref={scoringHeaderScrollRef}
           className={isScoreScreenMode
-            ? 'hidden sm:block overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]'
-            : 'hidden sm:block sticky top-[7.25rem] sm:top-[10.5rem] z-[25] overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 bg-[#e3f3f6]'}
+            ? 'hidden sm:block overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 scoring-table-surface'
+            : 'hidden sm:block sticky top-[7.25rem] sm:top-[10.5rem] z-[25] overflow-x-auto overflow-y-hidden no-scrollbar border-b border-[#AFDDE5]/70 scoring-table-surface'}
         >
-          <table className="ui-table-minimal w-full text-left border-collapse text-[11px] sm:text-sm table-fixed">
+          <table className="ui-table-minimal scoring-table-surface w-full text-left border-collapse text-[11px] sm:text-sm table-fixed">
             {renderScoringColGroup()}
             {renderScoringHeader()}
           </table>
@@ -7635,7 +7661,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
           }}
           className={isScoreScreenMode ? 'hidden sm:block overflow-auto max-h-[calc(100vh-14rem)]' : 'hidden sm:block overflow-x-auto'}
         >
-        <table className="ui-table-minimal w-full text-left border-collapse text-[11px] sm:text-sm table-fixed">
+        <table className="ui-table-minimal scoring-table-surface w-full text-left border-collapse text-[11px] sm:text-sm table-fixed">
           {renderScoringColGroup()}
           <tbody>
             {scoringShiftSections.map((section) => {
@@ -7696,8 +7722,8 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                           </td>
                         </tr>
                       )}
-                      <tr className="hover:bg-[#AFDDE5]/20 transition-colors">
-                    <td className="px-2 py-2 sm:px-4 sm:py-3 font-bold text-[11px] sm:text-sm text-black sticky left-0 z-[2] bg-white max-w-[112px] sm:max-w-none">
+                      <tr className="scoring-table-surface hover:bg-[#AFDDE5]/20 transition-colors">
+                    <td className="px-2 py-2 sm:px-4 sm:py-3 font-bold text-[11px] sm:text-sm text-black sticky left-0 z-[2] scoring-table-surface max-w-[152px] sm:max-w-none">
                       <span className="inline-flex items-center gap-1">
                         {renderFemaleInitialUnderline(formatScoringName(p), p.gender?.toLowerCase() === 'female')}
                       </span>
@@ -7812,14 +7838,19 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                             }}
                             disabled={!canManageScores}
                             data-numeric="true"
-                            className="ui-input w-14 sm:w-20 px-1.5 sm:px-2 py-1 sm:py-1.5 rounded-md sm:rounded-lg font-bold text-[11px] sm:text-sm"
+                            className="ui-input block w-full max-w-[52px] mx-auto px-1 py-1 sm:px-1.5 sm:py-1.5 rounded-md sm:rounded-lg font-bold text-[11px] sm:text-sm"
                             placeholder="0"
                           />
                         </td>
                       );
                     })}
-                    <td className="px-2 py-2 sm:px-4 sm:py-3 text-right font-bold text-[11px] sm:text-base text-black/80 whitespace-nowrap sticky right-[52px] sm:right-[82px] z-[2] bg-white">{total}</td>
-                    <td className="px-2 py-2 sm:px-4 sm:py-3 text-right font-bold text-[11px] sm:text-base text-emerald-700 whitespace-nowrap sticky right-0 z-[3] bg-white">{average.toFixed(1)}</td>
+                    <td
+                      className="px-2 py-2 sm:px-4 sm:py-3 text-right font-bold text-[11px] sm:text-base text-black/80 whitespace-nowrap sticky z-[2] scoring-table-surface"
+                      style={{ right: `${scoringTableWidths.avg}px` }}
+                    >
+                      {total}
+                    </td>
+                    <td className="px-2 py-2 sm:px-4 sm:py-3 text-right font-bold text-[11px] sm:text-base text-emerald-700 whitespace-nowrap sticky right-0 z-[3] scoring-table-surface">{average.toFixed(1)}</td>
                   </tr>
                     </React.Fragment>
                   );

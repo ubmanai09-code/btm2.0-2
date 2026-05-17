@@ -105,6 +105,14 @@ body {
   gap: var(--ui-space-24);
 }
 
+.scoring-table-surface {
+  background: #e3f3f6;
+}
+
+[data-theme="dark"] .scoring-table-surface {
+  background: color-mix(in srgb, var(--card) 86%, var(--bg));
+}
+
 /* Normalize common half-step spacing utilities to 8/12 scale */
 [class~="p-1.5"] {
   padding: var(--ui-space-8) !important;
