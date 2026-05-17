@@ -110,7 +110,7 @@ body {
 }
 
 [data-theme="dark"] .scoring-table-surface {
-  background: color-mix(in srgb, var(--card) 86%, var(--bg));
+  background: #21374f;
 }
 
 /* Normalize common half-step spacing utilities to 8/12 scale */
