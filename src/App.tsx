@@ -3351,9 +3351,10 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
   const [showModeratorPanel, setShowModeratorPanel] = useState(false);
   const [isTournamentCardCollapsed, setIsTournamentCardCollapsed] = useState(true);
   const [isDesktopTournamentHeader, setIsDesktopTournamentHeader] = useState(false);
-  const isScoreScreenMode = Boolean(scoreScreenMode);
-  const isStandingsScreenMode = Boolean(standingsScreenMode);
-  const isPresentScreenMode = isScoreScreenMode || isStandingsScreenMode;
+  const [isSmallScreen, setIsSmallScreen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(max-width: 640px)').matches;
+  });
 
   const loadAccessData = async () => {
     if (role !== 'admin' && role !== 'moderator') {
@@ -3518,6 +3519,37 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
     mediaQuery.addEventListener('change', applyMode);
     return () => mediaQuery.removeEventListener('change', applyMode);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(max-width: 640px)');
+    const applyMode = () => {
+      setIsSmallScreen(mediaQuery.matches);
+    };
+
+    applyMode();
+    mediaQuery.addEventListener('change', applyMode);
+    return () => mediaQuery.removeEventListener('change', applyMode);
+  }, []);
+
+  const blockPublicPresentModeOnSmallScreen = isPublicView && isSmallScreen;
+  const isScoreScreenMode = Boolean(scoreScreenMode) && !blockPublicPresentModeOnSmallScreen;
+  const isStandingsScreenMode = Boolean(standingsScreenMode) && !blockPublicPresentModeOnSmallScreen;
+  const isPresentScreenMode = isScoreScreenMode || isStandingsScreenMode;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!blockPublicPresentModeOnSmallScreen) return;
+
+    const url = new URL(window.location.href);
+    const hadScreenMode = url.searchParams.has('screen');
+    if (!hadScreenMode) return;
+
+    url.searchParams.delete('screen');
+    url.searchParams.delete('standingsMode');
+    url.searchParams.delete('gender');
+    window.history.replaceState(null, '', url.toString());
+  }, [blockPublicPresentModeOnSmallScreen]);
 
   useEffect(() => {
     if (isScoreScreenMode && activeTab !== 'scoring') {
@@ -3705,10 +3737,10 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       <div className="min-h-[400px]">
         {activeTab === 'participants' && <ParticipantView tournament={tournament} role={effectiveRole} />}
         {activeTab === 'lanes' && <LaneView tournament={tournament} role={effectiveRole} />}
-        {activeTab === 'scoring' && <ScoringView tournament={tournament} role={effectiveRole} sponsorsConfig={sponsorsConfig} onPresentScoreScreen={openScoreScreenMode} scoreScreenMode={isScoreScreenMode} />}
+        {activeTab === 'scoring' && <ScoringView tournament={tournament} role={effectiveRole} sponsorsConfig={sponsorsConfig} onPresentScoreScreen={blockPublicPresentModeOnSmallScreen ? undefined : openScoreScreenMode} scoreScreenMode={isScoreScreenMode} />}
         {activeTab === 'brackets' && <BracketsView tournament={tournament} role={effectiveRole} onTournamentUpdated={onTournamentUpdated} />}
         {activeTab === 'brackets-v2' && <BracketsViewV2 tournament={tournament} role={effectiveRole} onTournamentUpdated={onTournamentUpdated} />}
-        {activeTab === 'standings' && <StandingsView tournament={tournament} role={effectiveRole} sponsorsConfig={sponsorsConfig} onPresentStandingsScreen={openStandingsScreenMode} standingsScreenMode={isStandingsScreenMode} />}
+        {activeTab === 'standings' && <StandingsView tournament={tournament} role={effectiveRole} sponsorsConfig={sponsorsConfig} onPresentStandingsScreen={blockPublicPresentModeOnSmallScreen ? undefined : openStandingsScreenMode} standingsScreenMode={isStandingsScreenMode} />}
         {activeTab === 'league' && <LeagueView tournament={tournament} role={effectiveRole} />}
       </div>
     </div>
