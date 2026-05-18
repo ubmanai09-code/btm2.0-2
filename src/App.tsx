@@ -12308,6 +12308,7 @@ function V2RoundCard({
 function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament: Tournament; role: UserRole; onTournamentUpdated?: (t: Tournament) => void }) {
   const tx = React.useContext(UiTranslationContext);
   const isAdmin = role === 'admin';
+  const canManageBracketV2 = role === 'admin' || role === 'moderator';
   const storageKey = `btm_v2gen_${tournament.id}`;
 
   // ── Data ─────────────────────────────────────────────────────────────────
@@ -12327,7 +12328,10 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   const [editingBracketId, setEditingBracketId] = React.useState<string | null>(null);
   const [editingBracketName, setEditingBracketName] = React.useState('');
   const [savingBracketRename, setSavingBracketRename] = React.useState(false);
+  const [savingBracketConfig, setSavingBracketConfig] = React.useState(false);
+  const [saveBracketFeedback, setSaveBracketFeedback] = React.useState<string | null>(null);
   const [loadBracketId, setLoadBracketId] = React.useState('');
+  const showLeftPanel = role !== 'public';
 
   // ── Seeds ─────────────────────────────────────────────────────────────────
   const [seedImportMode, setSeedImportMode] = React.useState<V2SeedImportMode>('top-seeds');
@@ -12443,6 +12447,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
   // ── View ──────────────────────────────────────────────────────────────────
   const [viewMode, setViewMode] = React.useState<'visual' | 'list'>('visual');
+  const [isSmallPortraitScreen, setIsSmallPortraitScreen] = React.useState(false);
+  const forceListMode = isSmallPortraitScreen;
+  const effectiveViewMode: 'visual' | 'list' = forceListMode ? 'list' : viewMode;
   const [bracketZoom, setBracketZoom] = React.useState(1);
   const bracketCanvasRef = React.useRef<HTMLDivElement>(null);
   const exportAreaRef = React.useRef<HTMLDivElement>(null);
@@ -12483,8 +12490,6 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       if (s.scoreDrafts) setScoreDrafts(s.scoreDrafts);
       if (s.matchOverrides) setMatchOverrides(s.matchOverrides);
       if (s.slotOverrides) setSlotOverrides(s.slotOverrides);
-      if (typeof s.activeBracketName === 'string' && s.activeBracketName.trim()) setActiveBracketName(s.activeBracketName);
-      if (typeof s.activeBracketId === 'string' && s.activeBracketId.trim()) setActiveBracketId(s.activeBracketId);
       if (typeof s.include3rdPlace === 'boolean') setInclude3rdPlace(s.include3rdPlace);
       if (s.selectedBracketPreset === 'single-elim' || s.selectedBracketPreset === 'stepladder' || s.selectedBracketPreset === 'playoff' || s.selectedBracketPreset === 'ladder' || s.selectedBracketPreset === 'custom' || s.selectedBracketPreset === 'mixed') {
         setSelectedBracketPreset(s.selectedBracketPreset);
@@ -12592,6 +12597,25 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     api.getBuilderRulePresets().then(p => { if (!cancelled) setRulePresets(Array.isArray(p) ? p : []); }).catch(() => {});
     return () => { cancelled = true; };
   }, []);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(max-width: 900px) and (orientation: portrait)');
+    const apply = () => setIsSmallPortraitScreen(mediaQuery.matches);
+    apply();
+    mediaQuery.addEventListener('change', apply);
+    window.addEventListener('resize', apply);
+    return () => {
+      mediaQuery.removeEventListener('change', apply);
+      window.removeEventListener('resize', apply);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (forceListMode && viewMode !== 'list') {
+      setViewMode('list');
+    }
+  }, [forceListMode, viewMode]);
 
   const topSeedsPoolSize = React.useMemo(() => {
     return standings.length;
@@ -13116,11 +13140,22 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     };
     entry.scoreDrafts = scoreDrafts;
     entry.slotOverrides = slotOverrides;
+    setSavingBracketConfig(true);
+    setSaveBracketFeedback(null);
     try {
       await api.saveBracketV2Config(tournament.id, entry);
-    } catch {
+      setSaveBracketFeedback('Saved to server.');
+    } catch (e: any) {
       // Fallback: persist to localStorage if server save fails
       try { localStorage.setItem(savedBracketsKey, JSON.stringify([...savedBrackets.filter(b => b.id !== id), entry])); } catch { /* quota */ }
+      const message = String(e?.message || 'Save failed');
+      if (/permission|forbidden|401|403/i.test(message)) {
+        setSaveBracketFeedback('Save denied: your role cannot save this bracket.');
+      } else {
+        setSaveBracketFeedback('Server unavailable, saved only on this device.');
+      }
+    } finally {
+      setSavingBracketConfig(false);
     }
     setSavedBrackets(prev => {
       const exists = prev.some(b => b.id === id);
@@ -13175,7 +13210,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     setMatchOverrides(bkt.matchOverrides as typeof matchOverrides || {});
     setSlotOverrides(bkt.slotOverrides || {});
     setScoreDrafts(bkt.scoreDrafts || {});
-    setLoadBracketId('');
+    setLoadBracketId(id);
     setActiveBracketName(bkt.name);
     setActiveBracketId(bkt.id);
   };
@@ -13897,11 +13932,11 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     <div className="flex gap-0 items-start">
 
       {/* ── COLLAPSIBLE LEFT PANEL ──────────────────────────────────────────── */}
-      {role !== 'public' && <div className={`flex-shrink-0 transition-all duration-200 overflow-hidden ${leftOpen ? 'w-[288px]' : 'w-0'}`}>
+      {showLeftPanel && <div className={`flex-shrink-0 transition-all duration-200 overflow-hidden ${leftOpen ? 'w-[288px]' : 'w-0'}`}>
         <div className="w-[288px] flex flex-col gap-3 pb-4 pr-3">
 
           {/* ── Bracket Management ──────────────────────────────────────── */}
-          {isAdmin && (
+          {canManageBracketV2 && (
             <Card className="p-3">
               <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">1</span>Bracket</p>
 
@@ -13910,10 +13945,12 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                 <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200">
                   <span className="flex-1 text-xs font-semibold text-emerald-800 truncate">{activeBracketName}</span>
                   <button
-                    onClick={() => handleSaveBracket()}
-                    className="text-[10px] text-emerald-700 font-semibold hover:text-emerald-900 shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded border border-emerald-300 bg-white hover:bg-emerald-100 transition-colors"
+                    type="button"
+                    onClick={() => { void handleSaveBracket(); }}
+                    disabled={savingBracketConfig}
+                    className="text-[10px] text-emerald-700 font-semibold hover:text-emerald-900 shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded border border-emerald-300 bg-white hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Save bracket to server">
-                    <Save size={10} /> Save
+                    <Save size={10} /> {savingBracketConfig ? 'Saving...' : 'Save'}
                   </button>
                   <button
                     onClick={() => {
@@ -13923,6 +13960,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                     title="Close bracket"
                     className="text-black/25 hover:text-red-500 shrink-0"><X size={11} /></button>
                 </div>
+              )}
+              {activeBracketName && saveBracketFeedback && (
+                <div className="mb-2 text-[10px] text-black/50">{saveBracketFeedback}</div>
               )}
 
               {/* New bracket section */}
@@ -14647,7 +14687,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       </button>}
 
       {/* ── RIGHT PANEL — Visual Bracket Workspace ──────────────────────────── */}
-      <div className={`flex-1 flex flex-col gap-3 min-w-0 ${role !== 'public' ? 'pl-3' : ''}`}>
+      <div className={`flex-1 flex flex-col gap-3 min-w-0 ${showLeftPanel ? 'pl-3' : ''}`}>
 
         {/* Page Title */}
         <div className="flex flex-col">
@@ -14655,13 +14695,52 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           <p className="text-xs text-black/50 mt-0.5">{tx('Generate and manage tournament brackets')}</p>
         </div>
 
+        {role === 'public' && (
+          <Card className="p-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Available Brackets</p>
+                <p className="text-[10px] text-black/35 mt-0.5">Choose a saved bracket and load it.</p>
+              </div>
+              {activeBracketName && (
+                <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                  Active: {activeBracketName}
+                </span>
+              )}
+            </div>
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <select
+                value={loadBracketId || activeBracketId || ''}
+                onChange={(e) => setLoadBracketId(e.target.value)}
+                className="min-w-[220px] max-w-full h-8 px-2 rounded-md border border-black/15 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200"
+              >
+                <option value="">Select bracket...</option>
+                {savedBrackets.map((bkt) => (
+                  <option key={bkt.id} value={bkt.id}>{bkt.name}</option>
+                ))}
+              </select>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => { if (loadBracketId) handleLoadBracket(loadBracketId); }}
+                disabled={!loadBracketId}
+                className="h-8 px-3 text-[11px]"
+              >
+                Load
+              </Button>
+              {savedBracketsLoading && <span className="text-[10px] text-black/35">Loading brackets...</span>}
+              {!savedBracketsLoading && savedBrackets.length === 0 && <span className="text-[10px] text-black/35">No saved brackets yet.</span>}
+            </div>
+          </Card>
+        )}
+
         {/* Empty state — no active bracket */}
         {!activeBracketName && (
           <div className="flex flex-col items-center justify-center h-64 gap-4 rounded-xl border-2 border-dashed border-black/10 text-black/30">
             <div className="text-4xl">🏆</div>
             <div className="text-center">
               <p className="text-sm font-semibold text-black/40">No bracket active</p>
-              <p className="text-xs text-black/30 mt-1">Create a new bracket or load a saved one from the left panel.</p>
+              <p className="text-xs text-black/30 mt-1">{role === 'public' ? 'Choose a saved bracket above to load it.' : 'Create a new bracket or load a saved one from the left panel.'}</p>
             </div>
           </div>
         )}
@@ -14891,21 +14970,27 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
             {/* List / Visual toggle */}
             <div className="ml-auto flex items-center rounded-md border border-black/10 overflow-hidden bg-white">
               <button
-                onClick={() => { setViewMode('visual'); }}
-                className={`h-7 px-2.5 flex items-center gap-1 text-[11px] font-medium transition-colors ${viewMode === 'visual' ? 'bg-emerald-600 text-white' : 'text-black/50 hover:bg-gray-100'}`}
-                title="Visual view">
+                onClick={() => { if (!forceListMode) setViewMode('visual'); }}
+                disabled={forceListMode}
+                className={`h-7 px-2.5 flex items-center gap-1 text-[11px] font-medium transition-colors ${effectiveViewMode === 'visual' ? 'bg-emerald-600 text-white' : 'text-black/50 hover:bg-gray-100'} ${forceListMode ? 'cursor-not-allowed opacity-40 hover:bg-white' : ''}`}
+                title={forceListMode ? 'Visual view is disabled on small portrait screens' : 'Visual view'}>
                 <GitBranch size={12} /> Visual
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`h-7 px-2.5 flex items-center gap-1 text-[11px] font-medium transition-colors ${viewMode === 'list' ? 'bg-emerald-600 text-white' : 'text-black/50 hover:bg-gray-100'}`}
+                className={`h-7 px-2.5 flex items-center gap-1 text-[11px] font-medium transition-colors ${effectiveViewMode === 'list' ? 'bg-emerald-600 text-white' : 'text-black/50 hover:bg-gray-100'}`}
                 title="List view">
                 <LayoutList size={12} /> List
               </button>
             </div>
+            {forceListMode && (
+              <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                Small portrait screen: list view only
+              </span>
+            )}
           </div>
 
-          {viewMode === 'list' ? (
+          {effectiveViewMode === 'list' ? (
             /* ── List view ─────────────────────────────────────────────── */
             <div className="space-y-1 max-h-[600px] overflow-y-auto">
               {[...engineResult.rounds].map(round => (
