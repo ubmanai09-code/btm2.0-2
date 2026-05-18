@@ -6325,6 +6325,14 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                       const teamMembers = tournament.type === 'team' && a.team_id
                         ? participants.filter(p => p.team_id === a.team_id)
                         : [];
+
+                      const teamMemberNames = teamMembers
+                        .map((p) => {
+                          const first = (p.first_name || '').trim();
+                          const lastInitial = ((p.last_name || '').trim().charAt(0) || '').toUpperCase();
+                          return `${first}${lastInitial ? ` ${lastInitial}.` : ''}`.trim();
+                        })
+                        .filter(Boolean);
                       
                       const participant = tournament.type === 'individual' && a.participant_id
                         ? participants.find(p => p.id === a.participant_id)
@@ -6367,7 +6375,18 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                               <GripVertical size={12} />
                             </span>
                           )}
-                          <span className="min-w-0 flex-1 truncate text-left">{renderFemaleInitialUnderline(displayName, tournament.type === 'individual' && participant?.gender?.toLowerCase() === 'female')}</span>
+                          <span className="min-w-0 flex-1 text-left">
+                            <span className="block truncate">
+                              {renderFemaleInitialUnderline(displayName, tournament.type === 'individual' && participant?.gender?.toLowerCase() === 'female')}
+                            </span>
+                            {tournament.type === 'team' && teamMemberNames.length > 0 && (
+                              <span className={`mt-0.5 grid grid-cols-2 gap-x-1 gap-y-0 text-[9px] normal-case tracking-normal font-medium leading-tight whitespace-normal ${selectedItem?.id === a.id && selectedItem.type === 'assignment' ? 'text-white/75' : 'text-black/55'}`}>
+                                {teamMemberNames.map((memberName, memberIndex) => (
+                                  <span key={`${a.id}-member-${memberIndex}`} className="truncate">{memberName}</span>
+                                ))}
+                              </span>
+                            )}
+                          </span>
                           <button 
                             onClick={(e) => { e.stopPropagation(); handleRemoveAssignment(a.id); }}
                             className="ml-auto opacity-0 group-hover:opacity-100 p-0 hover:text-red-400 transition-all"
