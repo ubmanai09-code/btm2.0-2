@@ -17210,7 +17210,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                   )}
                   {/* Only show team column if team tournament and standingsMode is players */}
                   {standingsMode === 'players' && isTeamTournament && (
-                    <td className="px-2.5 py-1.5 text-slate-800 text-xs font-semibold">{s.team_name}</td>
+                    <td className={`px-2.5 py-1.5 text-xs font-semibold ${isStandingsScreenMode ? 'text-white/90' : 'text-slate-800'}`}>{s.team_name}</td>
                   )}
                   {gameNumbers.map((gameNumber, gameIndex) => {
                     const value = s.games[gameIndex] ?? 0;
@@ -17284,8 +17284,8 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 <tr key={s.key} className="hover:bg-[#AFDDE5]/20 transition-colors">
                   <td className="standings-sticky-col px-2 py-1.5 text-xs font-bold text-black/60 sticky left-0 z-[2]">{idx + 1}</td>
                   <td className="standings-sticky-col px-2 py-1.5 leading-tight sticky left-12 z-[2]">
-                    <div className="text-xs font-bold text-slate-900">{s.team_name}</div>
-                    <div className="text-[10px] text-slate-600 lowercase mt-0.5">
+                    <div className={`text-xs font-bold ${isStandingsScreenMode ? 'text-white' : 'text-slate-900'}`}>{s.team_name}</div>
+                    <div className={`text-[10px] lowercase mt-0.5 ${isStandingsScreenMode ? 'text-white/70' : 'text-slate-600'}`}>
                       {s.members.length > 0 ? s.members.join(', ') : 'no members'}
                     </div>
                   </td>
