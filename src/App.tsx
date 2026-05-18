@@ -11190,88 +11190,90 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
           {effectiveViewMode === 'list' ? (
             /* ── List view ─────────────────────────────────────────────── */
-            <div className="space-y-1 max-h-[600px] overflow-y-auto">
+            <div className="overflow-auto">
               {[...engineResult.rounds].map(round => (
-                <div key={round.roundId} className="mb-3">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-1.5 px-1">{round.roundName}</p>
-                  {engineResult.matches.filter(m => m.roundId === round.roundId).sort((a, b) => a.matchIndex - b.matchIndex).map(match => {
-                    const override = matchOverrides[match.id] || {};
-                    const isSelected = selectedMatchId === match.id;
-                    const specialTone = getSpecialMatchTone(match);
-                    return (
-                      <div key={match.id}
-                        onClick={() => isAdmin && setSelectedMatchId(isSelected ? null : match.id)}
-                        className={`rounded-lg border px-3 py-2 mb-1 cursor-pointer transition-colors ${isSelected
-                          ? 'border-emerald-400 bg-emerald-50'
-                          : specialTone === 'final'
-                            ? 'border-amber-300 bg-amber-50/60 hover:border-amber-400'
-                            : specialTone === 'bronze'
-                              ? 'border-orange-300 bg-orange-50/60 hover:border-orange-400'
-                              : 'border-black/[0.08] bg-white hover:border-emerald-200 hover:bg-emerald-50/40'
-                          }`}>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-black/70">{getListMatchLabel(match) || override.name || match.label}</span>
-                          {override.notes && <span className="text-[10px] text-black/35 italic truncate ml-2">{override.notes}</span>}
-                          {Object.keys(override).length > 0 && <span className="text-[10px] text-emerald-600 ml-auto shrink-0">overridden</span>}
-                        </div>
-                        <div className="flex gap-3 mt-1">
-                          {match.slots.map(slot => {
-                            const key = `${match.id}:${slot.slotIndex}`;
-                            const label = simulation.resolvedLabels.get(key) || slot.sourceLabel || 'TBD';
+                <div key={round.roundId} className="mb-4">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2 px-1">{round.roundName}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2">
+                    {engineResult.matches.filter(m => m.roundId === round.roundId).sort((a, b) => a.matchIndex - b.matchIndex).map(match => {
+                      const override = matchOverrides[match.id] || {};
+                      const isSelected = selectedMatchId === match.id;
+                      const specialTone = getSpecialMatchTone(match);
+                      return (
+                        <div key={match.id}
+                          onClick={() => isAdmin && setSelectedMatchId(isSelected ? null : match.id)}
+                          className={`rounded-lg border px-2 py-1.5 cursor-pointer transition-colors ${isSelected
+                            ? 'border-emerald-400 bg-emerald-50'
+                            : specialTone === 'final'
+                              ? 'border-amber-300 bg-amber-50/60 hover:border-amber-400'
+                              : specialTone === 'bronze'
+                                ? 'border-orange-300 bg-orange-50/60 hover:border-orange-400'
+                                : 'border-black/[0.08] bg-white hover:border-emerald-200 hover:bg-emerald-50/40'
+                            }`}>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-[11px] font-semibold text-black/70 truncate" title={getListMatchLabel(match) || override.name || match.label}>{getListMatchLabel(match) || override.name || match.label}</span>
+                            {override.notes && <span className="text-[9px] text-black/35 italic truncate">{override.notes}</span>}
+                            {Object.keys(override).length > 0 && <span className="text-[9px] text-emerald-600 font-semibold">overridden</span>}
+                          </div>
+                          <div className="flex flex-col gap-1 mt-1">
+                            {match.slots.map(slot => {
+                              const key = `${match.id}:${slot.slotIndex}`;
+                              const label = simulation.resolvedLabels.get(key) || slot.sourceLabel || 'TBD';
                               const slotSeed = simulation.resolvedSeeds.get(key) ?? getSlotSeed(slot, key);
-                            const isWinner = (simulation.advancingSlots[match.id] || []).includes(slot.slotIndex);
-                            const score = scoreDrafts[match.id]?.[slot.slotIndex];
-                            const canSwapList = isAdmin && slot.sourceType !== 'advance';
-                            const isEditingSwapList = editingSlotKey === key;
-                            return (
-                              <div key={slot.slotIndex} className={`flex-1 flex items-center justify-between px-2 py-1 rounded text-xs border ${isWinner ? 'border-emerald-400 bg-emerald-50' : 'border-black/[0.06] bg-gray-50'}`}>
-                                <div className="min-w-0 flex items-center gap-1.5">
-                                  {slotSeed != null && <span className="shrink-0 rounded bg-emerald-100 px-1 py-0.5 text-[10px] font-bold text-emerald-800">S{slotSeed}</span>}
-                                  {isEditingSwapList ? (
-                                    <select autoFocus
-                                      value={slotOverrides[key] != null ? String(slotOverrides[key]) : (slot.participantId != null ? String(slot.participantId) : '')}
+                              const isWinner = (simulation.advancingSlots[match.id] || []).includes(slot.slotIndex);
+                              const score = scoreDrafts[match.id]?.[slot.slotIndex];
+                              const canSwapList = isAdmin && slot.sourceType !== 'advance';
+                              const isEditingSwapList = editingSlotKey === key;
+                              return (
+                                <div key={slot.slotIndex} className={`flex items-center justify-between px-1.5 py-0.5 rounded text-[10px] border ${isWinner ? 'border-emerald-400 bg-emerald-50' : 'border-black/[0.06] bg-gray-50'}`}>
+                                  <div className="min-w-0 flex items-center gap-1">
+                                    {slotSeed != null && <span className="shrink-0 rounded bg-emerald-100 px-0.5 py-0 text-[8px] font-bold text-emerald-800">S{slotSeed}</span>}
+                                    {isEditingSwapList ? (
+                                      <select autoFocus
+                                        value={slotOverrides[key] != null ? String(slotOverrides[key]) : (slot.participantId != null ? String(slot.participantId) : '')}
+                                        onChange={e => {
+                                          const val = e.target.value;
+                                          if (val === '') setSlotOverrides(prev => { const n = { ...prev }; delete n[key]; return n; });
+                                          else setSlotOverrides(prev => ({ ...prev, [key]: val }));
+                                          setEditingSlotKey(null);
+                                        }}
+                                        onBlur={() => setEditingSlotKey(null)}
+                                        className="h-5 rounded border border-emerald-300 bg-white px-0.5 text-[9px] text-black/80 focus:outline-none focus:ring-1 focus:ring-emerald-200">
+                                        <option value="">— Auto —</option>
+                                        {participantNodes.map(p => <option key={p.id} value={String(p.id)}>S{p.seed} {p.name}</option>)}
+                                      </select>
+                                    ) : (
+                                      <span
+                                        className={`truncate ${canSwapList ? 'cursor-pointer hover:underline hover:text-emerald-700' : ''} ${label === 'TBD' ? 'text-black/30 italic' : isWinner ? 'font-semibold text-black' : 'text-black/70'}`}
+                                        onClick={canSwapList ? () => setEditingSlotKey(key) : undefined}
+                                        title={canSwapList ? 'Click to swap participant' : label}
+                                      >{label}{slotOverrides[key] != null && <span className="ml-0.5 text-[8px] text-violet-500">✎</span>}</span>
+                                    )}
+                                  </div>
+                                  {isAdmin && (
+                                    <input type="number" value={score ?? ''} placeholder="—"
+                                      min={0}
+                                      style={{ MozAppearance: 'textfield' } as React.CSSProperties}
+                                      onClick={e => e.stopPropagation()}
                                       onChange={e => {
                                         const val = e.target.value;
-                                        if (val === '') setSlotOverrides(prev => { const n = { ...prev }; delete n[key]; return n; });
-                                        else setSlotOverrides(prev => ({ ...prev, [key]: val }));
-                                        setEditingSlotKey(null);
+                                        if (val === '') { setScoreDrafts(prev => ({ ...prev, [match.id]: { ...(prev[match.id] || {}), [slot.slotIndex]: '' } })); return; }
+                                        const num = parseInt(val, 10);
+                                        if (isNaN(num) || num < 0) return;
+                                        const others = match.slots.filter(s => s.slotIndex !== slot.slotIndex).map(s => String(scoreDrafts[match.id]?.[s.slotIndex] ?? '')).filter(v => v !== '');
+                                        if (others.includes(String(num))) return;
+                                        setScoreDrafts(prev => ({ ...prev, [match.id]: { ...(prev[match.id] || {}), [slot.slotIndex]: String(num) } }));
                                       }}
-                                      onBlur={() => setEditingSlotKey(null)}
-                                      className="h-6 rounded border border-emerald-300 bg-white px-1 text-xs text-black/80 focus:outline-none focus:ring-1 focus:ring-emerald-200">
-                                      <option value="">— Auto —</option>
-                                      {participantNodes.map(p => <option key={p.id} value={String(p.id)}>S{p.seed} {p.name}</option>)}
-                                    </select>
-                                  ) : (
-                                    <span
-                                      className={`truncate ${canSwapList ? 'cursor-pointer hover:underline hover:text-emerald-700' : ''} ${label === 'TBD' ? 'text-black/30 italic' : isWinner ? 'font-semibold text-black' : 'text-black/70'}`}
-                                      onClick={canSwapList ? () => setEditingSlotKey(key) : undefined}
-                                      title={canSwapList ? 'Click to swap participant' : undefined}
-                                    >{label}{slotOverrides[key] != null && <span className="ml-0.5 text-[9px] text-violet-500">✎</span>}</span>
+                                      className="w-10 text-right bg-white border border-black/10 rounded px-0.5 py-0 text-[9px] focus:outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                                   )}
                                 </div>
-                                {isAdmin && (
-                                  <input type="number" value={score ?? ''} placeholder="—"
-                                    min={0}
-                                    style={{ MozAppearance: 'textfield' } as React.CSSProperties}
-                                    onClick={e => e.stopPropagation()}
-                                    onChange={e => {
-                                      const val = e.target.value;
-                                      if (val === '') { setScoreDrafts(prev => ({ ...prev, [match.id]: { ...(prev[match.id] || {}), [slot.slotIndex]: '' } })); return; }
-                                      const num = parseInt(val, 10);
-                                      if (isNaN(num) || num < 0) return;
-                                      const others = match.slots.filter(s => s.slotIndex !== slot.slotIndex).map(s => String(scoreDrafts[match.id]?.[s.slotIndex] ?? '')).filter(v => v !== '');
-                                      if (others.includes(String(num))) return;
-                                      setScoreDrafts(prev => ({ ...prev, [match.id]: { ...(prev[match.id] || {}), [slot.slotIndex]: String(num) } }));
-                                    }}
-                                    className="w-14 text-right bg-white border border-black/10 rounded px-1 py-0.5 text-xs focus:outline-none ml-2 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                                )}
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               ))}
             </div>
