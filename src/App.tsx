@@ -8255,6 +8255,254 @@ const v2CreateRound = (index: number): TournamentRoundConfig => ({
   reseed: false,
 });
 
+type V2RoundCardProps = {
+  round: TournamentRoundConfig;
+  index: number;
+  total: number;
+  availableFeedRounds: Array<{ id: string; name: string }>;
+  availableSeedNumbers: number[];
+  onChange: (updated: TournamentRoundConfig) => void;
+  onRemove: () => void;
+};
+
+const V2RoundCard = ({
+  round,
+  index,
+  total,
+  availableFeedRounds,
+  availableSeedNumbers,
+  onChange,
+  onRemove,
+}: V2RoundCardProps) => {
+  const [expanded, setExpanded] = React.useState(true);
+
+  const updateRound = (patch: Partial<TournamentRoundConfig>) => {
+    onChange({ ...round, ...patch });
+  };
+
+  const parseSeedList = (raw: string): number[] | null => {
+    const values = raw
+      .split(',')
+      .map((item) => Number.parseInt(item.trim(), 10))
+      .filter((value) => Number.isFinite(value) && value > 0);
+    if (values.length === 0) return null;
+    return Array.from(new Set(values));
+  };
+
+  const injectedSeedsText = Array.isArray(round.injectParticipantSeeds) && round.injectParticipantSeeds.length > 0
+    ? round.injectParticipantSeeds.join(', ')
+    : '';
+
+  return (
+    <div className="bg-white">
+      <div
+        className="flex cursor-pointer select-none items-center gap-2 px-3 py-2 hover:bg-[#f5f7ff]"
+        onClick={() => setExpanded((prev) => !prev)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setExpanded((prev) => !prev);
+          }
+        }}
+        aria-expanded={expanded}
+      >
+        {expanded ? <ChevronDown size={13} className="shrink-0 text-[#6070a8]" /> : <ChevronRight size={13} className="shrink-0 text-[#6070a8]" />}
+        <span className="shrink-0 w-5 text-center text-[10px] font-black tabular-nums text-[#9aabd0]">R{index + 1}</span>
+        <span className="flex-1 min-w-0 truncate text-[12px] font-bold text-[#2f3966]">{round.name || `Round ${index + 1}`}</span>
+        <span className="shrink-0 rounded bg-[#eef1ff] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-[#5066b0]">{round.matchType}</span>
+        <span className="shrink-0 rounded bg-[#f0f7ff] px-1.5 py-0.5 text-[9px] font-bold text-[#3b6ca8]">{round.playersPerMatch}p</span>
+        {total > 1 && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onRemove();
+            }}
+            className="shrink-0 inline-flex h-6 w-6 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+            title="Remove round"
+          >
+            <Trash2 size={11} />
+          </button>
+        )}
+      </div>
+
+      {expanded && (
+        <div className="border-t border-[#e8ecf8] bg-[#f9faff] px-3 py-3 space-y-2.5">
+          <div>
+            <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Round Name</label>
+            <input
+              value={round.name}
+              onChange={(event) => updateRound({ name: event.target.value })}
+              className="h-9 w-full rounded-lg border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Match Type</label>
+              <select
+                value={round.matchType}
+                onChange={(event) => {
+                  const nextMatchType = event.target.value as EngineMatchType;
+                  updateRound({
+                    matchType: nextMatchType,
+                    playersPerMatch: nextMatchType === 'head-to-head' ? 2 : Math.max(2, round.playersPerMatch || 4),
+                    advancementCount: nextMatchType === 'head-to-head' ? Math.min(1, Math.max(0, round.advancementCount || 1)) : Math.max(0, round.advancementCount || 1),
+                  });
+                }}
+                className="h-9 w-full rounded-lg border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]"
+              >
+                <option value="group">Group</option>
+                <option value="head-to-head">Head-to-head</option>
+                <option value="shootout">Shootout</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Feed From</label>
+              <select
+                value={index === 0 ? '' : (round.feedFromRoundId || '')}
+                onChange={(event) => updateRound({ feedFromRoundId: event.target.value || undefined })}
+                disabled={index === 0}
+                className="h-9 w-full rounded-lg border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966] disabled:bg-[#f3f5ff] disabled:text-[#7a86ae]"
+              >
+                <option value="">Previous round</option>
+                {availableFeedRounds.map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Source Outcome</label>
+              <select
+                value={index === 0 ? 'winner' : (round.sourceOutcome || 'winner')}
+                onChange={(event) => updateRound({ sourceOutcome: event.target.value as 'winner' | 'loser' | 'both' })}
+                disabled={index === 0}
+                className="h-9 w-full rounded-lg border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966] disabled:bg-[#f3f5ff] disabled:text-[#7a86ae]"
+              >
+                <option value="winner">Winners</option>
+                <option value="loser">Losers</option>
+                <option value="both">Winners + Losers</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Players / Match</label>
+              <input
+                type="number"
+                min="2"
+                value={round.playersPerMatch}
+                onChange={(event) => updateRound({
+                  playersPerMatch: round.matchType === 'head-to-head'
+                    ? 2
+                    : Math.max(2, Number.parseInt(event.target.value || '2', 10) || 2),
+                })}
+                disabled={round.matchType === 'head-to-head'}
+                className="h-9 w-full rounded-lg border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966] disabled:bg-[#f3f5ff] disabled:text-[#7a86ae]"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Advance / Match</label>
+              <input
+                type="number"
+                min="0"
+                max={Math.max(0, round.playersPerMatch)}
+                value={round.advancementCount}
+                onChange={(event) => updateRound({
+                  advancementCount: Math.max(0, Number.parseInt(event.target.value || '0', 10) || 0),
+                })}
+                className="h-9 w-full rounded-lg border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Scoring</label>
+              <select
+                value={round.scoringType}
+                onChange={(event) => updateRound({ scoringType: event.target.value as EngineScoringType })}
+                className="h-9 w-full rounded-lg border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]"
+              >
+                <option value="pins">Pins</option>
+                <option value="points">Points</option>
+                <option value="best-of-x">Best of X</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Manual Match Count</label>
+              <input
+                type="number"
+                min="1"
+                value={round.manualMatchCount ?? ''}
+                onChange={(event) => {
+                  const raw = event.target.value.trim();
+                  updateRound({ manualMatchCount: raw ? Math.max(1, Number.parseInt(raw, 10) || 1) : null });
+                }}
+                placeholder="Auto"
+                className="h-9 w-full rounded-lg border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Seed Injection</label>
+              <input
+                type="text"
+                value={injectedSeedsText}
+                onChange={(event) => updateRound({ injectParticipantSeeds: parseSeedList(event.target.value) })}
+                placeholder="e.g. 1, 2, 3"
+                className="h-9 w-full rounded-lg border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]"
+              />
+            </div>
+          </div>
+
+          {round.scoringType === 'best-of-x' && (
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-[#6c78a9]">Best Of</label>
+              <input
+                type="number"
+                min="1"
+                value={round.bestOf ?? 1}
+                onChange={(event) => updateRound({ bestOf: Math.max(1, Number.parseInt(event.target.value || '1', 10) || 1) })}
+                className="h-9 w-full rounded-lg border border-[#d6ddff] bg-white px-3 text-sm text-[#2f3966]"
+              />
+            </div>
+          )}
+
+          <label className="flex items-center gap-2 rounded-lg border border-[#d8defe] bg-white px-3 py-2 text-[11px] text-[#62709b]">
+            <input
+              type="checkbox"
+              checked={Boolean(round.reseed)}
+              onChange={(event) => updateRound({ reseed: event.target.checked })}
+              className="h-4 w-4 rounded border-[#c6d1f7] text-[#4f67bc] focus:ring-[#b8c5f3]"
+            />
+            Reseed advancers before creating this round
+          </label>
+
+          <div className="rounded-lg border border-[#d8defe] bg-white px-3 py-2 text-[11px] text-[#62709b]">
+            <span className="font-bold text-[#33408a]">{round.matchType}</span>
+            {' · '}
+            <span className="font-bold text-[#33408a]">{round.playersPerMatch}p/match</span>
+            {' · '}
+            <span className="font-bold text-[#33408a]">{round.scoringType === 'best-of-x' ? `Best of ${round.bestOf ?? 1}` : round.scoringType}</span>
+            {' · '}
+            <span className="font-bold text-[#33408a]">{round.advancementCount}</span>
+            {' '}advance
+            {availableSeedNumbers.length > 0 && (
+              <div className="mt-1 text-[10px] text-[#8a96bd]">
+                Available seeds: {availableSeedNumbers.join(', ')}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament: Tournament; role: UserRole; onTournamentUpdated?: (t: Tournament) => void }) {
   const tx = React.useContext(UiTranslationContext);
   const isAdmin = role === 'admin';
