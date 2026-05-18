@@ -11191,11 +11191,15 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           {effectiveViewMode === 'list' ? (
             /* ── List view ─────────────────────────────────────────────── */
             <div className="overflow-auto">
-              {[...engineResult.rounds].map(round => (
-                <div key={round.roundId} className="mb-4">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2 px-1">{round.roundName}</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2">
-                    {engineResult.matches.filter(m => m.roundId === round.roundId).sort((a, b) => a.matchIndex - b.matchIndex).map(match => {
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 auto-rows-max">
+                {[...engineResult.rounds].flatMap(round => {
+                  const roundMatches = engineResult.matches.filter(m => m.roundId === round.roundId).sort((a, b) => a.matchIndex - b.matchIndex);
+                  if (roundMatches.length === 0) return [];
+                  return [
+                    React.createElement('div', { key: `header-${round.roundId}`, className: 'col-span-full' },
+                      React.createElement('p', { className: 'text-[10px] font-bold uppercase tracking-widest text-black/40 px-1 mb-2' }, round.roundName)
+                    ),
+                    ...roundMatches.map(match => {
                       const override = matchOverrides[match.id] || {};
                       const isSelected = selectedMatchId === match.id;
                       const specialTone = getSpecialMatchTone(match);
@@ -11272,10 +11276,10 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                           </div>
                         </div>
                       );
-                    })}
-                  </div>
-                </div>
-              ))}
+                    })
+                  ];
+                })}
+              </div>
             </div>
           ) : (
             /* ── Visual view ───────────────────────────────────────────── */
