@@ -289,6 +289,18 @@ function initDb() {
       FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS manual_winners (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id INTEGER NOT NULL,
+      division TEXT CHECK(division IN ('all','female','male')) NOT NULL DEFAULT 'all',
+      place TEXT CHECK(place IN ('first','second','third')) NOT NULL,
+      target_kind TEXT CHECK(target_kind IN ('participant','team','manual')) NOT NULL DEFAULT 'manual',
+      target_id INTEGER,
+      display_name TEXT NOT NULL DEFAULT '',
+      UNIQUE (tournament_id, division, place),
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS brackets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tournament_id INTEGER NOT NULL,
@@ -3331,6 +3343,97 @@ async function startServer() {
     } catch (err: any) {
       console.error('Error saving standings bonus:', err);
       return res.status(500).json({ error: err.message || 'Failed to save standings bonus' });
+    }
+  });
+
+  app.get("/api/tournaments/:id/manual-winners", (req, res) => {
+    const tournament = db.prepare("SELECT id FROM tournaments WHERE id = ?").get(req.params.id) as any;
+    if (!tournament) return res.status(404).json({ error: "Tournament not found" });
+
+    const rows = db.prepare(`
+      SELECT id, tournament_id, division, place, target_kind, target_id, display_name
+      FROM manual_winners
+      WHERE tournament_id = ?
+      ORDER BY CASE division WHEN 'all' THEN 0 WHEN 'female' THEN 1 ELSE 2 END,
+               CASE place WHEN 'first' THEN 0 WHEN 'second' THEN 1 ELSE 2 END,
+               id ASC
+    `).all(req.params.id);
+
+    res.json(rows);
+  });
+
+  app.put("/api/tournaments/:id/manual-winners", requirePermission('scores:manage', (req) => req.params.id), (req, res) => {
+    try {
+      const tournament = db.prepare("SELECT id FROM tournaments WHERE id = ?").get(req.params.id) as any;
+      if (!tournament) return res.status(404).json({ error: "Tournament not found" });
+
+      const divisionRaw = String(req.body?.division || '').trim().toLowerCase();
+      const placeRaw = String(req.body?.place || '').trim().toLowerCase();
+      const targetKind = String(req.body?.target_kind || '').trim().toLowerCase();
+      const displayName = String(req.body?.display_name || '').trim();
+      const targetIdRaw = req.body?.target_id;
+      const targetId = targetIdRaw === null || targetIdRaw === undefined || targetIdRaw === ''
+        ? null
+        : Number.parseInt(String(targetIdRaw), 10);
+
+      const division: 'all' | 'female' | 'male' = divisionRaw === 'female' || divisionRaw === 'male' ? divisionRaw : 'all';
+      if (placeRaw !== 'first' && placeRaw !== 'second' && placeRaw !== 'third') {
+        return res.status(400).json({ error: 'Invalid winner place' });
+      }
+      if (targetKind !== 'participant' && targetKind !== 'team' && targetKind !== 'manual') {
+        return res.status(400).json({ error: 'Invalid winner target kind' });
+      }
+
+      const place: 'first' | 'second' | 'third' = placeRaw;
+      const normalizedDisplayName = displayName;
+      const hasContent = normalizedDisplayName.length > 0 || (targetKind !== 'manual' && targetId !== null);
+
+      if (!hasContent) {
+        db.prepare(`
+          DELETE FROM manual_winners
+          WHERE tournament_id = ? AND division = ? AND place = ?
+        `).run(req.params.id, division, place);
+        return res.json({ success: true });
+      }
+
+      if ((targetKind === 'participant' || targetKind === 'team') && (!Number.isFinite(targetId) || Number(targetId) <= 0)) {
+        return res.status(400).json({ error: 'Invalid winner target id' });
+      }
+
+      if (targetKind === 'participant') {
+        const participant = db.prepare("SELECT id FROM participants WHERE id = ? AND tournament_id = ?").get(targetId, req.params.id) as any;
+        if (!participant) {
+          return res.status(404).json({ error: 'Participant not found in tournament' });
+        }
+      }
+
+      if (targetKind === 'team') {
+        const team = db.prepare("SELECT id FROM teams WHERE id = ? AND tournament_id = ?").get(targetId, req.params.id) as any;
+        if (!team) {
+          return res.status(404).json({ error: 'Team not found in tournament' });
+        }
+      }
+
+      db.prepare(`
+        INSERT INTO manual_winners (tournament_id, division, place, target_kind, target_id, display_name)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(tournament_id, division, place)
+        DO UPDATE SET
+          target_kind = excluded.target_kind,
+          target_id = excluded.target_id,
+          display_name = excluded.display_name
+      `).run(req.params.id, division, place, targetKind, targetKind === 'manual' ? null : targetId, normalizedDisplayName);
+
+      const entry = db.prepare(`
+        SELECT id, tournament_id, division, place, target_kind, target_id, display_name
+        FROM manual_winners
+        WHERE tournament_id = ? AND division = ? AND place = ?
+      `).get(req.params.id, division, place);
+
+      return res.json({ success: true, entry });
+    } catch (err: any) {
+      console.error('Error saving manual winner:', err);
+      return res.status(500).json({ error: err.message || 'Failed to save manual winner' });
     }
   });
 
