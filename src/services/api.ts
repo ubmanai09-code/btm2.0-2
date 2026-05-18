@@ -85,6 +85,7 @@ export interface LeagueRankingRow {
   events_played: number;
   average_event_score: number;
   tournament_names: string[];
+  tournament_scores?: Array<{ id: number; name: string; score: number }>;
 }
 
 export interface LeagueRankingResponse {
@@ -94,6 +95,7 @@ export interface LeagueRankingResponse {
   division: 'all' | 'male' | 'female';
   tournaments: Array<{ id: number; name: string; date?: string; type?: Tournament['type'] }>;
   rows: LeagueRankingRow[];
+  warnings?: Array<{ type: string; message: string; entries: string[] }>;
 }
 
 export interface StandingBonus {
@@ -663,11 +665,15 @@ const api = {
     league: 'mba' | 'b-bowling';
     mode?: 'players' | 'teams';
     division?: 'all' | 'male' | 'female';
+    tournamentIds?: number[];
   }): Promise<LeagueRankingResponse> {
     const params = new URLSearchParams();
     params.set('league', options.league);
     if (options.mode) params.set('mode', options.mode);
     if (options.division) params.set('division', options.division);
+    if (options.tournamentIds && options.tournamentIds.length > 0) {
+      params.set('tournament_ids', options.tournamentIds.join(','));
+    }
     const res = await fetch(`/api/league-rankings?${params.toString()}`);
     const data = await this.safeJson(res);
     if (!res.ok) {

@@ -3754,10 +3754,42 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
   const [mode, setMode] = useState<'players' | 'teams'>(tournament.type === 'team' ? 'teams' : 'players');
   const [division, setDivision] = useState<'all' | 'male' | 'female'>('all');
   const [loading, setLoading] = useState(false);
+  const [tournamentsLoading, setTournamentsLoading] = useState(false);
   const [error, setError] = useState('');
   const [data, setData] = useState<LeagueRankingResponse | null>(null);
+  const [tournamentOptions, setTournamentOptions] = useState<Tournament[]>([]);
+  const [selectedTournamentIds, setSelectedTournamentIds] = useState<number[]>([]);
+  const [tournamentFilter, setTournamentFilter] = useState('');
+  const [rowFilter, setRowFilter] = useState('');
+
+  const leagueMatcher = React.useMemo(() => {
+    if (league === 'b-bowling') {
+      return (name: string) => /b\s*pro/i.test(name);
+    }
+    return (name: string) => /mixed/i.test(name);
+  }, [league]);
+
+  const availableTournamentOptions = React.useMemo(
+    () => tournamentOptions.filter((item) => leagueMatcher(String(item.name || ''))),
+    [leagueMatcher, tournamentOptions],
+  );
+
+  const filteredTournamentOptions = React.useMemo(() => {
+    const query = tournamentFilter.trim().toLowerCase();
+    if (!query) return availableTournamentOptions;
+    return availableTournamentOptions.filter((item) => {
+      const name = String(item.name || '').toLowerCase();
+      const date = String(item.date || '').toLowerCase();
+      return name.includes(query) || date.includes(query);
+    });
+  }, [availableTournamentOptions, tournamentFilter]);
 
   const loadLeagueRankings = async () => {
+    if (selectedTournamentIds.length === 0) {
+      setData(null);
+      setError('Select at least one tournament to build league scores.');
+      return;
+    }
     try {
       setLoading(true);
       setError('');
@@ -3765,6 +3797,7 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
         league,
         mode,
         division: mode === 'teams' ? 'all' : division,
+        tournamentIds: selectedTournamentIds,
       });
       setData(payload);
     } catch (err: any) {
@@ -3776,22 +3809,74 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
   };
 
   useEffect(() => {
+    let cancelled = false;
+    setTournamentsLoading(true);
+    api.getTournaments()
+      .then((items) => {
+        if (!cancelled) setTournamentOptions(Array.isArray(items) ? items : []);
+      })
+      .catch((err: any) => {
+        if (!cancelled) setError(err?.message || 'Failed to load tournaments');
+      })
+      .finally(() => {
+        if (!cancelled) setTournamentsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const availableIds = availableTournamentOptions.map((item) => item.id);
+    setSelectedTournamentIds((prev) => {
+      const next = prev.filter((id) => availableIds.includes(id));
+      if (next.length > 0) return next;
+      return availableIds;
+    });
+  }, [availableTournamentOptions]);
+
+  useEffect(() => {
     void loadLeagueRankings();
-  }, [league, mode, division]);
+  }, [league, mode, division, selectedTournamentIds.join(',')]);
 
   const canManage = role === 'admin' || role === 'moderator';
   const rows = data?.rows || [];
   const includedTournaments = data?.tournaments || [];
+  const warnings = data?.warnings || [];
+
+  const filteredRows = React.useMemo(() => {
+    const query = rowFilter.trim().toLowerCase();
+    if (!query) return rows;
+    return rows.filter((row) => {
+      const name = String(row.name || '').toLowerCase();
+      const club = String(row.club || '').toLowerCase();
+      const gender = String(row.gender || '').toLowerCase();
+      return name.includes(query) || club.includes(query) || gender.includes(query);
+    });
+  }, [rowFilter, rows]);
+
+  const selectedTournamentCount = selectedTournamentIds.length;
+  const totalScoreAcrossRows = filteredRows.reduce((sum, row) => sum + Number(row.total_score || 0), 0);
+
+  const toggleTournamentSelection = (tournamentId: number) => {
+    setSelectedTournamentIds((prev) => (
+      prev.includes(tournamentId)
+        ? prev.filter((id) => id !== tournamentId)
+        : [...prev, tournamentId]
+    ));
+  };
 
   const exportCsv = () => {
-    if (!data || rows.length === 0) return;
+    if (!data || filteredRows.length === 0) return;
+    const perTournamentHeaders = includedTournaments.map((item) => `${item.name} score`);
     const headers = mode === 'teams'
-      ? ['rank', 'team', 'total_score', 'events_played', 'average_event_score', 'tournaments']
-      : ['rank', 'name', 'gender', 'club', 'total_score', 'events_played', 'average_event_score', 'tournaments'];
-    const csvRows = rows.map((row) => mode === 'teams'
-      ? [row.rank, row.name, row.total_score, row.events_played, row.average_event_score, row.tournament_names.join(' | ')]
-      : [row.rank, row.name, row.gender || 'unknown', row.club || '', row.total_score, row.events_played, row.average_event_score, row.tournament_names.join(' | ')]
-    );
+      ? ['rank', 'team', ...perTournamentHeaders, 'total_score', 'events_played', 'average_event_score', 'tournaments']
+      : ['rank', 'name', 'gender', 'club', ...perTournamentHeaders, 'total_score', 'events_played', 'average_event_score', 'tournaments'];
+    const csvRows = filteredRows.map((row) => {
+      const scoreByTournamentId = new Map((row.tournament_scores || []).map((item) => [item.id, item.score]));
+      const tournamentValues = includedTournaments.map((item) => scoreByTournamentId.get(item.id) ?? '');
+      return mode === 'teams'
+        ? [row.rank, row.name, ...tournamentValues, row.total_score, row.events_played, row.average_event_score, row.tournament_names.join(' | ')]
+        : [row.rank, row.name, row.gender || 'unknown', row.club || '', ...tournamentValues, row.total_score, row.events_played, row.average_event_score, row.tournament_names.join(' | ')];
+    });
     const csv = [headers.join(','), ...csvRows.map((line) => line.map((item) => `"${String(item).replace(/"/g, '""')}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -3808,104 +3893,255 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h3 className="text-lg font-bold">{tx('League Rankings')}</h3>
-            <p className="text-xs text-black/45 mt-0.5">
-              {tx('Aggregated standings from multiple tournaments by league and division.')}
-            </p>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h3 className="text-lg font-bold">{tx('League Rankings')}</h3>
+              <p className="text-xs text-black/45 mt-0.5">
+                {tx('Build cumulative league standings from selected tournaments and review data quality warnings before publishing.')}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" onClick={() => void loadLeagueRankings()} title="Refresh" ariaLabel="Refresh">
+                <RefreshCw size={14} />
+              </Button>
+              <Button variant="outline" onClick={exportCsv} title="Export CSV" ariaLabel="Export CSV" disabled={filteredRows.length === 0}>
+                <Download size={14} />
+              </Button>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={league}
-              onChange={(e) => setLeague(e.target.value === 'b-bowling' ? 'b-bowling' : 'mba')}
-              className="h-8 rounded-md border border-black/15 bg-white px-2 text-xs"
-              aria-label="League"
-            >
-              <option value="mba">MBA (Mixed tournaments)</option>
-              <option value="b-bowling">B Bowling (B Pro league)</option>
-            </select>
-            <select
-              value={mode}
-              onChange={(e) => setMode(e.target.value === 'teams' ? 'teams' : 'players')}
-              className="h-8 rounded-md border border-black/15 bg-white px-2 text-xs"
-              aria-label="Mode"
-            >
-              <option value="players">Players</option>
-              <option value="teams">Teams</option>
-            </select>
-            <select
-              value={mode === 'teams' ? 'all' : division}
-              onChange={(e) => setDivision(e.target.value === 'male' ? 'male' : e.target.value === 'female' ? 'female' : 'all')}
-              disabled={mode === 'teams'}
-              className="h-8 rounded-md border border-black/15 bg-white px-2 text-xs disabled:opacity-50"
-              aria-label="Division"
-            >
-              <option value="all">All</option>
-              <option value="female">Female</option>
-              <option value="male">Male</option>
-            </select>
-            <Button variant="outline" onClick={() => void loadLeagueRankings()} title="Refresh" ariaLabel="Refresh">
-              <RefreshCw size={14} />
-            </Button>
-            <Button variant="outline" onClick={exportCsv} title="Export CSV" ariaLabel="Export CSV" disabled={rows.length === 0}>
-              <Download size={14} />
-            </Button>
+
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40">League</div>
+                <div className="mt-1 text-sm font-semibold text-black/80">{league === 'mba' ? 'MBA' : 'B Bowling'}</div>
+              </div>
+              <div className="rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40">Selected Tournaments</div>
+                <div className="mt-1 text-sm font-semibold text-black/80">{selectedTournamentCount}</div>
+              </div>
+              <div className="rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40">Ranked Entries</div>
+                <div className="mt-1 text-sm font-semibold text-black/80">{filteredRows.length}</div>
+              </div>
+              <div className="rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40">Score Total</div>
+                <div className="mt-1 text-sm font-semibold text-black/80">{totalScoreAcrossRows}</div>
+              </div>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-3">
+              <select
+                value={league}
+                onChange={(e) => setLeague(e.target.value === 'b-bowling' ? 'b-bowling' : 'mba')}
+                className="h-9 rounded-md border border-black/15 bg-white px-2 text-xs"
+                aria-label="League"
+              >
+                <option value="mba">MBA</option>
+                <option value="b-bowling">B Bowling</option>
+              </select>
+              <select
+                value={mode}
+                onChange={(e) => setMode(e.target.value === 'teams' ? 'teams' : 'players')}
+                className="h-9 rounded-md border border-black/15 bg-white px-2 text-xs"
+                aria-label="Mode"
+              >
+                <option value="players">Players</option>
+                <option value="teams">Teams</option>
+              </select>
+              <select
+                value={mode === 'teams' ? 'all' : division}
+                onChange={(e) => setDivision(e.target.value === 'male' ? 'male' : e.target.value === 'female' ? 'female' : 'all')}
+                disabled={mode === 'teams'}
+                className="h-9 rounded-md border border-black/15 bg-white px-2 text-xs disabled:opacity-50"
+                aria-label="Division"
+              >
+                <option value="all">All divisions</option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-black/10 bg-white p-3">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40">Tournament Selection</div>
+                <p className="mt-1 text-xs text-black/45">Choose exactly which tournaments contribute to the cumulative league table.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-black/40 pointer-events-none" />
+                  <input
+                    value={tournamentFilter}
+                    onChange={(e) => setTournamentFilter(e.target.value)}
+                    placeholder="Filter tournaments"
+                    className="h-8 w-52 rounded-md border border-black/15 bg-white pl-7 pr-2 text-xs"
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSelectedTournamentIds(availableTournamentOptions.map((item) => item.id))}
+                  title="Select all"
+                  ariaLabel="Select all tournaments"
+                >
+                  All
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSelectedTournamentIds([])}
+                  title="Clear selection"
+                  ariaLabel="Clear selected tournaments"
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-3 max-h-56 overflow-y-auto rounded-md border border-black/10">
+              {tournamentsLoading ? (
+                <div className="px-3 py-4 text-xs text-black/50">Loading tournaments...</div>
+              ) : filteredTournamentOptions.length === 0 ? (
+                <div className="px-3 py-4 text-xs text-black/50">No tournaments match the current league filter.</div>
+              ) : (
+                <div className="divide-y divide-black/10">
+                  {filteredTournamentOptions.map((item) => {
+                    const selected = selectedTournamentIds.includes(item.id);
+                    return (
+                      <label key={item.id} className={`flex cursor-pointer items-start gap-3 px-3 py-2 transition-colors ${selected ? 'bg-emerald-50/60' : 'bg-white hover:bg-black/[0.02]'}`}>
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => toggleTournamentSelection(item.id)}
+                          className="mt-0.5 accent-emerald-600"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold text-black/80 truncate">{item.name}</div>
+                          <div className="mt-0.5 text-[10px] uppercase tracking-widest text-black/40">
+                            {item.date || 'No date'} · {item.type || 'unknown'}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {error && <p className="text-sm text-rose-700 mt-3">{error}</p>}
+      </Card>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-black/55">
-          <span className="inline-flex items-center rounded-md border border-black/10 bg-black/[0.02] px-2 py-1">
-            League: {data?.league_name || (league === 'mba' ? 'MBA' : 'B Bowling')}
-          </span>
-          <span className="inline-flex items-center rounded-md border border-black/10 bg-black/[0.02] px-2 py-1">
-            Included tournaments: {includedTournaments.length}
-          </span>
-          <span className="inline-flex items-center rounded-md border border-black/10 bg-black/[0.02] px-2 py-1">
-            Ranked entries: {rows.length}
-          </span>
+      {warnings.length > 0 && (
+        <Card className="p-4 border-amber-200 bg-amber-50">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div>
+              <h4 className="text-sm font-bold text-amber-800">Data Quality Warnings</h4>
+              <p className="text-xs text-amber-700/80 mt-0.5">Potential duplicate names and missing required identity fields detected in the selected tournaments.</p>
+            </div>
+            <span className="inline-flex items-center rounded-full border border-amber-300 bg-white px-2 py-0.5 text-[10px] font-bold text-amber-700">
+              {warnings.length} warning{warnings.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            {warnings.map((warning, index) => (
+              <div key={`${warning.type}-${index}`} className="rounded-md border border-amber-200 bg-white px-3 py-2">
+                <div className="text-xs font-semibold text-amber-800">{warning.message}</div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {warning.entries.slice(0, 8).map((entry) => (
+                    <span key={entry} className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">
+                      {entry}
+                    </span>
+                  ))}
+                  {warning.entries.length > 8 && (
+                    <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">
+                      +{warning.entries.length - 8} more
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <Card className="p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h4 className="text-sm font-bold text-black/80">Cumulative Table</h4>
+            <p className="text-xs text-black/45 mt-0.5">Scores are aggregated across the selected tournaments.</p>
+          </div>
+          <div className="relative">
+            <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-black/40 pointer-events-none" />
+            <input
+              value={rowFilter}
+              onChange={(e) => setRowFilter(e.target.value)}
+              placeholder={mode === 'teams' ? 'Filter teams' : 'Filter players'}
+              className="h-9 w-56 rounded-md border border-black/15 bg-white pl-7 pr-2 text-xs"
+            />
+          </div>
         </div>
-
-        {includedTournaments.length > 0 && (
-          <p className="mt-2 text-xs text-black/45">
-            {includedTournaments.map((item) => item.name).join(' • ')}
-          </p>
-        )}
       </Card>
 
       <Card className="overflow-hidden">
         {loading ? (
           <p className="px-4 py-6 text-sm text-black/50">Loading league rankings...</p>
-        ) : rows.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <p className="px-4 py-6 text-sm text-black/50">No league rankings yet for selected filters.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="dashboard-setup-table w-full min-w-[760px] border-collapse text-sm">
+            <table className="dashboard-setup-table w-full min-w-[960px] border-collapse text-sm">
               <thead className="bg-[#e3f3f6]">
                 <tr>
                   <th className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-black/60">Rank</th>
                   <th className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-black/60">{mode === 'teams' ? 'Team' : 'Participant'}</th>
                   {mode === 'players' && <th className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-black/60">Gender</th>}
                   {mode === 'players' && <th className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-black/60">Club</th>}
+                  {includedTournaments.map((item) => (
+                    <th key={item.id} className="px-3 py-2 text-right text-[11px] font-bold uppercase tracking-wide text-black/60 min-w-[110px]">
+                      {item.name}
+                    </th>
+                  ))}
                   <th className="px-3 py-2 text-right text-[11px] font-bold uppercase tracking-wide text-black/60">Total</th>
                   <th className="px-3 py-2 text-right text-[11px] font-bold uppercase tracking-wide text-black/60">Events</th>
                   <th className="px-3 py-2 text-right text-[11px] font-bold uppercase tracking-wide text-black/60">Avg/Event</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, idx) => (
+                {filteredRows.map((row, idx) => {
+                  const scoreByTournamentId = new Map((row.tournament_scores || []).map((item) => [item.id, item.score]));
+                  const isTopThree = row.rank <= 3;
+                  const rankBadgeClass = row.rank === 1
+                    ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
+                    : row.rank === 2
+                      ? 'bg-slate-100 text-slate-700 border-slate-200'
+                      : row.rank === 3
+                        ? 'bg-orange-100 text-orange-800 border-orange-200'
+                        : 'bg-black/[0.03] text-black/60 border-black/10';
+                  return (
                   <tr key={row.key} className={idx % 2 === 1 ? 'bg-[#FAFAFA]' : 'bg-white'}>
-                    <td className="px-3 py-2 font-semibold text-black/60">{row.rank}</td>
+                    <td className="px-3 py-2 font-semibold text-black/60">
+                      <span className={`inline-flex min-w-[2rem] items-center justify-center rounded-full border px-2 py-0.5 text-[11px] font-bold ${rankBadgeClass}`}>
+                        {row.rank}
+                      </span>
+                    </td>
                     <td className="px-3 py-2 font-semibold text-black/80">{row.name}</td>
                     {mode === 'players' && <td className="px-3 py-2 text-black/60">{row.gender || 'unknown'}</td>}
                     {mode === 'players' && <td className="px-3 py-2 text-black/60">{row.club || '-'}</td>}
+                    {includedTournaments.map((item) => (
+                      <td key={`${row.key}-${item.id}`} className="px-3 py-2 text-right text-black/60 tabular-nums">
+                        {scoreByTournamentId.has(item.id) ? scoreByTournamentId.get(item.id) : '—'}
+                      </td>
+                    ))}
                     <td className="px-3 py-2 text-right font-bold text-black/80">{row.total_score}</td>
                     <td className="px-3 py-2 text-right text-black/60">{row.events_played}</td>
                     <td className="px-3 py-2 text-right text-black/60">{row.average_event_score.toFixed(1)}</td>
                   </tr>
-                ))}
+                )})}
               </tbody>
             </table>
           </div>

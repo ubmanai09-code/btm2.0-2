@@ -2912,6 +2912,7 @@ async function startServer() {
       const mode = String(req.query.mode || 'players').trim().toLowerCase() === 'teams' ? 'teams' : 'players';
       const divisionRaw = String(req.query.division || 'all').trim().toLowerCase();
       const division: 'all' | 'male' | 'female' = divisionRaw === 'male' || divisionRaw === 'female' ? divisionRaw : 'all';
+      const tournamentIdsRaw = String(req.query.tournament_ids || '').trim();
 
       const normalizeTextKey = (value: unknown) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
       const normalizeGender = (raw: unknown): 'male' | 'female' | 'unknown' => {
@@ -2953,7 +2954,13 @@ async function startServer() {
         ORDER BY date DESC, id DESC
       `).all() as any[];
 
-      const selectedTournaments = allTournaments.filter((row) => league.matchesTournament(String(row.name || '')));
+      let selectedTournaments: any[];
+      if (tournamentIdsRaw) {
+        const tournamentIds = tournamentIdsRaw.split(',').map(id => Number.parseInt(id.trim(), 10)).filter(id => Number.isFinite(id) && id > 0);
+        selectedTournaments = allTournaments.filter(row => tournamentIds.includes(row.id));
+      } else {
+        selectedTournaments = allTournaments.filter((row) => league.matchesTournament(String(row.name || '')));
+      }
       if (selectedTournaments.length === 0) {
         return res.json({
           league_code: league.code,
@@ -2962,6 +2969,7 @@ async function startServer() {
           division,
           tournaments: [],
           rows: [],
+          warnings: [],
         });
       }
 
@@ -2995,25 +3003,55 @@ async function startServer() {
           total_score: number;
           events_played: number;
           tournament_names: Set<string>;
+          tournament_scores: Map<number, { id: number; name: string; score: number }>;
         }>();
+
+        const warnings: Array<{ type: string; message: string; entries: string[] }> = [];
+        const perTournamentDuplicates = new Map<number, Map<string, number>>();
 
         for (const tournament of selectedTournaments) {
           const rows = perTournamentTeamRows.all(tournament.id) as any[];
+          const duplicateMap = new Map<string, number>();
+
           for (const row of rows) {
             const name = String(row.team_name || '').trim() || `Team #${row.team_id}`;
             const key = normalizeTextKey(name);
             const tournamentTotal = Number(row.score_sum || 0) + Number(row.additional_score || 0) + Number(row.bonus_score || 0);
+            const tournamentName = String(tournament.name || `Tournament #${tournament.id}`);
             const current = aggregate.get(key) || {
               key,
               name,
               total_score: 0,
               events_played: 0,
               tournament_names: new Set<string>(),
+              tournament_scores: new Map<number, { id: number; name: string; score: number }>(),
             };
             current.total_score += tournamentTotal;
             current.events_played += 1;
-            current.tournament_names.add(String(tournament.name || `Tournament #${tournament.id}`));
+            current.tournament_names.add(tournamentName);
+            current.tournament_scores.set(tournament.id, { id: tournament.id, name: tournamentName, score: tournamentTotal });
             aggregate.set(key, current);
+
+            duplicateMap.set(key, (duplicateMap.get(key) || 0) + 1);
+          }
+
+          perTournamentDuplicates.set(tournament.id, duplicateMap);
+        }
+
+        // Add duplicate warnings
+        for (const [tournamentId, duplicateMap] of perTournamentDuplicates) {
+          const tournament = selectedTournaments.find(t => t.id === tournamentId);
+          const duplicateKeys = Array.from(duplicateMap.entries()).filter(([_, count]) => count > 1);
+          if (duplicateKeys.length > 0) {
+            const duplicateNames = duplicateKeys.map(([key, count]) => {
+              const aggEntry = Array.from(aggregate.values()).find(v => v.key === key);
+              return `${aggEntry?.name || key} (${count} entries)`;
+            });
+            warnings.push({
+              type: 'duplicate_team',
+              message: `Duplicate team names in ${tournament?.name || 'tournament'}`,
+              entries: duplicateNames,
+            });
           }
         }
 
@@ -3027,6 +3065,7 @@ async function startServer() {
             events_played: row.events_played,
             average_event_score: row.events_played > 0 ? Number((row.total_score / row.events_played).toFixed(1)) : 0,
             tournament_names: Array.from(row.tournament_names),
+            tournament_scores: Array.from(row.tournament_scores.values()),
           }));
 
         return res.json({
@@ -3036,6 +3075,7 @@ async function startServer() {
           division,
           tournaments: selectedTournaments,
           rows,
+          warnings,
         });
       }
 
@@ -3068,18 +3108,40 @@ async function startServer() {
         key: string;
         name: string;
         gender: 'male' | 'female' | 'unknown';
+        tournament_scores: Map<number, { id: number; name: string; score: number }>;
         club: string | null;
         total_score: number;
         events_played: number;
         tournament_names: Set<string>;
       }>();
 
+      const warnings: Array<{ type: string; message: string; entries: string[] }> = [];
+      const missingFirstNames = new Set<string>();
+      const missingLastNames = new Set<string>();
+      const missingGenders = new Set<string>();
+      const perTournamentDuplicates = new Map<number, Map<string, number>>();
+
       for (const tournament of selectedTournaments) {
         const rows = perTournamentPlayerRows.all(tournament.id) as any[];
+        const duplicateMap = new Map<string, number>();
+
         for (const row of rows) {
-          const name = `${String(row.first_name || '').trim()} ${String(row.last_name || '').trim()}`.trim() || `Participant #${row.participant_id}`;
+          const firstName = String(row.first_name || '').trim();
+          const lastName = String(row.last_name || '').trim();
+          const name = `${firstName} ${lastName}`.trim() || `Participant #${row.participant_id}`;
           const gender = normalizeGender(row.gender);
           if (division !== 'all' && gender !== division) continue;
+
+          // Track missing fields
+          if (!firstName) {
+            missingFirstNames.add(`${name} in ${tournament.name}`);
+          }
+          if (!lastName) {
+            missingLastNames.add(`${name} in ${tournament.name}`);
+          }
+          if (gender === 'unknown') {
+            missingGenders.add(`${name} in ${tournament.name}`);
+          }
 
           const key = normalizeTextKey(name);
           const tournamentTotal = Number(row.score_sum || 0) + Number(row.additional_score || 0) + Number(row.bonus_score || 0);
@@ -3091,12 +3153,59 @@ async function startServer() {
             total_score: 0,
             events_played: 0,
             tournament_names: new Set<string>(),
+            tournament_scores: new Map<number, { id: number; name: string; score: number }>(),
           };
+          const tournamentName = String(tournament.name || `Tournament #${tournament.id}`);
           current.total_score += tournamentTotal;
           current.events_played += 1;
-          current.tournament_names.add(String(tournament.name || `Tournament #${tournament.id}`));
+          current.tournament_names.add(tournamentName);
+          current.tournament_scores.set(tournament.id, { id: tournament.id, name: tournamentName, score: tournamentTotal });
           aggregate.set(key, current);
+
+          duplicateMap.set(key, (duplicateMap.get(key) || 0) + 1);
         }
+
+        perTournamentDuplicates.set(tournament.id, duplicateMap);
+      }
+
+      // Add duplicate warnings
+      for (const [tournamentId, duplicateMap] of perTournamentDuplicates) {
+        const tournament = selectedTournaments.find(t => t.id === tournamentId);
+        const duplicateKeys = Array.from(duplicateMap.entries()).filter(([_, count]) => count > 1);
+        if (duplicateKeys.length > 0) {
+          const duplicateNames = duplicateKeys.map(([key, count]) => {
+            const aggEntry = Array.from(aggregate.values()).find(v => v.key === key);
+            return `${aggEntry?.name || key} (${count} entries)`;
+          });
+          warnings.push({
+            type: 'duplicate_participant',
+            message: `Duplicate participant names in ${tournament?.name || 'tournament'}`,
+            entries: duplicateNames,
+          });
+        }
+      }
+
+      // Add missing field warnings
+      if (missingFirstNames.size > 0) {
+        warnings.push({
+          type: 'missing_first_name',
+          message: 'Missing first name',
+          entries: Array.from(missingFirstNames),
+        });
+      }
+      if (missingLastNames.size > 0) {
+        warnings.push({
+          type: 'missing_last_name',
+          message: 'Missing last name',
+          entries: Array.from(missingLastNames),
+        });
+      }
+      if (missingGenders.size > 0) {
+        warnings.push({
+          type: 'missing_gender',
+          message: 'Missing or invalid gender',
+          entries: Array.from(missingGenders),
+        });
       }
 
       const rows = Array.from(aggregate.values())
@@ -3111,6 +3220,7 @@ async function startServer() {
           events_played: row.events_played,
           average_event_score: row.events_played > 0 ? Number((row.total_score / row.events_played).toFixed(1)) : 0,
           tournament_names: Array.from(row.tournament_names),
+          tournament_scores: Array.from(row.tournament_scores.values()),
         }));
 
       return res.json({
@@ -3120,6 +3230,7 @@ async function startServer() {
         division,
         tournaments: selectedTournaments,
         rows,
+        warnings,
       });
     } catch (err: any) {
       console.error('Error aggregating league rankings:', err);
