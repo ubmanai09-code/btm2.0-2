@@ -2402,9 +2402,9 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                                           <div className="mt-1.5 flex flex-wrap gap-2">
                                             {(isScoreBasedMatch || isDuel) && participantId ? (
                                               <input
-                                                type="number"
-                                                min="0"
-                                                max="300"
+                                                type="text"
+                                                inputMode="numeric"
+                                                pattern="[0-9]*"
                                                 value={draft[slot.slotIndex] || ''}
                                                 onChange={(e) => setScoreDrafts((prev) => ({
                                                   ...prev,

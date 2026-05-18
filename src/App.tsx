@@ -7311,7 +7311,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
     }
 
     const value = Number.parseInt(trimmed, 10);
-    if (!Number.isFinite(value) || value < 0 || value > 300) return;
+    if (!Number.isFinite(value) || value < 0) return;
 
     const result = await api.addScore(tournament.id, {
       participant_id: participantId,
@@ -7353,9 +7353,9 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
       setDraftScores((prev) => ({ ...prev, [`${participantId}-${gameNumber}`]: '' }));
       return;
     }
-    if (!/^\d{0,3}$/.test(rawValue)) return;
+    if (!/^\d*$/.test(rawValue)) return;
     const value = Number.parseInt(rawValue, 10);
-    if (!Number.isFinite(value) || value < 0 || value > 300) return;
+    if (!Number.isFinite(value) || value < 0) return;
     setDraftScores((prev) => ({ ...prev, [`${participantId}-${gameNumber}`]: rawValue }));
   };
 
@@ -7532,7 +7532,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
             const gameColumn = headers.indexOf(`game_${gameNumber}`);
             if (gameColumn === -1) continue;
             const value = Number.parseInt(columns[gameColumn], 10);
-            if (!Number.isFinite(value) || value < 0 || value > 300) continue;
+            if (!Number.isFinite(value) || value < 0) continue;
 
             scorePayloads.push({
               participant_id: participantId,
@@ -8111,7 +8111,6 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                             inputMode="numeric"
                             pattern="[0-9]*"
                             min="0"
-                            max="300"
                             value={currentScore}
                             onChange={(e) => handleScoreChange(p.id, gameNumber, e.target.value)}
                             onBlur={(e) => handleScoreBlur(p.id, gameNumber, e.target.value)}
@@ -11004,14 +11003,14 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                                 </div>
                                 {isAdmin && (
                                   <input type="number" value={score ?? ''} placeholder="—"
-                                    min={0} max={300}
+                                    min={0}
                                     style={{ MozAppearance: 'textfield' } as React.CSSProperties}
                                     onClick={e => e.stopPropagation()}
                                     onChange={e => {
                                       const val = e.target.value;
                                       if (val === '') { setScoreDrafts(prev => ({ ...prev, [match.id]: { ...(prev[match.id] || {}), [slot.slotIndex]: '' } })); return; }
                                       const num = parseInt(val, 10);
-                                      if (isNaN(num) || num < 0 || num > 300) return;
+                                      if (isNaN(num) || num < 0) return;
                                       const others = match.slots.filter(s => s.slotIndex !== slot.slotIndex).map(s => String(scoreDrafts[match.id]?.[s.slotIndex] ?? '')).filter(v => v !== '');
                                       if (others.includes(String(num))) return;
                                       setScoreDrafts(prev => ({ ...prev, [match.id]: { ...(prev[match.id] || {}), [slot.slotIndex]: String(num) } }));
@@ -11140,14 +11139,14 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                               )}
                               {isAdmin && (
                                 <input type="number" value={score ?? ''} placeholder="—"
-                                  min={0} max={300}
+                                  min={0}
                                   style={{ MozAppearance: 'textfield' } as React.CSSProperties}
                                   onClick={e => e.stopPropagation()}
                                   onChange={e => {
                                     const val = e.target.value;
                                     if (val === '') { setScoreDrafts(prev => ({ ...prev, [match.id]: { ...(prev[match.id] || {}), [slot.slotIndex]: '' } })); return; }
                                     const num = parseInt(val, 10);
-                                    if (isNaN(num) || num < 0 || num > 300) return;
+                                    if (isNaN(num) || num < 0) return;
                                     const others = match.slots.filter(s => s.slotIndex !== slot.slotIndex).map(s => String(scoreDrafts[match.id]?.[s.slotIndex] ?? '')).filter(v => v !== '');
                                     if (others.includes(String(num))) return;
                                     setScoreDrafts(prev => ({ ...prev, [match.id]: { ...(prev[match.id] || {}), [slot.slotIndex]: String(num) } }));
