@@ -8229,6 +8229,33 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   );
 }
 
+// ── V2 Bracket Types and Helpers ──────────────────────────────────────────
+type SavedBracketConfig = {
+  id: string;
+  name: string;
+  createdAt: string;
+  config?: any;
+  rounds?: TournamentRoundConfig[];
+  scoreDrafts?: Record<string, Record<number, string>>;
+  slotOverrides?: Record<string, string | number>;
+  seedImportMode?: V2SeedImportMode;
+};
+
+type V2SeedImportMode = 'top-seeds' | 'manual' | 'create-list' | 'custom';
+
+const v2CreateRound = (index: number): TournamentRoundConfig => ({
+  id: `round-${index + 1}`,
+  name: index === 0 ? 'Round 1' : index === 1 ? 'SF' : index === 2 ? 'Final' : `Round ${index + 1}`,
+  matchType: index === 0 ? 'group' : 'head-to-head',
+  sourceOutcome: 'winner',
+  playersPerMatch: index === 0 ? 4 : 2,
+  scoringType: 'pins',
+  bestOf: 1,
+  advancementCount: 2,
+  manualMatchCount: null,
+  reseed: false,
+});
+
 function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament: Tournament; role: UserRole; onTournamentUpdated?: (t: Tournament) => void }) {
   const tx = React.useContext(UiTranslationContext);
   const isAdmin = role === 'admin';
