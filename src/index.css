@@ -256,13 +256,11 @@ body {
 .scoring-table-surface {
   /* Subtle, minimal background for score entry tables - light theme */
   background: var(--bg-secondary);
-  color: var(--text);
 }
 
 [data-theme="dark"] .scoring-table-surface {
   /* Subtle, minimal background for score entry tables - dark theme */
   background: var(--bg-secondary);
-  color: var(--text);
 }
 
 /* Dark mode: override hardcoded Tailwind text colors inside scoring table */
@@ -279,10 +277,12 @@ body {
 [data-theme="dark"] .scoring-table-surface td .text-gray-400 {
   color: var(--text-tertiary) !important;
 }
-[data-theme="dark"] .scoring-table-surface td .text-green-700 {
+[data-theme="dark"] .scoring-table-surface td .text-emerald-700,
+[data-theme="dark"] .scoring-table-surface th .text-emerald-700 {
   color: var(--success-light) !important;
 }
-[data-theme="dark"] .scoring-table-surface td .text-blue-600 {
+[data-theme="dark"] .scoring-table-surface td .text-sky-700,
+[data-theme="dark"] .scoring-table-surface th .text-sky-700 {
   color: var(--info-light) !important;
 }
 

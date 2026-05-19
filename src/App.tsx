@@ -7575,12 +7575,12 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
           </th>
         ))}
         <th
-          className="px-2 py-2 sm:px-4 sm:py-3 text-[10px] font-semibold uppercase tracking-widest text-green-600 text-right sticky z-[6] scoring-table-surface min-w-[74px]"
+          className="px-2 py-2 sm:px-4 sm:py-3 text-[10px] font-semibold uppercase tracking-widest text-emerald-700 text-right sticky z-[6] scoring-table-surface min-w-[74px]"
           style={{ right: `${scoringTableWidths.avg}px` }}
         >
           Total
         </th>
-        <th className="px-2 py-2 sm:px-4 sm:py-3 text-[10px] font-semibold uppercase tracking-widest text-blue-500 text-right sticky right-0 z-[7] bg-blue-50/60 scoring-table-surface min-w-[66px]">Avg</th>
+        <th className="px-2 py-2 sm:px-4 sm:py-3 text-[10px] font-semibold uppercase tracking-widest text-sky-700 text-right sticky right-0 z-[7] scoring-table-surface min-w-[66px]">Avg</th>
       </tr>
     </thead>
   );
@@ -7766,11 +7766,11 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                       )}
                       <span className="shrink-0 text-right">
                         <span className="text-[9px] text-gray-400 block leading-none">Tot</span>
-                        <span className="text-sm font-bold tabular-nums text-green-700 leading-tight">{total}</span>
+                        <span className="text-sm font-bold tabular-nums text-emerald-700 leading-tight">{total}</span>
                       </span>
                       <span className="shrink-0 text-right w-10">
                         <span className="text-[9px] text-gray-400 block leading-none">Avg</span>
-                        <span className="text-xs font-bold tabular-nums text-blue-600 leading-tight">{average.toFixed(1)}</span>
+                        <span className="text-xs font-bold tabular-nums text-sky-700 leading-tight">{average.toFixed(1)}</span>
                       </span>
                       <span className="shrink-0 text-[10px] text-gray-400">{isExpanded ? '▴' : '▾'}</span>
                     </button>
@@ -7985,12 +7985,12 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                       );
                     })}
                     <td
-                      className="px-2 py-2 sm:px-4 sm:py-3 text-right font-bold text-[11px] sm:text-sm text-green-700 tabular-nums whitespace-nowrap sticky z-[2] scoring-table-surface"
+                      className="px-2 py-2 sm:px-4 sm:py-3 text-right font-bold text-[11px] sm:text-sm text-emerald-700 tabular-nums whitespace-nowrap sticky z-[2] scoring-table-surface"
                       style={{ right: `${scoringTableWidths.avg}px` }}
                     >
                       {total}
                     </td>
-                    <td className="px-2 py-2 sm:px-4 sm:py-3 text-right font-bold text-[11px] sm:text-sm text-blue-600 tabular-nums whitespace-nowrap sticky right-0 z-[3] bg-blue-50/60 scoring-table-surface">{average.toFixed(1)}</td>
+                    <td className="px-2 py-2 sm:px-4 sm:py-3 text-right font-bold text-[11px] sm:text-sm text-sky-700 tabular-nums whitespace-nowrap sticky right-0 z-[3] scoring-table-surface">{average.toFixed(1)}</td>
                   </tr>
                     </React.Fragment>
                   );
@@ -12839,7 +12839,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     </div>
                   </div>
                   <div className="overflow-x-auto mt-2">
-                    <div className={`grid ${hasGenderManualWinnersGrid ? 'grid-cols-3' : 'grid-cols-2'} border border-black/10 rounded-xl overflow-hidden`}>
+                    <div className={`grid ${hasGenderManualWinnersGrid ? 'grid-cols-3' : ''} border border-black/10 rounded-xl overflow-hidden`} style={!hasGenderManualWinnersGrid ? { gridTemplateColumns: '30% 70%' } : undefined}>
                       <div className="bg-black/5 px-2.5 py-1.5 font-bold text-[10px] uppercase tracking-widest border-b border-black/10"></div>
                       {winnerDivisions.map((division) => (
                         <div key={`winner-head-${division}`} className="bg-black/5 px-2.5 py-1.5 font-bold text-[10px] uppercase tracking-widest border-b border-black/10 text-center">
@@ -13124,10 +13124,10 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 <>
                   <h4 className="font-bold">{tx('Tournament Standings')}</h4>
                   <p className="text-sm text-black/40">{tx('Rankings sorted from highest to lowest total score')}</p>
-                  {standingsMode === 'teams' && isTeamTournament && (
-                    <p className={`text-xs mt-1 ${teamsCountValid ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {standingsMode === 'teams' && isTeamTournament && !teamsCountValid && (
+                    <p className="text-xs mt-1 text-amber-700">
                       Team check: ranked teams = {rankedTeamsCount} (real teams only), assigned players = {assignedPlayersCount}, unassigned players = {unassignedPlayersCount}.
-                      {teamsCountValid ? ' OK.' : ' Mismatch detected. Please review team assignments in Participants page.'}
+                      {' Mismatch detected. Please review team assignments in Participants page.'}
                     </p>
                   )}
                   {!bonusApiAvailable && (
@@ -13143,9 +13143,9 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 </>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-2 w-full md:flex-1">
+            <div className="flex items-center justify-between gap-2 w-full md:flex-1">
               {!isStandingsScreenMode && (
-                <div className="w-full md:w-auto flex justify-center">
+                <div className="flex items-center">
                 <div className={`flex items-center gap-1 ${segmentedTabContainerClass} p-0.5`}>
                   <button
                     onClick={() => setStandingsMode('players')}
@@ -13158,21 +13158,21 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     <div className="flex items-center gap-1 ml-0.5">
                       <button
                         onClick={() => setGenderFilter('all')}
-                        className={`px-1.5 py-0.5 rounded font-bold text-[11px] border ${genderFilter === 'all' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' : 'bg-white text-black/50 border-black/10'} transition-colors`}
+                        className={`px-1.5 py-0.5 rounded text-[11px] border border-transparent transition-colors ${genderFilter === 'all' ? 'font-black text-black' : 'font-medium text-black/40 hover:text-black/70'}`}
                         title="Show all"
                       >
                         All
                       </button>
                       <button
                         onClick={() => setGenderFilter('female')}
-                        className={`px-1.5 py-0.5 rounded font-bold text-[11px] border ${genderFilter === 'female' ? 'bg-pink-100 text-pink-700 border-pink-300' : 'bg-white text-black/50 border-black/10'} transition-colors`}
+                        className={`px-1.5 py-0.5 rounded text-[11px] border border-transparent transition-colors ${genderFilter === 'female' ? 'font-black text-black' : 'font-medium text-black/40 hover:text-black/70'}`}
                         title="Show only female (F)"
                       >
                         F
                       </button>
                       <button
                         onClick={() => setGenderFilter('male')}
-                        className={`px-1.5 py-0.5 rounded font-bold text-[11px] border ${genderFilter === 'male' ? 'bg-blue-100 text-blue-700 border-blue-300' : 'bg-white text-black/50 border-black/10'} transition-colors`}
+                        className={`px-1.5 py-0.5 rounded text-[11px] border border-transparent transition-colors ${genderFilter === 'male' ? 'font-black text-black' : 'font-medium text-black/40 hover:text-black/70'}`}
                         title="Show only male (M)"
                       >
                         M
@@ -13192,7 +13192,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 </div>
               )}
 
-              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:ml-auto md:justify-end">
+              <div className="flex flex-wrap items-center gap-2 ml-auto">
               {!isStandingsScreenMode && onPresentStandingsScreen && (
                 <Button
                   variant="outline"
@@ -13426,9 +13426,9 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                   <td
                     className={`px-2.5 py-1.5 text-center text-sm ${
                       maleTopAvgIds.has(s.participant_id)
-                        ? 'bg-sky-700 text-white ring-2 ring-sky-300 font-black'
+                        ? 'text-sky-700 font-black'
                         : femaleTopAvgIds.has(s.participant_id)
-                          ? 'bg-rose-700 text-white ring-2 ring-rose-300 font-black'
+                          ? 'text-rose-700 font-black'
                           : 'text-sky-700 font-semibold'
                     }`}
                   >
