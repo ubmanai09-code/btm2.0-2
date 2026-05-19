@@ -6,17 +6,91 @@
 }
 
 :root {
+  /* ────────────────────────────────────────────────────────── */
+  /* LIGHT MODE - Comprehensive Color Palette */
+  /* ────────────────────────────────────────────────────────── */
+
+  /* Primary Backgrounds */
   --bg: #F7F8FA;
+  --bg-secondary: #F0F1F3;
+  --bg-tertiary: #E8EAED;
+
+  /* Card & Surface */
   --card: #FFFFFF;
-  --border: #E6E8EB;
-  --text: #1F2937;
-  --text-muted: #6B7280;
-  --text-subtle: #9CA3AF;
+  --card-hover: #FAFBFC;
+  --card-alt: #F5F6F8;
+
+  /* Text Colors - Semantic Levels */
+  --text: #1F2937;              /* Primary text */
+  --text-secondary: #374151;    /* Secondary/heading text */
+  --text-tertiary: #6B7280;     /* Muted/meta text */
+  --text-quaternary: #9CA3AF;   /* Subtle/disabled text */
+  --text-disabled: #D1D5DB;     /* Fully disabled */
+
+  /* Text on Colored Backgrounds */
+  --text-on-accent: #FFFFFF;
+  --text-on-primary: #FFFFFF;
+  --text-on-success: #FFFFFF;
+  --text-on-danger: #FFFFFF;
+
+  /* Borders */
+  --border: #E6E8EB;            /* Primary border */
+  --border-secondary: #D1D5DB;  /* Stronger border */
+  --border-subtle: #F0F1F3;     /* Very subtle border */
+
+  /* Icon Colors */
+  --icon-primary: #6B7280;
+  --icon-secondary: #9CA3AF;
+  --icon-disabled: #D1D5DB;
+
+  /* Semantic Colors - Updated for light theme readability */
   --accent: #F97316;
+  --accent-light: #FED7AA;
+  --accent-lighter: #FFEDD5;
+  --accent-dark: #EA580C;
+
   --success: #16A34A;
+  --success-light: #86EFAC;
+  --success-lighter: #DCFCE7;
+  --success-dark: #15803D;
+
   --danger: #DC2626;
+  --danger-light: #FCA5A5;
+  --danger-lighter: #FEE2E2;
+  --danger-dark: #B91C1C;
+
   --warning: #F59E0B;
+  --warning-light: #FCD34D;
+  --warning-lighter: #FEF3C7;
+  --warning-dark: #D97706;
+
   --info: #0EA5E9;
+  --info-light: #7DD3FC;
+  --info-lighter: #E0F2FE;
+  --info-dark: #0284C7;
+
+  /* Primary Action Color (teal/emerald for consistency) */
+  --primary: #10B981;
+  --primary-light: #6EE7B7;
+  --primary-lighter: #D1FAE5;
+  --primary-dark: #059669;
+
+  /* Table Colors */
+  --table-header-bg: #F3F4F6;
+  --table-header-text: #374151;
+  --table-row-hover: #F9FAFB;
+  --table-border: #E5E7EB;
+  --table-alternate-bg: #FFFFFF;
+
+  /* Subtle Background Colors for Accents */
+  --accent-surface: #FFFBEB;
+  --success-surface: #F0FDF4;
+  --danger-surface: #FEF2F2;
+  --warning-surface: #FFFBEB;
+  --info-surface: #F0F9FF;
+  --primary-surface: #F0FDF4;
+
+  /* Spacing & Radius */
   --ui-radius: 6px;
   --ui-space-8: 8px;
   --ui-space-12: 12px;
@@ -26,17 +100,91 @@
 }
 
 [data-theme="dark"] {
+  /* ────────────────────────────────────────────────────────── */
+  /* DARK MODE - Comprehensive Color Palette */
+  /* ────────────────────────────────────────────────────────── */
+
+  /* Primary Backgrounds */
   --bg: #0F172A;
+  --bg-secondary: #1A2332;
+  --bg-tertiary: #2A3444;
+
+  /* Card & Surface */
   --card: #1E293B;
-  --border: #334155;
-  --text: #F1F5F9;
-  --text-muted: #B2BED1;
-  --text-subtle: #8C99AD;
+  --card-hover: #293449;
+  --card-alt: #334155;
+
+  /* Text Colors - Semantic Levels */
+  --text: #F1F5F9;              /* Primary text */
+  --text-secondary: #E2E8F0;    /* Secondary/heading text */
+  --text-tertiary: #B2BED1;     /* Muted/meta text */
+  --text-quaternary: #8C99AD;   /* Subtle/disabled text */
+  --text-disabled: #475569;     /* Fully disabled */
+
+  /* Text on Colored Backgrounds */
+  --text-on-accent: #FFFFFF;
+  --text-on-primary: #FFFFFF;
+  --text-on-success: #FFFFFF;
+  --text-on-danger: #FFFFFF;
+
+  /* Borders */
+  --border: #334155;            /* Primary border */
+  --border-secondary: #475569;  /* Stronger border */
+  --border-subtle: #1E293B;     /* Very subtle border */
+
+  /* Icon Colors */
+  --icon-primary: #B2BED1;
+  --icon-secondary: #8C99AD;
+  --icon-disabled: #475569;
+
+  /* Semantic Colors - Dark theme optimized */
   --accent: #F97316;
+  --accent-light: #FB923C;
+  --accent-lighter: #C2410C;
+  --accent-dark: #DC2626;
+
   --success: #22C55E;
+  --success-light: #4ADE80;
+  --success-lighter: #166534;
+  --success-dark: #16A34A;
+
   --danger: #EF4444;
+  --danger-light: #F87171;
+  --danger-lighter: #7F1D1D;
+  --danger-dark: #DC2626;
+
   --warning: #FCD34D;
+  --warning-light: #FBBF24;
+  --warning-lighter: #78350F;
+  --warning-dark: #CA8A04;
+
   --info: #38BDF8;
+  --info-light: #7DD3FC;
+  --info-lighter: #0C4A6E;
+  --info-dark: #0284C7;
+
+  /* Primary Action Color (teal/emerald for consistency) */
+  --primary: #10B981;
+  --primary-light: #6EE7B7;
+  --primary-lighter: #064E3B;
+  --primary-dark: #059669;
+
+  /* Table Colors */
+  --table-header-bg: #263449;
+  --table-header-text: #E2E8F0;
+  --table-row-hover: #1F2937;
+  --table-border: #475569;
+  --table-alternate-bg: #1E293B;
+
+  /* Subtle Background Colors for Accents */
+  --accent-surface: #78350F;
+  --success-surface: #064E3B;
+  --danger-surface: #7F1D1D;
+  --warning-surface: #78350F;
+  --info-surface: #0C4A6E;
+  --primary-surface: #064E3B;
+
+  /* Legacy variable for compatibility */
   --color-emerald-800: oklch(0.76 0.11 169.94);
   --ui-icon-opacity: 0.7;
 }
@@ -106,11 +254,47 @@ body {
 }
 
 .scoring-table-surface {
-  background: #e3f3f6;
+  /* Subtle, minimal background for score entry tables - light theme */
+  background: var(--bg-secondary);
+  color: var(--text);
 }
 
 [data-theme="dark"] .scoring-table-surface {
-  background: #21374f;
+  /* Subtle, minimal background for score entry tables - dark theme */
+  background: var(--bg-secondary);
+  color: var(--text);
+}
+
+/* Dark mode: override hardcoded Tailwind text colors inside scoring table */
+[data-theme="dark"] .scoring-table-surface td .text-gray-700,
+[data-theme="dark"] .scoring-table-surface td .text-gray-800,
+[data-theme="dark"] .scoring-table-surface .text-gray-700,
+[data-theme="dark"] .scoring-table-surface .text-gray-800 {
+  color: var(--text) !important;
+}
+[data-theme="dark"] .scoring-table-surface td .text-gray-300 {
+  color: var(--text-quaternary) !important;
+}
+[data-theme="dark"] .scoring-table-surface td .text-gray-500,
+[data-theme="dark"] .scoring-table-surface td .text-gray-400 {
+  color: var(--text-tertiary) !important;
+}
+[data-theme="dark"] .scoring-table-surface td .text-green-700 {
+  color: var(--success-light) !important;
+}
+[data-theme="dark"] .scoring-table-surface td .text-blue-600 {
+  color: var(--info-light) !important;
+}
+
+/* Scoring table header styling */
+.scoring-table-header {
+  background-color: var(--table-header-bg);
+  color: var(--table-header-text);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+  border-bottom: 2px solid var(--border);
 }
 
 /* Normalize common half-step spacing utilities to 8/12 scale */
@@ -191,7 +375,18 @@ body {
 }
 
 .ui-input::placeholder {
-  color: var(--text-muted);
+  color: var(--text-tertiary);
+}
+
+/* Backward compatibility aliases */
+:root {
+  --text-muted: var(--text-tertiary);
+  --text-subtle: var(--text-quaternary);
+}
+
+[data-theme="dark"] {
+  --text-muted: var(--text-tertiary);
+  --text-subtle: var(--text-quaternary);
 }
 
 .ui-input:focus {
@@ -199,6 +394,244 @@ body {
   border-color: var(--accent);
   background: var(--card);
   box-shadow: none;
+}
+
+/* ────────────────────────────────────────────────────────── */
+/* COMPONENT-SPECIFIC STYLES */
+/* ────────────────────────────────────────────────────────── */
+
+/* Tables - Clean, minimal styling */
+table {
+  border-collapse: collapse;
+}
+
+thead {
+  background-color: var(--table-header-bg);
+  color: var(--table-header-text);
+}
+
+tbody tr {
+  border-bottom: 1px solid var(--table-border);
+  transition: background-color 150ms ease;
+}
+
+tbody tr:hover {
+  background-color: var(--table-row-hover);
+}
+
+th, td {
+  border: 1px solid var(--table-border);
+  padding: 12px 16px;
+  text-align: left;
+  vertical-align: middle;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+th {
+  font-weight: 600;
+  color: var(--table-header-text);
+  background-color: var(--table-header-bg);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 12px;
+}
+
+/* Menu & Dropdown Items */
+.menu-item,
+.dropdown-item {
+  color: var(--text);
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  transition: all 150ms ease;
+  cursor: pointer;
+}
+
+.menu-item:hover,
+.dropdown-item:hover {
+  background-color: var(--card-hover);
+  border-color: var(--border-secondary);
+}
+
+.menu-item:active,
+.dropdown-item:active {
+  background-color: var(--bg-secondary);
+  color: var(--accent);
+}
+
+.menu-item:disabled,
+.dropdown-item:disabled {
+  color: var(--text-disabled);
+  background-color: var(--bg-secondary);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Icon Styling */
+.icon-primary {
+  color: var(--icon-primary);
+  opacity: var(--ui-icon-opacity);
+}
+
+.icon-secondary {
+  color: var(--icon-secondary);
+  opacity: var(--ui-icon-opacity);
+}
+
+.icon-disabled {
+  color: var(--icon-disabled);
+  opacity: 0.4;
+}
+
+.icon-accent {
+  color: var(--accent);
+}
+
+.icon-success {
+  color: var(--success);
+}
+
+.icon-danger {
+  color: var(--danger);
+}
+
+.icon-warning {
+  color: var(--warning);
+}
+
+.icon-info {
+  color: var(--info);
+}
+
+/* Text Hierarchy Utilities */
+.text-primary {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.text-tertiary {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.text-quaternary {
+  color: var(--text-quaternary);
+  font-weight: 400;
+}
+
+.text-disabled {
+  color: var(--text-disabled);
+  font-weight: 400;
+}
+
+/* Semantic Background Surfaces */
+.surface-accent {
+  background-color: var(--accent-surface);
+  color: var(--text);
+}
+
+.surface-success {
+  background-color: var(--success-surface);
+  color: var(--text);
+}
+
+.surface-danger {
+  background-color: var(--danger-surface);
+  color: var(--text);
+}
+
+.surface-warning {
+  background-color: var(--warning-surface);
+  color: var(--text);
+}
+
+.surface-info {
+  background-color: var(--info-surface);
+  color: var(--text);
+}
+
+.surface-primary {
+  background-color: var(--primary-surface);
+  color: var(--text);
+}
+
+/* Border Utilities */
+.border-primary {
+  border-color: var(--border);
+}
+
+.border-secondary {
+  border-color: var(--border-secondary);
+}
+
+.border-subtle {
+  border-color: var(--border-subtle);
+}
+
+/* Badge/Pill Styles */
+.badge-primary {
+  background-color: var(--primary-lighter);
+  color: var(--primary-dark);
+  border: 1px solid var(--primary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge-accent {
+  background-color: var(--accent-lighter);
+  color: var(--accent-dark);
+  border: 1px solid var(--accent);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge-success {
+  background-color: var(--success-lighter);
+  color: var(--success-dark);
+  border: 1px solid var(--success);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge-danger {
+  background-color: var(--danger-lighter);
+  color: var(--danger-dark);
+  border: 1px solid var(--danger);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge-warning {
+  background-color: var(--warning-lighter);
+  color: var(--warning-dark);
+  border: 1px solid var(--warning);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge-info {
+  background-color: var(--info-lighter);
+  color: var(--info-dark);
+  border: 1px solid var(--info);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .ui-input[type="number"],
