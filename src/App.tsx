@@ -3487,14 +3487,14 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       { id: 'participants', label: tPublic('public.tab.participants', 'Participants'), icon: Users },
       { id: 'lanes', label: tPublic('public.tab.lane_assignments', 'Lanes'), icon: Columns4 },
       { id: 'scoring', label: tPublic('public.tab.scoring', 'Score'), icon: ClipboardList },
-      { id: 'brackets-v2', label: tPublic('public.tab.brackets_v2', 'Brackets V2'), icon: BracketsV2TabIcon },
+      { id: 'brackets-v2', label: tPublic('public.tab.brackets_v2', 'Brackets'), icon: BracketsV2TabIcon },
       { id: 'standings', label: tPublic('public.tab.tournament_result', 'Standing'), icon: Trophy },
     ]
     : [
       { id: 'participants', label: t('tab.participants', 'Participants'), icon: Users },
       { id: 'lanes', label: t('tab.lane_assignments', 'Lanes'), icon: Columns4 },
       { id: 'scoring', label: t('tab.scoring', 'Score'), icon: ClipboardList },
-      ...(effectiveRole === 'admin' || effectiveRole === 'moderator' ? [{ id: 'brackets-v2', label: t('tab.brackets_v2', 'Brackets V2'), icon: BracketsV2TabIcon }] : []),
+      ...(effectiveRole === 'admin' || effectiveRole === 'moderator' ? [{ id: 'brackets-v2', label: t('tab.brackets_v2', 'Brackets'), icon: BracketsV2TabIcon }] : []),
       { id: 'standings', label: t('tab.tournament_result', 'Standing'), icon: Trophy },
       { id: 'league', label: t('tab.league', 'League'), icon: BarChart3 },
     ];
@@ -8556,7 +8556,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   const [presetEditorStep, setPresetEditorStep] = React.useState<'pick' | 'edit'>('pick');
   const [visualMatchHeights, setVisualMatchHeights] = React.useState<Record<string, number>>({});
 
-  const buildStandardPresetRounds = React.useCallback((type: 'single-elim' | 'stepladder' | 'playoff' | 'ladder', includeThird: boolean): TournamentRoundConfig[] => {
+  const buildStandardPresetRounds = React.useCallback((type: 'single-elim' | 'stepladder' | 'playoff' | 'ladder' | 'mixed', includeThird: boolean): TournamentRoundConfig[] => {
     if (type === 'single-elim') {
       return [
         { ...v2CreateRound(0), id: 'se-r1', name: 'QF', matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', manualMatchCount: null },
@@ -8598,6 +8598,31 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           advancementCount: 1,
           manualMatchCount: includeThird ? 2 : 1,
           scoringType: 'pins',
+        },
+      ];
+    }
+
+    if (type === 'mixed') {
+      return [
+        {
+          ...v2CreateRound(0),
+          id: 'mx-r1',
+          name: 'Round 1',
+          matchType: 'shootout',
+          playersPerMatch: 8,
+          advancementCount: 4,
+          scoringType: 'pins',
+          manualMatchCount: 1,
+        },
+        {
+          ...v2CreateRound(1),
+          id: 'mx-final',
+          name: 'Final',
+          matchType: 'shootout',
+          playersPerMatch: 4,
+          advancementCount: 1,
+          scoringType: 'pins',
+          manualMatchCount: 1,
         },
       ];
     }
@@ -9088,6 +9113,13 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     return null;
   }, [participantSeedById, slotOverrides]);
 
+  const normalizePlaceholderLabel = React.useCallback((label: string) => {
+    const normalized = String(label || '').trim();
+    if (!normalized) return 'TBD';
+    if (/^adv\s+\d+\s+of\s+/i.test(normalized)) return 'TBD';
+    return normalized;
+  }, []);
+
   // ── Engine ────────────────────────────────────────────────────────────────
   const generate = React.useCallback(() => {
     if (participantNodes.length === 0) { setEngineResult(null); return; }
@@ -9115,7 +9147,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         const key = `${match.id}:${slot.slotIndex}`;
         const fallbackSeed = getSlotSeed(slot, key);
         const label = slot.sourceType === 'advance'
-          ? (advancerByRank.get(`${slot.fromMatchId}:${slot.advanceRank ?? 1}`) || slot.sourceLabel || 'TBD')
+          ? normalizePlaceholderLabel(advancerByRank.get(`${slot.fromMatchId}:${slot.advanceRank ?? 1}`) || slot.sourceLabel || 'TBD')
           : (slotOverrides[key]
               ? (participantLabel.get(slotOverrides[key]) || `P#${slotOverrides[key]}`)
               : (slot.participantId ? (participantLabel.get(slot.participantId) || slot.sourceLabel || 'TBD') : (slot.sourceLabel || 'TBD')));
@@ -9126,8 +9158,11 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         resolvedSeeds.set(key, seed ?? null);
         return { slotIndex: slot.slotIndex, label, seed: seed ?? null, score: Number.parseInt(draft[slot.slotIndex] || '', 10) };
       });
-      const ranked = entries.filter(e => Number.isFinite(e.score)).sort((a, b) => b.score - a.score);
-      const adv = ranked.slice(0, Math.min(match.advancementCount, ranked.length));
+      const ranked = entries
+        .filter(e => Number.isFinite(e.score))
+        .sort((a, b) => (b.score - a.score) || ((a.seed ?? 9999) - (b.seed ?? 9999)));
+      const desiredAdvanceCount = match.advancementCount > 0 ? match.advancementCount : (ranked.length > 0 ? 1 : 0);
+      const adv = ranked.slice(0, Math.min(desiredAdvanceCount, ranked.length));
       advancingSlots[match.id] = adv.map(e => e.slotIndex);
       winners[match.id] = adv.length > 0 ? adv[0].slotIndex : null;
 
@@ -9143,7 +9178,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       }
     });
     return { winners, advancingSlots, resolvedLabels, resolvedSeeds };
-  }, [engineResult, scoreDrafts, participantNodes, slotOverrides, getSlotSeed]);
+  }, [engineResult, scoreDrafts, participantNodes, slotOverrides, getSlotSeed, normalizePlaceholderLabel]);
 
   // ── Layout ────────────────────────────────────────────────────────────────
   const topAlignedPos = React.useMemo(() => {
@@ -9627,45 +9662,42 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     const finalMatches = engineResult.matches
       .filter(m => m.roundIndex === lastRoundIndex)
       .sort((a, b) => a.matchIndex - b.matchIndex);
-    const secondLastRoundIndex = lastRoundIndex - 1;
-    const semiMatches = engineResult.matches.filter(m => m.roundIndex === secondLastRoundIndex);
 
     const resolveLabel = (matchId: string, slotIdx: number) =>
       simulation.resolvedLabels.get(`${matchId}:${slotIdx}`) || 'TBD';
 
-    // 1st and 2nd from the championship match
+    // Podium must come strictly from championship/final match participants.
     if (finalMatches.length === 0) return null;
-    const hasExplicitBronze = include3rdPlace && finalMatches.length >= 2;
-    const championshipMatch = hasExplicitBronze
-      ? (finalMatches.find((match) => match.matchIndex === 0) || finalMatches[0])
-      : finalMatches[0];
-    const bronzeMatch = hasExplicitBronze
-      ? (finalMatches.find((match) => match.matchIndex === 1) || finalMatches[1] || null)
-      : null;
-    const advSlots = simulation.advancingSlots[championshipMatch.id] || [];
-    const nonAdvSlots = championshipMatch.slots.map(s => s.slotIndex).filter(i => !advSlots.includes(i));
-    const first = advSlots.length > 0 ? resolveLabel(championshipMatch.id, advSlots[0]) : null;
-    const second = nonAdvSlots.length > 0 ? resolveLabel(championshipMatch.id, nonAdvSlots[0]) : (advSlots.length > 1 ? resolveLabel(championshipMatch.id, advSlots[1]) : null);
+    const championshipMatch = finalMatches.find((match) => match.matchIndex === 0) || finalMatches[0];
 
-    // 3rd: explicit bronze match winner when available, else fallback to semifinal losers.
-    const thirds: string[] = (() => {
-      if (!include3rdPlace) return [];
-      if (bronzeMatch) {
-        const bronzeAdv = simulation.advancingSlots[bronzeMatch.id] || [];
-        if (bronzeAdv.length > 0) {
-          const bronzeWinner = resolveLabel(bronzeMatch.id, bronzeAdv[0]);
-          if (bronzeWinner && bronzeWinner !== 'TBD') return [bronzeWinner];
-        }
+    const finalDraft = scoreDrafts[championshipMatch.id] || {};
+    const rankedByScore = championshipMatch.slots
+      .map((slot) => ({
+        slotIndex: slot.slotIndex,
+        score: Number.parseInt(finalDraft[slot.slotIndex] || '', 10),
+      }))
+      .filter((entry) => Number.isFinite(entry.score))
+      .sort((left, right) => Number(right.score) - Number(left.score));
+
+    let orderedSlots = rankedByScore.map((entry) => entry.slotIndex);
+    if (orderedSlots.length === 0) {
+      const winnerSlot = simulation.winners[championshipMatch.id];
+      const allSlots = championshipMatch.slots.map((slot) => slot.slotIndex);
+      if (winnerSlot != null) {
+        orderedSlots = [winnerSlot, ...allSlots.filter((slotIndex) => slotIndex !== winnerSlot)];
+      } else {
+        orderedSlots = allSlots;
       }
-      return semiMatches.flatMap(m => {
-        const adv = simulation.advancingSlots[m.id] || [];
-        return m.slots.map(s => s.slotIndex).filter(i => !adv.includes(i)).map(i => resolveLabel(m.id, i));
-      }).filter(l => l && l !== 'TBD');
-    })();
+    }
 
+    const first = orderedSlots[0] != null ? resolveLabel(championshipMatch.id, orderedSlots[0]) : null;
+    const second = orderedSlots[1] != null ? resolveLabel(championshipMatch.id, orderedSlots[1]) : null;
+    const third = orderedSlots[2] != null ? resolveLabel(championshipMatch.id, orderedSlots[2]) : null;
+
+    const thirds = include3rdPlace && third && third !== 'TBD' ? [third] : [];
     if (!first || first === 'TBD') return null;
     return { first, second: second || null, thirds };
-  }, [engineResult, simulation, include3rdPlace]);
+  }, [engineResult, simulation, include3rdPlace, scoreDrafts]);
 
   const bracketResultPodium = React.useMemo(() => {
     if (!Array.isArray(bracketRows) || bracketRows.length === 0) return null;
@@ -9678,6 +9710,33 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       }
       return safeText(match?.[`${slot}_name`]) || 'TBD';
     };
+    const getSlotParticipantNameById = (match: any, participantId: number) => {
+      if (!match || !participantId) return 'TBD';
+      if (Number(match.participant1_id || 0) === participantId) return getBracketName(match, 'p1');
+      if (Number(match.participant2_id || 0) === participantId) return getBracketName(match, 'p2');
+      if (Number(match.participant3_id || 0) === participantId) {
+        if (tournament.type === 'team') return safeText(match?.p3_team_name || match?.p3_name) || 'TBD';
+        return safeText(match?.p3_name) || 'TBD';
+      }
+      return 'TBD';
+    };
+    const getRankedParticipantsByScore = (match: any): Array<{ participantId: number; score: number }> => {
+      if (!match?.scores_json) return [];
+      let rows: any[] = [];
+      try {
+        const parsed = JSON.parse(String(match.scores_json));
+        rows = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        rows = [];
+      }
+      return rows
+        .map((row) => ({
+          participantId: Number(row?.participant_id ?? row?.id ?? 0),
+          score: Number(row?.score),
+        }))
+        .filter((row) => Number.isFinite(row.participantId) && row.participantId > 0 && Number.isFinite(row.score))
+        .sort((left, right) => right.score - left.score);
+    };
 
     const allDivisionMatches = bracketRows
       .filter((match) => String(match?.division || 'all') === 'all')
@@ -9686,22 +9745,33 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
     const finalRoundNumber = allDivisionMatches.reduce((max, match) => Math.max(max, Number(match?.round) || 0), 0);
     const finalMatch = allDivisionMatches.find((match) => Number(match?.round) === finalRoundNumber && Number(match?.match_index) === 0) || null;
-    const bronzeMatch = allDivisionMatches.find((match) => Number(match?.round) === finalRoundNumber && Number(match?.match_index) === 1) || null;
-    const stepladderSemifinalMatch = selectedBracketPreset === 'stepladder'
-      ? allDivisionMatches.find((match) => Number(match?.round) === Math.max(1, finalRoundNumber - 1) && Number(match?.match_index) === 0) || null
-      : null;
 
-    const first = finalMatch?.winner_id ? getBracketName(finalMatch, 'winner') : 'TBD';
-    const second = finalMatch?.winner_id
-      ? (Number(finalMatch.winner_id) === Number(finalMatch.participant1_id) ? getBracketName(finalMatch, 'p2') : getBracketName(finalMatch, 'p1'))
-      : 'TBD';
-    const third = bronzeMatch?.winner_id
-      ? getBracketName(bronzeMatch, 'winner')
-      : (stepladderSemifinalMatch?.winner_id
-        ? (Number(stepladderSemifinalMatch.winner_id) === Number(stepladderSemifinalMatch.participant1_id)
-          ? getBracketName(stepladderSemifinalMatch, 'p2')
-          : getBracketName(stepladderSemifinalMatch, 'p1'))
-        : 'TBD');
+    let first = 'TBD';
+    let second = 'TBD';
+    if (finalMatch) {
+      const explicitWinnerId = Number(finalMatch.winner_id || 0);
+      const rankedFinal = getRankedParticipantsByScore(finalMatch);
+      if (explicitWinnerId > 0) {
+        first = getBracketName(finalMatch, 'winner');
+        const runnerUpByScore = rankedFinal.find((entry) => entry.participantId !== explicitWinnerId);
+        if (runnerUpByScore) {
+          second = getSlotParticipantNameById(finalMatch, runnerUpByScore.participantId);
+        } else {
+          second = Number(finalMatch.winner_id) === Number(finalMatch.participant1_id)
+            ? getBracketName(finalMatch, 'p2')
+            : getBracketName(finalMatch, 'p1');
+        }
+      } else {
+        if (rankedFinal[0]) first = getSlotParticipantNameById(finalMatch, rankedFinal[0].participantId);
+        if (rankedFinal[1]) second = getSlotParticipantNameById(finalMatch, rankedFinal[1].participantId);
+      }
+    }
+
+    let third = 'TBD';
+    if (finalMatch) {
+      const rankedFinal = getRankedParticipantsByScore(finalMatch);
+      if (rankedFinal[2]) third = getSlotParticipantNameById(finalMatch, rankedFinal[2].participantId);
+    }
 
     if (first === 'TBD' && second === 'TBD' && third === 'TBD') return null;
     return {
@@ -9721,6 +9791,11 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     if (!first && !second && thirds.length === 0) return null;
     return { first, second, thirds };
   }, [bracketResultPodium, simulationPodium]);
+
+  const activeCustomPreset = React.useMemo(
+    () => rulePresets.find((preset) => String(preset.id) === String(selectedPresetId)) || null,
+    [rulePresets, selectedPresetId],
+  );
 
   const errors = engineResult?.issues.filter(i => i.level === 'error') ?? [];
   const warnings = engineResult?.issues.filter(i => i.level === 'warning') ?? [];
@@ -9756,7 +9831,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   }, [selectedBracketPreset, include3rdPlace]);
 
   // ── Standard bracket presets ──────────────────────────────────────────────
-  const applyStandardPreset = React.useCallback((type: 'single-elim' | 'stepladder' | 'playoff' | 'ladder') => {
+  const applyStandardPreset = React.useCallback((type: 'single-elim' | 'stepladder' | 'playoff' | 'ladder' | 'mixed') => {
     setRounds(buildStandardPresetRounds(type, include3rdPlace));
     setScoreDrafts({});
     setSelectedMatchId(null);
@@ -10413,7 +10488,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                     { id: 'stepladder', label: 'Stepladder', desc: 'Lower seeds play up, winner faces next seed each round.' },
                     { id: 'playoff', label: 'Play-Off', desc: 'Group qualifying rounds feed into a knockout final.' },
                     { id: 'ladder', label: 'Ladder', desc: 'Survivor rounds narrow down to a 1-on-1 championship.' },
-                    { id: 'mixed', label: 'Mixed', desc: 'Combines different match types across rounds (e.g. shootout + stepladder).' },
+                    { id: 'mixed', label: 'Custom', desc: 'Custom format with flexible match types across rounds (e.g. shootout + stepladder).' },
                   ] as const).map(typeItem => {
                     const typePresets = rulePresets.filter(p => {
                       const cat = p.bracketCategory ?? 'single-elim';
@@ -10590,7 +10665,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                         { id: 'stepladder', label: 'Stepladder' },
                         { id: 'playoff', label: 'Play-Off' },
                         { id: 'ladder', label: 'Ladder' },
-                        { id: 'mixed', label: 'Mixed' },
+                        { id: 'mixed', label: 'Custom' },
                       ] as const).map(cat => {
                         const catPresets = rulePresets.filter(p => {
                           const catId = p.bracketCategory ?? 'single-elim';
@@ -10779,7 +10854,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                               <option value="stepladder">Stepladder</option>
                               <option value="playoff">Play-Off</option>
                               <option value="ladder">Ladder</option>
-                              <option value="mixed">Mixed</option>
+                              <option value="mixed">Custom</option>
                             </select>
                           </div>
                           <button
@@ -10951,11 +11026,21 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               <p className="text-xs text-black/50">{participantNodes.length} participants · {rounds.length} rounds</p>
               {bracketTypeMode === 'available' && selectedBracketPreset !== 'custom' && (
                 <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                  {selectedBracketPreset === 'single-elim' ? 'Single Elimination' : selectedBracketPreset === 'stepladder' ? 'Stepladder' : selectedBracketPreset === 'playoff' ? 'Play-Off' : 'Ladder'}
+                  {selectedBracketPreset === 'single-elim'
+                    ? tx('Single Elimination')
+                    : selectedBracketPreset === 'stepladder'
+                      ? tx('Stepladder')
+                      : selectedBracketPreset === 'playoff'
+                        ? tx('Play-Off')
+                        : selectedBracketPreset === 'mixed'
+                          ? tx('Custom')
+                          : tx('Ladder')}
                 </span>
               )}
               {bracketTypeMode === 'custom' && (
-                <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">Preset Editor</span>
+                <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">
+                  {activeCustomPreset?.name || tx('Custom Preset')}
+                </span>
               )}
             </div>
           </div>
@@ -11191,15 +11276,18 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           {effectiveViewMode === 'list' ? (
             /* ── List view ─────────────────────────────────────────────── */
             <div className="overflow-auto">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 auto-rows-max">
-                {[...engineResult.rounds].flatMap(round => {
+              <div
+                className="grid gap-2 items-start"
+                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 210px), 1fr))' }}
+              >
+                {engineResult.rounds.map(round => {
                   const roundMatches = engineResult.matches.filter(m => m.roundId === round.roundId).sort((a, b) => a.matchIndex - b.matchIndex);
-                  if (roundMatches.length === 0) return [];
-                  return [
-                    React.createElement('div', { key: `header-${round.roundId}`, className: 'col-span-full' },
-                      React.createElement('p', { className: 'text-[10px] font-bold uppercase tracking-widest text-black/40 px-1 mb-2' }, round.roundName)
-                    ),
-                    ...roundMatches.map(match => {
+                  if (roundMatches.length === 0) return null;
+                  return (
+                    <div key={round.roundId} className="rounded-lg border border-black/[0.08] bg-white p-2">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 px-1 mb-2">{round.roundName}</p>
+                      <div className="flex flex-col gap-2">
+                        {roundMatches.map(match => {
                       const override = matchOverrides[match.id] || {};
                       const isSelected = selectedMatchId === match.id;
                       const specialTone = getSpecialMatchTone(match);
@@ -11264,8 +11352,6 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                                         if (val === '') { setScoreDrafts(prev => ({ ...prev, [match.id]: { ...(prev[match.id] || {}), [slot.slotIndex]: '' } })); return; }
                                         const num = parseInt(val, 10);
                                         if (isNaN(num) || num < 0) return;
-                                        const others = match.slots.filter(s => s.slotIndex !== slot.slotIndex).map(s => String(scoreDrafts[match.id]?.[s.slotIndex] ?? '')).filter(v => v !== '');
-                                        if (others.includes(String(num))) return;
                                         setScoreDrafts(prev => ({ ...prev, [match.id]: { ...(prev[match.id] || {}), [slot.slotIndex]: String(num) } }));
                                       }}
                                       className="w-10 text-right bg-white border border-black/10 rounded px-0.5 py-0 text-[9px] focus:outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
@@ -11276,8 +11362,10 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                           </div>
                         </div>
                       );
-                    })
-                  ];
+                        })}
+                          </div>
+                        </div>
+                      );
                 })}
               </div>
             </div>
@@ -11401,8 +11489,6 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                                     if (val === '') { setScoreDrafts(prev => ({ ...prev, [match.id]: { ...(prev[match.id] || {}), [slot.slotIndex]: '' } })); return; }
                                     const num = parseInt(val, 10);
                                     if (isNaN(num) || num < 0) return;
-                                    const others = match.slots.filter(s => s.slotIndex !== slot.slotIndex).map(s => String(scoreDrafts[match.id]?.[s.slotIndex] ?? '')).filter(v => v !== '');
-                                    if (others.includes(String(num))) return;
                                     setScoreDrafts(prev => ({ ...prev, [match.id]: { ...(prev[match.id] || {}), [slot.slotIndex]: String(num) } }));
                                   }}
                                   className={`w-11 h-7 text-right border-0 px-1.5 text-[12px] focus:outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${scoreCellClass}`} />

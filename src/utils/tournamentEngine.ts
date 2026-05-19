@@ -478,7 +478,7 @@ export const buildTournamentEngine = (config: TournamentEngineConfig): Tournamen
       match.slots[slotIndex] = {
         slotIndex,
         sourceType: source.kind === 'participant' ? 'participant' : 'advance',
-        sourceLabel: source.label,
+        sourceLabel: source.kind === 'advance' ? 'TBD' : source.label,
         participantId: source.participantId,
         fromMatchId: source.fromMatchId,
         advanceRank: source.advanceRank,

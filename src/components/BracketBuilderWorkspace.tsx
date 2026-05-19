@@ -370,7 +370,7 @@ const formatAdvanceSourceLabel = (label: string) => {
   const normalized = String(label || '').trim();
   const advMatch = normalized.match(/^Adv\s+(\d+)\s+of\s+(.+?)\s+(M\d+)$/i);
   if (advMatch) {
-    return `Qualifier #${advMatch[1]} from ${advMatch[2]} ${advMatch[3]}`;
+    return 'TBD';
   }
 
   const winnerMatch = normalized.match(/^Winner\s+of\s+(.+?)\s+(M\d+)$/i);
@@ -476,6 +476,39 @@ const getRankedMatchParticipants = (match: LiveGraphMatch, participantNameById: 
       rank: index + 1,
       name: participantNameById.get(entry.participantId) || `Player ${entry.participantId}`,
     }));
+};
+
+const getRankedRowScores = (row: BracketRow): Array<{ participantId: number; score: number }> => {
+  if (!row?.scores_json) return [];
+  let scores: any[] = [];
+  try {
+    const parsed = JSON.parse(String(row.scores_json));
+    scores = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    scores = [];
+  }
+  if (scores.length === 0) return [];
+
+  return scores
+    .map((entry) => ({
+      participantId: Number(entry?.participant_id ?? entry?.id ?? 0),
+      score: Number(entry?.score),
+    }))
+    .filter((entry) => Number.isFinite(entry.participantId) && entry.participantId > 0 && Number.isFinite(entry.score))
+    .sort((left, right) => right.score - left.score);
+};
+
+const getRowParticipantDisplayName = (row: BracketRow, participantId: number, isTeamTournament: boolean) => {
+  if (participantId === Number(row.participant1_id || 0)) {
+    return normalizeParticipantLabel(isTeamTournament ? (row.p1_team_name || row.p1_name || 'TBD') : (row.p1_name || 'TBD'));
+  }
+  if (participantId === Number(row.participant2_id || 0)) {
+    return normalizeParticipantLabel(isTeamTournament ? (row.p2_team_name || row.p2_name || 'TBD') : (row.p2_name || 'TBD'));
+  }
+  if (participantId === Number(row.participant3_id || 0)) {
+    return normalizeParticipantLabel(isTeamTournament ? (row.p3_team_name || row.p3_name || 'TBD') : (row.p3_name || 'TBD'));
+  }
+  return 'TBD';
 };
 
 const isLiveSlotWinner = (row: BracketRow, slot: LiveStructureSlot) => {
@@ -816,7 +849,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
       setRounds(rounds.filter((round) => !(round.sourceOutcome === 'both' && round.matchType === 'head-to-head')));
       return;
     }
-  }, [includeBronzeMatch, tournament.match_play_type]);
+  }, [includeBronzeMatch, tournament.match_play_type, rounds]);
 
   const refreshBracket = React.useCallback(async () => {
     setLoadingBracket(true);
@@ -1304,19 +1337,44 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
     const bronzeMatch = liveBracket.find((row) => Number(row.round) === liveChampionshipRound && Number(row.match_index) === 1) || null;
     const isTeamTournament = tournament.type === 'team';
 
-    const first = championshipMatch?.winner_id
-      ? normalizeParticipantLabel(getBracketDisplayName(championshipMatch, 'winner', isTeamTournament))
-      : 'TBD';
+    let first = 'TBD';
+    let second = 'TBD';
+    if (championshipMatch) {
+      const explicitWinnerId = Number(championshipMatch.winner_id || 0);
+      if (explicitWinnerId > 0) {
+        first = normalizeParticipantLabel(getBracketDisplayName(championshipMatch, 'winner', isTeamTournament));
+        const ranked = getRankedRowScores(championshipMatch);
+        const runnerUpByScore = ranked.find((entry) => entry.participantId !== explicitWinnerId);
+        if (runnerUpByScore) {
+          second = getRowParticipantDisplayName(championshipMatch, runnerUpByScore.participantId, isTeamTournament);
+        } else {
+          second = Number(championshipMatch.winner_id) === Number(championshipMatch.participant1_id)
+            ? normalizeParticipantLabel(getBracketDisplayName(championshipMatch, 'p2', isTeamTournament))
+            : normalizeParticipantLabel(getBracketDisplayName(championshipMatch, 'p1', isTeamTournament));
+        }
+      } else {
+        const ranked = getRankedRowScores(championshipMatch);
+        if (ranked[0]) {
+          first = getRowParticipantDisplayName(championshipMatch, ranked[0].participantId, isTeamTournament);
+        }
+        if (ranked[1]) {
+          second = getRowParticipantDisplayName(championshipMatch, ranked[1].participantId, isTeamTournament);
+        }
+      }
+    }
 
-    const second = championshipMatch?.winner_id
-      ? (Number(championshipMatch.winner_id) === Number(championshipMatch.participant1_id)
-        ? normalizeParticipantLabel(getBracketDisplayName(championshipMatch, 'p2', isTeamTournament))
-        : normalizeParticipantLabel(getBracketDisplayName(championshipMatch, 'p1', isTeamTournament)))
-      : 'TBD';
-
-    const third = bronzeMatch?.winner_id
-      ? normalizeParticipantLabel(getBracketDisplayName(bronzeMatch, 'winner', isTeamTournament))
-      : 'TBD';
+    let third = 'TBD';
+    if (bronzeMatch) {
+      const explicitBronzeWinnerId = Number(bronzeMatch.winner_id || 0);
+      if (explicitBronzeWinnerId > 0) {
+        third = normalizeParticipantLabel(getBracketDisplayName(bronzeMatch, 'winner', isTeamTournament));
+      } else {
+        const rankedBronze = getRankedRowScores(bronzeMatch);
+        if (rankedBronze[0]) {
+          third = getRowParticipantDisplayName(bronzeMatch, rankedBronze[0].participantId, isTeamTournament);
+        }
+      }
+    }
 
     return { first, second, third };
   }, [liveBracket, liveChampionshipRound, tournament.type]);
@@ -1631,7 +1689,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
     setAssigningSlotKey(key);
     setErrorMessage(null);
     try {
-      const slot = slotIndex === 1 ? 'p2' : 'p1';
+      const slot: 'p1' | 'p2' | 'p3' = slotIndex === 1 ? 'p2' : slotIndex === 2 ? 'p3' : 'p1';
       await api.assignBracketSeed(tournament.id, row.id, {
         slot,
         slot_index: slotIndex,
@@ -2402,24 +2460,18 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                                           <div className="mt-1.5 flex flex-wrap gap-2">
                                             {(isScoreBasedMatch || isDuel) && participantId ? (
                                               <input
-                                                type="text"
+                                                type="number"
                                                 inputMode="numeric"
-                                                pattern="[0-9]*"
+                                                min={0}
+                                                step={1}
                                                 value={draft[slot.slotIndex] || ''}
                                                 onChange={(e) => setScoreDrafts((prev) => ({
                                                   ...prev,
                                                   [row.id]: {
                                                     ...(prev[row.id] || {}),
-                                                    [slot.slotIndex]: e.target.value,
+                                                    [slot.slotIndex]: e.target.value.replace(/[^0-9]/g, ''),
                                                   },
                                                 }))}
-                                                onBlur={(e) => {
-                                                  const nextDraft = {
-                                                    ...(scoreDrafts[row.id] || {}),
-                                                    [slot.slotIndex]: e.currentTarget.value,
-                                                  };
-                                                  void maybeAutoSubmitScores(row, scoreableSlots, isScoreBasedMatch, nextDraft);
-                                                }}
                                                 onKeyDown={(e) => {
                                                   if (e.key !== 'Enter') return;
                                                   e.preventDefault();
@@ -2441,6 +2493,18 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                                           </div>
                                         )}
                                       </div>
+                                      {canScore && !isPublic && !isLockedMatch && scoreableSlots.length >= 2 && (
+                                        <div className="mt-2 flex justify-end">
+                                          <button
+                                            type="button"
+                                            onClick={() => void maybeAutoSubmitScores(row, scoreableSlots, isScoreBasedMatch, scoreDrafts[row.id] || {})}
+                                            disabled={savingMatchId === row.id}
+                                            className="inline-flex h-7 items-center rounded-md border border-[#d6ddff] bg-white px-2.5 text-[10px] font-black uppercase tracking-[0.08em] text-[#42548f] hover:bg-[#f3f6ff] disabled:opacity-50"
+                                          >
+                                            {savingMatchId === row.id ? 'Saving...' : 'Save Scores'}
+                                          </button>
+                                        </div>
+                                      )}
                                       {isPickerOpen && (
                                         <div className="absolute z-50 left-0 top-full mt-1 w-56 rounded-xl border border-[#d6ddff] bg-white shadow-lg overflow-hidden">
                                           <div className="p-2 border-b border-[#eef0ff]">
@@ -2510,7 +2574,6 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                     </svg>
                     {liveGraph.matches.map((match) => {
                       const row = match.row;
-                      const winnerId = Number(row.winner_id) || 0;
                       return (
                         <div
                           key={`pm-${row.id}`}
@@ -2526,7 +2589,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                             {match.slots.map((slot) => {
                               const participantId = slot.participantDbId ?? getFallbackSlotParticipantId(row, slot.slotIndex);
                               const name = getLiveSlotName(row, slot, participantNameById);
-                              const isWinner = Boolean(participantId && participantId === winnerId);
+                              const isWinner = isLiveSlotWinner(row, slot);
                               const seed = getLiveSlotSeed(row, slot);
                               let scoreDisplay: string | null = null;
                               if (participantId && row.scores_json) {
@@ -2649,7 +2712,6 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                 {/* Match cards */}
                 {liveGraph.matches.map((match) => {
                   const row = match.row;
-                  const winnerId = Number(row.winner_id) || 0;
                   return (
                     <div
                       key={`pm-${row.id}`}
@@ -2665,7 +2727,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                         {match.slots.map((slot) => {
                           const participantId = slot.participantDbId ?? getFallbackSlotParticipantId(row, slot.slotIndex);
                           const name = getLiveSlotName(row, slot, participantNameById);
-                          const isWinner = Boolean(participantId && participantId === winnerId);
+                          const isWinner = isLiveSlotWinner(row, slot);
                           const seed = getLiveSlotSeed(row, slot);
                           let scoreDisplay: string | null = null;
                           if (participantId && row.scores_json) {
@@ -2799,7 +2861,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
               <div className="max-h-[420px] divide-y divide-[#eef1ff] overflow-y-auto rounded-xl border border-[#dfe4ff] bg-white">
                 {rulePresets.map((preset) => {
                   const catLabel = preset.bracketCategory
-                    ? { 'single-elim': 'Single Elim', stepladder: 'Stepladder', playoff: 'Playoff', ladder: 'Ladder', custom: 'Custom', mixed: 'Mixed' }[preset.bracketCategory] ?? preset.bracketCategory
+                    ? { 'single-elim': 'Single Elim', stepladder: 'Stepladder', playoff: 'Playoff', ladder: 'Ladder', custom: 'Custom', mixed: 'Custom' }[preset.bracketCategory] ?? preset.bracketCategory
                     : null;
                   return (
                     <div key={preset.id} className="flex items-center gap-3 px-4 py-3 hover:bg-[#f8f9ff]">

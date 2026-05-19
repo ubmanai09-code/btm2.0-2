@@ -2240,17 +2240,6 @@ async function startServer() {
         )
     `).run();
 
-    db.prepare(`
-      UPDATE tournaments
-      SET status = 'finished'
-      WHERE status = 'archived'
-        AND EXISTS (
-          SELECT 1
-          FROM participants p
-          WHERE p.tournament_id = tournaments.id
-        )
-    `).run();
-
     const rows = db.prepare("SELECT * FROM tournaments ORDER BY created_at DESC").all();
     res.json(rows);
   });
@@ -2293,10 +2282,15 @@ async function startServer() {
         games_count, genders_rule, lanes_count, 
         players_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus, show_player_style, status
       } = req.body;
-      const existing = db.prepare("SELECT has_additional_scores, has_bonus, show_player_style FROM tournaments WHERE id = ?").get(req.params.id) as any;
+      const existing = db.prepare("SELECT * FROM tournaments WHERE id = ?").get(req.params.id) as any;
       if (!existing) {
         return res.status(404).json({ error: "Tournament not found" });
       }
+
+      const parseIntOrFallback = (value: any, fallback: number) => {
+        const parsed = Number.parseInt(value, 10);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      };
 
       const hasAdditional = has_additional_scores === undefined
         ? Number(existing.has_additional_scores) || 0
@@ -2315,9 +2309,28 @@ async function startServer() {
           players_per_lane = ?, players_per_team = ?, shifts_count = ?, oil_pattern = ?, has_additional_scores = ?, has_bonus = ?, show_player_style = ?, status = ?
         WHERE id = ?
       `).run(
-        name, date, location, format, organizer, logo, match_play_type || 'single_elimination', Number.isFinite(Number.parseInt(qualified_count, 10)) ? Number.parseInt(qualified_count, 10) : 0, Number.isFinite(Number.parseInt(playoff_winners_count, 10)) ? Number.parseInt(playoff_winners_count, 10) : 1, type, 
-        games_count || 3, genders_rule, lanes_count || 10, 
-        players_per_lane || 2, players_per_team || 1, shifts_count || 1, oil_pattern, hasAdditional, hasBonus, showPlayerStyle, status || 'draft', req.params.id
+        name ?? existing.name,
+        date ?? existing.date,
+        location ?? existing.location,
+        format ?? existing.format,
+        organizer ?? existing.organizer,
+        logo ?? existing.logo,
+        match_play_type ?? existing.match_play_type ?? 'single_elimination',
+        parseIntOrFallback(qualified_count, Number(existing.qualified_count) || 0),
+        parseIntOrFallback(playoff_winners_count, Number(existing.playoff_winners_count) || 1),
+        type ?? existing.type,
+        parseIntOrFallback(games_count, Number(existing.games_count) || 3),
+        genders_rule ?? existing.genders_rule,
+        parseIntOrFallback(lanes_count, Number(existing.lanes_count) || 10),
+        parseIntOrFallback(players_per_lane, Number(existing.players_per_lane) || 2),
+        parseIntOrFallback(players_per_team, Number(existing.players_per_team) || 1),
+        parseIntOrFallback(shifts_count, Number(existing.shifts_count) || 1),
+        oil_pattern ?? existing.oil_pattern,
+        hasAdditional,
+        hasBonus,
+        showPlayerStyle,
+        status ?? existing.status ?? 'draft',
+        req.params.id
       );
       
       res.json({ success: true });
@@ -4695,7 +4708,7 @@ async function startServer() {
       const matchId = Number.parseInt(req.params.matchId, 10);
       if (!Number.isFinite(matchId)) return res.status(400).json({ error: 'Invalid match id' });
 
-      const slot = req.body?.slot === 'p2' ? 'p2' : 'p1';
+      const slot = req.body?.slot === 'p2' ? 'p2' : req.body?.slot === 'p3' ? 'p3' : 'p1';
       const seedKind = req.body?.seed_kind === 'team' ? 'team' : 'participant';
       const seedId = Number.parseInt(req.body?.seed_id, 10);
       const seedNumberRaw = Number.parseInt(req.body?.seed, 10);
@@ -4730,11 +4743,15 @@ async function startServer() {
         return res.status(400).json({ error: 'Could not resolve participant for selected seed' });
       }
 
-      const participantField = slot === 'p1' ? 'participant1_id' : 'participant2_id';
-      const seedField = slot === 'p1' ? 'participant1_seed' : 'participant2_seed';
-      const sourceField = slot === 'p1' ? 'participant1_source_match_id' : 'participant2_source_match_id';
-      const sourceOutcomeField = slot === 'p1' ? 'participant1_source_outcome' : 'participant2_source_outcome';
-      db.prepare(`UPDATE brackets SET ${participantField} = ?, ${seedField} = ?, ${sourceField} = NULL, ${sourceOutcomeField} = NULL WHERE id = ?`).run(participantId, seedNumber, matchId);
+      if (slot === 'p3') {
+        db.prepare('UPDATE brackets SET participant3_id = ?, participant3_seed = ? WHERE id = ?').run(participantId, seedNumber, matchId);
+      } else {
+        const participantField = slot === 'p1' ? 'participant1_id' : 'participant2_id';
+        const seedField = slot === 'p1' ? 'participant1_seed' : 'participant2_seed';
+        const sourceField = slot === 'p1' ? 'participant1_source_match_id' : 'participant2_source_match_id';
+        const sourceOutcomeField = slot === 'p1' ? 'participant1_source_outcome' : 'participant2_source_outcome';
+        db.prepare(`UPDATE brackets SET ${participantField} = ?, ${seedField} = ?, ${sourceField} = NULL, ${sourceOutcomeField} = NULL WHERE id = ?`).run(participantId, seedNumber, matchId);
+      }
 
       const refreshed = db.prepare("SELECT participant1_id, participant2_id, participant3_id, winner_id FROM brackets WHERE id = ?").get(matchId) as any;
       if (

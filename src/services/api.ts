@@ -982,7 +982,7 @@ const api = {
   async assignBracketSeed(
     tournamentId: number,
     matchId: number,
-    options: { slot: 'p1' | 'p2'; slot_index?: number; seed_id: number; seed_kind: 'team' | 'participant'; seed?: number }
+    options: { slot: 'p1' | 'p2' | 'p3'; slot_index?: number; seed_id: number; seed_kind: 'team' | 'participant'; seed?: number }
   ): Promise<{ success: boolean; error?: string }> {
     const res = await fetch(`/api/tournaments/${tournamentId}/brackets/${matchId}/assign`, {
       method: 'POST',
