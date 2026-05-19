@@ -71,7 +71,7 @@ body {
 
 .ui-input {
   background: color-mix(in srgb, var(--card) 95%, var(--bg));
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: var(--ui-radius);
   color: var(--text);
 }
@@ -219,6 +219,40 @@ body {
 
 .ui-success {
   color: var(--success);
+}
+
+/* Light mode readability pass for dense admin/config UIs */
+[data-theme="light"] .border-black\/5,
+[data-theme="light"] .border-black\/8,
+[data-theme="light"] .border-black\/10,
+[data-theme="light"] .border-black\/15,
+[data-theme="light"] .border-black\/20,
+[data-theme="light"] .border-black\/30 {
+  border-color: color-mix(in srgb, var(--text) 16%, var(--card)) !important;
+}
+
+[data-theme="light"] .text-black\/90,
+[data-theme="light"] .text-black\/85,
+[data-theme="light"] .text-black\/80,
+[data-theme="light"] .text-black\/75 {
+  color: var(--text) !important;
+}
+
+[data-theme="light"] .text-black\/70,
+[data-theme="light"] .text-black\/65,
+[data-theme="light"] .text-black\/60,
+[data-theme="light"] .text-black\/55,
+[data-theme="light"] .text-black\/50,
+[data-theme="light"] .text-black\/45,
+[data-theme="light"] .text-black\/40 {
+  color: var(--text-muted) !important;
+}
+
+[data-theme="light"] .bg-black\/\[0\.02\],
+[data-theme="light"] .bg-black\/\[0\.03\],
+[data-theme="light"] .bg-black\/\[0\.04\],
+[data-theme="light"] .bg-black\/\[0\.05\] {
+  background-color: color-mix(in srgb, var(--text) 3%, var(--card)) !important;
 }
 
 /* Dark mode specific adjustments */

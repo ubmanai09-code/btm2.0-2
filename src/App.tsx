@@ -1649,7 +1649,10 @@ export default function App() {
   const openSponsorsConfigEditor = (mode: 'sponsors' | 'adblock' = 'sponsors') => {
     setSponsorsConfigError('');
     setSponsorsConfigDraft(normalizeSponsorsConfig(sponsorsConfig));
-    setSponsorsConfigScope(selectedTournament ? String(selectedTournament.id) : 'global');
+    const defaultScope = view === 'list'
+      ? 'global'
+      : (selectedTournament ? String(selectedTournament.id) : 'global');
+    setSponsorsConfigScope(defaultScope);
     setSponsorsEditorMode(mode);
     setShowSponsorsConfigEditor(true);
   };
