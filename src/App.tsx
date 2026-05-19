@@ -12820,33 +12820,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 </div>
               </div>
             )}
-            <div className="inline-flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setIsAutoScrollPaused((prev) => !prev)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs transition-colors"
-                title={isAutoScrollPaused ? 'Resume auto scroll' : 'Pause auto scroll'}
-              >
-                {isAutoScrollPaused ? tx('Resume') : tx('Pause')}
-              </button>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Scroll</span>
-              <select
-                value={autoScrollSpeed}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setAutoScrollSpeed(next === 'fast' || next === 'medium' ? next : 'slow');
-                }}
-                className="h-8 rounded-md border border-[#AFDDE5]/80 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                aria-label="Auto scroll speed"
-              >
-                <option value="slow">Slow</option>
-                <option value="medium">Medium</option>
-                <option value="fast">Fast</option>
-              </select>
-              {isAutoScrollPaused && (
-                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Paused</span>
-              )}
-            </div>
+            {/* Pause/Resume and auto scroll controls removed for Present Mode as requested */}
           </div>
         )}
       </div>
