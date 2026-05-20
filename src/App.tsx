@@ -5156,7 +5156,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                           ariaLabel="Clear Players"
                           className="px-2"
                         >
-                          <BrushCleaning size={14} />
+                          <UserMinus size={14} />
                         </Button>
                         {showPlayersClearMenu && (
                           <div className="absolute left-0 mt-1 min-w-[150px] rounded-md border border-black/10 bg-white shadow-lg z-40 p-1">
