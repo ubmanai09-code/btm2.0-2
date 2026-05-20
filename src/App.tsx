@@ -2090,11 +2090,11 @@ export default function App() {
                           onClick={() => { setSelectedSponsor(sponsor); setShowSponsorsModal(true); }}
                           className="rounded-lg border border-black/10 bg-white p-3 text-left hover:border-emerald-300 transition-colors"
                         >
-                          <div className="w-full h-20 flex items-center justify-center">
+                          <div className="w-full aspect-[3/2] flex items-center justify-center overflow-hidden">
                             <img
                               src={sponsor.logo || '/logo.png'}
                               alt={sponsor.name}
-                              className="w-full h-full object-contain"
+                              className="max-w-full max-h-full w-auto h-auto object-contain"
                               onError={(e) => {
                                 (e.currentTarget as HTMLImageElement).src = '/logo.png';
                               }}
@@ -2793,8 +2793,8 @@ export default function App() {
 
             {selectedSponsor ? (
               <div className="space-y-3">
-                <div className="w-full h-44 rounded-md border border-black/10 bg-white p-3 flex items-center justify-center">
-                  <img src={selectedSponsor.logo} alt={selectedSponsor.name} className="w-full h-full object-contain" />
+                <div className="w-full aspect-[16/9] rounded-md border border-black/10 bg-white p-3 flex items-center justify-center overflow-hidden">
+                  <img src={selectedSponsor.logo} alt={selectedSponsor.name} className="max-w-full max-h-full w-auto h-auto object-contain" />
                 </div>
                 <div className="space-y-2 text-sm text-black/75">
                   <div>
@@ -2829,8 +2829,8 @@ export default function App() {
                     onClick={() => setSelectedSponsor(sponsor)}
                     className="p-2 rounded-md border border-black/10 bg-white hover:border-emerald-300 text-left flex items-center gap-2"
                   >
-                    <div className="w-12 h-12 rounded border border-black/10 bg-white p-1 flex items-center justify-center">
-                      <img src={sponsor.logo} alt={sponsor.name} className="w-full h-full object-contain" />
+                    <div className="w-12 h-12 rounded border border-black/10 bg-white p-1 flex items-center justify-center overflow-hidden">
+                      <img src={sponsor.logo} alt={sponsor.name} className="max-w-full max-h-full w-auto h-auto object-contain" />
                     </div>
                     <div>
                       <p className="font-semibold text-sm text-black/80">{sponsor.name}</p>
@@ -3638,7 +3638,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                           <img
                             src={sponsor.logo}
                             alt={sponsor.name}
-                            className="w-full h-full object-contain"
+                            className="max-w-full max-h-full w-auto h-auto object-contain"
                             onError={(e) => {
                               (e.currentTarget as HTMLImageElement).src = '/logo.png';
                             }}
