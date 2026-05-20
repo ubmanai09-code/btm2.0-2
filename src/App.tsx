@@ -1817,7 +1817,7 @@ export default function App() {
   const scopedDraftSponsors = sponsorsConfigScope === 'global'
     ? sponsorsConfigDraft.global
     : (sponsorsConfigDraft.tournaments[sponsorsConfigScope] || []);
-  const dashboardSponsors = sponsorsConfig.global.slice(0, 2);
+  const dashboardSponsors = sponsorsConfig.global.slice(0, 6);
   const dashboardPromo = sponsorsConfig.dashboardPromo;
   const appGlobalSponsor = sponsorsConfig.globalSponsorEnabled ? sponsorsConfig.globalSponsor : null;
 
@@ -2073,24 +2073,14 @@ export default function App() {
                 <Card className="border border-emerald-200 bg-white overflow-hidden">
                   <div className="p-4">
                     {isAdmin && (
-                      <div className="flex items-center justify-between gap-2 mb-3">
+                      <div className="mb-3">
                         <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700">Dashboard Sponsors</p>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={openSponsorsConfigEditor}
-                          className="px-2"
-                          title={t('sponsors.manager_title', 'Sponsors and Partners Manager')}
-                          ariaLabel={t('sponsors.manager_title', 'Sponsors and Partners Manager')}
-                        >
-                          <Edit size={13} />
-                        </Button>
                       </div>
                     )}
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                       {dashboardSponsors.length === 0 ? (
-                        <div className="sm:col-span-2 rounded-lg border border-dashed border-black/20 bg-black/[0.02] py-8 text-center text-sm text-black/45">
+                        <div className="col-span-3 rounded-lg border border-dashed border-black/20 bg-black/[0.02] py-8 text-center text-sm text-black/45">
                           No dashboard sponsors configured.
                         </div>
                       ) : dashboardSponsors.map((sponsor) => (
@@ -2100,7 +2090,7 @@ export default function App() {
                           onClick={() => { setSelectedSponsor(sponsor); setShowSponsorsModal(true); }}
                           className="rounded-lg border border-black/10 bg-white p-3 text-left hover:border-emerald-300 transition-colors"
                         >
-                          <div className="w-full h-24 rounded-md border border-black/10 bg-white p-2 flex items-center justify-center">
+                          <div className="w-full h-20 flex items-center justify-center">
                             <img
                               src={sponsor.logo || '/logo.png'}
                               alt={sponsor.name}
@@ -2110,7 +2100,7 @@ export default function App() {
                               }}
                             />
                           </div>
-                          <p className="mt-2 text-sm font-semibold text-black/85 truncate">{sponsor.name || 'Unnamed sponsor'}</p>
+                          <p className="mt-2 text-xs font-semibold text-black/85 truncate">{sponsor.name || 'Unnamed sponsor'}</p>
                         </button>
                       ))}
                     </div>
@@ -13118,12 +13108,11 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
         <Card className="overflow-visible relative">
           {!isStandingsScreenMode && (
-          <div className="p-6 border-b border-black/5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-white/95">
+          <div className="px-4 py-2 border-b border-black/5 flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-white/95">
             <div>
               {!isStandingsScreenMode && (
                 <>
-                  <h4 className="font-bold">{tx('Tournament Standings')}</h4>
-                  <p className="text-sm text-black/40">{tx('Rankings sorted from highest to lowest total score')}</p>
+                  <h4 className="font-bold text-sm">{tx('Ranking')}</h4>
                   {standingsMode === 'teams' && isTeamTournament && !teamsCountValid && (
                     <p className="text-xs mt-1 text-amber-700">
                       Team check: ranked teams = {rankedTeamsCount} (real teams only), assigned players = {assignedPlayersCount}, unassigned players = {unassignedPlayersCount}.
