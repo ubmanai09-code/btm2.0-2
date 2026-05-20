@@ -1952,72 +1952,86 @@ export default function App() {
             <span className="px-2 py-1.5 rounded-md border border-white/20 text-xs font-bold uppercase tracking-wider bg-white/10 text-white/60">
               {t('app.status.loading', 'Loading...')}
             </span>
-          ) : currentRole === 'public' ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => { setAuthError(''); setShowLogin(true); }}
-              title={t('auth.login', 'Login')}
-              ariaLabel={t('auth.login', 'Login')}
-              className="text-white border-white/25 hover:bg-white/10 hover:border-white/40"
-            >
-              <LogIn size={14} />
-            </Button>
           ) : (
-            <>
-              <span className="px-2 py-1.5 rounded-md border border-white/20 text-xs font-bold uppercase tracking-wider bg-white/10 text-white">
-                {t(`role.${currentRole}`, currentRole)}
-              </span>
-              {currentRole === 'admin' && (
-                <div ref={adminSettingsMenuRef} className="relative">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowAdminSettingsMenu((prev) => !prev)}
-                    title={t('app.nav.admin_settings', 'Admin Settings')}
-                    ariaLabel={t('app.nav.admin_settings', 'Admin Settings')}
-                    className="text-white border-white/25 hover:bg-white/10 hover:border-white/40"
-                  >
-                    <Shield size={14} />
-                  </Button>
-
-                  {showAdminSettingsMenu && (
-                    <Card className="absolute right-0 top-10 w-56 p-2 border border-black/15 shadow-xl z-[70]">
-                      <div className="space-y-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowAdminSettingsMenu(false);
-                            setPasswordError('');
-                            setShowPasswordModal(true);
-                          }}
-                          className="w-full text-left px-3 py-2 rounded-md text-xs font-semibold uppercase tracking-wide text-black/75 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
-                        >
-                          Change Password
-                        </button>
-                        <button
-                          type="button"
-                          onClick={openAdminModeratorManager}
-                          className="w-full text-left px-3 py-2 rounded-md text-xs font-semibold uppercase tracking-wide text-black/75 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
-                        >
-                          Moderator Access
-                        </button>
-                      </div>
-                    </Card>
-                  )}
-                </div>
-              )}
+            <div ref={adminSettingsMenuRef} className="relative">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleLogout}
-                title={t('auth.logout', 'Logout')}
-                ariaLabel={t('auth.logout', 'Logout')}
+                onClick={() => setShowAdminSettingsMenu((prev) => !prev)}
+                title={currentRole === 'public' ? t('auth.login', 'Login') : t('app.nav.account', 'Account')}
+                ariaLabel={currentRole === 'public' ? t('auth.login', 'Login') : t('app.nav.account', 'Account')}
                 className="text-white border-white/25 hover:bg-white/10 hover:border-white/40"
               >
-                <LogOut size={14} />
+                <User size={14} />
               </Button>
-            </>
+
+              {showAdminSettingsMenu && (
+                <Card className="absolute right-0 top-10 w-56 p-2 border border-black/15 shadow-xl z-[70]">
+                  <div className="space-y-1">
+                    {currentRole === 'public' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAdminSettingsMenu(false);
+                          setAuthError('');
+                          setShowLogin(true);
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-md text-xs font-semibold uppercase tracking-wide text-black/75 hover:bg-emerald-50 hover:text-emerald-700 transition-colors flex items-center gap-2"
+                      >
+                        <LogIn size={13} />
+                        {t('auth.login', 'Login')}
+                      </button>
+                    ) : (
+                      <>
+                        <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/40 border-b border-black/10 mb-1">
+                          {t(`role.${currentRole}`, currentRole)}
+                        </div>
+                        {currentRole === 'admin' && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowAdminSettingsMenu(false);
+                                setPasswordError('');
+                                setShowPasswordModal(true);
+                              }}
+                              className="w-full text-left px-3 py-2 rounded-md text-xs font-semibold uppercase tracking-wide text-black/75 hover:bg-emerald-50 hover:text-emerald-700 transition-colors flex items-center gap-2"
+                            >
+                              <KeyRound size={13} />
+                              {t('auth.change_password', 'Change Password')}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowAdminSettingsMenu(false);
+                                openAdminModeratorManager();
+                              }}
+                              className="w-full text-left px-3 py-2 rounded-md text-xs font-semibold uppercase tracking-wide text-black/75 hover:bg-emerald-50 hover:text-emerald-700 transition-colors flex items-center gap-2"
+                            >
+                              <Shield size={13} />
+                              {t('auth.moderator_access', 'Moderator Access')}
+                            </button>
+                          </>
+                        )}
+                        <div className="border-t border-black/10 mt-1 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAdminSettingsMenu(false);
+                              handleLogout();
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-md text-xs font-semibold uppercase tracking-wide text-red-600/80 hover:bg-red-50 hover:text-red-700 transition-colors flex items-center gap-2"
+                          >
+                            <LogOut size={13} />
+                            {t('auth.logout', 'Logout')}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </Card>
+              )}
+            </div>
           )}
         </div>
       </nav>
