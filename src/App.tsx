@@ -1873,7 +1873,7 @@ export default function App() {
 
   const getStatusPillClass = (status: 'active' | 'incoming' | 'finished' | 'archived') => {
     if (status === 'active') return 'bg-emerald-100 text-emerald-700';
-    if (status === 'incoming') return 'bg-amber-100 text-amber-700';
+    if (status === 'incoming') return 'bg-orange-100 text-orange-600';
     if (status === 'finished') return 'bg-[color:var(--text)]/5 text-[color:var(--text-muted)]';
     return 'bg-slate-200 text-slate-700';
   };
@@ -1915,7 +1915,8 @@ export default function App() {
       <nav className="fixed top-0 left-0 right-0 h-16 bg-black/95 backdrop-blur-sm border-b border-white/10 z-50 px-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div
-            className="w-16 h-12 rounded-md overflow-hidden border-2 border-white/30 flex items-center justify-center bg-white cursor-pointer hover:shadow-lg transition"
+            className="w-11 h-11 rounded-full overflow-hidden border border-white/30 flex items-center justify-center cursor-pointer hover:shadow-lg transition shrink-0"
+            style={{ backgroundColor: '#ffffff' }}
             onClick={() => window.location.href = '/'}
             title="Go to Home Page"
             tabIndex={0}
@@ -1925,7 +1926,7 @@ export default function App() {
             <img
               src="/logo.png"
               alt="BTM Logo"
-              className="w-full h-full object-contain"
+              className="w-[85%] h-[85%] object-contain"
             />
           </div>
           <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2">
@@ -3328,6 +3329,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
   standingsScreenMode?: boolean,
 }) {
   const t = tPublic;
+  const { theme } = useTheme();
   const [moderatorAccess, setModeratorAccess] = useState<ModeratorTournamentAccess | null>(null);
   const [moderators, setModerators] = useState<UserAccount[]>([]);
   const [selectedModeratorId, setSelectedModeratorId] = useState<number | ''>('');
@@ -3343,6 +3345,38 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
   const [expiresHours, setExpiresHours] = useState('24');
   const [showModeratorPanel, setShowModeratorPanel] = useState(false);
   const [isTournamentCardCollapsed, setIsTournamentCardCollapsed] = useState(true);
+  const [logoBgColor, setLogoBgColor] = useState<string>('white');
+  const logoImgRef = useRef<HTMLImageElement>(null);
+  const sampleLogoBgColor = (imgEl: HTMLImageElement) => {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = imgEl.naturalWidth || imgEl.width;
+      canvas.height = imgEl.naturalHeight || imgEl.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(imgEl, 0, 0);
+      const corners = [
+        ctx.getImageData(0, 0, 1, 1).data,
+        ctx.getImageData(canvas.width - 1, 0, 1, 1).data,
+        ctx.getImageData(0, canvas.height - 1, 1, 1).data,
+        ctx.getImageData(canvas.width - 1, canvas.height - 1, 1, 1).data,
+      ];
+      const avgA = corners.reduce((s, c) => s + c[3], 0) / 4;
+      if (avgA < 10) { setLogoBgColor('white'); return; }
+      const r = Math.round(corners.reduce((s, c) => s + c[0], 0) / 4);
+      const g = Math.round(corners.reduce((s, c) => s + c[1], 0) / 4);
+      const b = Math.round(corners.reduce((s, c) => s + c[2], 0) / 4);
+      setLogoBgColor(`rgb(${r},${g},${b})`);
+    } catch { setLogoBgColor('white'); }
+  };
+  useEffect(() => {
+    setLogoBgColor('white');
+    const img = logoImgRef.current;
+    if (img && img.complete && img.naturalWidth > 0) {
+      sampleLogoBgColor(img);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tournament?.logo]);
   const [isDesktopTournamentHeader, setIsDesktopTournamentHeader] = useState(false);
   const [isSmallScreen, setIsSmallScreen] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -3609,13 +3643,16 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                     aria-expanded={isDesktopTournamentHeader ? true : !isTournamentCardCollapsed}
                   >
                     <div className="min-w-0 flex items-start gap-2">
-                      <div className="w-[72px] h-[72px] rounded-lg border border-black/10 bg-white p-2 flex items-center justify-center shrink-0">
+                      <div className="w-[72px] h-[72px] rounded-full border border-black/20 dark:border-white/30 shrink-0 flex items-center justify-center overflow-hidden" style={{ backgroundColor: logoBgColor }}>
                         <img
+                          ref={logoImgRef}
                           src={tournament.logo || '/logo.png'}
                           alt={tournament.name}
                           className="w-full h-full object-contain"
+                          onLoad={(e) => sampleLogoBgColor(e.currentTarget as HTMLImageElement)}
                           onError={(e) => {
                             (e.currentTarget as HTMLImageElement).src = '/logo.png';
+                            setLogoBgColor('white');
                           }}
                         />
                       </div>
