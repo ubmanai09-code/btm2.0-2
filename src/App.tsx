@@ -14,24 +14,22 @@ import {
   Save,
   RefreshCw,
   RotateCw,
-  UserPlus,
   Target,
   GitBranch,
   Download,
   Edit,
   Trash2,
   ArrowRightLeft,
-  UserMinus,
   Upload,
   Archive,
   ArchiveRestore,
   Printer,
-  BrushCleaning,
   GripVertical,
   X,
   LogIn,
   LogOut,
   KeyRound,
+  Minus,
   Home,
   Eye,
   EyeOff,
@@ -48,6 +46,7 @@ import {
   LayoutList,
   Moon,
   Sun,
+  AlertCircle,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry, LeagueRankingResponse } from './services/api';
@@ -437,7 +436,7 @@ const Button = ({
 }: { 
   children: React.ReactNode, 
   onClick?: () => void, 
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'manage',
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'manage' | 'create' | 'remove',
   size?: 'sm' | 'md' | 'lg',
   className?: string,
   disabled?: boolean,
@@ -451,13 +450,15 @@ const Button = ({
     secondary: 'bg-slate-700 text-white hover:bg-slate-800',
     outline: 'border border-[var(--border)] text-[color:var(--text)] hover:bg-[color:var(--text)]/[0.03]',
     ghost: 'text-[color:var(--text)] hover:bg-[color:var(--text)]/[0.05]',
-    manage: 'ui-accent'
+    manage: 'ui-accent',
+    create: 'bg-emerald-600 text-white hover:bg-emerald-700 border border-emerald-700',
+    remove: 'bg-orange-500 text-white hover:bg-orange-600 border border-orange-600'
   };
 
   const sizes = {
-    sm: 'px-2 py-2 text-[10px]',
-    md: 'px-3 py-2 text-sm',
-    lg: 'px-4 py-3 text-base'
+    sm: 'px-1.5 py-1 text-[9px]',
+    md: 'px-2.5 py-1.5 text-xs',
+    lg: 'px-3.5 py-2 text-sm'
   };
 
   return (
@@ -2168,7 +2169,7 @@ export default function App() {
                 {/* Center: New Tournament */}
                 <div className="flex-1 flex justify-center">
                   {isAdmin && (
-                    <Button size="sm" className="px-3" onClick={() => { setFormType('individual'); setView('create'); }} title={t('app.new_tournament', 'New Tournament')} ariaLabel={t('app.new_tournament', 'New Tournament')}>
+                    <Button size="sm" variant="create" className="px-3" onClick={() => { setFormType('individual'); setView('create'); }} title={t('app.new_tournament', 'New Tournament')} ariaLabel={t('app.new_tournament', 'New Tournament')}>
                       <Plus size={16} />
                     </Button>
                   )}
@@ -2221,7 +2222,7 @@ export default function App() {
                     <h3 className="text-xl font-semibold uppercase tracking-wide">{t('app.no_tournaments', 'No tournaments yet')}</h3>
                     <p className="text-black/40 mb-6 text-sm">{t('app.no_tournaments_subtitle', 'Create your first tournament to get started')}</p>
                     {isAdmin && (
-                      <Button onClick={() => setView('create')} variant="outline" className="mx-auto" title={t('app.create_tournament', 'Create Tournament')} ariaLabel={t('app.create_tournament', 'Create Tournament')}>
+                      <Button onClick={() => setView('create')} variant="create" className="mx-auto" title={t('app.create_tournament', 'Create Tournament')} ariaLabel={t('app.create_tournament', 'Create Tournament')}>
                         <Plus size={18} />
                       </Button>
                     )}
@@ -2551,8 +2552,8 @@ export default function App() {
                                 <div key={sponsorItem.id} className="rounded-md border border-black/10 p-3 space-y-2">
                                   <div className="flex items-center justify-between gap-2">
                                     <p className="text-xs font-bold uppercase tracking-wider text-black/50">Sponsor {index + 1}</p>
-                                    <Button type="button" size="sm" variant="outline" onClick={() => removeFormSponsor(sponsorItem.id)} title="Remove Sponsor" ariaLabel="Remove Sponsor">
-                                      <Trash2 size={12} />
+                                    <Button type="button" size="sm" variant="remove" onClick={() => removeFormSponsor(sponsorItem.id)} title="Remove Sponsor" ariaLabel="Remove Sponsor">
+                                      <Minus size={12} />
                                     </Button>
                                   </div>
 
@@ -2728,7 +2729,7 @@ export default function App() {
                   title={t('moderator.grant_timed', 'Grant Timed Access')}
                   ariaLabel={t('moderator.grant_timed', 'Grant Timed Access')}
                 >
-                  <UserPlus size={14} />
+                  <Plus size={14} />
                 </Button>
                 <Button
                   variant="outline"
@@ -2751,8 +2752,8 @@ export default function App() {
                         <span className="text-black/50"> ({t('moderator.expires', 'expires')} {new Date(assignment.expires_at).toLocaleString()})</span>
                       )}
                     </div>
-                    <Button variant="ghost" size="sm" disabled={moderatorAccessLoading || !selectedTournament} onClick={() => handleModeratorRemove(assignment.user_id)} title={t('moderator.remove_access', 'Remove Moderator Access')} ariaLabel={t('moderator.remove_access', 'Remove Moderator Access')}>
-                      <UserMinus size={14} />
+                    <Button variant="remove" size="sm" disabled={moderatorAccessLoading || !selectedTournament} onClick={() => handleModeratorRemove(assignment.user_id)} title={t('moderator.remove_access', 'Remove Moderator Access')} ariaLabel={t('moderator.remove_access', 'Remove Moderator Access')}>
+                      <Minus size={14} />
                     </Button>
                   </div>
                 )) : <p className="text-xs text-black/50">{t('moderator.assignments_empty', 'No moderator assignments yet.')}</p>}
@@ -2765,8 +2766,8 @@ export default function App() {
                   <Input label={t('moderator.password', 'Password')} type="password" value={moderatorNewPassword} onChange={(e: any) => setModeratorNewPassword(e.target.value)} />
                 </div>
                 <div className="mt-2">
-                  <Button variant="outline" disabled={moderatorAccessLoading} onClick={handleModeratorCreate} title={t('moderator.create', 'Create Moderator')} ariaLabel={t('moderator.create', 'Create Moderator')}>
-                    <UserPlus size={14} />
+                  <Button variant="create" disabled={moderatorAccessLoading} onClick={handleModeratorCreate} title={t('moderator.create', 'Create Moderator')} ariaLabel={t('moderator.create', 'Create Moderator')}>
+                    <Plus size={14} />
                   </Button>
                 </div>
               </div>
@@ -3071,13 +3072,13 @@ export default function App() {
                     </div>
                     <Button
                       size="sm"
-                      variant="outline"
+                      variant="remove"
                       className="px-3"
                       onClick={() => updateDraftDashboardPromoField('image', '')}
                       title="Clear promo image"
                       ariaLabel="Clear promo image"
                     >
-                      <Trash2 size={14} />
+                      <Minus size={14} />
                     </Button>
                   </div>
 
@@ -3148,13 +3149,13 @@ export default function App() {
                         </div>
                         <Button
                           size="sm"
-                          variant="outline"
+                          variant="remove"
                           className="px-3"
                           onClick={() => updateDraftPresentModeAdField('standings', 'left', 'image', '')}
                           title="Clear standings left image"
                           ariaLabel="Clear standings left image"
                         >
-                          <Trash2 size={14} />
+                          <Minus size={14} />
                         </Button>
                         <div className="relative">
                           <input
@@ -3170,13 +3171,13 @@ export default function App() {
                         </div>
                         <Button
                           size="sm"
-                          variant="outline"
+                          variant="remove"
                           className="px-3"
                           onClick={() => updateDraftPresentModeAdField('standings', 'right', 'image', '')}
                           title="Clear standings right image"
                           ariaLabel="Clear standings right image"
                         >
-                          <Trash2 size={14} />
+                          <Minus size={14} />
                         </Button>
                       </div>
                     </Card>
@@ -3230,13 +3231,13 @@ export default function App() {
                         </div>
                         <Button
                           size="sm"
-                          variant="outline"
+                          variant="remove"
                           className="px-3"
                           onClick={() => updateDraftPresentModeAdField('scoring', 'left', 'image', '')}
                           title="Clear scoring left image"
                           ariaLabel="Clear scoring left image"
                         >
-                          <Trash2 size={14} />
+                          <Minus size={14} />
                         </Button>
                         <div className="relative">
                           <input
@@ -3252,13 +3253,13 @@ export default function App() {
                         </div>
                         <Button
                           size="sm"
-                          variant="outline"
+                          variant="remove"
                           className="px-3"
                           onClick={() => updateDraftPresentModeAdField('scoring', 'right', 'image', '')}
                           title="Clear scoring right image"
                           ariaLabel="Clear scoring right image"
                         >
-                          <Trash2 size={14} />
+                          <Minus size={14} />
                         </Button>
                       </div>
                     </Card>
@@ -3275,13 +3276,13 @@ export default function App() {
                       <p className="text-xs font-bold uppercase tracking-widest text-black/60">{t('sponsors.entry', 'Entry')} {index + 1}</p>
                       <Button
                         size="sm"
-                        variant="outline"
+                        variant="remove"
                         onClick={() => removeDraftSponsorForScope(sponsorsConfigScope, item.id)}
                         className="px-2"
                         title={t('sponsors.remove_entry', 'Remove Entry')}
                         ariaLabel={t('sponsors.remove_entry', 'Remove Entry')}
                       >
-                        <Trash2 size={12} />
+                        <Minus size={12} />
                       </Button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -4231,6 +4232,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     key: 'none',
     direction: 'asc',
   });
+  const [activeWarningId, setActiveWarningId] = useState<string | null>(null);
   const playersTableRef = useRef<HTMLTableElement | null>(null);
   const teamsTableRef = useRef<HTMLTableElement | null>(null);
   const say = (message: string) => alert(tx(message));
@@ -5102,9 +5104,6 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div>
                   <h4 className="font-bold text-black/80 flex items-center gap-1.5 text-xs sm:text-sm"><User size={14} className="text-emerald-700" />{tx('Players')}({participants.length}) M({maleCount}) F({femaleCount})</h4>
-                  {issueCount > 0 && (
-                    <p className="text-[11px] text-red-600 mt-1 font-semibold">{issueCount} {tx('record(s) need review (highlighted in red).')}</p>
-                  )}
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2 w-full md:w-auto md:min-w-[360px]">
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -5150,13 +5149,13 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       <div className="relative">
                         <Button
                           size="sm"
-                          variant="manage"
+                          variant="remove"
                           onClick={() => setShowPlayersClearMenu((prev) => !prev)}
                           title="Clear Players"
                           ariaLabel="Clear Players"
                           className="px-2"
                         >
-                          <UserMinus size={14} />
+                          <Minus size={14} />
                         </Button>
                         {showPlayersClearMenu && (
                           <div className="absolute left-0 mt-1 min-w-[150px] rounded-md border border-black/10 bg-white shadow-lg z-40 p-1">
@@ -5185,8 +5184,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       </div>
                     )}
                     {canManageParticipants && (
-                      <Button size="sm" variant="manage" onClick={() => { setEditingPlayer(null); setShowAddPlayer(true); }} title="Add Player" ariaLabel="Add Player" className="px-2">
-                        <UserPlus size={14} />
+                      <Button size="sm" variant="create" onClick={() => { setEditingPlayer(null); setShowAddPlayer(true); }} title="Add Player" ariaLabel="Add Player" className="px-2">
+                        <Plus size={14} />
                       </Button>
                     )}
                   </div>
@@ -5226,14 +5225,14 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               <div className="mb-2 flex gap-2 items-center">
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="remove"
                   onClick={handleDeleteSelected}
                   disabled={selectedParticipantIds.length === 0}
                   title="Clear Selected"
                   ariaLabel="Clear Selected"
-                  className="px-2 text-red-700 border-red-300 disabled:opacity-50"
+                  className="px-2 disabled:opacity-50"
                 >
-                  <Trash2 size={14} className="mr-1" /> Clear Selected ({selectedParticipantIds.length})
+                  <Minus size={14} className="mr-1" /> Clear Selected ({selectedParticipantIds.length})
                 </Button>
                 <Button
                   size="sm"
@@ -5417,6 +5416,23 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       >
                         <span className="inline-flex items-center gap-1">
                           {renderNameWithFemaleSpotAfter(p, { includeLastName: false })}
+                          {participantIssues.has(p.id) && (
+                            <div className="relative inline-block">
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setActiveWarningId(activeWarningId === `p-${p.id}` ? null : `p-${p.id}`); }}
+                                className="text-red-500 hover:text-red-600 transition-colors"
+                                title="Issues found — click to read"
+                              >
+                                <AlertCircle size={11} />
+                              </button>
+                              {activeWarningId === `p-${p.id}` && (
+                                <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-red-200 rounded shadow-lg p-2 min-w-[180px] text-[11px] text-red-700 space-y-1 whitespace-normal">
+                                  {(participantIssues.get(p.id) || []).map((issue, i) => <p key={i}>• {issue}</p>)}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </span>
                       </td>
                       <td className={`px-1 py-1.5 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>{p.last_name || '-'}</td>
@@ -5452,16 +5468,6 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                   <div>
                     <h4 className="font-bold text-black/80 flex items-center gap-2"><Users size={16} className="text-emerald-700" />{tx('Teams')} ({teams.length})</h4>
-                    {teamsWithIntegrityIssues > 0 && (
-                      <p className="text-[11px] text-red-600 mt-1 font-semibold">
-                        {tx('Warning:')} {teamsWithIntegrityIssues} {tx('team(s) have missing or duplicated members.')}
-                      </p>
-                    )}
-                    {multiTeamPlayers.length > 0 && (
-                      <p className="text-[11px] text-red-600 mt-1 font-semibold">
-                        {tx('Warning:')} {multiTeamPlayers.length} {tx('player(s) appear in more than one team')} ({multiTeamPlayers.slice(0, 3).map((player) => player.name).join(', ')}{multiTeamPlayers.length > 3 ? ', ...' : ''}).
-                      </p>
-                    )}
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2 w-full md:w-auto md:min-w-[320px]">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -5504,13 +5510,13 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                           </>
                         )}
                       {canManageParticipants && (
-                        <Button size="sm" variant="manage" onClick={handleClearTeams} title="Clear Teams" ariaLabel="Clear Teams" className="px-2">
-                          <BrushCleaning size={14} />
+                        <Button size="sm" variant="remove" onClick={handleClearTeams} title="Clear Teams" ariaLabel="Clear Teams" className="px-2">
+                          <Minus size={14} />
                         </Button>
                       )}
                       {canManageParticipants && (
-                        <Button size="sm" variant="manage" onClick={openCreateTeamModal} title="Add Team" ariaLabel="Add Team" className="px-2">
-                          <UserPlus size={14} />
+                        <Button size="sm" variant="create" onClick={openCreateTeamModal} title="Add Team" ariaLabel="Add Team" className="px-2">
+                          <Plus size={14} />
                         </Button>
                       )}
                     </div>
@@ -5569,7 +5575,33 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       return (
                         <tr key={team.id} className="hover:bg-[#AFDDE5]/20 transition-colors align-top">
                           <td className="px-3 py-2 text-[10px] text-black/60 sticky left-0 z-[2] bg-white">{index + 1}</td>
-                          <td className="px-3 py-2 uppercase text-xs text-black sticky left-12 z-[2] bg-white">{team.name}</td>
+                          <td className="px-3 py-2 uppercase text-xs text-black sticky left-12 z-[2] bg-white">
+                            <span className="inline-flex items-center gap-1">
+                              {team.name}
+                              {integrityIssue && (
+                                <div className="relative inline-block">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); setActiveWarningId(activeWarningId === `t-${team.id}` ? null : `t-${team.id}`); }}
+                                    className="text-red-500 hover:text-red-600 transition-colors"
+                                    title="Issues found — click to read"
+                                  >
+                                    <AlertCircle size={11} />
+                                  </button>
+                                  {activeWarningId === `t-${team.id}` && (
+                                    <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-red-200 rounded shadow-lg p-2 min-w-[180px] text-[11px] text-red-700 space-y-1 whitespace-normal">
+                                      {integrityIssue.missingCount > 0 && (
+                                        <p>• {tx('Missing members:')} {integrityIssue.missingCount} ({tx('expected')} {expectedPlayersPerTeam})</p>
+                                      )}
+                                      {integrityIssue.duplicateNames.length > 0 && (
+                                        <p>• {tx('Duplicated members:')} {integrityIssue.duplicateNames.join(', ')}</p>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </span>
+                          </td>
                           <td className="px-3 py-2">
                             <div className="space-y-1">
                               <div className="flex flex-wrap gap-1.5">
@@ -5791,6 +5823,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   const [lanePickerLaneNumber, setLanePickerLaneNumber] = useState<number | null>(null);
   const [lanePickerShift, setLanePickerShift] = useState(1);
   const [lanePickerSearchQuery, setLanePickerSearchQuery] = useState('');
+  const [activeWarningId, setActiveWarningId] = useState<string | null>(null);
   const say = (message: string) => alert(tx(message));
   const ask = (message: string) => confirm(tx(message));
 
@@ -6392,6 +6425,26 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     groupedLanesByShift[shift] = grouped;
   });
 
+  // Compute per-entity lane issues (e.g. assigned to multiple lanes in same shift)
+  const laneIssues = new Map<number, string[]>();
+  const entityShiftCounts = new Map<string, number[]>();
+  lanes.forEach((lane) => {
+    const entityId = tournament.type === 'individual' ? lane.participant_id : lane.team_id;
+    if (!entityId) return;
+    const key = `${lane.shift_number}-${entityId}`;
+    const laneNums = entityShiftCounts.get(key) || [];
+    laneNums.push(lane.lane_number);
+    entityShiftCounts.set(key, laneNums);
+  });
+  entityShiftCounts.forEach((laneNums, key) => {
+    if (laneNums.length <= 1) return;
+    const parts = key.split('-');
+    const entityId = Number(parts[1]);
+    const issues = laneIssues.get(entityId) || [];
+    issues.push(`Assigned to multiple lanes in Shift ${parts[0]}: lanes ${laneNums.join(', ')}`);
+    laneIssues.set(entityId, issues);
+  });
+
   const waitingQueueHeightClass = waitingQueue.length > 16
     ? 'max-h-[184px]'
     : waitingQueue.length > 8
@@ -6470,9 +6523,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                         </div>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleRemoveFromTournament(item.id, tournament.type === 'individual' ? 'participant' : 'team'); }}
-                          className={`opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-all ${
-                            selectedItem?.id === item.id && selectedItem.type === 'waiting' ? 'text-white' : ''
-                          }`}
+                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:text-red-500 transition-all"
                           title="Delete from Tournament"
                         >
                           <Trash2 size={12} />
@@ -6491,16 +6542,16 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       <div>
         <div className="sticky top-[7.25rem] z-20 bg-white/95 backdrop-blur-sm border border-[#AFDDE5]/50 rounded-md px-2 py-1.5 flex flex-wrap items-center justify-between gap-2 mb-2">
             <div className="flex flex-wrap items-center gap-1.5">
-              <Button size="sm" variant="manage" onClick={loadData} title="Refresh" ariaLabel="Refresh" className="px-2">
+              <Button size="sm" variant="outline" onClick={loadData} title="Refresh" ariaLabel="Refresh" className="px-2">
                 <RefreshCw size={14} />
               </Button>
               {canManageLanes && (
-                <Button size="sm" variant="manage" onClick={handleClearLanes} title="Clear Assignments" ariaLabel="Clear Assignments" className="px-2">
-                  <BrushCleaning size={14} />
+                <Button size="sm" variant="remove" onClick={handleClearLanes} title="Clear Assignments" ariaLabel="Clear Assignments" className="px-2">
+                  <Minus size={14} />
                 </Button>
               )}
               {canManageLanes && (
-                <Button size="sm" onClick={handleAutoAssign} variant="manage" title="Auto-Assign" ariaLabel="Auto-Assign" className="px-3">
+                <Button size="sm" onClick={handleAutoAssign} variant="outline" title="Auto-Assign" ariaLabel="Auto-Assign" className="px-3">
                   Auto Assign
                 </Button>
               )}
@@ -6680,6 +6731,27 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                           >
                             <X size={10} />
                           </button>
+                          {(() => {
+                            const entityId = tournament.type === 'individual' ? a.participant_id : a.team_id;
+                            const issues = entityId ? laneIssues.get(entityId) : undefined;
+                            return issues && issues.length > 0 ? (
+                              <div className="relative inline-block">
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setActiveWarningId(activeWarningId === `la-${a.id}` ? null : `la-${a.id}`); }}
+                                  className="text-red-500 hover:text-red-600 transition-colors"
+                                  title="Issues found — click to read"
+                                >
+                                  <AlertCircle size={10} />
+                                </button>
+                                {activeWarningId === `la-${a.id}` && (
+                                  <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-red-200 rounded shadow-lg p-2 min-w-[200px] text-[11px] text-red-700 space-y-1 whitespace-normal">
+                                    {issues.map((issue, i) => <p key={i}>• {issue}</p>)}
+                                  </div>
+                                )}
+                              </div>
+                            ) : null;
+                          })()}
                         </div>
                       );
                     })
@@ -6774,6 +6846,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   const [currentShift, setCurrentShift] = useState(1);
   const [presentShiftFilter, setPresentShiftFilter] = useState<number[] | null>(null);
   const [mobileExpandedScoreRow, setMobileExpandedScoreRow] = useState<string | null>(null);
+  const [activeWarningId, setActiveWarningId] = useState<string | null>(null);
   const importScoresInputRef = useRef<HTMLInputElement | null>(null);
   const scoringHeaderScrollRef = useRef<HTMLDivElement | null>(null);
   const scoringBodyScrollRef = useRef<HTMLDivElement | null>(null);
@@ -7102,6 +7175,24 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
       };
     })
     : [{ shiftNumber: currentShift, laneMaps: currentShiftLaneMaps, participants: scoringParticipants }];
+
+  // Compute per-participant score issues
+  const scoreIssues = new Map<number, string[]>();
+  scoringParticipants.forEach((p) => {
+    const issues: string[] = [];
+    const gameValues = gameNumbers.map((n) => scoreMap.get(`${p.id}-${n}`));
+    const hasAnyScore = gameValues.some((v) => v !== undefined);
+    const missingSome = gameValues.some((v) => v === undefined);
+    if (hasAnyScore && missingSome) {
+      issues.push('Some game scores are missing');
+    }
+    gameValues.forEach((v, i) => {
+      if (v !== undefined && v > 300) {
+        issues.push(`Game ${gameNumbers[i]} score exceeds 300 (${v})`);
+      }
+    });
+    if (issues.length) scoreIssues.set(p.id, issues);
+  });
 
   const teamTotalsByHeaderKey = new Map<string, number>();
   if (tournament.type === 'team') {
@@ -7717,13 +7808,13 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
             ))}
           </div>
           {canManageScores && (
-            <Button size="sm" variant="manage" onClick={handleRefreshScores} title="Refresh" ariaLabel="Refresh" className="px-2">
+            <Button size="sm" variant="outline" onClick={handleRefreshScores} title="Refresh" ariaLabel="Refresh" className="px-2">
               <RefreshCw size={14} />
             </Button>
           )}
           {canManageScores && (
-            <Button size="sm" variant="manage" onClick={handleClearScores} title="Clear" ariaLabel="Clear" className="px-2">
-              <BrushCleaning size={14} />
+            <Button size="sm" variant="remove" onClick={handleClearScores} title="Clear" ariaLabel="Clear" className="px-2">
+              <Minus size={14} />
             </Button>
           )}
         </div>
@@ -7766,7 +7857,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
       )}
 
       <Card ref={scoringTableRef} className="border-gray-200 overflow-visible relative">
-        <div className="sm:hidden px-3 py-2 flex items-center gap-1.5 bg-gray-50 border-b border-gray-200">
+        <div className="sm:hidden px-3 py-2 flex items-center gap-1.5 bg-black/5 border-b border-black/10">
           {isPublicUser ? (
             <span className="inline-flex items-center gap-1.5 text-[10px] text-black/50 leading-snug">
               <span>Tap score to see details</span>
@@ -7801,13 +7892,13 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                     <button
                       type="button"
                       onClick={() => setMobileExpandedScoreRow(isExpanded ? null : rowKey)}
-                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-black/5 active:bg-black/10 transition-colors"
                     >
-                      <span className="flex-1 text-xs font-semibold text-gray-800 leading-tight truncate">
+                      <span className="flex-1 text-xs font-semibold text-black leading-tight truncate">
                         {renderFemaleInitialUnderline(formatScoringName(p), p.gender?.toLowerCase() === 'female')}
                       </span>
                       {!isPublicUser && (
-                        <span className="shrink-0 text-[10px] font-medium text-gray-500 tabular-nums">{laneBadge}</span>
+                        <span className="shrink-0 text-[10px] font-medium text-black/50 tabular-nums">{laneBadge}</span>
                       )}
                       {tournament.type === 'team' && (
                         <span className="shrink-0 font-bold tabular-nums text-[11px] text-green-700">
@@ -7815,36 +7906,63 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                         </span>
                       )}
                       <span className="shrink-0 text-right">
-                        <span className="text-[9px] text-gray-400 block leading-none">Tot</span>
+                        <span className="text-[9px] text-black/40 block leading-none">Tot</span>
                         <span className="text-sm font-bold tabular-nums text-emerald-700 leading-tight">{total}</span>
                       </span>
                       <span className="shrink-0 text-right w-10">
-                        <span className="text-[9px] text-gray-400 block leading-none">Avg</span>
+                        <span className="text-[9px] text-black/40 block leading-none">Avg</span>
                         <span className="text-xs font-bold tabular-nums text-sky-700 leading-tight">{average.toFixed(1)}</span>
                       </span>
-                      <span className="shrink-0 text-[10px] text-gray-400">{isExpanded ? '▴' : '▾'}</span>
+                      <span className="shrink-0 text-[10px] text-black/40">{isExpanded ? '▴' : '▾'}</span>
                     </button>
                     {isExpanded && (
-                      <div className="px-3 pb-2.5 pt-1.5 bg-gray-50 border-t border-gray-100">
-                        <p className="text-xs font-semibold text-gray-800 leading-tight">
+                      <div className="px-3 pb-2.5 pt-1.5 bg-black/5 border-t border-black/5">
+                        <p className="text-xs font-semibold text-black leading-tight">
                           {renderFemaleInitialUnderline(formatScoringName(p), p.gender?.toLowerCase() === 'female')}
                         </p>
-                        <p className="mt-1 text-[11px] leading-snug text-gray-600">
+                        <p className="mt-1 text-[11px] leading-snug text-black/60">
                           <span className="font-semibold">Total:</span> {total}
                           {' | '}
                           <span className="font-semibold">Avg:</span> {average.toFixed(1)}
                           {' | '}
                           <span className="font-semibold">Lane:</span> {laneBadge}
-                          {gameNumbers.map((gameNumber) => {
-                            const scoreKey = `${p.id}-${gameNumber}`;
-                            const currentScore = draftScores[scoreKey] !== undefined
-                              ? draftScores[scoreKey]
-                              : (scoreMap.get(scoreKey) ?? '');
-                            const normalized = String(currentScore ?? '').trim();
-                            return ` | G${gameNumber}: ${normalized.length > 0 ? normalized : '-'}`;
-                          }).join('')}
+                          {!canManageScores || isScoreScreenMode
+                            ? gameNumbers.map((gameNumber) => {
+                                const scoreKey = `${p.id}-${gameNumber}`;
+                                const currentScore = draftScores[scoreKey] !== undefined
+                                  ? draftScores[scoreKey]
+                                  : (scoreMap.get(scoreKey) ?? '');
+                                const normalized = String(currentScore ?? '').trim();
+                                return ` | G${gameNumber}: ${normalized.length > 0 ? normalized : '-'}`;
+                              }).join('')
+                            : null}
                           {tournament.type === 'team' ? ` | Team: ${teamTotalScore}` : ''}
                         </p>
+                        {canManageScores && !isScoreScreenMode && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {gameNumbers.map((gameNumber) => {
+                              const scoreKey = `${p.id}-${gameNumber}`;
+                              const currentScore = draftScores[scoreKey] !== undefined
+                                ? draftScores[scoreKey]
+                                : (scoreMap.get(scoreKey) ?? '');
+                              return (
+                                <div key={gameNumber} className="flex flex-col items-center gap-0.5">
+                                  <span className="text-[9px] text-black/40">G{gameNumber}</span>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={currentScore}
+                                    onChange={(e) => handleScoreChange(p.id, gameNumber, e.target.value)}
+                                    onBlur={(e) => handleScoreBlur(p.id, gameNumber, e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
+                                    placeholder="—"
+                                    className="w-12 text-center text-xs font-medium tabular-nums bg-white border border-black/10 rounded px-1 py-0.5 focus:border-emerald-500 focus:outline-none"
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -7944,7 +8062,26 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                       )}
                       <tr className={`group scoring-table-surface border-b border-gray-100 hover:bg-gray-50/60 transition-colors ${tournament.type === 'team' ? ((teamIndexMap.get(teamHeaderKey) ?? 0) % 2 === 1 ? 'bg-blue-50/20' : '') : (index % 2 === 1 ? 'bg-gray-50/40' : '')}`}>
                     <td className="px-2 py-2 sm:px-4 sm:py-3 font-semibold text-[11px] sm:text-[13px] text-gray-800 sticky left-0 z-[2] scoring-table-surface max-w-[152px] sm:max-w-none">
-                      {renderFemaleInitialUnderline(formatScoringName(p), p.gender?.toLowerCase() === 'female')}
+                      <span className="inline-flex items-center gap-1">
+                        {renderFemaleInitialUnderline(formatScoringName(p), p.gender?.toLowerCase() === 'female')}
+                        {scoreIssues.has(p.id) && (
+                          <div className="relative inline-block">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setActiveWarningId(activeWarningId === `sc-${p.id}` ? null : `sc-${p.id}`); }}
+                              className="text-red-500 hover:text-red-600 transition-colors"
+                              title="Issues found — click to read"
+                            >
+                              <AlertCircle size={11} />
+                            </button>
+                            {activeWarningId === `sc-${p.id}` && (
+                              <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-red-200 rounded shadow-lg p-2 min-w-[200px] text-[11px] text-red-700 space-y-1 whitespace-normal">
+                                {(scoreIssues.get(p.id) || []).map((issue, i) => <p key={i}>• {issue}</p>)}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </span>
                     </td>
                     {tournament.type === 'team' && showMergedTeamTotal && (
                       <td
@@ -8028,9 +8165,22 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                         : (scoreMap.get(scoreKey) ?? '');
                       return (
                         <td key={gameNumber} className="px-1.5 py-2 sm:px-3 sm:py-3 text-center">
-                          <span className={`font-medium tabular-nums text-[11px] sm:text-sm ${currentScore !== '' ? 'text-gray-700' : 'text-gray-300'}`}>
-                            {currentScore !== '' ? currentScore : '—'}
-                          </span>
+                          {canManageScores && !isScoreScreenMode ? (
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={currentScore}
+                              onChange={(e) => handleScoreChange(p.id, gameNumber, e.target.value)}
+                              onBlur={(e) => handleScoreBlur(p.id, gameNumber, e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
+                              placeholder="—"
+                              className="w-12 sm:w-14 text-center font-medium tabular-nums text-[11px] sm:text-sm bg-transparent border-b border-transparent hover:border-gray-300 focus:border-emerald-500 focus:outline-none"
+                            />
+                          ) : (
+                            <span className={`font-medium tabular-nums text-[11px] sm:text-sm ${currentScore !== '' ? 'text-gray-700' : 'text-gray-300'}`}>
+                              {currentScore !== '' ? currentScore : '—'}
+                            </span>
+                          )}
                         </td>
                       );
                     })}
@@ -11637,6 +11787,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
   const [loading, setLoading] = useState(true);
   const [mobileExpandedRow, setMobileExpandedRow] = useState<string | null>(null);
+  const [activeWarningId, setActiveWarningId] = useState<string | null>(null);
   const standingsImportInputRef = useRef<HTMLInputElement | null>(null);
   const standingsHeaderScrollRef = useRef<HTMLDivElement | null>(null);
   const standingsBodyScrollRef = useRef<HTMLDivElement | null>(null);
@@ -12270,6 +12421,20 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     ? filteredPlayerStandingsRows
     : directPlayerStandingsFallbackRows;
 
+  // Compute per-participant standings issues (e.g. impossible scores)
+  const standingsIssues = new Map<number, string[]>();
+  standingsRowsForDisplay.forEach((s) => {
+    const issues: string[] = [];
+    const hasImpossibleScore = Array.isArray(s.games) && s.games.some((v: number | null | undefined) => typeof v === 'number' && v > 300);
+    if (hasImpossibleScore) {
+      issues.push('One or more game scores exceed 300');
+    }
+    if (s.total === 0 && s.grand_total === 0) {
+      issues.push('No scores recorded');
+    }
+    if (issues.length) standingsIssues.set(s.participant_id, issues);
+  });
+
   const hasMeaningfulClub = (value: unknown) => {
     const normalized = String(value || '').trim();
     return normalized.length > 0 && normalized !== '-';
@@ -12718,7 +12883,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       <thead>
         <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
           <th className={`px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-black/70 w-12 bg-[#e3f3f6] sticky left-0 ${headerTopClass} z-[6]`}>Rank</th>
-          <th className={`px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-900 bg-[#e3f3f6] sticky left-12 ${headerTopClass} z-[6]`}>{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
+          <th className={`px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-black/80 bg-[#e3f3f6] sticky left-12 ${headerTopClass} z-[6]`}>{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
           {standingsMode === 'players' && (
             <>
               {showPlayerStyle && <th className={`${headerBaseClass} text-center`}>1H/2H</th>}
@@ -13282,7 +13447,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           </div>
           )}
           {/* Mobile compact view — hidden on sm+ */}
-          <div className="sm:hidden px-3 py-2 flex items-center gap-1.5 bg-[#f0fafb] border-b border-[#AFDDE5]/60">
+          <div className="sm:hidden px-3 py-2 flex items-center gap-1.5 bg-[#AFDDE5]/10 border-b border-[#AFDDE5]/40">
             <span className="text-[10px] text-black/40 leading-snug">
               Tap a name for compact details &bull; Rotate phone for full table
             </span>
@@ -13314,8 +13479,8 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     <span className="shrink-0 text-black/30">{isExpanded ? '▲' : '▼'}</span>
                   </button>
                   {isExpanded && (
-                    <div className="px-3 pb-2.5 pt-1.5 bg-[#f7fcfd]">
-                      <p className="text-xs font-bold leading-tight">
+                    <div className="px-3 pb-2.5 pt-1.5 bg-[#AFDDE5]/10">
+                      <p className="text-xs font-bold leading-tight text-black">
                         {isFemale ? <span style={{ textDecorationLine: 'underline', textDecorationStyle: 'dotted' }}>{s.participant_name}</span> : s.participant_name}
                       </p>
                       <p className="mt-1 text-[11px] leading-snug text-black/75">
@@ -13352,8 +13517,8 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     <span className="shrink-0 text-black/30">{isExpanded ? '▲' : '▼'}</span>
                   </button>
                   {isExpanded && (
-                    <div className="px-3 pb-2.5 pt-1.5 bg-[#f7fcfd]">
-                      <p className="text-xs font-bold leading-tight">{s.team_name}</p>
+                    <div className="px-3 pb-2.5 pt-1.5 bg-[#AFDDE5]/10">
+                      <p className="text-xs font-bold leading-tight text-black">{s.team_name}</p>
                       <p className="mt-1 text-[11px] leading-snug text-black/75">
                         <span className="font-semibold text-emerald-700">{totalColumnLabel}:</span> {s.grand_total}
                         {gameNumbers.map((gn, gi) => {
@@ -13401,6 +13566,23 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                         s.participant_name,
                         (participantGenderMap.get(s.participant_id) || '').startsWith('f')
                       )}
+                      {standingsIssues.has(s.participant_id) && (
+                        <div className="relative inline-block">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setActiveWarningId(activeWarningId === `st-${s.participant_id}` ? null : `st-${s.participant_id}`); }}
+                            className="text-red-500 hover:text-red-600 transition-colors"
+                            title="Issues found — click to read"
+                          >
+                            <AlertCircle size={11} />
+                          </button>
+                          {activeWarningId === `st-${s.participant_id}` && (
+                            <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-red-200 rounded shadow-lg p-2 min-w-[200px] text-[11px] text-red-700 space-y-1 whitespace-normal">
+                              {(standingsIssues.get(s.participant_id) || []).map((issue, i) => <p key={i}>• {issue}</p>)}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </span>
                   </td>
                   {showPlayerStyle && (
@@ -13415,7 +13597,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                   )}
                   {/* Only show team column if team tournament and standingsMode is players */}
                   {standingsMode === 'players' && isTeamTournament && (
-                    <td className="px-2.5 py-1.5 text-xs font-semibold text-slate-800">{s.team_name}</td>
+                    <td className="px-2.5 py-1.5 text-xs font-semibold text-black/80">{s.team_name}</td>
                   )}
                   {gameNumbers.map((gameNumber, gameIndex) => {
                     const value = s.games[gameIndex] ?? 0;
@@ -13450,7 +13632,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       ) : s.additional;
                     })()}
                   </td>}
-                  {hasBonus && <td className="px-2.5 py-1.5 text-center text-slate-800 font-medium">
+                  {hasBonus && <td className="px-2.5 py-1.5 text-center text-black/80 font-medium">
                     {(() => {
                       const bonusKey = toBonusKey('participant', s.participant_id);
                       const liveValue = bonusDrafts[bonusKey] !== undefined ? bonusDrafts[bonusKey] : String(s.bonus);
@@ -13489,8 +13671,8 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 <tr key={s.key} className="hover:bg-[#AFDDE5]/20 transition-colors">
                   <td className="standings-sticky-col px-2 py-1.5 text-xs font-bold text-black/60 sticky left-0 z-[2]">{idx + 1}</td>
                   <td className="standings-sticky-col px-2 py-1.5 leading-tight sticky left-12 z-[2]">
-                    <div className="text-xs font-bold text-slate-900">{s.team_name}</div>
-                    <div className="text-[10px] lowercase mt-0.5 text-slate-600">
+                    <div className="text-xs font-bold text-black">{s.team_name}</div>
+                    <div className="text-[10px] lowercase mt-0.5 text-black/60">
                       {s.members.length > 0 ? s.members.join(', ') : 'no members'}
                     </div>
                   </td>
@@ -13518,7 +13700,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       ) : s.additional;
                     })()}
                   </td>}
-                  {hasBonus && <td className="px-2.5 py-1.5 text-center text-slate-800 font-medium">
+                  {hasBonus && <td className="px-2.5 py-1.5 text-center text-black/80 font-medium">
                     {(() => {
                       if (!s.team_id) return s.bonus;
                       const bonusKey = toBonusKey('team', s.team_id);
