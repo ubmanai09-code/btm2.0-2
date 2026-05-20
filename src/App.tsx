@@ -2039,49 +2039,9 @@ export default function App() {
       <main className="pt-24 pb-12 px-6 max-w-7xl mx-auto">
         {view === 'list' && (
             <div className="space-y-8">
-              <div className="flex items-end justify-between gap-3">
-                <div>
-                  <h1 className="text-4xl font-bold tracking-tight">{t('app.tournaments', 'Tournaments')}</h1>
-                  <p className="text-black/40 mt-1">{t('app.tournaments_subtitle', 'Manage and track your bowling events')}</p>
-                </div>
-                <div className="flex gap-2 flex-wrap justify-end">
-                  {currentRole !== 'public' && (
-                    <>
-                      <Button size="sm" variant="outline" onClick={handleSaveData} className="px-2" title={t('common.save', 'Save')} ariaLabel={t('common.save', 'Save')}>
-                        <Save size={16} />
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={handleExport} className="px-2" title={t('common.export', 'Export')} ariaLabel={t('common.export', 'Export')}>
-                        <Upload size={16} />
-                      </Button>
-                    </>
-                  )}
-                  {isAdmin && (
-                    <>
-                      <input
-                        ref={tournamentsImportInputRef}
-                        type="file"
-                        accept=".json,application/json"
-                        className="hidden"
-                        onChange={handleImport}
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="px-2"
-                        onClick={() => tournamentsImportInputRef.current?.click()}
-                        title={t('common.import', 'Import')}
-                        ariaLabel={t('common.import', 'Import')}
-                      >
-                        <Download size={16} />
-                      </Button>
-                    </>
-                  )}
-                  {isAdmin && (
-                    <Button size="sm" className="px-2" onClick={() => { setFormType('individual'); setView('create'); }} title={t('app.new_tournament', 'New Tournament')} ariaLabel={t('app.new_tournament', 'New Tournament')}>
-                      <Plus size={16} />
-                    </Button>
-                  )}
-                </div>
+              <div>
+                <h1 className="text-4xl font-bold tracking-tight">{t('app.tournaments', 'Tournaments')}</h1>
+                <p className="text-black/40 mt-1">{t('app.tournaments_subtitle', 'Manage and track your bowling events')}</p>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-4">
@@ -2199,6 +2159,48 @@ export default function App() {
                     </div>
                   </Card>
                 )}
+              </div>
+
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-bold uppercase tracking-wider text-black/50">{t('app.tournaments', 'Tournaments')}</h2>
+                <div className="flex gap-2">
+                  {currentRole !== 'public' && (
+                    <>
+                      <Button size="sm" variant="outline" onClick={handleSaveData} className="px-2" title={t('common.save', 'Save')} ariaLabel={t('common.save', 'Save')}>
+                        <Save size={16} />
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={handleExport} className="px-2" title={t('common.export', 'Export')} ariaLabel={t('common.export', 'Export')}>
+                        <Upload size={16} />
+                      </Button>
+                    </>
+                  )}
+                  {isAdmin && (
+                    <>
+                      <input
+                        ref={tournamentsImportInputRef}
+                        type="file"
+                        accept=".json,application/json"
+                        className="hidden"
+                        onChange={handleImport}
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="px-2"
+                        onClick={() => tournamentsImportInputRef.current?.click()}
+                        title={t('common.import', 'Import')}
+                        ariaLabel={t('common.import', 'Import')}
+                      >
+                        <Download size={16} />
+                      </Button>
+                    </>
+                  )}
+                  {isAdmin && (
+                    <Button size="sm" className="px-2" onClick={() => { setFormType('individual'); setView('create'); }} title={t('app.new_tournament', 'New Tournament')} ariaLabel={t('app.new_tournament', 'New Tournament')}>
+                      <Plus size={16} />
+                    </Button>
+                  )}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
