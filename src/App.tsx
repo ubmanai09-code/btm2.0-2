@@ -2161,9 +2161,21 @@ export default function App() {
                 )}
               </div>
 
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-bold uppercase tracking-wider text-black/50">{t('app.tournaments', 'Tournaments')}</h2>
-                <div className="flex gap-2">
+              <div className="flex items-center mb-2">
+                {/* Left: label */}
+                <h2 className="text-sm font-bold uppercase tracking-wider text-black/50 flex-1">{t('app.tournaments', 'Tournaments')}</h2>
+
+                {/* Center: New Tournament */}
+                <div className="flex-1 flex justify-center">
+                  {isAdmin && (
+                    <Button size="sm" className="px-3" onClick={() => { setFormType('individual'); setView('create'); }} title={t('app.new_tournament', 'New Tournament')} ariaLabel={t('app.new_tournament', 'New Tournament')}>
+                      <Plus size={16} />
+                    </Button>
+                  )}
+                </div>
+
+                {/* Right: Save / Export / Import */}
+                <div className="flex-1 flex gap-2 justify-end">
                   {currentRole !== 'public' && (
                     <>
                       <Button size="sm" variant="outline" onClick={handleSaveData} className="px-2" title={t('common.save', 'Save')} ariaLabel={t('common.save', 'Save')}>
@@ -2194,11 +2206,6 @@ export default function App() {
                         <Download size={16} />
                       </Button>
                     </>
-                  )}
-                  {isAdmin && (
-                    <Button size="sm" className="px-2" onClick={() => { setFormType('individual'); setView('create'); }} title={t('app.new_tournament', 'New Tournament')} ariaLabel={t('app.new_tournament', 'New Tournament')}>
-                      <Plus size={16} />
-                    </Button>
                   )}
                 </div>
               </div>
