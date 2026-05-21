@@ -263,6 +263,27 @@ body {
   background: var(--bg-secondary);
 }
 
+/* Mobile scores: team header dark mode */
+[data-theme="dark"] .mobile-score-team-header {
+  background: rgba(100, 116, 139, 0.5) !important; /* slate-500/50 */
+  border-color: rgba(148, 163, 184, 0.4) !important;
+}
+[data-theme="dark"] .mobile-score-team-name {
+  color: #ffffff !important;
+}
+[data-theme="dark"] .mobile-score-team-total-label {
+  color: rgba(203, 213, 225, 0.8) !important; /* slate-300 */
+}
+[data-theme="dark"] .mobile-score-team-total {
+  color: #86efac !important; /* green-300 */
+}
+[data-theme="dark"] .mobile-score-tot {
+  color: #6ee7b7 !important; /* emerald-300 */
+}
+[data-theme="dark"] .mobile-score-avg {
+  color: #7dd3fc !important; /* sky-300 */
+}
+
 /* Dark mode: override hardcoded Tailwind text colors inside scoring table */
 [data-theme="dark"] .scoring-table-surface td .text-gray-700,
 [data-theme="dark"] .scoring-table-surface td .text-gray-800,

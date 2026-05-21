@@ -7948,11 +7948,11 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                 return (
                   <React.Fragment key={`score-mobile-row-${rowKey}`}>
                     {showTeamHeader && (
-                      <div className="flex items-center justify-between px-3 py-1.5 bg-gray-100 border-t-2 border-gray-200">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 truncate mr-2">{teamLabel}</span>
+                      <div className="mobile-score-team-header flex items-center justify-between px-3 py-1.5 bg-gray-100 border-t-2 border-gray-200">
+                        <span className="mobile-score-team-name text-[10px] font-bold uppercase tracking-wider text-gray-500 truncate mr-2">{teamLabel}</span>
                         <span className="shrink-0 flex items-baseline gap-1">
-                          <span className="text-[9px] text-gray-400 leading-none">Total</span>
-                          <span className="text-sm font-bold tabular-nums text-green-700">{teamTotalScore}</span>
+                          <span className="mobile-score-team-total-label text-[9px] text-gray-400 leading-none">Total</span>
+                          <span className="mobile-score-team-total text-sm font-bold tabular-nums text-green-700">{teamTotalScore}</span>
                         </span>
                       </div>
                     )}
@@ -7977,38 +7977,31 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                           <span className="flex-1" />
                           <span className="shrink-0 flex items-baseline gap-1">
                             <span className="text-[9px] text-black/40 leading-none">Tot</span>
-                            <span className="text-sm font-bold tabular-nums text-emerald-700 leading-tight">{total}</span>
+                            <span className="mobile-score-tot text-sm font-bold tabular-nums text-emerald-700 leading-tight">{total}</span>
                           </span>
                           <span className="shrink-0 flex items-baseline gap-1">
                             <span className="text-[9px] text-black/40 leading-none">Avg</span>
-                            <span className="text-xs font-bold tabular-nums text-sky-700 leading-tight">{average.toFixed(1)}</span>
+                            <span className="mobile-score-avg text-xs font-bold tabular-nums text-sky-700 leading-tight">{average.toFixed(1)}</span>
                           </span>
                         </span>
                       </button>
                       {isExpanded && (
                         <div className={`pb-2.5 pt-1.5 bg-black/5 border-t border-black/5 ${tournament.type === 'team' ? 'px-3 pl-5' : 'px-3'}`}>
-                          <p className="text-xs font-semibold text-black leading-tight">
-                            {renderFemaleInitialUnderline(formatScoringName(p), p.gender?.toLowerCase() === 'female')}
-                          </p>
-                          <p className="mt-1 text-[11px] leading-snug text-black/60">
-                            <span className="font-semibold">Total:</span> {total}
-                            {' | '}
-                            <span className="font-semibold">Avg:</span> {average.toFixed(1)}
-                            {' | '}
-                            <span className="font-semibold">Lane:</span> {laneBadge}
-                            {!canManageScores || isScoreScreenMode
-                              ? gameNumbers.map((gameNumber) => {
-                                  const scoreKey = `${p.id}-${gameNumber}`;
-                                  const currentScore = draftScores[scoreKey] !== undefined
-                                    ? draftScores[scoreKey]
-                                    : (scoreMap.get(scoreKey) ?? '');
-                                  const normalized = String(currentScore ?? '').trim();
-                                  return ` | G${gameNumber}: ${normalized.length > 0 ? normalized : '-'}`;
-                                }).join('')
-                              : null}
-                          </p>
-                          {canManageScores && !isScoreScreenMode && (
-                            <div className="mt-2 flex flex-wrap gap-2">
+                          {!canManageScores || isScoreScreenMode ? (
+                            <p className="text-[11px] leading-snug text-black/60">
+                              {gameNumbers.map((gameNumber, i) => {
+                                const scoreKey = `${p.id}-${gameNumber}`;
+                                const currentScore = draftScores[scoreKey] !== undefined
+                                  ? draftScores[scoreKey]
+                                  : (scoreMap.get(scoreKey) ?? '');
+                                const normalized = String(currentScore ?? '').trim();
+                                return (
+                                  <span key={gameNumber}>{i > 0 ? ' | ' : ''}<span className="font-semibold">G{gameNumber}:</span> {normalized.length > 0 ? normalized : '—'}</span>
+                                );
+                              })}
+                            </p>
+                          ) : (
+                            <div className="mt-1 flex flex-wrap gap-2">
                               {gameNumbers.map((gameNumber) => {
                                 const scoreKey = `${p.id}-${gameNumber}`;
                                 const currentScore = draftScores[scoreKey] !== undefined
