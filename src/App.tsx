@@ -3669,7 +3669,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                     tabIndex={isDesktopTournamentHeader ? -1 : 0}
                     aria-expanded={isDesktopTournamentHeader ? true : !isTournamentCardCollapsed}
                   >
-                    <div className="min-w-0 flex items-start gap-2">
+                    <div className="min-w-0 flex items-center gap-2">
                       <div className="w-[72px] h-[72px] rounded-full border border-black/20 dark:border-white/30 shrink-0 flex items-center justify-center overflow-hidden" style={{ backgroundColor: logoBgColor }}>
                         <img
                           ref={logoImgRef}
@@ -6682,7 +6682,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                         e.stopPropagation();
                         toggleLaneOperationStatus(laneNumber, shift);
                       }}
-                      className={`h-3.5 min-w-3.5 rounded-full text-[9px] leading-none font-bold inline-flex items-center justify-center border transition-all ${
+                      className={`h-2.5 min-w-2.5 rounded-full text-[7px] leading-none font-bold inline-flex items-center justify-center border transition-all ${
                         isLaneOutOfOperation
                           ? 'bg-red-500 border-red-500 text-white'
                           : 'bg-emerald-500 border-emerald-500 text-white'
@@ -6702,7 +6702,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                       <ArrowRightLeft size={10} />
                     </button>
                   </div>
-                  <span className="text-[9px] text-black/50">{assignments.length} / {tournament.players_per_lane}</span>
+
                 </div>
                 <div className="p-1 flex-1 flex flex-col gap-0.5">
                   {assignments.length === 0 ? (
