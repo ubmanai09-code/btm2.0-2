@@ -47,6 +47,9 @@ import {
   Moon,
   Sun,
   AlertCircle,
+  UserRoundPlus,
+  UserRoundMinus,
+  Eraser,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry, LeagueRankingResponse } from './services/api';
@@ -4228,7 +4231,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const [showTeamsSearch, setShowTeamsSearch] = useState(false);
   const [showPlayersClearMenu, setShowPlayersClearMenu] = useState(false);
   const [isPlayerSelectionMode, setIsPlayerSelectionMode] = useState(false);
-  const [playerSort, setPlayerSort] = useState<{ key: 'none' | 'club' | 'average'; direction: 'asc' | 'desc' }>({
+  const [playerSort, setPlayerSort] = useState<{ key: 'none' | 'club' | 'average' | 'first_name' | 'last_name' | 'gender' | 'hand'; direction: 'asc' | 'desc' }>({
+    key: 'none',
+    direction: 'asc',
+  });
+  const [teamSort, setTeamSort] = useState<{ key: 'none' | 'name' | 'members'; direction: 'asc' | 'desc' }>({
     key: 'none',
     direction: 'asc',
   });
@@ -4907,6 +4914,10 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         const leftName = (left.first_name || '').trim().toLowerCase();
         const rightName = (right.first_name || '').trim().toLowerCase();
         comparison = leftName.localeCompare(rightName);
+      } else if (playerSort.key === 'last_name') {
+        const leftName = (left.last_name || '').trim().toLowerCase();
+        const rightName = (right.last_name || '').trim().toLowerCase();
+        comparison = leftName.localeCompare(rightName);
       } else if (playerSort.key === 'gender') {
         const leftGender = (left.gender || '').trim().toLowerCase();
         const rightGender = (right.gender || '').trim().toLowerCase();
@@ -4965,15 +4976,36 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     loadData();
   };
 
-  const filteredTeams = teams.filter((team) => {
-    if (!activePlayerSearch) return true;
-    const teamName = (team.name || '').trim().toLowerCase();
-    if (teamName.includes(activePlayerSearch)) return true;
-    const memberNames = participants
-      .filter((participant) => participant.team_id === team.id)
-      .map((participant) => `${participant.first_name || ''} ${participant.last_name || ''}`.trim().toLowerCase());
-    return memberNames.some((name) => name.includes(activePlayerSearch));
-  });
+  const filteredTeams = (() => {
+    const base = teams.filter((team) => {
+      if (!activePlayerSearch) return true;
+      const teamName = (team.name || '').trim().toLowerCase();
+      if (teamName.includes(activePlayerSearch)) return true;
+      const memberNames = participants
+        .filter((participant) => participant.team_id === team.id)
+        .map((participant) => `${participant.first_name || ''} ${participant.last_name || ''}`.trim().toLowerCase());
+      return memberNames.some((name) => name.includes(activePlayerSearch));
+    });
+    if (teamSort.key === 'none') return base;
+    return [...base].sort((a, b) => {
+      let cmp = 0;
+      if (teamSort.key === 'name') {
+        cmp = (a.name || '').trim().toLowerCase().localeCompare((b.name || '').trim().toLowerCase());
+      } else if (teamSort.key === 'members') {
+        const aCount = participants.filter(p => p.team_id === a.id).length;
+        const bCount = participants.filter(p => p.team_id === b.id).length;
+        cmp = aCount - bCount;
+      }
+      return teamSort.direction === 'asc' ? cmp : -cmp;
+    });
+  })();
+
+  const toggleTeamSort = (key: 'name' | 'members') => {
+    setTeamSort((prev) => {
+      if (prev.key === key) return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      return { key, direction: 'asc' };
+    });
+  };
 
   const normalizedTeamMemberSearch = teamMemberSearchQuery.trim().toLowerCase();
   const filteredTeamMemberCandidates = participants.filter((player) => {
@@ -5039,7 +5071,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   });
   const teamsWithIntegrityIssues = Array.from(teamIntegrityIssues.keys()).length;
 
-  const togglePlayerSort = (key: 'club' | 'average' | 'first_name' | 'gender' | 'hand') => {
+  const togglePlayerSort = (key: 'club' | 'average' | 'first_name' | 'last_name' | 'gender' | 'hand') => {
     setPlayerSort((previous) => {
       if (previous.key === key) {
         return {
@@ -5155,7 +5187,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                           ariaLabel="Clear Players"
                           className="px-2"
                         >
-                          <Minus size={14} />
+                          <UserRoundMinus size={12} />
                         </Button>
                         {showPlayersClearMenu && (
                           <div className="absolute left-0 mt-1 min-w-[150px] rounded-md border border-black/10 bg-white shadow-lg z-40 p-1">
@@ -5185,7 +5217,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     )}
                     {canManageParticipants && (
                       <Button size="sm" variant="create" onClick={() => { setEditingPlayer(null); setShowAddPlayer(true); }} title="Add Player" ariaLabel="Add Player" className="px-2">
-                        <Plus size={14} />
+                        <UserRoundPlus size={12} />
                       </Button>
                     )}
                   </div>
@@ -5340,7 +5372,17 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       <span>{playerSort.key === 'first_name' ? (playerSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
                     </button>
                   </th>
-                  <th className="px-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">{tx('Family Name')}</th>
+                  <th className="px-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">
+                    <button
+                      type="button"
+                      onClick={() => togglePlayerSort('last_name')}
+                      className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-black/70 hover:text-emerald-700 transition-colors"
+                      title="Sort by family name"
+                    >
+                      {tx('Family Name')}
+                      <span>{playerSort.key === 'last_name' ? (playerSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
+                    </button>
+                  </th>
                   <th className="pl-1 pr-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">
                     <button
                       type="button"
@@ -5435,7 +5477,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                           )}
                         </span>
                       </td>
-                      <td className={`px-1 py-1.5 uppercase text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>{p.last_name || '-'}</td>
+                      <td className={`px-1 py-1.5 text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>{p.last_name || '-'}</td>
                       <td className={`pl-1 pr-2 py-1.5 text-[10px] uppercase text-center ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{(p.gender || '').toLowerCase().startsWith('f') ? 'F' : (p.gender || '').toLowerCase().startsWith('m') ? 'M' : '-'}</td>
                       {showPlayerStyle && (
                         <td className={`pl-2 pr-1 py-1.5 text-[10px] uppercase text-center ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{normalizeHandsStyle(p.hands)}</td>
@@ -5467,7 +5509,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               <div className="p-3 border-b border-[#AFDDE5]/70 bg-white sticky top-[7.25rem] z-20">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                   <div>
-                    <h4 className="font-bold text-black/80 flex items-center gap-2"><Users size={16} className="text-emerald-700" />{tx('Teams')} ({teams.length})</h4>
+                    <h4 className="font-bold text-black/80 flex items-center gap-1.5 text-xs sm:text-sm"><Users size={14} className="text-emerald-700" />{tx('Teams')} ({teams.length})</h4>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2 w-full md:w-auto md:min-w-[320px]">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -5511,12 +5553,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         )}
                       {canManageParticipants && (
                         <Button size="sm" variant="remove" onClick={handleClearTeams} title="Clear Teams" ariaLabel="Clear Teams" className="px-2">
-                          <Minus size={14} />
+                          <UserRoundMinus size={12} />
                         </Button>
                       )}
                       {canManageParticipants && (
                         <Button size="sm" variant="create" onClick={openCreateTeamModal} title="Add Team" ariaLabel="Add Team" className="px-2">
-                          <Plus size={14} />
+                          <UserRoundPlus size={12} />
                         </Button>
                       )}
                     </div>
@@ -5552,10 +5594,20 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 <thead className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
                   <tr>
                     <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 w-12 sticky left-0 z-[3] bg-[#e3f3f6]">#</th>
-                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 sticky left-12 z-[3] bg-[#e3f3f6]">{tx('Team Name')}</th>
-                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">{tx('Team Members')}</th>
+                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 sticky left-12 z-[3] bg-[#e3f3f6]">
+                      <button type="button" onClick={() => toggleTeamSort('name')} className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-black/70 hover:text-emerald-700 transition-colors" title="Sort by team name">
+                        {tx('Team Name')}<span>{teamSort.key === 'name' ? (teamSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
+                      </button>
+                    </th>
+                    <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70">
+                      <button type="button" onClick={() => toggleTeamSort('members')} className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-black/70 hover:text-emerald-700 transition-colors" title="Sort by member count">
+                        {tx('Team Members')}<span>{teamSort.key === 'members' ? (teamSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
+                      </button>
+                    </th>
                     {canManageParticipants && (
-                      <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right whitespace-nowrap w-16 sticky right-0 z-[3] bg-[#e3f3f6]">Actions</th>
+                      <th className="px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-black/70 text-right whitespace-nowrap w-16 sticky right-0 z-[3] bg-[#e3f3f6]">
+                        <span className="text-[9px] font-bold uppercase tracking-widest">Actions</span>
+                      </th>
                     )}
                   </tr>
                 </thead>
@@ -6547,7 +6599,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
               </Button>
               {canManageLanes && (
                 <Button size="sm" variant="remove" onClick={handleClearLanes} title="Clear Assignments" ariaLabel="Clear Assignments" className="px-2">
-                  <Minus size={14} />
+                  <Eraser size={12} />
                 </Button>
               )}
               {canManageLanes && (
@@ -7814,7 +7866,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
           )}
           {canManageScores && (
             <Button size="sm" variant="remove" onClick={handleClearScores} title="Clear" ariaLabel="Clear" className="px-2">
-              <Minus size={14} />
+              <Eraser size={12} />
             </Button>
           )}
         </div>
