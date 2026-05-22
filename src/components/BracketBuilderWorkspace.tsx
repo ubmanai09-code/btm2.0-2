@@ -759,6 +759,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
   const [mobileRoundIndex, setMobileRoundIndex] = React.useState(0);
   const [editingMatchIds, setEditingMatchIds] = React.useState<Set<number>>(new Set());
   const [resettingMatchId, setResettingMatchId] = React.useState<number | null>(null);
+  const [podiumPickerSlot, setPodiumPickerSlot] = React.useState<'first' | 'second' | 'third' | null>(null);
   const savedBadgeTimeoutRef = React.useRef<number | null>(null);
   const liveBracketSurfaceRef = React.useRef<HTMLDivElement | null>(null);
   const presentSurfaceRef = React.useRef<HTMLDivElement | null>(null);
@@ -1320,16 +1321,12 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
   }, [liveGraph]);
 
   const liveChampionshipRound = React.useMemo(() => {
-    const rows = [...liveBracket].sort((left, right) => Number(left.round) - Number(right.round));
-    for (let index = rows.length - 1; index >= 0; index -= 1) {
-      const row = rows[index];
-      if (Number(row.match_index) !== 0) continue;
-      const p1Outcome = String(row.participant1_source_outcome || '').toLowerCase();
-      const p2Outcome = String(row.participant2_source_outcome || '').toLowerCase();
-      if (p1Outcome === 'winner' && p2Outcome === 'winner') return Number(row.round) || 0;
-      if (row.participant1_id && row.participant2_id) return Number(row.round) || 0;
-    }
-    return rows.length > 0 ? Math.max(...rows.map((row) => Number(row.round) || 0)) : 0;
+    // Always use the highest round that contains a match_index=0 row.
+    // Do NOT use participant assignment as a signal — in stepladder/ladder brackets
+    // top seeds are pre-assigned to early rounds, which causes false positives.
+    const finalRows = liveBracket.filter((row) => Number(row.match_index) === 0);
+    if (finalRows.length === 0) return 0;
+    return Math.max(...finalRows.map((row) => Number(row.round) || 0));
   }, [liveBracket]);
 
   const livePodium = React.useMemo(() => {
@@ -1343,23 +1340,9 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
       const explicitWinnerId = Number(championshipMatch.winner_id || 0);
       if (explicitWinnerId > 0) {
         first = normalizeParticipantLabel(getBracketDisplayName(championshipMatch, 'winner', isTeamTournament));
-        const ranked = getRankedRowScores(championshipMatch);
-        const runnerUpByScore = ranked.find((entry) => entry.participantId !== explicitWinnerId);
-        if (runnerUpByScore) {
-          second = getRowParticipantDisplayName(championshipMatch, runnerUpByScore.participantId, isTeamTournament);
-        } else {
-          second = Number(championshipMatch.winner_id) === Number(championshipMatch.participant1_id)
-            ? normalizeParticipantLabel(getBracketDisplayName(championshipMatch, 'p2', isTeamTournament))
-            : normalizeParticipantLabel(getBracketDisplayName(championshipMatch, 'p1', isTeamTournament));
-        }
-      } else {
-        const ranked = getRankedRowScores(championshipMatch);
-        if (ranked[0]) {
-          first = getRowParticipantDisplayName(championshipMatch, ranked[0].participantId, isTeamTournament);
-        }
-        if (ranked[1]) {
-          second = getRowParticipantDisplayName(championshipMatch, ranked[1].participantId, isTeamTournament);
-        }
+        second = Number(championshipMatch.winner_id) === Number(championshipMatch.participant1_id)
+          ? normalizeParticipantLabel(getBracketDisplayName(championshipMatch, 'p2', isTeamTournament))
+          : normalizeParticipantLabel(getBracketDisplayName(championshipMatch, 'p1', isTeamTournament));
       }
     }
 
@@ -1368,16 +1351,34 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
       const explicitBronzeWinnerId = Number(bronzeMatch.winner_id || 0);
       if (explicitBronzeWinnerId > 0) {
         third = normalizeParticipantLabel(getBracketDisplayName(bronzeMatch, 'winner', isTeamTournament));
-      } else {
-        const rankedBronze = getRankedRowScores(bronzeMatch);
-        if (rankedBronze[0]) {
-          third = getRowParticipantDisplayName(bronzeMatch, rankedBronze[0].participantId, isTeamTournament);
-        }
       }
     }
 
     return { first, second, third };
   }, [liveBracket, liveChampionshipRound, tournament.type]);
+
+  const livePodiumMatches = React.useMemo(() => {
+    const championshipMatch = liveBracket.find((row) => Number(row.round) === liveChampionshipRound && Number(row.match_index) === 0) || null;
+    const bronzeMatch = liveBracket.find((row) => Number(row.round) === liveChampionshipRound && Number(row.match_index) === 1) || null;
+    return { championshipMatch, bronzeMatch };
+  }, [liveBracket, liveChampionshipRound]);
+
+  const podiumCandidates = React.useMemo(() => {
+    const isTeam = tournament.type === 'team';
+    const build = (match: BracketRow | null): Array<{ id: number; name: string; seed: number | null }> => {
+      if (!match) return [];
+      const result: Array<{ id: number; name: string; seed: number | null }> = [];
+      if (match.participant1_id) result.push({ id: match.participant1_id, name: getRowParticipantDisplayName(match, match.participant1_id, isTeam), seed: match.participant1_seed ?? null });
+      if (match.participant2_id) result.push({ id: match.participant2_id, name: getRowParticipantDisplayName(match, match.participant2_id, isTeam), seed: match.participant2_seed ?? null });
+      if (match.participant3_id) result.push({ id: match.participant3_id, name: getRowParticipantDisplayName(match, match.participant3_id, isTeam), seed: match.participant3_seed ?? null });
+      return result;
+    };
+    return {
+      first: build(livePodiumMatches.championshipMatch),
+      second: build(livePodiumMatches.championshipMatch),
+      third: build(livePodiumMatches.bronzeMatch),
+    };
+  }, [livePodiumMatches, tournament.type]);
 
   const bracketComplete = React.useMemo(() => {
     const hasFirst = livePodium.first !== 'TBD';
@@ -2229,17 +2230,71 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
               ) : (
                 <div ref={liveBracketSurfaceRef} className="overflow-auto rounded-2xl border border-[#dce2ff] bg-[linear-gradient(180deg,#fbfcff_0%,#f7fafc_100%)] p-4">
                   <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-4">
-                    <div className="rounded-xl border border-[#ecd58f] bg-[#fffaf0] px-3 py-2">
-                      <div className="text-[10px] font-black uppercase tracking-[0.08em] text-[#9b7a12]">Gold Winner (1st)</div>
+                    {/* Gold (1st) */}
+                    <div className={`rounded-xl border border-[#ecd58f] bg-[#fffaf0] px-3 py-2${canScore && podiumCandidates.first.length > 0 ? ' cursor-pointer hover:border-[#c8a800] hover:bg-[#fff8e1]' : ''}`} onDoubleClick={() => canScore && podiumCandidates.first.length > 0 && setPodiumPickerSlot(podiumPickerSlot === 'first' ? null : 'first')}>
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-black uppercase tracking-[0.08em] text-[#9b7a12]">Gold Winner (1st)</div>
+                        {canScore && podiumCandidates.first.length > 0 && <span className="text-[9px] font-bold text-[#b8940a] opacity-70">double-click to set</span>}
+                      </div>
                       <div className="mt-1 text-sm font-black text-[#6d5711]">{livePodium.first}</div>
+                      {podiumPickerSlot === 'first' && (
+                        <div className="mt-2 rounded-lg border border-[#ecd58f] bg-white" onDoubleClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-between px-2 pt-1.5 pb-1">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-[#9b7a12]">Set 1st Place</span>
+                            <button type="button" onClick={(e) => { e.stopPropagation(); setPodiumPickerSlot(null); }} className="text-[#9b7a12] hover:text-[#6d5711]"><X size={12} /></button>
+                          </div>
+                          {podiumCandidates.first.map((c) => (
+                            <button key={`pod1-${c.id}`} type="button" onClick={async (e) => { e.stopPropagation(); setPodiumPickerSlot(null); if (livePodiumMatches.championshipMatch) await handleSetWinner(livePodiumMatches.championshipMatch, c.id); }} className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-[#fffbea] border-t border-[#f5e9a0]">
+                              {c.seed != null && <span className="shrink-0 rounded bg-[#f0dc70] px-1 text-[9px] font-black text-[#7a6200]">#{c.seed}</span>}
+                              <span className="font-bold text-[#5a4800] truncate">{c.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div className="rounded-xl border border-[#e9dcc0] bg-[#f8f7f2] px-3 py-2">
-                      <div className="text-[10px] font-black uppercase tracking-[0.08em] text-[#7d7260]">Silver Winner (2nd)</div>
+                    {/* Silver (2nd) */}
+                    <div className={`rounded-xl border border-[#e9dcc0] bg-[#f8f7f2] px-3 py-2${canScore && podiumCandidates.second.length > 0 ? ' cursor-pointer hover:border-[#b0a080] hover:bg-[#f3f1e8]' : ''}`} onDoubleClick={() => canScore && podiumCandidates.second.length > 0 && setPodiumPickerSlot(podiumPickerSlot === 'second' ? null : 'second')}>
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-black uppercase tracking-[0.08em] text-[#7d7260]">Silver Winner (2nd)</div>
+                        {canScore && podiumCandidates.second.length > 0 && <span className="text-[9px] font-bold text-[#7d7260] opacity-70">double-click to set</span>}
+                      </div>
                       <div className="mt-1 text-sm font-black text-[#5f5547]">{livePodium.second}</div>
+                      {podiumPickerSlot === 'second' && (
+                        <div className="mt-2 rounded-lg border border-[#e9dcc0] bg-white" onDoubleClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-between px-2 pt-1.5 pb-1">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-[#7d7260]">Pick 1st — other becomes 2nd</span>
+                            <button type="button" onClick={(e) => { e.stopPropagation(); setPodiumPickerSlot(null); }} className="text-[#7d7260] hover:text-[#5f5547]"><X size={12} /></button>
+                          </div>
+                          {podiumCandidates.second.map((c) => (
+                            <button key={`pod2-${c.id}`} type="button" onClick={async (e) => { e.stopPropagation(); setPodiumPickerSlot(null); if (livePodiumMatches.championshipMatch) { const other = podiumCandidates.second.find((x) => x.id !== c.id); if (other) await handleSetWinner(livePodiumMatches.championshipMatch, other.id); } }} className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-[#f5f3ec] border-t border-[#ede7d5]">
+                              {c.seed != null && <span className="shrink-0 rounded bg-[#e5e0d0] px-1 text-[9px] font-black text-[#5f5040]">#{c.seed}</span>}
+                              <span className="font-bold text-[#4a4030] truncate">{c.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div className="rounded-xl border border-[#e0c9ad] bg-[#faf5ef] px-3 py-2">
-                      <div className="text-[10px] font-black uppercase tracking-[0.08em] text-[#8d5e3b]">Bronze Winner (3rd)</div>
+                    {/* Bronze (3rd) */}
+                    <div className={`rounded-xl border border-[#e0c9ad] bg-[#faf5ef] px-3 py-2${canScore && podiumCandidates.third.length > 0 ? ' cursor-pointer hover:border-[#b8895a] hover:bg-[#f5ede0]' : ''}`} onDoubleClick={() => canScore && podiumCandidates.third.length > 0 && setPodiumPickerSlot(podiumPickerSlot === 'third' ? null : 'third')}>
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] font-black uppercase tracking-[0.08em] text-[#8d5e3b]">Bronze Winner (3rd)</div>
+                        {canScore && podiumCandidates.third.length > 0 && <span className="text-[9px] font-bold text-[#8d5e3b] opacity-70">double-click to set</span>}
+                      </div>
                       <div className="mt-1 text-sm font-black text-[#704323]">{livePodium.third}</div>
+                      {podiumPickerSlot === 'third' && (
+                        <div className="mt-2 rounded-lg border border-[#e0c9ad] bg-white" onDoubleClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-between px-2 pt-1.5 pb-1">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-[#8d5e3b]">Set 3rd Place</span>
+                            <button type="button" onClick={(e) => { e.stopPropagation(); setPodiumPickerSlot(null); }} className="text-[#8d5e3b] hover:text-[#704323]"><X size={12} /></button>
+                          </div>
+                          {podiumCandidates.third.map((c) => (
+                            <button key={`pod3-${c.id}`} type="button" onClick={async (e) => { e.stopPropagation(); setPodiumPickerSlot(null); if (livePodiumMatches.bronzeMatch) await handleSetWinner(livePodiumMatches.bronzeMatch, c.id); }} className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-[#fdf0e5] border-t border-[#ead5b8]">
+                              {c.seed != null && <span className="shrink-0 rounded bg-[#e8c898] px-1 text-[9px] font-black text-[#6a3e20]">#{c.seed}</span>}
+                              <span className="font-bold text-[#5a3018] truncate">{c.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="rounded-xl border border-[#bfdef7] bg-[#f2f8ff] px-3 py-2">
                       <div className="flex items-center justify-between gap-2">

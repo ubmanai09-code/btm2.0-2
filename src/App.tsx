@@ -8798,6 +8798,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   const exportAreaRef = React.useRef<HTMLDivElement>(null);
   const [showExportDialog, setShowExportDialog] = React.useState(false);
   const [scoreDrafts, setScoreDrafts] = React.useState<Record<string, Record<number, string>>>({});
+  const [podiumPickerSlot, setPodiumPickerSlot] = React.useState<'first' | 'second' | 'third' | null>(null);
+  const [podiumSelectValue, setPodiumSelectValue] = React.useState<string>('');
+  const [podiumSaving, setPodiumSaving] = React.useState(false);
   const [selectedMatchId, setSelectedMatchId] = React.useState<string | null>(null);
   const [selectedSeedNumber, setSelectedSeedNumber] = React.useState<number | null>(null);
   const [editingSeedNumberV2, setEditingSeedNumberV2] = React.useState<number | null>(null);
@@ -8838,6 +8841,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         setSelectedBracketPreset(s.selectedBracketPreset);
       }
       if (typeof s.selectedPresetId === 'string') setSelectedPresetId(s.selectedPresetId);
+      if (s.bracketTypeMode === 'available' || s.bracketTypeMode === 'custom') setBracketTypeMode(s.bracketTypeMode);
     } catch { /* ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -8858,10 +8862,11 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         activeBracketId,
         selectedBracketPreset,
         selectedPresetId,
+        bracketTypeMode,
         include3rdPlace,
       }));
     } catch { /* quota */ }
-  }, [storageKey, rounds, seedImportMode, topSeedsCount, manualPickedIds, customSeedList, autoGenerate, scoreDrafts, matchOverrides, slotOverrides, activeBracketName, activeBracketId, selectedBracketPreset, selectedPresetId, include3rdPlace]);
+  }, [storageKey, rounds, seedImportMode, topSeedsCount, manualPickedIds, customSeedList, autoGenerate, scoreDrafts, matchOverrides, slotOverrides, activeBracketName, activeBracketId, selectedBracketPreset, selectedPresetId, bracketTypeMode, include3rdPlace]);
 
   // ── Load data ─────────────────────────────────────────────────────────────
   React.useEffect(() => {
@@ -9489,6 +9494,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       matchOverrides,
       selectedBracketPreset,
       selectedPresetId,
+      bracketTypeMode,
       include3rdPlace,
     };
     entry.scoreDrafts = scoreDrafts;
@@ -9556,6 +9562,11 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     if (Array.isArray(bkt.customSeedList)) setCustomSeedList(bkt.customSeedList);
     if (bkt.selectedBracketPreset === 'single-elim' || bkt.selectedBracketPreset === 'stepladder' || bkt.selectedBracketPreset === 'playoff' || bkt.selectedBracketPreset === 'ladder' || bkt.selectedBracketPreset === 'custom' || bkt.selectedBracketPreset === 'mixed') {
       setSelectedBracketPreset(bkt.selectedBracketPreset);
+    }
+    // Restore bracketTypeMode: use saved value if available, otherwise derive from selectedBracketPreset
+    if (bkt.bracketTypeMode === 'available' || bkt.bracketTypeMode === 'custom') {
+      setBracketTypeMode(bkt.bracketTypeMode);
+    } else {
       setBracketTypeMode(bkt.selectedBracketPreset === 'custom' ? 'custom' : 'available');
     }
     setSelectedPresetId(String(bkt.selectedPresetId || ''));
@@ -9866,31 +9877,26 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     const finalRoundNumber = allDivisionMatches.reduce((max, match) => Math.max(max, Number(match?.round) || 0), 0);
     const finalMatch = allDivisionMatches.find((match) => Number(match?.round) === finalRoundNumber && Number(match?.match_index) === 0) || null;
 
+    const bronzeMatch = allDivisionMatches.find((match) => Number(match?.round) === finalRoundNumber && Number(match?.match_index) === 1) || null;
+
     let first = 'TBD';
     let second = 'TBD';
     if (finalMatch) {
       const explicitWinnerId = Number(finalMatch.winner_id || 0);
-      const rankedFinal = getRankedParticipantsByScore(finalMatch);
       if (explicitWinnerId > 0) {
         first = getBracketName(finalMatch, 'winner');
-        const runnerUpByScore = rankedFinal.find((entry) => entry.participantId !== explicitWinnerId);
-        if (runnerUpByScore) {
-          second = getSlotParticipantNameById(finalMatch, runnerUpByScore.participantId);
-        } else {
-          second = Number(finalMatch.winner_id) === Number(finalMatch.participant1_id)
-            ? getBracketName(finalMatch, 'p2')
-            : getBracketName(finalMatch, 'p1');
-        }
-      } else {
-        if (rankedFinal[0]) first = getSlotParticipantNameById(finalMatch, rankedFinal[0].participantId);
-        if (rankedFinal[1]) second = getSlotParticipantNameById(finalMatch, rankedFinal[1].participantId);
+        second = Number(finalMatch.winner_id) === Number(finalMatch.participant1_id)
+          ? getBracketName(finalMatch, 'p2')
+          : getBracketName(finalMatch, 'p1');
       }
     }
 
     let third = 'TBD';
-    if (finalMatch) {
-      const rankedFinal = getRankedParticipantsByScore(finalMatch);
-      if (rankedFinal[2]) third = getSlotParticipantNameById(finalMatch, rankedFinal[2].participantId);
+    if (bronzeMatch) {
+      const explicitBronzeWinnerId = Number(bronzeMatch.winner_id || 0);
+      if (explicitBronzeWinnerId > 0) {
+        third = getBracketName(bronzeMatch, 'winner');
+      }
     }
 
     if (first === 'TBD' && second === 'TBD' && third === 'TBD') return null;
@@ -9911,6 +9917,28 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     if (!first && !second && thirds.length === 0) return null;
     return { first, second, thirds };
   }, [bracketResultPodium, simulationPodium]);
+
+  const podiumMatchMeta = React.useMemo(() => {
+    if (!Array.isArray(bracketRows) || bracketRows.length === 0) return { finalMatch: null, bronzeMatch: null, finalRoundMatches: [] };
+    const allMatches = bracketRows
+      .filter((m) => String(m?.division || 'all') === 'all')
+      .sort((a, b) => (Number(a?.round) - Number(b?.round)) || (Number(a?.match_index) - Number(b?.match_index)));
+    const finalRound = allMatches.reduce((max, m) => Math.max(max, Number(m?.round) || 0), 0);
+    const finalRoundMatches = allMatches.filter((m) => Number(m?.round) === finalRound);
+    const finalMatch = finalRoundMatches.find((m) => Number(m?.match_index) === 0) || null;
+    const bronzeMatch = finalRoundMatches.find((m) => Number(m?.match_index) === 1) || null;
+    return { finalMatch, bronzeMatch, finalRoundMatches };
+  }, [bracketRows]);
+
+  const handlePodiumSetWinner = React.useCallback(async (matchId: number, winnerId: number) => {
+    try {
+      await api.setBracketWinner(tournament.id, matchId, winnerId);
+      const rows = await api.getBrackets(tournament.id);
+      setBracketRows(Array.isArray(rows) ? rows : []);
+    } catch {
+      // silently ignore
+    }
+  }, [tournament.id]);
 
   const activeCustomPreset = React.useMemo(
     () => rulePresets.find((preset) => String(preset.id) === String(selectedPresetId)) || null,
@@ -10637,7 +10665,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                               onClick={() => {
                                 setBracketTypeMode('custom');
                                 setSelectedBracketPreset(typeItem.id as any);
-                                setSelectedPresetId('');
+                                // Keep selectedPresetId as a source reference — do not clear
                                 setEditingPresetSource(null);
                                 setSaveAsPresetName('');
                                 setSaveAsPresetCategory(typeItem.id as any);
@@ -10803,6 +10831,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                                     ? p.rounds.map((r: any, i: number) => ({ ...v2CreateRound(i), ...r, id: r.id || `preset-${i}` }))
                                     : [];
                                   setEditingPresetSource(p);
+                                  setSelectedPresetId(String(p.id));
                                   setSaveAsPresetName(p.name);
                                   setSaveAsPresetCategory(((p.bracketCategory && p.bracketCategory !== 'custom') ? p.bracketCategory : 'single-elim') as any);
                                   setRounds(loaded);
@@ -11144,24 +11173,23 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
             <h3 className="text-lg font-bold">{activeBracketName}</h3>
             <div className="flex items-center gap-2 mt-0.5">
               <p className="text-xs text-black/50">{participantNodes.length} participants · {rounds.length} rounds</p>
-              {bracketTypeMode === 'available' && selectedBracketPreset !== 'custom' && (
-                <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                  {selectedBracketPreset === 'single-elim'
-                    ? tx('Single Elimination')
-                    : selectedBracketPreset === 'stepladder'
-                      ? tx('Stepladder')
-                      : selectedBracketPreset === 'playoff'
-                        ? tx('Play-Off')
-                        : selectedBracketPreset === 'mixed'
-                          ? tx('Custom')
-                          : tx('Ladder')}
-                </span>
-              )}
-              {bracketTypeMode === 'custom' && (
-                <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">
-                  {activeCustomPreset?.name || tx('Custom Preset')}
-                </span>
-              )}
+              {(bracketTypeMode === 'available' || bracketTypeMode === 'custom') && (() => {
+                const categoryLabel =
+                  selectedBracketPreset === 'single-elim' ? tx('Single Elimination')
+                  : selectedBracketPreset === 'stepladder' ? tx('Stepladder')
+                  : selectedBracketPreset === 'playoff' ? tx('Play-Off')
+                  : selectedBracketPreset === 'ladder' ? tx('Ladder')
+                  : selectedBracketPreset === 'mixed' ? tx('Mixed')
+                  : null;
+                const cat = categoryLabel || tx('Custom');
+                const label = activeCustomPreset?.name ? `${cat} | ${activeCustomPreset.name}` : cat;
+                const isCustomEdit = bracketTypeMode === 'custom' && !activeCustomPreset;
+                return (
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${isCustomEdit ? 'border border-sky-200 bg-sky-50 text-sky-700' : 'border border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                    {label}{isCustomEdit ? tx(' (custom edit)') : ''}
+                  </span>
+                );
+              })()}
             </div>
           </div>
         </div>}
@@ -11280,27 +11308,42 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           </Card>
         )}
 
-        {activeBracketName && podium && (
+        {activeBracketName && (podium || podiumMatchMeta.finalMatch != null) && (
           <Card className="p-4">
             <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-3 text-center">Results / Podium</p>
+            {canManageBracketV2 && podiumMatchMeta.finalMatch != null && (
+              <p className="text-[9px] text-center text-black/30 mb-2">Double-click a position to set the winner</p>
+            )}
             <div className="flex items-end justify-center gap-3">
-              <div className="flex flex-col items-center gap-1.5">
+              {/* 2nd place */}
+              <div
+                className={`flex flex-col items-center gap-1.5${canManageBracketV2 && podiumMatchMeta.finalMatch ? ' cursor-pointer' : ''}`}
+                onDoubleClick={() => { if (canManageBracketV2 && podiumMatchMeta.finalMatch) { setPodiumPickerSlot('second'); setPodiumSelectValue(''); } }}
+              >
                 <div className="w-12 h-12 rounded-full bg-gray-100 border-2 border-gray-300 flex items-center justify-center text-lg">🥈</div>
-                <div className="text-xs font-semibold text-black/60 text-center max-w-[80px] truncate">{podiumDisplayName(podium.second || '')}</div>
+                <div className="text-xs font-semibold text-black/60 text-center max-w-[80px] truncate">{podiumDisplayName(podium?.second || '')}</div>
                 <div className="bg-gray-200 w-16 h-10 rounded-t-md flex items-center justify-center text-xs font-bold text-gray-500">2nd</div>
               </div>
-              <div className="flex flex-col items-center gap-1.5">
+              {/* 1st place */}
+              <div
+                className={`flex flex-col items-center gap-1.5${canManageBracketV2 && podiumMatchMeta.finalMatch ? ' cursor-pointer' : ''}`}
+                onDoubleClick={() => { if (canManageBracketV2 && podiumMatchMeta.finalMatch) { setPodiumPickerSlot('first'); setPodiumSelectValue(''); } }}
+              >
                 <div className="w-14 h-14 rounded-full bg-yellow-50 border-2 border-yellow-400 flex items-center justify-center text-xl">🥇</div>
-                <div className="text-sm font-bold text-black/80 text-center max-w-[100px] truncate">{podiumDisplayName(podium.first || '')}</div>
+                <div className="text-sm font-bold text-black/80 text-center max-w-[100px] truncate">{podiumDisplayName(podium?.first || '')}</div>
                 <div className="bg-yellow-400 w-20 h-14 rounded-t-md flex items-center justify-center text-xs font-bold text-yellow-900">1st</div>
               </div>
-              <div className="flex flex-col items-center gap-1.5">
+              {/* 3rd place */}
+              <div
+                className={`flex flex-col items-center gap-1.5${canManageBracketV2 && podiumMatchMeta.finalMatch ? ' cursor-pointer' : ''}`}
+                onDoubleClick={() => { if (canManageBracketV2 && podiumMatchMeta.finalMatch) { setPodiumPickerSlot('third'); setPodiumSelectValue(''); } }}
+              >
                 <div className="w-12 h-12 rounded-full bg-orange-50 border-2 border-orange-300 flex items-center justify-center text-lg">🥉</div>
-                <div className="text-xs font-semibold text-black/60 text-center max-w-[80px] truncate">{podiumDisplayName(podium.thirds[0] || '')}</div>
+                <div className="text-xs font-semibold text-black/60 text-center max-w-[80px] truncate">{podiumDisplayName(podium?.thirds[0] || '')}</div>
                 <div className="bg-orange-300 w-16 h-8 rounded-t-md flex items-center justify-center text-xs font-bold text-orange-900">3rd</div>
               </div>
             </div>
-            {podium.thirds.length > 1 && (
+            {podium && podium.thirds.length > 1 && (
               <div className="mt-3 text-center">
                 <p className="text-[10px] text-black/40 mb-1">Also 3rd place:</p>
                 <div className="flex flex-wrap gap-1.5 justify-center">
@@ -11311,6 +11354,117 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               </div>
             )}
           </Card>
+        )}
+
+        {/* Podium winner picker modal */}
+        {podiumPickerSlot && canManageBracketV2 && (
+          <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center p-4" onClick={() => { setPodiumPickerSlot(null); setPodiumSelectValue(''); }}>
+            <div className="w-full max-w-sm rounded-2xl border border-black/10 bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between gap-3 border-b border-black/10 px-4 py-3">
+                <div>
+                  <h5 className="text-sm font-bold text-black/80">Set {podiumPickerSlot === 'first' ? '🥇 1st' : podiumPickerSlot === 'second' ? '🥈 2nd' : '🥉 3rd'} Place</h5>
+                  {podiumPickerSlot === 'second' && <p className="text-[11px] text-black/45 mt-0.5">Picks the winner of the final match — the other finalist becomes 2nd</p>}
+                </div>
+                <button type="button" onClick={() => { setPodiumPickerSlot(null); setPodiumSelectValue(''); }} className="h-8 w-8 rounded-full border border-black/10 bg-white text-black/55 hover:text-black/80 flex items-center justify-center">✕</button>
+              </div>
+              <div className="px-4 py-4 space-y-4">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-widest text-black/45 mb-1">
+                    {tournament.type === 'team' ? 'Team' : 'Participant'}
+                  </label>
+                  {(() => {
+                    // Build options from final-round match participants
+                    const srcMatches = podiumPickerSlot === 'third' && podiumMatchMeta.bronzeMatch
+                      ? [podiumMatchMeta.bronzeMatch]
+                      : podiumMatchMeta.finalRoundMatches;
+                    const opts: { id: number; label: string }[] = [];
+                    for (const m of srcMatches) {
+                      // Explicit participant slots (p1/p2/p3)
+                      const slots = [
+                        { id: Number(m?.participant1_id || 0), name: String((tournament.type === 'team' ? m?.p1_team_name : null) || m?.p1_name || '').trim() },
+                        { id: Number(m?.participant2_id || 0), name: String((tournament.type === 'team' ? m?.p2_team_name : null) || m?.p2_name || '').trim() },
+                        { id: Number(m?.participant3_id || 0), name: String((tournament.type === 'team' ? m?.p3_team_name : null) || m?.p3_name || '').trim() },
+                      ];
+                      for (const s of slots) {
+                        if (s.id > 0 && s.name && s.name !== 'TBD' && !opts.some((o) => o.id === s.id)) {
+                          opts.push({ id: s.id, label: s.name });
+                        }
+                      }
+                      // Also include participants stored in participants_json (ladder/multi-participant matches)
+                      if (m?.participants_json) {
+                        try {
+                          const pjList = JSON.parse(String(m.participants_json));
+                          if (Array.isArray(pjList)) {
+                            for (const pj of pjList) {
+                              const id = Number(pj?.id || 0);
+                              if (id <= 0 || opts.some((o) => o.id === id)) continue;
+                              const p = participants.find((pp) => pp.id === id);
+                              const label = p
+                                ? (tournament.type === 'team'
+                                  ? (p.team_name || `${p.first_name}${p.last_name ? ' ' + p.last_name : ''}`.trim())
+                                  : `${p.first_name}${p.last_name ? ' ' + p.last_name : ''}`.trim())
+                                : String(id);
+                              if (label) opts.push({ id, label });
+                            }
+                          }
+                        } catch {}
+                      }
+                    }
+                    // Fallback: all participants (stepladder — IDs not pre-assigned)
+                    const finalOpts = opts.length > 0
+                      ? opts
+                      : [...participants]
+                          .map((p) => ({
+                            id: p.id,
+                            label: tournament.type === 'team'
+                              ? (p.team_name || `${p.first_name}${p.last_name ? ' ' + p.last_name : ''}`.trim())
+                              : `${p.first_name}${p.last_name ? ' ' + p.last_name : ''}`.trim(),
+                          }))
+                          .sort((a, b) => a.label.localeCompare(b.label));
+                    return (
+                      <select
+                        value={podiumSelectValue}
+                        disabled={podiumSaving}
+                        onChange={(e) => setPodiumSelectValue(e.target.value)}
+                        className="w-full h-10 rounded-lg border border-black/15 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                      >
+                        <option value="">Choose {tournament.type === 'team' ? 'team' : 'participant'}…</option>
+                        {finalOpts.map((o) => (
+                          <option key={o.id} value={String(o.id)}>{o.label}</option>
+                        ))}
+                      </select>
+                    );
+                  })()}
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button type="button" disabled={podiumSaving} onClick={() => { setPodiumPickerSlot(null); setPodiumSelectValue(''); }} className="h-9 px-3 rounded-lg border border-black/10 bg-white text-xs font-bold uppercase tracking-wide text-black/60 disabled:opacity-50">Cancel</button>
+                  <button
+                    type="button"
+                    disabled={podiumSaving || !podiumSelectValue}
+                    onClick={async () => {
+                      if (!podiumSelectValue) return;
+                      const pid = Number(podiumSelectValue);
+                      const matchId = podiumPickerSlot === 'third'
+                        ? Number((podiumMatchMeta.bronzeMatch || podiumMatchMeta.finalMatch)?.id || 0) || null
+                        : (podiumMatchMeta.finalMatch ? Number(podiumMatchMeta.finalMatch.id) : null);
+                      if (!matchId) return;
+                      setPodiumSaving(true);
+                      try {
+                        await handlePodiumSetWinner(matchId, pid);
+                      } finally {
+                        setPodiumSaving(false);
+                        setPodiumPickerSlot(null);
+                        setPodiumSelectValue('');
+                      }
+                    }}
+                    className="h-9 px-3 rounded-lg border border-emerald-300 bg-emerald-50 text-xs font-bold uppercase tracking-wide text-emerald-700 disabled:opacity-50"
+                  >
+                    {podiumSaving ? 'Saving…' : 'Save Winner'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Bracket canvas */}

@@ -4779,7 +4779,7 @@ async function startServer() {
     }
 
     const match = db.prepare(`
-      SELECT id, participant1_id, participant2_id, participant3_id
+      SELECT id, participant1_id, participant2_id, participant3_id, participants_json
       FROM brackets
       WHERE id = ? AND tournament_id = ?
       LIMIT 1
@@ -4788,14 +4788,32 @@ async function startServer() {
       return res.status(404).json({ error: 'Match not found' });
     }
 
-    const allowedWinnerIds = [
+    const allowedWinnerIds: number[] = [
       Number(match.participant1_id) || 0,
       Number(match.participant2_id) || 0,
       Number(match.participant3_id) || 0,
     ].filter((id) => id > 0);
 
+    // Also allow winners listed in participants_json (multi-participant / ladder matches)
+    if (match.participants_json) {
+      try {
+        const pjList = JSON.parse(String(match.participants_json));
+        if (Array.isArray(pjList)) {
+          for (const pj of pjList) {
+            const id = Number(pj?.id || 0);
+            if (id > 0 && !allowedWinnerIds.includes(id)) allowedWinnerIds.push(id);
+          }
+        }
+      } catch {}
+    }
+
     if (!allowedWinnerIds.includes(numericWinnerId)) {
-      return res.status(400).json({ error: 'Winner must be one of the participants in this match' });
+      if (allowedWinnerIds.length > 0) {
+        // Match has participants assigned but winner is not among them
+        return res.status(400).json({ error: 'Winner must be one of the participants in this match' });
+      }
+      // Match has no participants assigned yet — assign winner to participant1 slot
+      db.prepare("UPDATE brackets SET participant1_id = ? WHERE id = ?").run(numericWinnerId, numericMatchId);
     }
 
     db.prepare("UPDATE brackets SET winner_id = ? WHERE id = ?").run(numericWinnerId, numericMatchId);
