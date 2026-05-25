@@ -1007,6 +1007,18 @@ const api = {
     }
     return data;
   },
+  async setBracketPlacement(tournamentId: number, matchId: number, place: 2 | 3, participantId: number): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/brackets/${matchId}/placement`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ place, participant_id: participantId }),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to set placement');
+    }
+    return data;
+  },
   async setBracketDuelScores(
     tournamentId: number,
     matchId: number,

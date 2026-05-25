@@ -9885,6 +9885,12 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       const explicitWinnerId = Number(finalMatch.winner_id || 0);
       if (explicitWinnerId > 0) {
         first = getBracketName(finalMatch, 'winner');
+      }
+      // Explicit 2nd place placement takes priority; fall back to derived loser.
+      const explicit2ndId = Number(finalMatch.second_place_id || 0);
+      if (explicit2ndId > 0) {
+        second = String((tournament.type === 'team' ? finalMatch.second_place_team_name : null) || finalMatch.second_place_name || '').trim() || 'TBD';
+      } else if (explicitWinnerId > 0) {
         second = Number(finalMatch.winner_id) === Number(finalMatch.participant1_id)
           ? getBracketName(finalMatch, 'p2')
           : getBracketName(finalMatch, 'p1');
@@ -9892,7 +9898,11 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     }
 
     let third = 'TBD';
-    if (bronzeMatch) {
+    // 3rd place: explicit placement on finalMatch first, then bronzeMatch winner.
+    const explicit3rdId = Number(finalMatch?.third_place_id || 0);
+    if (explicit3rdId > 0) {
+      third = String((tournament.type === 'team' ? finalMatch?.third_place_team_name : null) || finalMatch?.third_place_name || '').trim() || 'TBD';
+    } else if (bronzeMatch) {
       const explicitBronzeWinnerId = Number(bronzeMatch.winner_id || 0);
       if (explicitBronzeWinnerId > 0) {
         third = getBracketName(bronzeMatch, 'winner');
@@ -9935,8 +9945,20 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       await api.setBracketWinner(tournament.id, matchId, winnerId);
       const rows = await api.getBrackets(tournament.id);
       setBracketRows(Array.isArray(rows) ? rows : []);
-    } catch {
-      // silently ignore
+    } catch (err: any) {
+      console.error('[Podium] Error:', err);
+      alert(`Failed to save winner: ${err?.message || 'Unknown error'}`);
+    }
+  }, [tournament.id]);
+
+  const handlePodiumSetPlacement = React.useCallback(async (matchId: number, place: 2 | 3, participantId: number) => {
+    try {
+      await api.setBracketPlacement(tournament.id, matchId, place, participantId);
+      const rows = await api.getBrackets(tournament.id);
+      setBracketRows(Array.isArray(rows) ? rows : []);
+    } catch (err: any) {
+      console.error('[Podium] Placement error:', err);
+      alert(`Failed to save placement: ${err?.message || 'Unknown error'}`);
     }
   }, [tournament.id]);
 
@@ -11363,7 +11385,6 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               <div className="flex items-center justify-between gap-3 border-b border-black/10 px-4 py-3">
                 <div>
                   <h5 className="text-sm font-bold text-black/80">Set {podiumPickerSlot === 'first' ? '🥇 1st' : podiumPickerSlot === 'second' ? '🥈 2nd' : '🥉 3rd'} Place</h5>
-                  {podiumPickerSlot === 'second' && <p className="text-[11px] text-black/45 mt-0.5">Picks the winner of the final match — the other finalist becomes 2nd</p>}
                 </div>
                 <button type="button" onClick={() => { setPodiumPickerSlot(null); setPodiumSelectValue(''); }} className="h-8 w-8 rounded-full border border-black/10 bg-white text-black/55 hover:text-black/80 flex items-center justify-center">✕</button>
               </div>
@@ -11376,7 +11397,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                     // Build options from final-round match participants
                     const srcMatches = podiumPickerSlot === 'third' && podiumMatchMeta.bronzeMatch
                       ? [podiumMatchMeta.bronzeMatch]
-                      : podiumMatchMeta.finalRoundMatches;
+                      : (podiumMatchMeta.finalMatch ? [podiumMatchMeta.finalMatch] : podiumMatchMeta.finalRoundMatches);
                     const opts: { id: number; label: string }[] = [];
                     for (const m of srcMatches) {
                       // Explicit participant slots (p1/p2/p3)
@@ -11450,7 +11471,18 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                       if (!matchId) return;
                       setPodiumSaving(true);
                       try {
-                        await handlePodiumSetWinner(matchId, pid);
+                        if (podiumPickerSlot === 'first') {
+                          await handlePodiumSetWinner(matchId, pid);
+                        } else if (podiumPickerSlot === 'second') {
+                          await handlePodiumSetPlacement(matchId, 2, pid);
+                        } else {
+                          // 3rd: if bronzeMatch exists, set its winner; otherwise use placement on finalMatch
+                          if (podiumMatchMeta.bronzeMatch) {
+                            await handlePodiumSetWinner(matchId, pid);
+                          } else {
+                            await handlePodiumSetPlacement(matchId, 3, pid);
+                          }
+                        }
                       } finally {
                         setPodiumSaving(false);
                         setPodiumPickerSlot(null);

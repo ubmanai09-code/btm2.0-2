@@ -491,6 +491,8 @@ function initDb() {
     { name: 'participants_json', type: 'TEXT' },
     { name: 'structure_json', type: 'TEXT' },
     { name: 'scores_json', type: 'TEXT' },
+    { name: 'second_place_id', type: 'INTEGER' },
+    { name: 'third_place_id', type: 'INTEGER' },
   ];
   bracketMigrations.forEach(m => {
     if (!bColumns.includes(m.name)) {
@@ -1670,6 +1672,17 @@ async function startServer() {
         if (!resolvedWinner) return;
         if (allowed.includes(resolvedWinner)) return;
 
+        // Fallback: if participants_json is empty but participant slots are set
+        // (e.g. manually assigned via the podium picker before rounds are played),
+        // allow the winner if it matches one of the explicit slot IDs.
+        const slotAllowed = [Number(m.participant1_id) || 0, Number(m.participant2_id) || 0, Number(m.participant3_id) || 0].filter((id) => id > 0);
+        if (slotAllowed.includes(resolvedWinner)) return;
+
+        // No participants resolved at all — preserve the manually-set winner.
+        // (Happens when source rounds haven't been played yet and structure_json
+        // rebuild has cleared participant slots to null.)
+        if (allowed.length === 0 && slotAllowed.length === 0) return;
+
         db.prepare('UPDATE brackets SET winner_id = NULL WHERE id = ?').run(m.id);
         m.winner_id = null;
         return;
@@ -1681,10 +1694,12 @@ async function startServer() {
       if (!winner) return;
 
       const allowed = [p1, p2, p3].filter((id) => id > 0);
-      const hasThirdSlot = p3 > 0;
-      const hasCompleteParticipants = hasThirdSlot ? (p1 > 0 && p2 > 0 && p3 > 0) : (p1 > 0 && p2 > 0);
       const winnerAllowed = allowed.includes(winner);
-      if (winnerAllowed && hasCompleteParticipants) return;
+      // Keep the winner if it is one of the current participants, even when the
+      // other slot is still empty (e.g. final match before all rounds complete).
+      // Also keep the winner when no participants are assigned yet (no source data
+      // to validate against — manual assignment before rounds are played).
+      if (winnerAllowed || allowed.length === 0) return;
 
       db.prepare('UPDATE brackets SET winner_id = NULL WHERE id = ?').run(m.id);
       m.winner_id = null;
@@ -1734,7 +1749,9 @@ async function startServer() {
       const nextParticipant1Seed = Number.isFinite(Number(slot0?.seed)) ? Number(slot0.seed) : null;
       const nextParticipant2Seed = Number.isFinite(Number(slot1?.seed)) ? Number(slot1.seed) : null;
       const nextParticipant3Seed = Number.isFinite(Number(slot2?.seed)) ? Number(slot2.seed) : null;
-      const nextParticipantsJson = (String(match.match_kind || '') === 'shootout' || String(match.match_kind || '') === 'survivor_cut')
+      const matchKindStr = String(match.match_kind || '').toLowerCase();
+      const isShootoutOrSurvivor = matchKindStr === 'shootout' || matchKindStr === 'survivor_cut';
+      const nextParticipantsJson = isShootoutOrSurvivor
         ? JSON.stringify(participantSlots)
         : match.participants_json;
       const nextStructureJson = JSON.stringify({ ...structure, slots: nextSlots });
@@ -1750,15 +1767,31 @@ async function startServer() {
         || String(match.structure_json || '') !== nextStructureJson
         || String(match.participants_json || '') !== String(nextParticipantsJson || '')
       ) {
+        // Determine whether to preserve the current winner_id.
+        // For shootout/survivor_cut, participants come from participants_json.
+        // For other match types, they come from participant1_id / participant2_id / participant3_id.
+        // In either case: if NO new participants have been resolved (source rounds not yet played),
+        // keep the manually-set winner rather than clearing it.
+        const currentWinner = Number(match.winner_id) || 0;
+        let newWinnerId: number | null = null;
+        if (currentWinner > 0) {
+          if (isShootoutOrSurvivor) {
+            const newAllowedIds = participantSlots.map((s: any) => Number(s.id));
+            // No resolved participants yet → preserve manual winner; otherwise validate.
+            newWinnerId = (newAllowedIds.length === 0 || newAllowedIds.includes(currentWinner)) ? currentWinner : null;
+          } else {
+            const newAllowed = [nextParticipant1Id, nextParticipant2Id, nextParticipant3Id].filter((id): id is number => id !== null);
+            // No resolved participants yet → preserve manual winner; otherwise validate.
+            newWinnerId = (newAllowed.length === 0 || newAllowed.includes(currentWinner)) ? currentWinner : null;
+          }
+        }
+
         db.prepare(`
           UPDATE brackets
           SET participant1_id = ?, participant2_id = ?, participant3_id = ?,
               participant1_seed = ?, participant2_seed = ?, participant3_seed = ?,
               participants_json = ?, structure_json = ?,
-              winner_id = CASE
-                WHEN winner_id IN (?, ?, ?) THEN winner_id
-                ELSE NULL
-              END
+              winner_id = ?
           WHERE id = ?
         `).run(
           nextParticipant1Id,
@@ -1769,9 +1802,7 @@ async function startServer() {
           nextParticipant3Seed,
           nextParticipantsJson,
           nextStructureJson,
-          nextParticipant1Id,
-          nextParticipant2Id,
-          nextParticipant3Id,
+          newWinnerId,
           match.id,
         );
 
@@ -1783,9 +1814,7 @@ async function startServer() {
         match.participant3_seed = nextParticipant3Seed;
         match.participants_json = nextParticipantsJson;
         match.structure_json = nextStructureJson;
-        if (![nextParticipant1Id, nextParticipant2Id, nextParticipant3Id].includes(Number(match.winner_id) || 0)) {
-          match.winner_id = null;
-        }
+        match.winner_id = newWinnerId;
       }
     }
 
@@ -1834,13 +1863,11 @@ async function startServer() {
         db.prepare(`
           UPDATE brackets
           SET participant1_id = ?, participant2_id = ?, winner_id = CASE
-            WHEN winner_id IN (?, ?) AND ? IS NOT NULL AND ? IS NOT NULL THEN winner_id
+            WHEN winner_id IN (?, ?) THEN winner_id
             ELSE NULL
           END
           WHERE id = ?
         `).run(
-          expectedP1,
-          expectedP2,
           expectedP1,
           expectedP2,
           expectedP1,
@@ -3565,19 +3592,27 @@ async function startServer() {
              (p2.first_name || CASE WHEN p2.last_name IS NOT NULL AND p2.last_name != '' THEN (' ' || UPPER(SUBSTR(p2.last_name,1,1)) || '.') ELSE '' END || CASE WHEN p2.hands IS NOT NULL AND p2.hands != '' THEN (' (' || p2.hands || ')') ELSE '' END) as p2_name, 
              (p3.first_name || CASE WHEN p3.last_name IS NOT NULL AND p3.last_name != '' THEN (' ' || UPPER(SUBSTR(p3.last_name,1,1)) || '.') ELSE '' END || CASE WHEN p3.hands IS NOT NULL AND p3.hands != '' THEN (' (' || p3.hands || ')') ELSE '' END) as p3_name,
              (w.first_name || CASE WHEN w.last_name IS NOT NULL AND w.last_name != '' THEN (' ' || UPPER(SUBSTR(w.last_name,1,1)) || '.') ELSE '' END || CASE WHEN w.hands IS NOT NULL AND w.hands != '' THEN (' (' || w.hands || ')') ELSE '' END) as winner_name,
+             (ps2.first_name || CASE WHEN ps2.last_name IS NOT NULL AND ps2.last_name != '' THEN (' ' || UPPER(SUBSTR(ps2.last_name,1,1)) || '.') ELSE '' END || CASE WHEN ps2.hands IS NOT NULL AND ps2.hands != '' THEN (' (' || ps2.hands || ')') ELSE '' END) as second_place_name,
+             (ps3.first_name || CASE WHEN ps3.last_name IS NOT NULL AND ps3.last_name != '' THEN (' ' || UPPER(SUBSTR(ps3.last_name,1,1)) || '.') ELSE '' END || CASE WHEN ps3.hands IS NOT NULL AND ps3.hands != '' THEN (' (' || ps3.hands || ')') ELSE '' END) as third_place_name,
              t1.name as p1_team_name,
              t2.name as p2_team_name,
              t3.name as p3_team_name,
-             tw.name as winner_team_name
+             tw.name as winner_team_name,
+             ts2.name as second_place_team_name,
+             ts3.name as third_place_team_name
       FROM brackets b
       LEFT JOIN participants p1 ON b.participant1_id = p1.id
       LEFT JOIN participants p2 ON b.participant2_id = p2.id
       LEFT JOIN participants p3 ON b.participant3_id = p3.id
       LEFT JOIN participants w ON b.winner_id = w.id
+      LEFT JOIN participants ps2 ON b.second_place_id = ps2.id
+      LEFT JOIN participants ps3 ON b.third_place_id = ps3.id
       LEFT JOIN teams t1 ON p1.team_id = t1.id
       LEFT JOIN teams t2 ON p2.team_id = t2.id
       LEFT JOIN teams t3 ON p3.team_id = t3.id
       LEFT JOIN teams tw ON w.team_id = tw.id
+      LEFT JOIN teams ts2 ON ps2.team_id = ts2.id
+      LEFT JOIN teams ts3 ON ps3.team_id = ts3.id
       WHERE b.tournament_id = ?
         AND (? = 'all' OR b.division = ?)
       ORDER BY b.round ASC, b.match_index ASC
@@ -4818,6 +4853,27 @@ async function startServer() {
 
     db.prepare("UPDATE brackets SET winner_id = ? WHERE id = ?").run(numericWinnerId, numericMatchId);
     advanceWinnerToNextRound(req.params.id, numericMatchId, numericWinnerId);
+    res.json({ success: true });
+  });
+
+  // Set 2nd or 3rd place independently (does NOT overwrite winner_id).
+  app.post("/api/tournaments/:id/brackets/:matchId/placement", requirePermission('brackets:manage', (req) => req.params.id), (req, res) => {
+    const { place, participant_id } = req.body;
+    const numericPlace = Number.parseInt(place, 10);
+    const numericParticipantId = Number.parseInt(participant_id, 10);
+    const numericMatchId = Number.parseInt(req.params.matchId, 10);
+    if (!Number.isFinite(numericMatchId) || !Number.isFinite(numericParticipantId) || (numericPlace !== 2 && numericPlace !== 3)) {
+      return res.status(400).json({ error: 'Invalid parameters: place must be 2 or 3, participant_id must be a valid id' });
+    }
+
+    const match = db.prepare(`SELECT id FROM brackets WHERE id = ? AND tournament_id = ? LIMIT 1`).get(numericMatchId, req.params.id);
+    if (!match) return res.status(404).json({ error: 'Match not found' });
+
+    const participant = db.prepare(`SELECT id FROM participants WHERE id = ? AND tournament_id = ? LIMIT 1`).get(numericParticipantId, req.params.id);
+    if (!participant) return res.status(404).json({ error: 'Participant not found in this tournament' });
+
+    const column = numericPlace === 2 ? 'second_place_id' : 'third_place_id';
+    db.prepare(`UPDATE brackets SET ${column} = ? WHERE id = ?`).run(numericParticipantId, numericMatchId);
     res.json({ success: true });
   });
 
