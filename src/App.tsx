@@ -9879,6 +9879,46 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
     const bronzeMatch = allDivisionMatches.find((match) => Number(match?.round) === finalRoundNumber && Number(match?.match_index) === 1) || null;
 
+    // Helper: look up participant name by ID — checks p1/p2/p3 slots on any bracket row, then participants list.
+    const getParticipantNameById = (participantId: number): string => {
+      if (!participantId) return 'TBD';
+      // Check p1/p2/p3 slots across all bracket rows (covers duel participants)
+      for (const row of bracketRows) {
+        if (Number(row?.participant1_id) === participantId) {
+          const n = tournament.type === 'team' ? safeText(row?.p1_team_name || row?.p1_name) : safeText(row?.p1_name);
+          if (n) return n;
+        }
+        if (Number(row?.participant2_id) === participantId) {
+          const n = tournament.type === 'team' ? safeText(row?.p2_team_name || row?.p2_name) : safeText(row?.p2_name);
+          if (n) return n;
+        }
+        if (Number(row?.participant3_id) === participantId) {
+          const n = tournament.type === 'team' ? safeText(row?.p3_team_name || row?.p3_name) : safeText(row?.p3_name);
+          if (n) return n;
+        }
+        if (Number(row?.winner_id) === participantId) {
+          const n = tournament.type === 'team' ? safeText(row?.winner_team_name || row?.winner_name) : safeText(row?.winner_name);
+          if (n) return n;
+        }
+        if (Number(row?.second_place_id) === participantId) {
+          const n = tournament.type === 'team' ? safeText(row?.second_place_team_name || row?.second_place_name) : safeText(row?.second_place_name);
+          if (n) return n;
+        }
+        if (Number(row?.third_place_id) === participantId) {
+          const n = tournament.type === 'team' ? safeText(row?.third_place_team_name || row?.third_place_name) : safeText(row?.third_place_name);
+          if (n) return n;
+        }
+      }
+      // Fallback: look up from participants list
+      const p = participants.find((pp: any) => pp.id === participantId);
+      if (p) {
+        return tournament.type === 'team'
+          ? (safeText((p as any).team_name) || safeText(`${(p as any).first_name || ''}${(p as any).last_name ? ' ' + (p as any).last_name : ''}`))
+          : safeText(`${(p as any).first_name || ''}${(p as any).last_name ? ' ' + (p as any).last_name : ''}`);
+      }
+      return 'TBD';
+    };
+
     let first = 'TBD';
     let second = 'TBD';
     if (finalMatch) {
@@ -9891,14 +9931,25 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       if (explicit2ndId > 0) {
         second = String((tournament.type === 'team' ? finalMatch.second_place_team_name : null) || finalMatch.second_place_name || '').trim() || 'TBD';
       } else if (explicitWinnerId > 0) {
-        second = Number(finalMatch.winner_id) === Number(finalMatch.participant1_id)
+        // For duel: non-winner of p1/p2 is 2nd place
+        const derivedSecond = Number(finalMatch.winner_id) === Number(finalMatch.participant1_id)
           ? getBracketName(finalMatch, 'p2')
           : getBracketName(finalMatch, 'p1');
+        if (derivedSecond !== 'TBD') {
+          second = derivedSecond;
+        } else {
+          // For shootout/stepladder: derive from scores_json rank 2
+          const scoreRanked = getRankedParticipantsByScore(finalMatch);
+          if (scoreRanked.length >= 2) {
+            const n = getParticipantNameById(scoreRanked[1].participantId);
+            if (n !== 'TBD') second = n;
+          }
+        }
       }
     }
 
     let third = 'TBD';
-    // 3rd place: explicit placement on finalMatch first, then bronzeMatch winner.
+    // 3rd place: explicit placement on finalMatch first, then bronzeMatch winner, then scores_json rank 3.
     const explicit3rdId = Number(finalMatch?.third_place_id || 0);
     if (explicit3rdId > 0) {
       third = String((tournament.type === 'team' ? finalMatch?.third_place_team_name : null) || finalMatch?.third_place_name || '').trim() || 'TBD';
@@ -9906,6 +9957,13 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       const explicitBronzeWinnerId = Number(bronzeMatch.winner_id || 0);
       if (explicitBronzeWinnerId > 0) {
         third = getBracketName(bronzeMatch, 'winner');
+      }
+    } else if (finalMatch) {
+      // No bronze match — derive 3rd from scores_json rank 3 (shootout/stepladder final)
+      const scoreRanked = getRankedParticipantsByScore(finalMatch);
+      if (scoreRanked.length >= 3) {
+        const n = getParticipantNameById(scoreRanked[2].participantId);
+        if (n !== 'TBD') third = n;
       }
     }
 
@@ -9915,7 +9973,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       second: second === 'TBD' ? null : second,
       thirds: include3rdPlace && third !== 'TBD' ? [third] : [],
     };
-  }, [bracketRows, tournament.type, selectedBracketPreset, include3rdPlace]);
+  }, [bracketRows, participants, tournament.type, selectedBracketPreset, include3rdPlace]);
 
   const podium = React.useMemo(() => {
     const first = bracketResultPodium?.first || simulationPodium?.first || null;

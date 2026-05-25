@@ -4948,8 +4948,9 @@ async function startServer() {
     }
 
     const winnerId = Number(ranked[0].participant_id);
-    db.prepare('UPDATE brackets SET scores_json = ?, winner_id = ? WHERE id = ?')
-      .run(JSON.stringify(ranked), winnerId, numericMatchId);
+    const duelRank2Id = ranked.length >= 2 ? Number(ranked[1].participant_id) : null;
+    db.prepare('UPDATE brackets SET scores_json = ?, winner_id = ?, second_place_id = ? WHERE id = ?')
+      .run(JSON.stringify(ranked), winnerId, duelRank2Id, numericMatchId);
 
     advanceWinnerToNextRound(tournamentId, numericMatchId, winnerId);
     res.json({ success: true, winner_id: winnerId });
@@ -5024,12 +5025,12 @@ async function startServer() {
     const eliminatedIds = eliminated.map(p => p.id);
 
     // Persist scores and winner (top scorer)
-    db.prepare("UPDATE brackets SET scores_json = ?, winner_id = ? WHERE id = ?")
-      .run(
-        JSON.stringify(ranked.map(p => ({ id: p.id, seed: p.seed, score: p.score, eliminated: eliminatedIds.includes(p.id) }))),
-        advancing[0]?.id ?? null,
-        numericMatchId,
-      );
+    const shootoutScoresJson = JSON.stringify(ranked.map(p => ({ id: p.id, seed: p.seed, score: p.score, eliminated: eliminatedIds.includes(p.id) })));
+    const shootoutWinnerId = advancing[0]?.id ?? null;
+    const shootoutRank2Id = ranked.length >= 2 ? ranked[1].id : null;
+    const shootoutRank3Id = ranked.length >= 3 ? ranked[2].id : null;
+    db.prepare("UPDATE brackets SET scores_json = ?, winner_id = ?, second_place_id = ?, third_place_id = ? WHERE id = ?")
+      .run(shootoutScoresJson, shootoutWinnerId, shootoutRank2Id, shootoutRank3Id, numericMatchId);
 
     // Populate next round
     const division = String(match.division || 'all');
@@ -5087,7 +5088,7 @@ async function startServer() {
     const currentRoundNo = Number(match.round);
 
     // Clear scores and winner for the match itself
-    db.prepare('UPDATE brackets SET scores_json = NULL, winner_id = NULL WHERE id = ?').run(numericMatchId);
+    db.prepare('UPDATE brackets SET scores_json = NULL, winner_id = NULL, second_place_id = NULL, third_place_id = NULL WHERE id = ?').run(numericMatchId);
 
     if (matchKind === 'shootout' || matchKind === 'survivor_cut') {
       // For shootout/survivor_cut: also clear downstream advancement
@@ -5141,7 +5142,7 @@ async function startServer() {
 
     const division = String(match.division || 'all');
     const currentRoundNo = Number(match.round);
-    db.prepare("UPDATE brackets SET scores_json = NULL, winner_id = NULL WHERE id = ?").run(numericMatchId);
+    db.prepare("UPDATE brackets SET scores_json = NULL, winner_id = NULL, second_place_id = NULL, third_place_id = NULL WHERE id = ?").run(numericMatchId);
 
     // Clear all downstream rounds
     db.prepare(`
@@ -5215,8 +5216,10 @@ async function startServer() {
     const scoresJson = JSON.stringify(
       scoreRows.map((s, idx) => ({ participant_id: s.participantId, seed: s.seed, score: s.score, rank: idx + 1 }))
     );
-    db.prepare('UPDATE brackets SET scores_json = ?, winner_id = ? WHERE id = ?')
-      .run(scoresJson, winnerId, numericMatchId);
+    const slRank2Id = scoreRows.length >= 2 ? scoreRows[1].participantId : null;
+    const slRank3Id = scoreRows.length >= 3 ? scoreRows[2].participantId : null;
+    db.prepare('UPDATE brackets SET scores_json = ?, winner_id = ?, second_place_id = ?, third_place_id = ? WHERE id = ?')
+      .run(scoresJson, winnerId, slRank2Id, slRank3Id, numericMatchId);
     advanceWinnerToNextRound(req.params.id, numericMatchId, winnerId);
     return res.json({ success: true, winner_id: winnerId });
   });
