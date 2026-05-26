@@ -9797,9 +9797,28 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     const resolveLabel = (matchId: string, slotIdx: number) =>
       simulation.resolvedLabels.get(`${matchId}:${slotIdx}`) || 'TBD';
 
-    // Podium must come strictly from championship/final match participants.
     if (finalMatches.length === 0) return null;
     const championshipMatch = finalMatches.find((match) => match.matchIndex === 0) || finalMatches[0];
+
+    // ── Step 1: analyse final-round structure ─────────────────────────────
+    const hasBronzeMatch = finalMatches.length > 1;
+    const isDuelFinal = championshipMatch.slots.length === 2;
+    const isMultiPlayerFinal = championshipMatch.slots.length >= 3;
+
+    // ── Step 2: preset / category as secondary confirmation ───────────────
+    const isStepladderStyle = (
+      selectedBracketPreset === 'stepladder' ||
+      selectedBracketPreset === 'ladder' ||
+      selectedBracketPreset === 'mixed'
+    );
+    const isSingleElimStyle = (
+      selectedBracketPreset === 'single-elim' ||
+      selectedBracketPreset === 'playoff'
+    );
+    // Duel-final-without-bronze applies to any stepladder-style OR any
+    // single-elim/playoff that opted out of a bronze match.
+    const isDuelFinalNoBronze = isDuelFinal && !hasBronzeMatch &&
+      (isStepladderStyle || isSingleElimStyle || !selectedBracketPreset);
 
     const finalDraft = scoreDrafts[championshipMatch.id] || {};
     const rankedByScore = championshipMatch.slots
@@ -9827,12 +9846,12 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
     const thirds: string[] = [];
     if (include3rdPlace) {
-      // Multi-player final: 3rd slot comes from the championship match itself
-      if (third && third !== 'TBD') {
+      // Case A: multi-player final — 3rd slot is within the championship match
+      if (isMultiPlayerFinal && third && third !== 'TBD') {
         thirds.push(third);
       }
-      // Single-elim with separate bronze match (matchIndex !== 0 in the final round)
-      if (thirds.length === 0 && finalMatches.length > 1) {
+      // Case B: separate bronze match (single-elim/playoff with 3rd place match)
+      if (thirds.length === 0 && hasBronzeMatch) {
         const bronzeMatchSim = finalMatches.find((m) => m.matchIndex !== 0);
         if (bronzeMatchSim) {
           const bronzeDraft = scoreDrafts[bronzeMatchSim.id] || {};
@@ -9857,9 +9876,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           }
         }
       }
-      // No bronze match and single final (stepladder / single-elim without bronze):
-      // 3rd = loser of the penultimate round match
-      if (thirds.length === 0 && finalMatches.length === 1 && championshipMatch.slots.length === 2) {
+      // Case C: duel final with no bronze (stepladder / single-elim without bronze)
+      //         3rd = loser of the penultimate round match
+      if (thirds.length === 0 && isDuelFinalNoBronze) {
         const prevRoundMatches = engineResult.matches
           .filter((m) => m.roundIndex === lastRoundIndex - 1)
           .sort((a, b) => a.matchIndex - b.matchIndex);
@@ -9876,7 +9895,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     }
     if (!first || first === 'TBD') return null;
     return { first, second: second || null, thirds };
-  }, [engineResult, simulation, include3rdPlace, scoreDrafts]);
+  }, [engineResult, simulation, include3rdPlace, scoreDrafts, selectedBracketPreset]);
 
   const bracketResultPodium = React.useMemo(() => {
     if (!Array.isArray(bracketRows) || bracketRows.length === 0) return null;
@@ -9997,33 +10016,56 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     }
 
     let third = 'TBD';
-    // 3rd place: explicit placement on finalMatch first, then bronzeMatch winner, then scores_json rank 3.
+
+    // ── Step 1: analyse final-round structure ─────────────────────────────
+    const finalRoundMatchCount = allDivisionMatches.filter(
+      (m) => Number(m?.round) === finalRoundNumber
+    ).length;
+    const hasBronze = bronzeMatch !== null;
+    const isDuelFinalStructure = finalMatch ? !finalMatch.participant3_id : false;
+    const isMultiPlayerFinalStructure = finalMatch ? !!finalMatch.participant3_id : false;
+
+    // ── Step 2: preset / category as secondary confirmation ───────────────
+    const isStepladderCat = (
+      tournament.match_play_type === 'stepladder' ||
+      tournament.match_play_type === 'ladder' ||
+      selectedBracketPreset === 'stepladder' ||
+      selectedBracketPreset === 'ladder' ||
+      selectedBracketPreset === 'mixed'
+    );
+    const isSingleElimCat = (
+      tournament.match_play_type === 'single_elimination' ||
+      selectedBracketPreset === 'single-elim' ||
+      selectedBracketPreset === 'playoff'
+    );
+    // A duel final without a bronze match applies to stepladder-style AND
+    // single-elim/playoff that opted out of a bronze, and custom brackets.
+    const isDuelFinalNoBronze = isDuelFinalStructure && !hasBronze &&
+      (isStepladderCat || isSingleElimCat || finalRoundMatchCount === 1);
+
+    // 3rd place: explicit placement first, then structural derivation.
     const explicit3rdId = Number(finalMatch?.third_place_id || 0);
     if (explicit3rdId > 0) {
       third = String((tournament.type === 'team' ? finalMatch?.third_place_team_name : null) || finalMatch?.third_place_name || '').trim() || 'TBD';
-    } else if (bronzeMatch) {
-      const explicitBronzeWinnerId = Number(bronzeMatch.winner_id || 0);
+    } else if (hasBronze) {
+      // Case B: separate bronze match
+      const explicitBronzeWinnerId = Number(bronzeMatch!.winner_id || 0);
       if (explicitBronzeWinnerId > 0) {
-        const fromName = getBracketName(bronzeMatch, 'winner');
+        const fromName = getBracketName(bronzeMatch!, 'winner');
         third = fromName !== 'TBD' ? fromName : getParticipantNameById(explicitBronzeWinnerId);
       }
-      // Fallback: winner_id not set — derive from scores_json (highest scorer wins head-to-head)
+      // Fallback: no winner_id yet — derive from scores_json (highest scorer wins)
       if (third === 'TBD') {
-        const bronzeScores = getRankedParticipantsByScore(bronzeMatch);
+        const bronzeScores = getRankedParticipantsByScore(bronzeMatch!);
         if (bronzeScores.length >= 2 && bronzeScores[0].score > bronzeScores[1].score) {
           const n = getParticipantNameById(bronzeScores[0].participantId);
           if (n !== 'TBD') third = n;
         }
       }
     } else if (finalMatch) {
-      // No bronze match — determine 3rd by tournament structure.
-      // Duel finals (any format: stepladder, ladder, single-elim without bronze):
-      //   3rd = loser of the penultimate round match.
-      // Multi-player finals (shootout/group with 3+ participants in one match):
-      //   3rd = rank 3 from scores_json.
-      const isDuelFinal = !finalMatch.participant3_id;
-      if (isDuelFinal) {
-        // The loser of the match immediately before the final is 3rd place
+      if (isDuelFinalNoBronze) {
+        // Case C: duel final without bronze (stepladder / single-elim without bronze)
+        //         3rd = loser of the penultimate round match
         const semifinalRound = finalRoundNumber - 1;
         const semifinalMatch = allDivisionMatches.find(
           (m) => Number(m?.round) === semifinalRound && Number(m?.match_index) === 0
@@ -10040,8 +10082,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
             }
           }
         }
-      } else {
-        // Multi-player final (shootout/group): derive 3rd from scores_json rank 3
+      } else if (isMultiPlayerFinalStructure) {
+        // Case A: multi-player final (shootout/group) — 3rd from scores_json rank 3
         const scoreRanked = getRankedParticipantsByScore(finalMatch);
         if (scoreRanked.length >= 3) {
           const n = getParticipantNameById(scoreRanked[2].participantId);
@@ -10056,7 +10098,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       second: second === 'TBD' ? null : second,
       thirds: include3rdPlace && third !== 'TBD' ? [third] : [],
     };
-  }, [bracketRows, participants, tournament.type, selectedBracketPreset, include3rdPlace]);
+  }, [bracketRows, participants, tournament.type, tournament.match_play_type, selectedBracketPreset, include3rdPlace]);
 
   const podium = React.useMemo(() => {
     const first = bracketResultPodium?.first || simulationPodium?.first || null;
