@@ -28,7 +28,30 @@
       "url": ""
     }
   ],
-  "tournaments": {},
+  "tournaments": {
+    "7": [
+      {
+        "id": "form-1779774412976-0",
+        "kind": "sponsor",
+        "name": "CIT LLC",
+        "logo": "https://i.imgur.com/l3W382H.jpeg",
+        "description": "",
+        "contacts": "",
+        "url": ""
+      }
+    ],
+    "29": [
+      {
+        "id": "form-1779778406762-0",
+        "kind": "sponsor",
+        "name": "Си Ай Ти ХХК",
+        "logo": "https://i.imgur.com/l3W382H.jpeg",
+        "description": "Си-Ай-Ти ХХК нь 2004 онд байгуулагдсан, эмнэлгийн багаж тоног төхөөрөмжийн импорт, суурилуулалт, засвар үйлчилгээ үзүүлдэг мэргэжлийн байгууллага юм.",
+        "contacts": "75950077 info@cit.mn",
+        "url": "https://www.cit.mn/"
+      }
+    ]
+  },
   "globalSponsorEnabled": false,
   "globalSponsor": null,
   "dashboardPromo": {

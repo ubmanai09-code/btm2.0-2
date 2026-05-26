@@ -5238,6 +5238,7 @@ async function startServer() {
       server: {
         middlewareMode: true,
         hmr: hmrEnabled ? { port: resolvedHmrPort } : false,
+        allowedHosts: true,
       },
       appType: "spa",
     });

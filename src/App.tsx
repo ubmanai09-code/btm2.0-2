@@ -3409,6 +3409,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
     if (typeof window === 'undefined') return false;
     return window.matchMedia('(max-width: 640px)').matches;
   });
+  const [selectedTournamentSponsor, setSelectedTournamentSponsor] = useState<SponsorInfo | null>(null);
 
   const loadAccessData = async () => {
     if (role !== 'admin' && role !== 'moderator') {
@@ -3695,9 +3696,13 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                   {tournamentSponsors.length > 0 && (
                     <div className="flex flex-wrap items-center gap-1.5">
                       {tournamentSponsors.map((sponsor) => (
-                        <div
+                        <button
                           key={sponsor.id}
-                          className="h-[64px] w-[64px] rounded-lg border border-black/10 bg-white p-1.5 flex items-center justify-center overflow-hidden shrink-0"
+                          type="button"
+                          onClick={() => setSelectedTournamentSponsor(sponsor)}
+                          className="h-[64px] w-[64px] rounded-lg border border-black/10 bg-white p-1.5 flex items-center justify-center overflow-hidden shrink-0 hover:border-emerald-400 hover:shadow-sm transition-all cursor-pointer"
+                          title={sponsor.name}
+                          aria-label={sponsor.name}
                         >
                           <img
                             src={sponsor.logo}
@@ -3707,7 +3712,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                               (e.currentTarget as HTMLImageElement).src = '/logo.png';
                             }}
                           />
-                        </div>
+                        </button>
                       ))}
                     </div>
                   )}
@@ -3797,6 +3802,47 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
         {activeTab === 'standings' && <StandingsView tournament={tournament} role={effectiveRole} sponsorsConfig={sponsorsConfig} onPresentStandingsScreen={blockPublicPresentModeOnSmallScreen ? undefined : openStandingsScreenMode} standingsScreenMode={isStandingsScreenMode} />}
         {activeTab === 'league' && <LeagueView tournament={tournament} role={effectiveRole} />}
       </div>
+
+      {selectedTournamentSponsor && (
+        <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4" onClick={() => setSelectedTournamentSponsor(null)}>
+          <Card className="w-full max-w-md p-4" onClick={(e: any) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="text-lg font-bold">{selectedTournamentSponsor.name || t('sponsors.title', 'Sponsor')}</h3>
+              <Button size="sm" variant="outline" onClick={() => setSelectedTournamentSponsor(null)} title={t('common.close', 'Close')} ariaLabel={t('common.close', 'Close')}>
+                <X size={14} />
+              </Button>
+            </div>
+            <div className="space-y-3">
+              <div className="w-full aspect-[16/9] rounded-md border border-black/10 bg-white p-3 flex items-center justify-center overflow-hidden">
+                <img
+                  src={selectedTournamentSponsor.logo}
+                  alt={selectedTournamentSponsor.name}
+                  className="max-w-full max-h-full w-auto h-auto object-contain"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/logo.png'; }}
+                />
+              </div>
+              <div className="space-y-2 text-sm text-black/75">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">{t('sponsors.description', 'Description')}</p>
+                  <p>{selectedTournamentSponsor.description || t('sponsors.no_description', 'No description provided.')}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">{t('sponsors.contacts', 'Contacts')}</p>
+                  <p>{selectedTournamentSponsor.contacts || t('sponsors.no_contacts', 'No contact details provided.')}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider font-bold text-black/45">{t('sponsors.website', 'Website')}</p>
+                  {selectedTournamentSponsor.url ? (
+                    <a href={selectedTournamentSponsor.url} target="_blank" rel="noreferrer" className="text-emerald-700 underline break-all">{selectedTournamentSponsor.url}</a>
+                  ) : (
+                    <p>{t('sponsors.no_url', 'No URL provided.')}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
