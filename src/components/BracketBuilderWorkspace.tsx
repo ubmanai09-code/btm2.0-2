@@ -248,6 +248,12 @@ const normalizeParticipantLabel = (value: string) => {
   return compact.replace(/\s+player$/i, '').trim() || 'TBD';
 };
 
+const shortenName = (fullName: string): string => {
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length < 2) return fullName;
+  return `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.`;
+};
+
 const isRowWinner = (row: BracketRow, slot: 'p1' | 'p2' | 'p3') => {
   if (slot === 'p1') return row.winner_id && row.winner_id === row.participant1_id;
   if (slot === 'p2') return row.winner_id && row.winner_id === row.participant2_id;
@@ -1256,10 +1262,8 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
   const participantNameById = React.useMemo(() => {
     const mapping = new Map<number, string>();
     participants.forEach((participant) => {
-      mapping.set(
-        participant.id,
-        `${participant.first_name || ''} ${participant.last_name || ''}`.trim() || `Player ${participant.id}`,
-      );
+      const full = `${participant.first_name || ''} ${participant.last_name || ''}`.trim() || `Player ${participant.id}`;
+      mapping.set(participant.id, shortenName(full));
     });
     return mapping;
   }, [participants]);
@@ -1352,10 +1356,35 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
       if (explicitBronzeWinnerId > 0) {
         third = normalizeParticipantLabel(getBracketDisplayName(bronzeMatch, 'winner', isTeamTournament));
       }
+    } else {
+      // No bronze match: stepladder/ladder/mixed duel finals → 3rd = loser of the semifinal
+      const isStepladderLadderOrMixed = (
+        tournament.match_play_type === 'stepladder' ||
+        tournament.match_play_type === 'ladder' ||
+        tournament.match_play_type === 'bowling_hybrid' ||
+        tournament.match_play_type === 'survivor_elimination' ||
+        tournament.match_play_type === 'team_selection_playoff' ||
+        loadedPresetCategory === 'stepladder' ||
+        loadedPresetCategory === 'ladder' ||
+        loadedPresetCategory === 'mixed'
+      );
+      if (isStepladderLadderOrMixed && championshipMatch && !championshipMatch.participant3_id) {
+        const semifinalRound = liveChampionshipRound - 1;
+        const semifinalMatch = liveBracket.find(
+          (row) => Number(row.round) === semifinalRound && Number(row.match_index) === 0
+        ) || null;
+        if (semifinalMatch) {
+          const semiWinnerId = Number(semifinalMatch.winner_id || 0);
+          if (semiWinnerId > 0) {
+            const semiLoserSlot: 'p1' | 'p2' = semiWinnerId === Number(semifinalMatch.participant1_id) ? 'p2' : 'p1';
+            third = normalizeParticipantLabel(getBracketDisplayName(semifinalMatch, semiLoserSlot, isTeamTournament));
+          }
+        }
+      }
     }
 
     return { first, second, third };
-  }, [liveBracket, liveChampionshipRound, tournament.type]);
+  }, [liveBracket, liveChampionshipRound, tournament.type, tournament.match_play_type, loadedPresetCategory]);
 
   const livePodiumMatches = React.useMemo(() => {
     const championshipMatch = liveBracket.find((row) => Number(row.round) === liveChampionshipRound && Number(row.match_index) === 0) || null;
@@ -1373,12 +1402,36 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
       if (match.participant3_id) result.push({ id: match.participant3_id, name: getRowParticipantDisplayName(match, match.participant3_id, isTeam), seed: match.participant3_seed ?? null });
       return result;
     };
+
+    // For stepladder/ladder/mixed: 3rd place candidates come from the semifinal match
+    // since there is no bronze match — only the loser of the semi is eligible.
+    let thirdCandidateMatch = livePodiumMatches.bronzeMatch;
+    if (!thirdCandidateMatch) {
+      const isStepladderLadderOrMixed = (
+        tournament.match_play_type === 'stepladder' ||
+        tournament.match_play_type === 'ladder' ||
+        tournament.match_play_type === 'bowling_hybrid' ||
+        tournament.match_play_type === 'survivor_elimination' ||
+        tournament.match_play_type === 'team_selection_playoff' ||
+        loadedPresetCategory === 'stepladder' ||
+        loadedPresetCategory === 'ladder' ||
+        loadedPresetCategory === 'mixed'
+      );
+      const champ = livePodiumMatches.championshipMatch;
+      if (isStepladderLadderOrMixed && champ && !champ.participant3_id) {
+        const semifinalRound = liveChampionshipRound - 1;
+        thirdCandidateMatch = liveBracket.find(
+          (row) => Number(row.round) === semifinalRound && Number(row.match_index) === 0
+        ) || null;
+      }
+    }
+
     return {
       first: build(livePodiumMatches.championshipMatch),
       second: build(livePodiumMatches.championshipMatch),
-      third: build(livePodiumMatches.bronzeMatch),
+      third: build(thirdCandidateMatch),
     };
-  }, [livePodiumMatches, tournament.type]);
+  }, [livePodiumMatches, liveBracket, liveChampionshipRound, tournament.type, tournament.match_play_type, loadedPresetCategory]);
 
   const bracketComplete = React.useMemo(() => {
     const hasFirst = livePodium.first !== 'TBD';

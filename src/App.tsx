@@ -2516,7 +2516,7 @@ export default function App() {
               </Card>
 
               {showFormSponsorsModal && (
-                <div className="fixed inset-0 z-[80] bg-black/45 flex items-center justify-center p-4" onClick={() => setShowFormSponsorsModal(false)}>
+                <div className="fixed inset-0 z-[80] bg-black/45 flex items-center justify-center p-4">
                   <Card className="w-full max-w-3xl max-h-[88vh] p-4 flex flex-col" onClick={(e: any) => e.stopPropagation()}>
                     <div className="flex items-center justify-between gap-3 mb-3 shrink-0">
                       <h3 className="text-lg font-bold">Tournament Sponsors Setup</h3>
@@ -3692,7 +3692,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                     </div>
                   </div>
 
-                  {!isTournamentCardCollapsed && tournamentSponsors.length > 0 && (
+                  {tournamentSponsors.length > 0 && (
                     <div className="flex flex-wrap items-center gap-1.5">
                       {tournamentSponsors.map((sponsor) => (
                         <div
@@ -9014,25 +9014,31 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   }, [seedImportMode, standings, manualPickedIds]);
 
   // ── Participant nodes ─────────────────────────────────────────────────────
+  const shortenParticipantName = React.useCallback((fullName: string): string => {
+    const parts = String(fullName || '').trim().split(/\s+/);
+    if (parts.length < 2) return fullName;
+    return `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.`;
+  }, []);
+
   const participantNodes = React.useMemo((): TournamentParticipantNode[] => {
     if (seedImportMode === 'create-list') {
-      return customSeedList.map((name, i) => ({ id: `custom-${i + 1}`, name, seed: i + 1 }));
+      return customSeedList.map((name, i) => ({ id: `custom-${i + 1}`, name: shortenParticipantName(name), seed: i + 1 }));
     }
     if (seedImportMode === 'manual') {
       if (pickedStandingsEntries.length > 0) {
-        return pickedStandingsEntries.map(e => ({ id: e.id, name: e.name, seed: e.seed }));
+        return pickedStandingsEntries.map(e => ({ id: e.id, name: shortenParticipantName(e.name), seed: e.seed }));
       }
       return [];
     }
     if (importedTopSeedEntries.length > 0) {
       return importedTopSeedEntries.map((entry) => ({
         id: entry.id,
-        name: entry.name,
+        name: shortenParticipantName(entry.name),
         seed: entry.seed,
       }));
     }
     return [];
-  }, [seedImportMode, customSeedList, pickedStandingsEntries, importedTopSeedEntries]);
+  }, [seedImportMode, customSeedList, pickedStandingsEntries, importedTopSeedEntries, shortenParticipantName]);
 
   const formatCompactTeamMemberName = React.useCallback((firstName?: string | null, lastName?: string | null) => {
     const first = String(firstName || '').trim();
@@ -11323,11 +11329,11 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         </div>
 
         {role === 'public' && (
-          <Card className="p-3">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
+          <Card className="p-3 max-w-sm">
+            <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Available Brackets</p>
-                <p className="text-[10px] text-black/35 mt-0.5">Choose a saved bracket and load it.</p>
+                <p className="text-[10px] text-black/35 mt-0.5">Select a bracket to load it.</p>
               </div>
               {activeBracketName && (
                 <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
@@ -11335,29 +11341,40 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                 </span>
               )}
             </div>
-            <div className="mt-2 flex items-center gap-2 flex-wrap">
-              <select
-                value={loadBracketId || activeBracketId || ''}
-                onChange={(e) => setLoadBracketId(e.target.value)}
-                className="min-w-[220px] max-w-full h-8 px-2 rounded-md border border-black/15 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200"
-              >
-                <option value="">Select bracket...</option>
-                {savedBrackets.map((bkt) => (
-                  <option key={bkt.id} value={bkt.id}>{bkt.name}</option>
-                ))}
-              </select>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => { if (loadBracketId) handleLoadBracket(loadBracketId); }}
-                disabled={!loadBracketId}
-                className="h-8 px-3 text-[11px]"
-              >
-                Load
-              </Button>
-              {savedBracketsLoading && <span className="text-[10px] text-black/35">Loading brackets...</span>}
-              {!savedBracketsLoading && savedBrackets.length === 0 && <span className="text-[10px] text-black/35">No saved brackets yet.</span>}
-            </div>
+            {savedBracketsLoading && <span className="text-[10px] text-black/35">Loading brackets...</span>}
+            {!savedBracketsLoading && savedBrackets.length === 0 && (
+              <span className="text-[10px] text-black/35">No saved brackets yet.</span>
+            )}
+            {!savedBracketsLoading && savedBrackets.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                {savedBrackets.map((bkt) => {
+                  const isActive = bkt.id === activeBracketId;
+                  return (
+                    <div
+                      key={bkt.id}
+                      className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs ${
+                        isActive
+                          ? 'border-emerald-300 bg-emerald-50'
+                          : 'border-black/10 bg-white'
+                      }`}
+                    >
+                      <span className={`flex-1 min-w-0 truncate ${isActive ? 'text-emerald-800 font-semibold' : 'text-black/70'}`}>
+                        {bkt.name}
+                      </span>
+                      {isActive
+                        ? <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide whitespace-nowrap">Active</span>
+                        : <button
+                            onClick={() => handleLoadBracket(bkt.id)}
+                            className="h-6 px-2.5 rounded border border-black/15 bg-white hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 text-[10px] font-semibold text-black/50 transition-colors whitespace-nowrap"
+                          >
+                            Load
+                          </button>
+                      }
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </Card>
         )}
 
