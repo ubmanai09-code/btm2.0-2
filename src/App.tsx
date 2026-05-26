@@ -9857,6 +9857,22 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           }
         }
       }
+      // No bronze match and single final (stepladder / single-elim without bronze):
+      // 3rd = loser of the penultimate round match
+      if (thirds.length === 0 && finalMatches.length === 1 && championshipMatch.slots.length === 2) {
+        const prevRoundMatches = engineResult.matches
+          .filter((m) => m.roundIndex === lastRoundIndex - 1)
+          .sort((a, b) => a.matchIndex - b.matchIndex);
+        const semiMatch = prevRoundMatches.find((m) => m.matchIndex === 0) || null;
+        if (semiMatch) {
+          const semiAdvancing = simulation.advancingSlots[semiMatch.id] || [];
+          const loserSlot = semiMatch.slots.find((s) => !semiAdvancing.includes(s.slotIndex));
+          if (loserSlot) {
+            const loserLabel = resolveLabel(semiMatch.id, loserSlot.slotIndex);
+            if (loserLabel && loserLabel !== 'TBD') thirds.push(loserLabel);
+          }
+        }
+      }
     }
     if (!first || first === 'TBD') return null;
     return { first, second: second || null, thirds };
@@ -10001,17 +10017,13 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       }
     } else if (finalMatch) {
       // No bronze match — determine 3rd by tournament structure.
-      // Stepladder/ladder/mixed duel finals: 3rd = loser of the semifinal match.
-      // Shootout/group finals with 3+ players: 3rd = rank 3 from scores_json.
-      const isStepladderOrLadderOrMixed = (
-        tournament.match_play_type === 'stepladder' ||
-        tournament.match_play_type === 'ladder' ||
-        tournament.match_play_type === 'bowling_hybrid' ||
-        tournament.match_play_type === 'survivor_elimination' ||
-        tournament.match_play_type === 'team_selection_playoff'
-      );
-      if (isStepladderOrLadderOrMixed && !finalMatch.participant3_id) {
-        // Duel final: the loser of the penultimate round (semifinal) is 3rd place
+      // Duel finals (any format: stepladder, ladder, single-elim without bronze):
+      //   3rd = loser of the penultimate round match.
+      // Multi-player finals (shootout/group with 3+ participants in one match):
+      //   3rd = rank 3 from scores_json.
+      const isDuelFinal = !finalMatch.participant3_id;
+      if (isDuelFinal) {
+        // The loser of the match immediately before the final is 3rd place
         const semifinalRound = finalRoundNumber - 1;
         const semifinalMatch = allDivisionMatches.find(
           (m) => Number(m?.round) === semifinalRound && Number(m?.match_index) === 0
