@@ -11614,8 +11614,10 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                         } catch {}
                       }
                     }
-                    // Fallback: all participants (stepladder — IDs not pre-assigned)
-                    const finalOpts = opts.length > 0
+                    // Fallback: all participants when fewer than 2 candidates are
+                    // resolved from the match (e.g. stepladder final where only
+                    // seed #1's bye slot is filled and slot 2 is still TBD).
+                    const finalOpts = opts.length >= 2
                       ? opts
                       : [...participants]
                           .map((p) => ({
