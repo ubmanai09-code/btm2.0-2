@@ -9825,7 +9825,39 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     const second = orderedSlots[1] != null ? resolveLabel(championshipMatch.id, orderedSlots[1]) : null;
     const third = orderedSlots[2] != null ? resolveLabel(championshipMatch.id, orderedSlots[2]) : null;
 
-    const thirds = include3rdPlace && third && third !== 'TBD' ? [third] : [];
+    const thirds: string[] = [];
+    if (include3rdPlace) {
+      // Multi-player final: 3rd slot comes from the championship match itself
+      if (third && third !== 'TBD') {
+        thirds.push(third);
+      }
+      // Single-elim with separate bronze match (matchIndex !== 0 in the final round)
+      if (thirds.length === 0 && finalMatches.length > 1) {
+        const bronzeMatchSim = finalMatches.find((m) => m.matchIndex !== 0);
+        if (bronzeMatchSim) {
+          const bronzeDraft = scoreDrafts[bronzeMatchSim.id] || {};
+          const bronzeRanked = bronzeMatchSim.slots
+            .map((slot) => ({
+              slotIndex: slot.slotIndex,
+              score: Number.parseInt(bronzeDraft[slot.slotIndex] || '', 10),
+            }))
+            .filter((entry) => Number.isFinite(entry.score))
+            .sort((a, b) => b.score - a.score);
+          let bronzeOrderedSlots = bronzeRanked.map((entry) => entry.slotIndex);
+          if (bronzeOrderedSlots.length === 0) {
+            const bronzeWinnerSlot = simulation.winners[bronzeMatchSim.id];
+            const allBronzeSlots = bronzeMatchSim.slots.map((s) => s.slotIndex);
+            bronzeOrderedSlots = bronzeWinnerSlot != null
+              ? [bronzeWinnerSlot, ...allBronzeSlots.filter((si) => si !== bronzeWinnerSlot)]
+              : allBronzeSlots;
+          }
+          if (bronzeOrderedSlots[0] != null) {
+            const bronzeWinner = resolveLabel(bronzeMatchSim.id, bronzeOrderedSlots[0]);
+            if (bronzeWinner && bronzeWinner !== 'TBD') thirds.push(bronzeWinner);
+          }
+        }
+      }
+    }
     if (!first || first === 'TBD') return null;
     return { first, second: second || null, thirds };
   }, [engineResult, simulation, include3rdPlace, scoreDrafts]);
@@ -9956,14 +9988,53 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     } else if (bronzeMatch) {
       const explicitBronzeWinnerId = Number(bronzeMatch.winner_id || 0);
       if (explicitBronzeWinnerId > 0) {
-        third = getBracketName(bronzeMatch, 'winner');
+        const fromName = getBracketName(bronzeMatch, 'winner');
+        third = fromName !== 'TBD' ? fromName : getParticipantNameById(explicitBronzeWinnerId);
+      }
+      // Fallback: winner_id not set — derive from scores_json (highest scorer wins head-to-head)
+      if (third === 'TBD') {
+        const bronzeScores = getRankedParticipantsByScore(bronzeMatch);
+        if (bronzeScores.length >= 2 && bronzeScores[0].score > bronzeScores[1].score) {
+          const n = getParticipantNameById(bronzeScores[0].participantId);
+          if (n !== 'TBD') third = n;
+        }
       }
     } else if (finalMatch) {
-      // No bronze match — derive 3rd from scores_json rank 3 (shootout/stepladder final)
-      const scoreRanked = getRankedParticipantsByScore(finalMatch);
-      if (scoreRanked.length >= 3) {
-        const n = getParticipantNameById(scoreRanked[2].participantId);
-        if (n !== 'TBD') third = n;
+      // No bronze match — determine 3rd by tournament structure.
+      // Stepladder/ladder/mixed duel finals: 3rd = loser of the semifinal match.
+      // Shootout/group finals with 3+ players: 3rd = rank 3 from scores_json.
+      const isStepladderOrLadderOrMixed = (
+        tournament.match_play_type === 'stepladder' ||
+        tournament.match_play_type === 'ladder' ||
+        tournament.match_play_type === 'bowling_hybrid' ||
+        tournament.match_play_type === 'survivor_elimination' ||
+        tournament.match_play_type === 'team_selection_playoff'
+      );
+      if (isStepladderOrLadderOrMixed && !finalMatch.participant3_id) {
+        // Duel final: the loser of the penultimate round (semifinal) is 3rd place
+        const semifinalRound = finalRoundNumber - 1;
+        const semifinalMatch = allDivisionMatches.find(
+          (m) => Number(m?.round) === semifinalRound && Number(m?.match_index) === 0
+        ) || null;
+        if (semifinalMatch) {
+          const semiWinnerId = Number(semifinalMatch.winner_id || 0);
+          if (semiWinnerId > 0) {
+            const semiLoserId = semiWinnerId === Number(semifinalMatch.participant1_id)
+              ? Number(semifinalMatch.participant2_id || 0)
+              : Number(semifinalMatch.participant1_id || 0);
+            if (semiLoserId > 0) {
+              const n = getParticipantNameById(semiLoserId);
+              if (n !== 'TBD') third = n;
+            }
+          }
+        }
+      } else {
+        // Multi-player final (shootout/group): derive 3rd from scores_json rank 3
+        const scoreRanked = getRankedParticipantsByScore(finalMatch);
+        if (scoreRanked.length >= 3) {
+          const n = getParticipantNameById(scoreRanked[2].participantId);
+          if (n !== 'TBD') third = n;
+        }
       }
     }
 
