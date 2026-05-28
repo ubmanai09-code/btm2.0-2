@@ -2101,64 +2101,28 @@ export default function App() {
                 </Card>
 
                 {dashboardPromo.enabled && (
-                  <Card className="border border-orange-200 bg-white overflow-hidden">
-                    <div className="p-4 h-full flex flex-col gap-3">
-                      {isAdmin && (
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-orange-700">Dashboard Ad Slot</p>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openSponsorsConfigEditor('adblock')}
-                            className="px-2"
-                            title="Manage Ad Block"
-                            ariaLabel="Manage Ad Block"
-                          >
-                            <Edit size={13} />
-                          </Button>
+                  <Card className="border-0 shadow-none bg-transparent overflow-hidden p-0">
+                    <div className="relative w-full">
+                      {dashboardPromo.image ? (
+                        <img
+                          src={normalizeWebUrl(dashboardPromo.image)}
+                          alt={dashboardPromo.title || 'Dashboard promo image'}
+                          className="w-full block"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="h-44 flex items-center justify-center text-sm text-black/45 bg-black/[0.02]">
+                          Upload promo image
                         </div>
                       )}
-
-                      <div className="rounded-lg border border-black/10 bg-white overflow-hidden">
-                        {dashboardPromo.image ? (
-                          <img
-                            src={normalizeWebUrl(dashboardPromo.image)}
-                            alt={dashboardPromo.title || 'Dashboard promo image'}
-                            className="w-full h-44 object-cover"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <div className="h-44 flex items-center justify-center text-sm text-black/45 bg-black/[0.02]">
-                            Upload promo image
-                          </div>
-                        )}
-                      </div>
-
-                      <div>
-                        <p className="text-sm font-semibold text-black/85">{dashboardPromo.title || 'Advertise Here'}</p>
-                        {currentRole !== 'public' && dashboardPromo.subtitle && (
-                          <p className="text-xs text-black/55 mt-1">{dashboardPromo.subtitle}</p>
-                        )}
-                        {dashboardPromo.link && (
-                          <a href={normalizeWebUrl(dashboardPromo.link)} target="_blank" rel="noreferrer" className="text-xs text-emerald-700 underline break-all mt-1 inline-block">
-                            {normalizeWebUrl(dashboardPromo.link)}
-                          </a>
-                        )}
-                      </div>
-
                       {isAdmin && (
-                        <div className="pt-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openSponsorsConfigEditor('adblock')}
-                            className="px-3"
-                            title="Manage Ad Block"
-                            ariaLabel="Manage Ad Block"
-                          >
-                            Manage Ad Block
-                          </Button>
-                        </div>
+                        <button
+                          onClick={() => openSponsorsConfigEditor('adblock')}
+                          className="absolute top-2 right-2 bg-white/80 hover:bg-white rounded p-1 shadow-sm"
+                          title="Manage Ad Block"
+                        >
+                          <Edit size={13} className="text-orange-700" />
+                        </button>
                       )}
                     </div>
                   </Card>
