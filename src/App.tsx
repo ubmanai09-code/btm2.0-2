@@ -85,6 +85,7 @@ type DashboardPromo = {
   title: string;
   subtitle: string;
   image: string;
+  video: string;
   link: string;
 };
 
@@ -123,6 +124,7 @@ const DEFAULT_DASHBOARD_PROMO: DashboardPromo = {
   title: t('dashboard.advertise_here', 'Advertise Here'),
   subtitle: t('dashboard.promo_subtitle', 'Promote your brand with a dashboard promo image.'),
   image: '',
+  video: '',
   link: '',
 };
 
@@ -216,6 +218,7 @@ const normalizeSponsorsConfig = (value: any): SponsorsConfig => {
     title: String(rawDashboardPromo?.title || DEFAULT_DASHBOARD_PROMO.title),
     subtitle: String(rawDashboardPromo?.subtitle || DEFAULT_DASHBOARD_PROMO.subtitle),
     image: normalizeWebUrl(rawDashboardPromo?.image || ''),
+    video: normalizeWebUrl(rawDashboardPromo?.video || ''),
     link: normalizeWebUrl(rawDashboardPromo?.link || ''),
   };
 
@@ -2107,16 +2110,40 @@ export default function App() {
                   </div>
                 </Card>
 
-                {dashboardPromo.enabled && (
+                    {dashboardPromo.enabled && (
                   <Card className="border-0 shadow-none bg-transparent overflow-hidden p-0">
                     <div className="relative w-full">
-                      {dashboardPromo.image ? (
-                        <img
-                          src={normalizeWebUrl(dashboardPromo.image)}
-                          alt={dashboardPromo.title || 'Dashboard promo image'}
-                          className="w-full block"
-                          referrerPolicy="no-referrer"
-                        />
+                      {dashboardPromo.video ? (
+                        <a
+                          href={dashboardPromo.link || undefined}
+                          target={dashboardPromo.link ? '_blank' : undefined}
+                          rel={dashboardPromo.link ? 'noopener noreferrer' : undefined}
+                          className={dashboardPromo.link ? 'block' : undefined}
+                        >
+                          <video
+                            src={normalizeWebUrl(dashboardPromo.video)}
+                            autoPlay
+                            loop
+                            muted
+                            playsInline
+                            className="w-full block rounded-lg"
+                            poster={dashboardPromo.image ? normalizeWebUrl(dashboardPromo.image) : undefined}
+                          />
+                        </a>
+                      ) : dashboardPromo.image ? (
+                        <a
+                          href={dashboardPromo.link || undefined}
+                          target={dashboardPromo.link ? '_blank' : undefined}
+                          rel={dashboardPromo.link ? 'noopener noreferrer' : undefined}
+                          className={dashboardPromo.link ? 'block' : undefined}
+                        >
+                          <img
+                            src={normalizeWebUrl(dashboardPromo.image)}
+                            alt={dashboardPromo.title || 'Dashboard promo'}
+                            className="w-full block"
+                            referrerPolicy="no-referrer"
+                          />
+                        </a>
                       ) : (
                         <div className="h-44 flex items-center justify-center text-sm text-black/45 bg-black/[0.02]">
                           Upload promo image
@@ -3040,6 +3067,11 @@ export default function App() {
                       value={sponsorsConfigDraft.dashboardPromo?.image || ''}
                       onChange={(e: any) => updateDraftDashboardPromoField('image', e.target.value)}
                     />
+                    <Input
+                      label="Promo Video URL (mp4/webm — auto-plays, loops, muted)"
+                      value={sponsorsConfigDraft.dashboardPromo?.video || ''}
+                      onChange={(e: any) => updateDraftDashboardPromoField('video', e.target.value)}
+                    />
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -3068,7 +3100,17 @@ export default function App() {
                   </div>
 
                   <div className="w-full h-40 rounded-md border border-black/10 bg-white overflow-hidden">
-                    {sponsorsConfigDraft.dashboardPromo?.image ? (
+                    {sponsorsConfigDraft.dashboardPromo?.video ? (
+                      <video
+                        src={normalizeWebUrl(sponsorsConfigDraft.dashboardPromo.video)}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="w-full h-full object-cover"
+                        poster={sponsorsConfigDraft.dashboardPromo.image ? normalizeWebUrl(sponsorsConfigDraft.dashboardPromo.image) : undefined}
+                      />
+                    ) : sponsorsConfigDraft.dashboardPromo?.image ? (
                       <img
                         src={normalizeWebUrl(sponsorsConfigDraft.dashboardPromo.image)}
                         alt="Dashboard promo preview"
