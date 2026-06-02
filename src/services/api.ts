@@ -22,6 +22,7 @@ export interface Tournament {
   has_additional_scores?: number;
   has_bonus?: number;
   show_player_style?: number;
+  divisions?: string;
   created_at: string;
 }
 
@@ -38,6 +39,7 @@ export interface Participant {
   team_id: number | null;
   team_order?: number;
   team_name?: string;
+  division?: string;
 }
 
 export interface Team {

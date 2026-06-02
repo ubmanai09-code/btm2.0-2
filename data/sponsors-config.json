@@ -58,12 +58,12 @@
     "enabled": true,
     "title": "Advertise Here",
     "subtitle": "Promote your brand with a dashboard promo image.",
-    "image": "https://imgur.com/a/6UyhYrg",
+    "image": "https://i.imgur.com/QS3ZYiu.png",
     "link": ""
   },
   "presentModeAds": {
     "standings": {
-      "enabled": true,
+      "enabled": false,
       "left": {
         "image": "",
         "link": ""
@@ -74,7 +74,7 @@
       }
     },
     "scoring": {
-      "enabled": true,
+      "enabled": false,
       "left": {
         "image": "",
         "link": ""

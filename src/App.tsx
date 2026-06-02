@@ -995,6 +995,7 @@ export default function App() {
       has_additional_scores: formData.get('has_additional_scores') ? 1 : 0,
       has_bonus: formData.get('has_bonus') ? 1 : 0,
       show_player_style: formData.get('show_player_style') ? 1 : 0,
+      divisions: (formData.get('divisions') as string || '').trim() || null,
     };
 
     if (view === 'edit') {
@@ -2428,13 +2429,24 @@ export default function App() {
                     </label>
                   </div>
 
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <Input
+                        label="Divisions (optional)"
+                        name="divisions"
+                        placeholder="e.g. A, B, C"
+                        defaultValue={editingTournament?.divisions || ''}
+                      />
+                      <p className="mt-1 text-[11px] text-black/40 px-1">Comma-separated division names. Participants can be assigned to a division, and standings can be filtered by division.</p>
+                    </div>
+                  </div>
+
                   <div className="rounded-md border border-black/10 bg-white p-3">
                     <button
                       type="button"
                       onClick={() => setShowFormSponsorsModal(true)}
                       className="w-full flex items-center justify-between gap-3 text-left"
-                    >
-                      <div>
+                    >                      <div>
                         <h3 className="text-sm font-bold text-black/80">Tournament Sponsors Setup</h3>
                         <p className="text-xs text-black/50">
                           {formUseCustomSponsors
@@ -4309,7 +4321,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       club: formData.get('club') as string,
       average: parsedAverage,
       email: formData.get('email') as string,
-      team_id: formData.get('team_id') ? parseInt(formData.get('team_id') as string) : null
+      team_id: formData.get('team_id') ? parseInt(formData.get('team_id') as string) : null,
+      division: (formData.get('division') as string || '').trim() || null,
     };
     
     console.log('Submitting player data:', data);
@@ -5393,7 +5406,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       <span>{playerSort.key === 'last_name' ? (playerSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
                     </button>
                   </th>
-                  <th className="pl-1 pr-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center">
+                  <th className="px-1 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 text-center w-10">
                     <button
                       type="button"
                       onClick={() => togglePlayerSort('gender')}
@@ -5428,6 +5441,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       <span>{playerSort.key === 'club' ? (playerSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
                     </button>
                   </th>
+                  {(() => {
+                    const divList = (tournament.divisions || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+                    if (divList.length === 0) return null;
+                    return <th className="pl-2 pr-0.5 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70">Zone</th>;
+                  })()}
                   {canManageParticipants && isPlayerSelectionMode && (
                     <th className="px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black/70 w-8 sticky right-0 z-[4] bg-[#e3f3f6]">
                       <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} style={{ transform: 'scale(0.6)', width: 16, height: 16 }} />
@@ -5488,11 +5506,16 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         </span>
                       </td>
                       <td className={`px-1 py-1.5 text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>{p.last_name || '-'}</td>
-                      <td className={`pl-1 pr-2 py-1.5 text-[10px] uppercase text-center ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{(p.gender || '').toLowerCase().startsWith('f') ? 'F' : (p.gender || '').toLowerCase().startsWith('m') ? 'M' : '-'}</td>
+                      <td className={`px-1 py-1.5 text-[10px] uppercase text-center w-10 ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{(p.gender || '').toLowerCase().startsWith('f') ? 'F' : (p.gender || '').toLowerCase().startsWith('m') ? 'M' : '-'}</td>
                       {showPlayerStyle && (
                         <td className={`pl-2 pr-1 py-1.5 text-[10px] uppercase text-center ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{normalizeHandsStyle(p.hands)}</td>
                       )}
                       <td className={`pl-2 pr-0.5 py-1.5 text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`} title={p.club || ''}>{p.club || '-'}</td>
+                      {(() => {
+                        const divList = (tournament.divisions || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+                        if (divList.length === 0) return null;
+                        return <td className={`pl-2 pr-0.5 py-1.5 text-[11px] font-bold ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/60'}`}>{p.division || '—'}</td>;
+                      })()}
                       {canManageParticipants && isPlayerSelectionMode && (
                         <td className={`px-2 py-1.5 sticky right-0 z-[3] bg-white text-center`}>
                           <input
@@ -5768,6 +5791,22 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
                   <Input label="Team/Club" name="club" defaultValue={editingPlayer?.club} placeholder="e.g. City Bowlers" />
                   <Input label="Contact Details" name="email" type="text" defaultValue={editingPlayer?.email} placeholder="Phone or email" />
+                  
+                  {(() => {
+                    const divisionList = (tournament.divisions || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+                    if (divisionList.length === 0) return null;
+                    return (
+                      <Select
+                        label="Division"
+                        name="division"
+                        defaultValue={editingPlayer?.division || ''}
+                        options={[
+                          { value: '', label: '— No Division —' },
+                          ...divisionList.map((d: string) => ({ value: d, label: d }))
+                        ]}
+                      />
+                    );
+                  })()}
                   
                   <div className="pt-4 flex gap-3 border-t border-emerald-100/80">
                     <Button type="submit" className="flex-1 justify-center" title={editingPlayer ? 'Save Changes' : 'Add Player'} ariaLabel={editingPlayer ? 'Save Changes' : 'Add Player'}>
@@ -12217,6 +12256,9 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   }, []);
   // Gender filter for standings table only
   const [genderFilter, setGenderFilter] = useState<'all' | 'male' | 'female'>('all');
+  const [divisionFilter, setDivisionFilter] = useState<string>('all');
+  const tournamentDivisions = (tournament.divisions || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+  const hasDivisions = tournamentDivisions.length > 0;
   const canManageStandings = role === 'admin' || role === 'moderator';
   const tx = React.useContext(UiTranslationContext);
   const [hasAdditionalScores, setHasAdditionalScores] = useState(Boolean(tournament.has_additional_scores));
@@ -12835,6 +12877,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         team_name: p.team_name || '-',
         club: p.club || '-',
         hands: (participantInfoMap.get(p.id)?.hands || '').trim() || null,
+        division: (participantInfoMap.get(p.id)?.division || '').trim() || null,
         games: allGames, // for display, show all games
         additional: visibleAdditional,
         bonus,
@@ -12843,8 +12886,11 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         average,
       };
     })
-    // Sort by total (first N games), then average, then name
-    .sort((a, b) => (b.total - a.total) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name));
+    // Sort by grand_total when additional scores or bonus (handicap) are present, otherwise by total (first N games)
+    .sort((a, b) => {
+      const sortKey = (hasAdditionalScores || hasBonus) ? 'grand_total' : 'total';
+      return (b[sortKey] - a[sortKey]) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name);
+    });
 
   const shiftNumbers = Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1);
 
@@ -12852,6 +12898,10 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   let filteredPlayerStandingsRows = playerStandingsRows;
   if (standingsMode === 'players' && typeof genderFilter !== 'undefined' && genderFilter !== 'all') {
     filteredPlayerStandingsRows = playerStandingsRows.filter(row => (participantGenderMap.get(row.participant_id) || '').toLowerCase() === genderFilter);
+  }
+  // Filter by division if selected
+  if (standingsMode === 'players' && hasDivisions && divisionFilter !== 'all') {
+    filteredPlayerStandingsRows = filteredPlayerStandingsRows.filter(row => (row.division || '') === divisionFilter);
   }
   // In present mode hide participants with no scores entered yet
   if (isStandingsScreenMode) {
@@ -12959,8 +13009,11 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         grand_total: grandTotal,
       };
     })
-    // Sort by total (first N games), then name
-    .sort((a, b) => (b.total - a.total) || a.team_name.localeCompare(b.team_name));
+    // Sort by grand_total when additional scores or bonus (handicap) are present, otherwise by total
+    .sort((a, b) => {
+      const sortKey = (hasAdditionalScores || hasBonus) ? 'grand_total' : 'total';
+      return (b[sortKey] - a[sortKey]) || a.team_name.localeCompare(b.team_name);
+    });
   // In present mode hide teams with no scores entered yet
   const teamStandingsRows = isStandingsScreenMode
     ? teamStandingsRowsAll.filter((row) => row.grand_total > 0 || row.total > 0)
@@ -13349,6 +13402,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
             <>
               {showPlayerStyle && <th className={`${headerBaseClass} text-center`}>1H/2H</th>}
               {hasClubData && <th className={headerBaseClass}>Club</th>}
+              {hasDivisions && <th className={`${headerBaseClass} text-center w-11`}>Zone</th>}
             </>
           )}
           {standingsMode === 'players' && isTeamTournament && (
@@ -13386,6 +13440,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         <>
           {showPlayerStyle && <col style={{ width: '68px' }} />}
           {hasClubData && <col style={{ width: '150px' }} />}
+          {hasDivisions && <col style={{ width: '44px' }} />}
         </>
       )}
       {standingsMode === 'players' && isTeamTournament && <col style={{ width: '120px' }} />}
@@ -13473,7 +13528,28 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 </div>
               </div>
             )}
-            {/* Pause/Resume and auto scroll controls removed for Present Mode as requested */}
+            {standingsMode === 'players' && hasDivisions && (
+              <div className="inline-flex items-center gap-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Zone</span>
+                <div className={segmentedTabContainerClass}>
+                  <button
+                    onClick={() => setDivisionFilter('all')}
+                    className={getSegmentedTabButtonClass(divisionFilter === 'all', 'compact')}
+                  >
+                    All
+                  </button>
+                  {tournamentDivisions.map((d: string) => (
+                    <button
+                      key={d}
+                      onClick={() => setDivisionFilter(d)}
+                      className={getSegmentedTabButtonClass(divisionFilter === d, 'compact')}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -13854,6 +13930,28 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       </button>
                     </div>
                   )}
+                  {standingsMode === 'players' && hasDivisions && (
+                    <div className="flex items-center gap-0.5 ml-0.5 border-l border-black/10 pl-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-black/40 mr-0.5">Zone:</span>
+                      <button
+                        onClick={() => setDivisionFilter('all')}
+                        className={`px-1.5 py-0.5 rounded text-[11px] border border-transparent transition-colors ${divisionFilter === 'all' ? 'font-black text-black' : 'font-medium text-black/40 hover:text-black/70'}`}
+                        title="Show all divisions"
+                      >
+                        All
+                      </button>
+                      {tournamentDivisions.map((d: string) => (
+                        <button
+                          key={d}
+                          onClick={() => setDivisionFilter(d)}
+                          className={`px-1.5 py-0.5 rounded text-[11px] border border-transparent transition-colors ${divisionFilter === d ? 'font-black text-black' : 'font-medium text-black/40 hover:text-black/70'}`}
+                          title={`Show zone ${d}`}
+                        >
+                          {d}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   {isTeamTournament && (
                     <button
@@ -14054,6 +14152,11 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                   {hasClubData && (
                     <td className="px-2.5 py-1.5 text-black/70 text-[13px] font-medium leading-tight">
                       {s.club}
+                    </td>
+                  )}
+                  {hasDivisions && (
+                    <td className="px-1 py-1.5 text-[11px] font-bold text-black/60 text-center">
+                      {s.division || '—'}
                     </td>
                   )}
                   {/* Only show team column if team tournament and standingsMode is players */}
