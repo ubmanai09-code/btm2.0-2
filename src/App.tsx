@@ -1155,6 +1155,12 @@ export default function App() {
           oil_pattern: String(raw?.oil_pattern || ''),
           has_additional_scores: Number(raw?.has_additional_scores) ? 1 : 0,
           has_bonus: Number(raw?.has_bonus) ? 1 : 0,
+          show_player_style: Number(raw?.show_player_style) ? 1 : 0,
+          divisions: raw?.divisions != null ? String(raw.divisions) : '',
+          match_play_type: raw?.match_play_type || 'single_elimination',
+          qualified_count: Number(raw?.qualified_count) || 0,
+          playoff_winners_count: Number(raw?.playoff_winners_count) || 0,
+          known_bracket_format_id: raw?.known_bracket_format_id ?? null,
           status: raw?.status === 'active' || raw?.status === 'finished' || raw?.status === 'archived'
             ? raw.status
             : 'draft',
@@ -3954,7 +3960,7 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
         : [row.rank, row.name, row.gender || 'unknown', row.club || '', ...tournamentValues, row.total_score, row.events_played, row.average_event_score, row.tournament_names.join(' | ')];
     });
     const csv = [headers.join(','), ...csvRows.map((line) => line.map((item) => `"${String(item).replace(/"/g, '""')}"`).join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -4354,7 +4360,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   };
 
   const handleExportCSV = () => {
-    const headers = ['First Name', 'Last Name', 'Gender', 'Hands', 'Club', 'Average', 'Contact Details'];
+    const hasDivisionData = participants.some(p => p.division && p.division.trim());
+    const headers = ['First Name', 'Last Name', 'Gender', 'Hands', 'Club', 'Average', 'Contact Details', ...(hasDivisionData ? ['Division'] : [])];
     const rows = participants.map(p => [
       p.first_name,
       p.last_name,
@@ -4362,7 +4369,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       normalizeHandsStyle(p.hands),
       p.club,
       p.average,
-      p.email
+      p.email,
+      ...(hasDivisionData ? [p.division || ''] : []),
     ]);
     
     const csvContent = [
@@ -4370,7 +4378,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       ...rows.map(r => r.join(','))
     ].join('\n');
     
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
@@ -4408,6 +4416,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
           return contactIndex >= 0 ? contactIndex : parsedHeaders.indexOf('email');
         })()
         : 5;
+      const divisionIndex = hasHeader ? parsedHeaders.indexOf('division') : -1;
       const dataLines = hasHeader ? lines.slice(1) : lines;
       
       const newParticipants = dataLines.filter(line => line.trim()).map(line => {
@@ -4419,6 +4428,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         const club = (clubIndex >= 0 ? columns[clubIndex] : columns[3]) || '';
         const average = (averageIndex >= 0 ? columns[averageIndex] : columns[4]) || '';
         const email = (emailIndex >= 0 ? columns[emailIndex] : columns[5]) || '';
+        const division = divisionIndex >= 0 ? (columns[divisionIndex] || '') : '';
 
         if (first_name && !last_name) {
           const parts = first_name.split(/\s+/).filter(Boolean);
@@ -4445,7 +4455,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
           hands: normalizeHandsStyle(hands),
           club,
           average: parseInt(average) || 0,
-          email
+          email,
+          division: division || undefined,
         };
       }).filter((participant): participant is {
         first_name: string;
@@ -4455,6 +4466,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         club: string;
         average: number;
         email: string;
+        division?: string;
       } => participant !== null);
 
       await api.bulkAddParticipants(tournament.id, newParticipants, { replaceExisting: true });
@@ -4619,7 +4631,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     };
 
     const csvContent = [headers, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
@@ -6237,7 +6249,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     };
 
     const csvContent = [headers, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n');
-    const dataStr = "data:text/csv;charset=utf-8," + encodeURIComponent(csvContent);
+    const dataStr = "data:text/csv;charset=utf-8," + encodeURIComponent('\uFEFF' + csvContent);
     const downloadAnchorNode = document.createElement('a');
     downloadAnchorNode.setAttribute("href", dataStr);
     downloadAnchorNode.setAttribute("download", `tournament_${tournament.id}_lanes.csv`);
@@ -7638,7 +7650,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
     });
 
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
@@ -13281,6 +13293,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           'participant',
           ...(hasClubData ? ['club'] : []),
           'team',
+          ...(hasDivisions ? ['zone'] : []),
           ...gameHeaders,
           'total',
           ...extraHeaders,
@@ -13301,6 +13314,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           s.participant_name,
           ...(hasClubData ? [s.club] : []),
           s.team_name,
+          ...(hasDivisions ? [s.division || ''] : []),
           ...s.games,
           s.total,
           ...(hasAdditionalScores ? [s.additional] : []),
@@ -13309,7 +13323,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           s.average.toFixed(1),
         ]);
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
@@ -13331,26 +13345,103 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         if (lines.length < 2) return;
 
         const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-        const participantIdIndex = headers.indexOf('participant_id');
-        const gameNumberIndex = headers.indexOf('game_number');
-        const scoreIndex = headers.indexOf('score');
-        if (participantIdIndex === -1 || gameNumberIndex === -1 || scoreIndex === -1) {
-          alert('Invalid import file. Required columns: participant_id, game_number, score');
-          return;
+
+        // --- New wide export format: rank, participant, [club], [team], [zone], game_1..., total, [additional_score], [bonus], grand_total, [avg] ---
+        const isWideFormat = headers.includes('rank') && headers.includes('participant');
+
+        if (isWideFormat) {
+          // Build name→participant lookup
+          const participantsByFullName = new Map<string, Participant>();
+          const participantsByShortName = new Map<string, Participant>();
+          for (const p of participants) {
+            const full = `${p.first_name} ${p.last_name}`.trim().toUpperCase();
+            const short = formatStandingsName(p.id, full);
+            if (full) participantsByFullName.set(full.toLowerCase(), p);
+            if (short) participantsByShortName.set(short.toLowerCase(), p);
+          }
+
+          const participantColIdx = headers.indexOf('participant');
+          const additionalColIdx = headers.indexOf('additional_score');
+          const bonusColIdx = headers.indexOf('bonus');
+          // Detect game columns: game_1, game_2, ...
+          const gameColEntries: Array<{ gameNumber: number; colIdx: number }> = [];
+          for (let i = 0; i < headers.length; i++) {
+            const m = headers[i].match(/^game_(\d+)$/);
+            if (m) gameColEntries.push({ gameNumber: Number(m[1]), colIdx: i });
+          }
+
+          const scorePayloads: Array<{ participant_id: number; game_number: number; score: number }> = [];
+          const bonusPayloads: Array<{ target_id: number; bonus: number }> = [];
+          const additionalPayloads: Array<{ target_id: number; additional_score: number }> = [];
+
+          for (const line of lines.slice(1)) {
+            const cols = line.split(',').map(c => c.trim());
+            const nameRaw = (cols[participantColIdx] || '').trim().toLowerCase();
+            const participant = participantsByShortName.get(nameRaw) || participantsByFullName.get(nameRaw);
+            if (!participant) continue;
+
+            for (const { gameNumber, colIdx } of gameColEntries) {
+              const val = Number.parseInt(cols[colIdx], 10);
+              if (!Number.isFinite(val) || val < 0 || val > 300) continue;
+              scorePayloads.push({ participant_id: participant.id, game_number: gameNumber, score: val });
+            }
+
+            if (additionalColIdx !== -1) {
+              const val = Number.parseInt(cols[additionalColIdx], 10);
+              if (Number.isFinite(val)) additionalPayloads.push({ target_id: participant.id, additional_score: val });
+            }
+
+            if (bonusColIdx !== -1) {
+              const val = Number.parseInt(cols[bonusColIdx], 10);
+              if (Number.isFinite(val)) bonusPayloads.push({ target_id: participant.id, bonus: val });
+            }
+          }
+
+          if (scorePayloads.length === 0 && additionalPayloads.length === 0 && bonusPayloads.length === 0) {
+            alert('No matching participants found in import file. Check that names match exactly.');
+            return;
+          }
+
+          // Clear existing scores for matched participants then re-import
+          const matchedIds = Array.from(new Set(scorePayloads.map(s => s.participant_id)));
+          if (matchedIds.length > 0) {
+            try { await api.clearScoresForParticipants(tournament.id, matchedIds); } catch { /* continue */ }
+          }
+
+          const BATCH = 30;
+          for (let i = 0; i < scorePayloads.length; i += BATCH) {
+            await Promise.all(scorePayloads.slice(i, i + BATCH).map(p => api.addScore(tournament.id, p)));
+          }
+          await Promise.all(additionalPayloads.map(p =>
+            api.setStandingAdditionalScore(tournament.id, { target_kind: 'participant', target_id: p.target_id, additional_score: p.additional_score })
+          ));
+          await Promise.all(bonusPayloads.map(p =>
+            api.setStandingBonus(tournament.id, { target_kind: 'participant', target_id: p.target_id, bonus: p.bonus })
+          ));
+
+        } else {
+          // --- Legacy pivot format: participant_id, game_number, score ---
+          const participantIdIndex = headers.indexOf('participant_id');
+          const gameNumberIndex = headers.indexOf('game_number');
+          const scoreIndex = headers.indexOf('score');
+          if (participantIdIndex === -1 || gameNumberIndex === -1 || scoreIndex === -1) {
+            alert('Invalid import file. Expected columns: participant, game_1, game_2... (or legacy: participant_id, game_number, score)');
+            return;
+          }
+
+          const tasks: Promise<any>[] = [];
+          for (const line of lines.slice(1)) {
+            const cols = line.split(',').map(c => c.trim());
+            const participantId = Number.parseInt(cols[participantIdIndex], 10);
+            const gameNumber = Number.parseInt(cols[gameNumberIndex], 10);
+            const score = Number.parseInt(cols[scoreIndex], 10);
+            if (!Number.isFinite(participantId) || !Number.isFinite(gameNumber) || !Number.isFinite(score)) continue;
+            if (gameNumber < 1 || score < 0 || score > 300) continue;
+            tasks.push(api.addScore(tournament.id, { participant_id: participantId, game_number: gameNumber, score }));
+          }
+          await Promise.all(tasks);
         }
 
-        const tasks: Promise<any>[] = [];
-        for (const line of lines.slice(1)) {
-          const cols = line.split(',').map(c => c.trim());
-          const participantId = Number.parseInt(cols[participantIdIndex], 10);
-          const gameNumber = Number.parseInt(cols[gameNumberIndex], 10);
-          const score = Number.parseInt(cols[scoreIndex], 10);
-          if (!Number.isFinite(participantId) || !Number.isFinite(gameNumber) || !Number.isFinite(score)) continue;
-          if (gameNumber < 1 || score < 0 || score > 300) continue;
-          tasks.push(api.addScore(tournament.id, { participant_id: participantId, game_number: gameNumber, score }));
-        }
-
-        await Promise.all(tasks);
         await loadStandings();
       } catch (err) {
         console.error('Failed to import standings data:', err);
@@ -13506,48 +13597,30 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
             {standingsMode === 'players' && (
               <div className="inline-flex items-center gap-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Gender</span>
-                <div className={segmentedTabContainerClass}>
-                  <button
-                    onClick={() => setGenderFilter('all')}
-                    className={getSegmentedTabButtonClass(genderFilter === 'all', 'compact')}
-                  >
-                    All
-                  </button>
-                  <button
-                    onClick={() => setGenderFilter('female')}
-                    className={getSegmentedTabButtonClass(genderFilter === 'female', 'compact')}
-                  >
-                    F
-                  </button>
-                  <button
-                    onClick={() => setGenderFilter('male')}
-                    className={getSegmentedTabButtonClass(genderFilter === 'male', 'compact')}
-                  >
-                    M
-                  </button>
-                </div>
+                <select
+                  value={genderFilter}
+                  onChange={(e) => setGenderFilter(e.target.value as 'all' | 'male' | 'female')}
+                  className="text-[11px] font-semibold bg-white border border-black/15 rounded px-1.5 py-0.5 text-black/70 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                >
+                  <option value="all">All</option>
+                  <option value="female">F</option>
+                  <option value="male">M</option>
+                </select>
               </div>
             )}
             {standingsMode === 'players' && hasDivisions && (
               <div className="inline-flex items-center gap-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Zone</span>
-                <div className={segmentedTabContainerClass}>
-                  <button
-                    onClick={() => setDivisionFilter('all')}
-                    className={getSegmentedTabButtonClass(divisionFilter === 'all', 'compact')}
-                  >
-                    All
-                  </button>
+                <select
+                  value={divisionFilter}
+                  onChange={(e) => setDivisionFilter(e.target.value)}
+                  className="text-[11px] font-semibold bg-white border border-black/15 rounded px-1.5 py-0.5 text-black/70 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                >
+                  <option value="all">All</option>
                   {tournamentDivisions.map((d: string) => (
-                    <button
-                      key={d}
-                      onClick={() => setDivisionFilter(d)}
-                      className={getSegmentedTabButtonClass(divisionFilter === d, 'compact')}
-                    >
-                      {d}
-                    </button>
+                    <option key={d} value={d}>{d}</option>
                   ))}
-                </div>
+                </select>
               </div>
             )}
           </div>
@@ -13907,49 +13980,30 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
                   {standingsMode === 'players' && (
                     <div className="flex items-center gap-1 ml-0.5">
-                      <button
-                        onClick={() => setGenderFilter('all')}
-                        className={`px-1.5 py-0.5 rounded text-[11px] border border-transparent transition-colors ${genderFilter === 'all' ? 'font-black text-black' : 'font-medium text-black/40 hover:text-black/70'}`}
-                        title="Show all"
+                      <select
+                        value={genderFilter}
+                        onChange={(e) => setGenderFilter(e.target.value as 'all' | 'male' | 'female')}
+                        className="text-[11px] font-semibold bg-white border border-black/15 rounded px-1 py-0.5 text-black/70 focus:outline-none focus:ring-1 focus:ring-emerald-400"
                       >
-                        All
-                      </button>
-                      <button
-                        onClick={() => setGenderFilter('female')}
-                        className={`px-1.5 py-0.5 rounded text-[11px] border border-transparent transition-colors ${genderFilter === 'female' ? 'font-black text-black' : 'font-medium text-black/40 hover:text-black/70'}`}
-                        title="Show only female (F)"
-                      >
-                        F
-                      </button>
-                      <button
-                        onClick={() => setGenderFilter('male')}
-                        className={`px-1.5 py-0.5 rounded text-[11px] border border-transparent transition-colors ${genderFilter === 'male' ? 'font-black text-black' : 'font-medium text-black/40 hover:text-black/70'}`}
-                        title="Show only male (M)"
-                      >
-                        M
-                      </button>
+                        <option value="all">All</option>
+                        <option value="female">F</option>
+                        <option value="male">M</option>
+                      </select>
                     </div>
                   )}
                   {standingsMode === 'players' && hasDivisions && (
-                    <div className="flex items-center gap-0.5 ml-0.5 border-l border-black/10 pl-1.5">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-black/40 mr-0.5">Zone:</span>
-                      <button
-                        onClick={() => setDivisionFilter('all')}
-                        className={`px-1.5 py-0.5 rounded text-[11px] border border-transparent transition-colors ${divisionFilter === 'all' ? 'font-black text-black' : 'font-medium text-black/40 hover:text-black/70'}`}
-                        title="Show all divisions"
+                    <div className="flex items-center gap-1 ml-0.5 border-l border-black/10 pl-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-black/40">Zone:</span>
+                      <select
+                        value={divisionFilter}
+                        onChange={(e) => setDivisionFilter(e.target.value)}
+                        className="text-[11px] font-semibold bg-white border border-black/15 rounded px-1 py-0.5 text-black/70 focus:outline-none focus:ring-1 focus:ring-emerald-400"
                       >
-                        All
-                      </button>
-                      {tournamentDivisions.map((d: string) => (
-                        <button
-                          key={d}
-                          onClick={() => setDivisionFilter(d)}
-                          className={`px-1.5 py-0.5 rounded text-[11px] border border-transparent transition-colors ${divisionFilter === d ? 'font-black text-black' : 'font-medium text-black/40 hover:text-black/70'}`}
-                          title={`Show zone ${d}`}
-                        >
-                          {d}
-                        </button>
-                      ))}
+                        <option value="all">All</option>
+                        {tournamentDivisions.map((d: string) => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
                     </div>
                   )}
 
