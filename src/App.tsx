@@ -2124,7 +2124,6 @@ export default function App() {
                             src={normalizeWebUrl(dashboardPromo.video)}
                             autoPlay
                             loop
-                            muted
                             playsInline
                             className="w-full block rounded-lg"
                             poster={dashboardPromo.image ? normalizeWebUrl(dashboardPromo.image) : undefined}
@@ -3068,7 +3067,7 @@ export default function App() {
                       onChange={(e: any) => updateDraftDashboardPromoField('image', e.target.value)}
                     />
                     <Input
-                      label="Promo Video URL (mp4/webm — auto-plays, loops, muted)"
+                      label="Promo Video URL (mp4/webm — auto-plays, loops)"
                       value={sponsorsConfigDraft.dashboardPromo?.video || ''}
                       onChange={(e: any) => updateDraftDashboardPromoField('video', e.target.value)}
                     />
@@ -3105,7 +3104,6 @@ export default function App() {
                         src={normalizeWebUrl(sponsorsConfigDraft.dashboardPromo.video)}
                         autoPlay
                         loop
-                        muted
                         playsInline
                         className="w-full h-full object-cover"
                         poster={sponsorsConfigDraft.dashboardPromo.image ? normalizeWebUrl(sponsorsConfigDraft.dashboardPromo.image) : undefined}
