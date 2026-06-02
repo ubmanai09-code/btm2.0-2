@@ -4270,6 +4270,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const [activeWarningId, setActiveWarningId] = useState<string | null>(null);
   const playersTableRef = useRef<HTMLTableElement | null>(null);
   const teamsTableRef = useRef<HTMLTableElement | null>(null);
+  const importCSVInputRef = useRef<HTMLInputElement | null>(null);
+  const importTeamsInputRef = useRef<HTMLInputElement | null>(null);
   const say = (message: string) => alert(tx(message));
   const ask = (message: string) => confirm(tx(message));
 
@@ -5269,13 +5271,15 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     )}
                     {canManageParticipants && (
                       <div className="relative">
-                        <input 
-                          type="file" 
-                          accept=".csv" 
-                          className="absolute inset-0 opacity-0 cursor-pointer" 
+                        <input
+                          ref={importCSVInputRef}
+                          type="file"
+                          accept=".csv"
+                          className="hidden"
                           onChange={handleImportCSV}
                         />
-                        <Button size="sm" variant="outline" title="Import Players" ariaLabel="Import Players" className="px-2">
+                        <Button size="sm" variant="outline" title="Import Players" ariaLabel="Import Players" className="px-2"
+                          onClick={() => { if (importCSVInputRef.current) { importCSVInputRef.current.value = ''; importCSVInputRef.current.click(); } }}>
                           <Download size={14} />
                         </Button>
                       </div>
@@ -5620,8 +5624,15 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       )}
                       {canManageParticipants && (
                         <div className="relative">
-                          <input type="file" accept=".csv" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportTeams} />
-                          <Button size="sm" variant="outline" title="Import Teams" className="px-2">
+                          <input
+                            ref={importTeamsInputRef}
+                            type="file"
+                            accept=".csv"
+                            className="hidden"
+                            onChange={handleImportTeams}
+                          />
+                          <Button size="sm" variant="outline" title="Import Teams" className="px-2"
+                            onClick={() => { if (importTeamsInputRef.current) { importTeamsInputRef.current.value = ''; importTeamsInputRef.current.click(); } }}>
                             <Download size={14} />
                           </Button>
                         </div>
