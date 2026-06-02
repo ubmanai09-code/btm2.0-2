@@ -4402,7 +4402,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
     const reader = new FileReader();
     reader.onload = async (event) => {
-      const text = event.target?.result as string;
+      const text = (event.target?.result as string).replace(/^\uFEFF/, '');
       const lines = text.split('\n');
       const parsedHeaders = (lines[0] || '').split(',').map((s) => s.trim().toLowerCase());
       const hasHeader = parsedHeaders.includes('first name') || parsedHeaders.includes('last name');
@@ -4783,7 +4783,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     reader.onload = async (event) => {
       try {
         setPlayerSort({ key: 'none', direction: 'asc' });
-        const text = event.target?.result as string;
+        const text = (event.target?.result as string).replace(/^\uFEFF/, '');
         const rows = parseCsv(text);
         if (rows.length === 0) {
           inputEl.value = '';
@@ -6327,7 +6327,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
-        const text = event.target?.result as string;
+        const text = (event.target?.result as string).replace(/^\uFEFF/, '');
         const rows = parseCsv(text);
         if (rows.length < 2) {
           say('Invalid file format');
@@ -7683,7 +7683,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
-        const text = event.target?.result as string;
+        const text = (event.target?.result as string).replace(/^\uFEFF/, '');
         const lines = text.split('\n').filter(line => line.trim());
         if (lines.length < 2) return;
 
@@ -13351,7 +13351,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
-        const text = event.target?.result as string;
+        const text = (event.target?.result as string).replace(/^\uFEFF/, '');
         const lines = text.split('\n').filter(line => line.trim());
         if (lines.length < 2) return;
 
