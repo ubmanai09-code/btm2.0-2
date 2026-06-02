@@ -5948,6 +5948,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   const [lanePickerShift, setLanePickerShift] = useState(1);
   const [lanePickerSearchQuery, setLanePickerSearchQuery] = useState('');
   const [activeWarningId, setActiveWarningId] = useState<string | null>(null);
+  const importLanesInputRef = useRef<HTMLInputElement | null>(null);
   const say = (message: string) => alert(tx(message));
   const ask = (message: string) => confirm(tx(message));
 
@@ -6693,8 +6694,15 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
               )}
               {canManageLanes && (
                 <div className="relative">
-                  <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImportLanes} accept=".csv" />
-                  <Button size="sm" variant="outline" title="Import" ariaLabel="Import" className="px-2">
+                  <input
+                    ref={importLanesInputRef}
+                    type="file"
+                    className="hidden"
+                    accept=".csv"
+                    onChange={handleImportLanes}
+                  />
+                  <Button size="sm" variant="outline" title="Import" ariaLabel="Import" className="px-2"
+                    onClick={() => { if (importLanesInputRef.current) { importLanesInputRef.current.value = ''; importLanesInputRef.current.click(); } }}>
                     <Download size={14} />
                   </Button>
                 </div>
