@@ -307,6 +307,20 @@ body {
   color: var(--info-light) !important;
 }
 
+/* Sticky section toolbars — same dark look in both light and dark mode.
+   Override CSS variables locally so all child buttons/tabs automatically
+   inherit dark-mode text, border and background values. */
+.section-sticky-toolbar {
+  --text: #F8FAFC;
+  --text-secondary: #E2E8F0;
+  --text-tertiary: #B2BED1;
+  --text-muted: #B2BED1;
+  --border: rgba(148, 163, 184, 0.35);
+  background-color: rgba(30, 41, 59, 0.95) !important;
+  border-color: rgba(51, 65, 85, 0.6) !important;
+  color: #F8FAFC;
+}
+
 /* Desktop scores: team name group header row — same look in both light and dark mode */
 .score-team-header-row {
   background: rgba(100, 116, 139, 0.45) !important; /* slate-500/45 */
