@@ -263,18 +263,18 @@ body {
   background: var(--bg-secondary);
 }
 
-/* Mobile scores: team header dark mode */
-[data-theme="dark"] .mobile-score-team-header {
+/* Mobile scores: team header — same look in both light and dark mode */
+.mobile-score-team-header {
   background: rgba(100, 116, 139, 0.5) !important; /* slate-500/50 */
   border-color: rgba(148, 163, 184, 0.4) !important;
 }
-[data-theme="dark"] .mobile-score-team-name {
+.mobile-score-team-name {
   color: #ffffff !important;
 }
-[data-theme="dark"] .mobile-score-team-total-label {
+.mobile-score-team-total-label {
   color: rgba(203, 213, 225, 0.8) !important; /* slate-300 */
 }
-[data-theme="dark"] .mobile-score-team-total {
+.mobile-score-team-total {
   color: #86efac !important; /* green-300 */
 }
 [data-theme="dark"] .mobile-score-tot {
@@ -305,6 +305,16 @@ body {
 [data-theme="dark"] .scoring-table-surface td .text-sky-700,
 [data-theme="dark"] .scoring-table-surface th .text-sky-700 {
   color: var(--info-light) !important;
+}
+
+/* Desktop scores: team name group header row — same look in both light and dark mode */
+.score-team-header-row {
+  background: rgba(100, 116, 139, 0.45) !important; /* slate-500/45 */
+  border-top-color: rgba(148, 163, 184, 0.5) !important;
+}
+.score-team-header-row td {
+  color: #ffffff !important;
+  letter-spacing: 0.12em;
 }
 
 /* Scoring table header styling */

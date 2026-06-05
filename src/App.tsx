@@ -8251,7 +8251,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                   return (
                     <React.Fragment key={`${section.shiftNumber}-${p.id}`}>
                       {showTeamHeader && (
-                        <tr className={`border-t-2 border-gray-200 ${(teamIndexMap.get(teamHeaderKey) ?? 0) % 2 === 1 ? 'bg-blue-50/30' : 'bg-gray-50/40'}`}>
+                        <tr className={`score-team-header-row border-t-2 border-gray-200 ${(teamIndexMap.get(teamHeaderKey) ?? 0) % 2 === 1 ? 'bg-blue-50/30' : 'bg-gray-50/40'}`}>
                           <td className="px-2 pt-3 pb-0.5 sm:px-4 text-[9px] font-medium tracking-widest text-gray-500 text-center" colSpan={scoringTableColSpan}>
                             — {teamLabel} —
                           </td>
