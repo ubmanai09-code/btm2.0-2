@@ -323,6 +323,22 @@ body {
   color: #F8FAFC;
 }
 
+/* Outline buttons inside the dark toolbar: brighter icon/border + hover */
+.section-sticky-toolbar button.border {
+  border-color: rgba(148, 163, 184, 0.55) !important;
+  color: #CBD5E1 !important; /* slate-300 — bright enough to read */
+  background-color: transparent !important;
+}
+.section-sticky-toolbar button.border:hover {
+  border-color: #94A3B8 !important; /* slate-400 */
+  color: #F1F5F9 !important; /* near-white */
+  background-color: rgba(148, 163, 184, 0.15) !important;
+}
+.section-sticky-toolbar button.border svg {
+  color: inherit !important;
+  stroke: currentColor !important;
+}
+
 /* Desktop scores: team name group header row — same look in both light and dark mode */
 .score-team-header-row {
   background: rgba(100, 116, 139, 0.45) !important; /* slate-500/45 */
