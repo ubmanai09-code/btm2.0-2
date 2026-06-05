@@ -323,18 +323,19 @@ body {
   color: #F8FAFC;
 }
 
-/* Outline buttons inside the dark toolbar: brighter icon/border + hover */
-.section-sticky-toolbar button.border {
+/* Outline buttons inside the dark toolbar: brighter icon/border + hover.
+   Exclude orange (remove) and green (create) colored buttons. */
+.section-sticky-toolbar button.border:not([class*="bg-orange"]):not([class*="bg-emerald"]) {
   border-color: rgba(148, 163, 184, 0.55) !important;
   color: #CBD5E1 !important; /* slate-300 — bright enough to read */
   background-color: transparent !important;
 }
-.section-sticky-toolbar button.border:hover {
+.section-sticky-toolbar button.border:not([class*="bg-orange"]):not([class*="bg-emerald"]):hover {
   border-color: #94A3B8 !important; /* slate-400 */
   color: #F1F5F9 !important; /* near-white */
   background-color: rgba(148, 163, 184, 0.15) !important;
 }
-.section-sticky-toolbar button.border svg {
+.section-sticky-toolbar button.border:not([class*="bg-orange"]):not([class*="bg-emerald"]) svg {
   color: inherit !important;
   stroke: currentColor !important;
 }
