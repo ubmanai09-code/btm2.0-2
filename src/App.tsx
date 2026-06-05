@@ -6076,6 +6076,14 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       return;
     }
 
+    if (lanes.length > 0) {
+      const exportFirst = window.confirm('Auto-Assign will replace all current lane assignments. Export current assignments first? Click OK to export first, or Cancel to skip export and continue.');
+      if (exportFirst) {
+        handleExportLanes();
+      }
+      if (!ask('Auto-Assign will replace all current lane assignments. Continue?')) return;
+    }
+
     const shuffled = [...items];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -6455,6 +6463,12 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
   const handleClearLanes = async () => {
     if (!canManageLanes) return;
+    if (lanes.length > 0) {
+      const exportFirst = window.confirm('Export lane assignments before clearing? Click OK to export first, or Cancel to skip export and go straight to clearing.');
+      if (exportFirst) {
+        handleExportLanes();
+      }
+    }
     if (!ask('Clear all lane assignments for this tournament?')) return;
     try {
       await api.bulkUpdateLanes(tournament.id, []);
@@ -6708,7 +6722,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         <div className="sticky top-[7.25rem] z-20 bg-white/95 backdrop-blur-sm border border-[#AFDDE5]/50 rounded-md px-2 py-1.5 flex flex-wrap items-center justify-between gap-2 mb-2">
             <div className="flex flex-wrap items-center gap-1.5">
               <Button size="sm" variant="outline" onClick={loadData} title="Refresh" ariaLabel="Refresh" className="px-2">
-                <RefreshCw size={14} />
+                <RotateCw size={14} />
               </Button>
               {canManageLanes && (
                 <Button size="sm" variant="remove" onClick={handleClearLanes} title="Clear Assignments" ariaLabel="Clear Assignments" className="px-2">

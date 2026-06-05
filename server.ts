@@ -2557,30 +2557,81 @@ async function startServer() {
         INSERT INTO participants (tournament_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order, division) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
+      const restoreLaneStmt = db.prepare(`
+        INSERT INTO lane_assignments (tournament_id, participant_id, lane_number, shift_number)
+        VALUES (?, ?, ?, ?)
+      `);
 
       const transaction = db.transaction((players: ReturnType<typeof normalizeParticipant>[]) => {
         const affectedTeams = new Set<number>();
         if (replaceExisting) {
+          // Save existing lane assignments keyed by participant name before clearing,
+          // so they can be restored to the re-inserted participants.
+          const existingLanes = db.prepare(`
+            SELECT la.lane_number, la.shift_number, p.first_name, p.last_name
+            FROM lane_assignments la
+            JOIN participants p ON la.participant_id = p.id
+            WHERE la.tournament_id = ?
+          `).all(tournamentId) as Array<{ lane_number: number; shift_number: number; first_name: string; last_name: string }>;
+          const savedLanes = new Map<string, { lane_number: number; shift_number: number }[]>();
+          for (const lane of existingLanes) {
+            const key = `${(lane.first_name || '').trim().toLowerCase()}::${(lane.last_name || '').trim().toLowerCase()}`;
+            if (!savedLanes.has(key)) savedLanes.set(key, []);
+            savedLanes.get(key)!.push({ lane_number: lane.lane_number, shift_number: lane.shift_number });
+          }
+
           clearExisting.run(tournamentId);
-        }
-        for (const p of players) {
-          const assignedTeamOrder = p.team_id
-            ? (p.team_order || getNextTeamOrder(tournamentId, p.team_id))
-            : 0;
-          insert.run(
-            tournamentId,
-            p.first_name,
-            p.last_name,
-            p.gender,
-            p.hands,
-            p.club,
-            p.average,
-            p.email,
-            p.team_id,
-            assignedTeamOrder,
-            p.division || null
-          );
-          if (p.team_id) affectedTeams.add(p.team_id);
+
+          for (const p of players) {
+            const assignedTeamOrder = p.team_id
+              ? (p.team_order || getNextTeamOrder(tournamentId, p.team_id))
+              : 0;
+            const result = insert.run(
+              tournamentId,
+              p.first_name,
+              p.last_name,
+              p.gender,
+              p.hands,
+              p.club,
+              p.average,
+              p.email,
+              p.team_id,
+              assignedTeamOrder,
+              p.division || null
+            );
+            if (p.team_id) affectedTeams.add(p.team_id);
+
+            // Restore lane assignments for this participant if they existed before
+            const key = `${(p.first_name || '').trim().toLowerCase()}::${(p.last_name || '').trim().toLowerCase()}`;
+            const lanes = savedLanes.get(key);
+            if (lanes && lanes.length > 0) {
+              const newId = result.lastInsertRowid;
+              for (const lane of lanes) {
+                restoreLaneStmt.run(tournamentId, newId, lane.lane_number, lane.shift_number);
+              }
+              savedLanes.delete(key); // prevent duplicate restoration for same-name participants
+            }
+          }
+        } else {
+          for (const p of players) {
+            const assignedTeamOrder = p.team_id
+              ? (p.team_order || getNextTeamOrder(tournamentId, p.team_id))
+              : 0;
+            insert.run(
+              tournamentId,
+              p.first_name,
+              p.last_name,
+              p.gender,
+              p.hands,
+              p.club,
+              p.average,
+              p.email,
+              p.team_id,
+              assignedTeamOrder,
+              p.division || null
+            );
+            if (p.team_id) affectedTeams.add(p.team_id);
+          }
         }
         for (const teamId of affectedTeams) {
           resequenceTeamMembers(teamId);
@@ -2705,15 +2756,35 @@ async function startServer() {
     const { teams, replace_existing } = req.body;
     const tournamentId = req.params.id;
     const insertStmt = db.prepare("INSERT INTO teams (tournament_id, name, active) VALUES (?, ?, 1)");
-    const clearTeamLaneAssignments = db.prepare("DELETE FROM lane_assignments WHERE tournament_id = ?");
-    const deactivateTeams = db.prepare("UPDATE teams SET active = 0 WHERE tournament_id = ?");
-    const transaction = db.transaction((data) => {
+    const transaction = db.transaction((data: Array<{ name: string }>) => {
       if (replace_existing === true) {
-        clearTeamLaneAssignments.run(tournamentId);
-        deactivateTeams.run(tournamentId);
-      }
-      for (const t of data) {
-        insertStmt.run(tournamentId, t.name);
+        // Get existing active teams for this tournament
+        const existingTeams = db.prepare("SELECT id, name FROM teams WHERE tournament_id = ? AND active = 1").all(tournamentId) as Array<{ id: number; name: string }>;
+        const existingByName = new Map<string, number>(existingTeams.map((t) => [t.name.trim().toLowerCase(), t.id]));
+        const newNames = new Set(data.map((t) => t.name.trim().toLowerCase()));
+
+        // Deactivate and remove lane assignments only for teams not present in the new list
+        for (const existing of existingTeams) {
+          if (!newNames.has(existing.name.trim().toLowerCase())) {
+            db.prepare("UPDATE teams SET active = 0 WHERE id = ?").run(existing.id);
+            db.prepare("DELETE FROM lane_assignments WHERE team_id = ?").run(existing.id);
+          }
+        }
+
+        // Reactivate existing teams or insert truly new ones
+        for (const t of data) {
+          const normalizedName = t.name.trim().toLowerCase();
+          const existingId = existingByName.get(normalizedName);
+          if (existingId != null) {
+            db.prepare("UPDATE teams SET active = 1, name = ? WHERE id = ?").run(t.name, existingId);
+          } else {
+            insertStmt.run(tournamentId, t.name);
+          }
+        }
+      } else {
+        for (const t of data) {
+          insertStmt.run(tournamentId, t.name);
+        }
       }
     });
     transaction(Array.isArray(teams) ? teams : []);
