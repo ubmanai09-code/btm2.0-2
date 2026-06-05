@@ -6719,7 +6719,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
       {/* Lanes Grid */}
       <div>
-        <div className="section-sticky-toolbar sticky top-[7.25rem] z-20 bg-white/95 backdrop-blur-sm border border-[#AFDDE5]/50 rounded-md px-2 py-1.5 flex flex-wrap items-center justify-between gap-2 mb-2">
+        <div className="section-sticky-toolbar sticky top-[7.25rem] z-20 backdrop-blur-sm border rounded-md px-2 py-1.5 flex flex-wrap items-center justify-between gap-2 mb-2">
             <div className="flex flex-wrap items-center gap-1.5">
               <Button size="sm" variant="outline" onClick={loadData} title="Refresh" ariaLabel="Refresh" className="px-2">
                 <RotateCw size={14} />
@@ -7980,7 +7980,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
       </div>
 
       {!isScoreScreenMode && (
-      <div className="section-sticky-toolbar sticky top-[7.25rem] z-30 flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-white/95 backdrop-blur-sm py-1 border-b border-gray-200">
+      <div className="section-sticky-toolbar sticky top-[7.25rem] z-30 flex flex-col md:flex-row md:items-center md:justify-between gap-2 backdrop-blur-sm py-1 border-b">
         <div className="flex flex-wrap items-center gap-2">
           {tournament.shifts_count > 1 && (
           <div className={`${segmentedTabContainerClass} w-fit`}>

@@ -315,8 +315,10 @@ body {
   --text-secondary: #E2E8F0;
   --text-tertiary: #B2BED1;
   --text-muted: #B2BED1;
-  --border: rgba(148, 163, 184, 0.35);
-  background-color: rgba(30, 41, 59, 0.95) !important;
+  --border: rgba(148, 163, 184, 0.3);
+  --card: #293449;
+  --card-hover: #344060;
+  background-color: #1E293B !important;
   border-color: rgba(51, 65, 85, 0.6) !important;
   color: #F8FAFC;
 }
