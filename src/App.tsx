@@ -52,7 +52,7 @@ import {
   Eraser,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
-import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry, LeagueRankingResponse } from './services/api';
+import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry, LeagueRankingResponse, StandingAdditionalScore, StandingBonus } from './services/api';
 import { buildKnownBracketTemplateDefaults } from './utils/bracketTemplates';
 import {
   buildTournamentEngine,
@@ -454,7 +454,7 @@ const Button = ({
   const variants = {
     primary: 'ui-accent',
     secondary: 'bg-slate-700 text-white hover:bg-slate-800',
-    outline: 'border border-[var(--border)] text-[color:var(--text)] hover:bg-[color:var(--text)]/[0.03]',
+    outline: 'text-[color:var(--text)] hover:bg-[color:var(--text)]/[0.06] hover:border hover:border-[var(--border)]',
     ghost: 'text-[color:var(--text)] hover:bg-[color:var(--text)]/[0.05]',
     manage: 'ui-accent',
     create: 'bg-emerald-600 text-white hover:bg-emerald-700 border border-emerald-700',
@@ -519,8 +519,8 @@ const renderFemaleInitialUnderline = (name: string, isFemale: boolean) => {
   );
 };
 
-const segmentedTabContainerClass = 'inline-flex items-center rounded-lg border border-[var(--border)] bg-[color:var(--card)]/95 backdrop-blur-sm p-1 shadow-sm';
-const segmentedTabContainerOrangeClass = 'inline-flex items-center rounded-lg border border-[var(--border)] bg-[color:var(--card)]/95 backdrop-blur-sm p-1 shadow-sm';
+const segmentedTabContainerClass = 'inline-flex items-center gap-0.5';
+const segmentedTabContainerOrangeClass = 'inline-flex items-center gap-0.5';
 
 // Updated tab button styles for inactive and active states
 const getSegmentedTabButtonClass = (
@@ -2516,7 +2516,7 @@ export default function App() {
                     <Button type="submit" className="flex-1 justify-center py-3" title={view === 'edit' ? t('tournament.save_changes', 'Save Changes') : t('app.create_tournament', 'Create Tournament')} ariaLabel={view === 'edit' ? t('tournament.save_changes', 'Save Changes') : t('app.create_tournament', 'Create Tournament')}>
                       {view === 'edit' ? <Save size={16} /> : <Plus size={16} />}
                     </Button>
-                    <Button type="button" variant="outline" onClick={() => { setView('list'); setEditingTournament(null); }} className="px-8" title={t('common.close', 'Close')} ariaLabel={t('common.close', 'Close')}>
+                    <Button type="button" variant="outline" onClick={() => { setView('list'); setEditingTournament(null); }} className="px-8 border border-[var(--border)]" title={t('common.close', 'Close')} ariaLabel={t('common.close', 'Close')}>
                       <X size={16} />
                     </Button>
                   </div>
@@ -2663,7 +2663,7 @@ export default function App() {
                 <Button type="submit" className="flex-1 justify-center" title={t('auth.login', 'Login')} ariaLabel={t('auth.login', 'Login')}>
                   <LogIn size={16} />
                 </Button>
-                <Button type="button" variant="outline" onClick={() => setShowLogin(false)} className="px-6" title={t('common.close', 'Close')} ariaLabel={t('common.close', 'Close')}>
+                <Button type="button" variant="outline" onClick={() => setShowLogin(false)} className="px-6 border border-[var(--border)]" title={t('common.close', 'Close')} ariaLabel={t('common.close', 'Close')}>
                   <X size={16} />
                 </Button>
               </div>
@@ -2685,7 +2685,7 @@ export default function App() {
                 <Button type="submit" className="flex-1 justify-center" disabled={passwordSaving} title={t('common.save', 'Save')} ariaLabel={t('common.save', 'Save')}>
                   {passwordSaving ? t('auth.saving', 'Saving...') : <Save size={16} />}
                 </Button>
-                <Button type="button" variant="outline" onClick={() => setShowPasswordModal(false)} className="px-6" disabled={passwordSaving} title={t('common.close', 'Close')} ariaLabel={t('common.close', 'Close')}>
+                <Button type="button" variant="outline" onClick={() => setShowPasswordModal(false)} className="px-6 border border-[var(--border)]" disabled={passwordSaving} title={t('common.close', 'Close')} ariaLabel={t('common.close', 'Close')}>
                   <X size={16} />
                 </Button>
               </div>
@@ -3016,7 +3016,7 @@ export default function App() {
                     >
                       <Plus size={14} />
                     </Button>
-                    <Button size="sm" variant="outline" onClick={exportSponsorsConfigEditor} className="px-3" title={t('sponsors.export_config', 'Export Config')} ariaLabel={t('sponsors.export_config', 'Export Config')}>
+                    <Button size="sm" variant="outline" onClick={exportSponsorsConfigEditor} className="px-3 border border-[var(--border)]" title={t('sponsors.export_config', 'Export Config')} ariaLabel={t('sponsors.export_config', 'Export Config')}>
                       <Upload size={14} />
                     </Button>
                     <div className="relative">
@@ -3027,7 +3027,7 @@ export default function App() {
                         className="absolute inset-0 opacity-0 cursor-pointer"
                         onChange={importSponsorsConfigEditor}
                       />
-                      <Button size="sm" variant="outline" className="px-3" title={t('sponsors.import_config', 'Import Config')} ariaLabel={t('sponsors.import_config', 'Import Config')}>
+                      <Button size="sm" variant="outline" className="px-3 border border-[var(--border)]" title={t('sponsors.import_config', 'Import Config')} ariaLabel={t('sponsors.import_config', 'Import Config')}>
                         <Download size={14} />
                       </Button>
                     </div>
@@ -3334,10 +3334,10 @@ export default function App() {
             <div className="shrink-0 pt-3 mt-3 border-t border-black/10 bg-white">
               {sponsorsConfigError && <p className="text-xs text-red-600 font-semibold mb-2">{sponsorsConfigError}</p>}
               <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={saveSponsorsConfigEditor} className="px-3" title={t('common.save', 'Save')} ariaLabel={t('common.save', 'Save')}>
+              <Button size="sm" variant="outline" onClick={saveSponsorsConfigEditor} className="px-3 border border-[var(--border)]" title={t('common.save', 'Save')} ariaLabel={t('common.save', 'Save')}>
                 <Save size={14} />
               </Button>
-              <Button size="sm" variant="outline" onClick={resetSponsorsConfigEditor} className="px-3 normal-case tracking-normal" title={t('sponsors.reset_to_file', 'Reset to File')} ariaLabel={t('sponsors.reset_to_file', 'Reset to File')}>
+              <Button size="sm" variant="outline" onClick={resetSponsorsConfigEditor} className="px-3 normal-case tracking-normal border border-[var(--border)]" title={t('sponsors.reset_to_file', 'Reset to File')} ariaLabel={t('sponsors.reset_to_file', 'Reset to File')}>
                 {t('sponsors.reset_to_file', 'Reset to File')}
               </Button>
               </div>
@@ -5981,6 +5981,8 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   const [loading, setLoading] = useState(true);
   const [currentShift, setCurrentShift] = useState(1);
   const [selectedItem, setSelectedItem] = useState<{ id: number, type: 'assignment' | 'waiting' } | null>(null);
+  const [selectedLaneKeys, setSelectedLaneKeys] = useState<Set<string>>(new Set());
+  const [showClearLanesMenu, setShowClearLanesMenu] = useState(false);
   const [outOfOperationLanesByShift, setOutOfOperationLanesByShift] = useState<Record<number, number[]>>({});
   const [draggingAssignment, setDraggingAssignment] = useState<{ assignmentId: number; laneNumber: number; shiftNumber: number } | null>(null);
   const [isDesktopViewport, setIsDesktopViewport] = useState(false);
@@ -6227,8 +6229,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     if (type === 'participant') {
       await api.deleteParticipant(id);
     } else {
-      // Teams don't have a delete API yet, but we can add it or just ignore for now
-      // For now let's assume participants are the main concern
+      await api.deleteTeam(id);
     }
     loadData();
   };
@@ -6473,10 +6474,26 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     try {
       await api.bulkUpdateLanes(tournament.id, []);
       setSelectedItem(null);
+      setSelectedLaneKeys(new Set());
       await loadData();
     } catch (err) {
       console.error(err);
       say('Failed to clear lane assignments.');
+    }
+  };
+
+  const handleClearSelectedLanes = async () => {
+    if (!canManageLanes || selectedLaneKeys.size === 0) return;
+    if (!ask(`Clear assignments from ${selectedLaneKeys.size} selected lane${selectedLaneKeys.size > 1 ? 's' : ''}?`)) return;
+    try {
+      const toDelete = lanes.filter(l => selectedLaneKeys.has(`${l.lane_number}-${l.shift_number}`));
+      await Promise.all(toDelete.map(l => api.deleteLaneAssignment(l.id)));
+      setSelectedItem(null);
+      setSelectedLaneKeys(new Set());
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      say('Failed to clear selected lane assignments.');
     }
   };
 
@@ -6719,23 +6736,49 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
       {/* Lanes Grid */}
       <div>
-        <div className="section-sticky-toolbar sticky top-[7.25rem] z-20 backdrop-blur-sm border rounded-md px-2 py-1.5 flex flex-wrap items-center justify-between gap-2 mb-2">
-            <div className="flex flex-wrap items-center gap-1.5">
+        <div className="section-sticky-toolbar sticky top-[7.25rem] z-20 backdrop-blur-sm border rounded-md px-2 py-1.5 flex items-center justify-between gap-2 mb-2 overflow-x-auto">
+            <div className="flex items-center gap-1.5 shrink-0">
               <Button size="sm" variant="outline" onClick={loadData} title="Refresh" ariaLabel="Refresh" className="px-2">
                 <RotateCw size={14} />
               </Button>
               {canManageLanes && (
-                <Button size="sm" variant="remove" onClick={handleClearLanes} title="Clear Assignments" ariaLabel="Clear Assignments" className="px-2">
-                  <Eraser size={12} />
-                </Button>
+                <div className="relative">
+                  <Button size="sm" variant="remove"
+                    onClick={() => setShowClearLanesMenu(v => !v)}
+                    title="Clear Assignments" ariaLabel="Clear Assignments" className="px-2 flex items-center gap-1">
+                    <Eraser size={12} />
+                    {selectedLaneKeys.size > 0 && <span className="text-[10px] font-bold">({selectedLaneKeys.size})</span>}
+                    <ChevronDown size={10} />
+                  </Button>
+                  {showClearLanesMenu && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowClearLanesMenu(false)} />
+                      <div className="absolute left-0 top-9 z-50 bg-white border border-black/15 rounded-lg shadow-xl py-1 min-w-[200px]">
+                        <button
+                          disabled={selectedLaneKeys.size === 0}
+                          onClick={() => { setShowClearLanesMenu(false); void handleClearSelectedLanes(); }}
+                          className="w-full text-left px-3 py-2 text-xs font-medium text-black/70 hover:bg-red-50 hover:text-red-700 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+                          <Eraser size={12} />
+                          {selectedLaneKeys.size > 0 ? `Clear Selected (${selectedLaneKeys.size} lane${selectedLaneKeys.size > 1 ? 's' : ''})` : 'Clear Selected (none selected)'}
+                        </button>
+                        <div className="my-1 border-t border-black/10" />
+                        <button
+                          onClick={() => { setShowClearLanesMenu(false); void handleClearLanes(); }}
+                          className="w-full text-left px-3 py-2 text-xs font-medium text-black/70 hover:bg-red-50 hover:text-red-700 flex items-center gap-2">
+                          <Trash2 size={12} /> Clear All
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
               {canManageLanes && (
-                <Button size="sm" onClick={handleAutoAssign} variant="outline" title="Auto-Assign" ariaLabel="Auto-Assign" className="px-3">
+                <Button size="sm" onClick={handleAutoAssign} variant="outline" title="Auto-Assign" ariaLabel="Auto-Assign" className="px-3 font-bold text-emerald-600">
                   Auto Assign
                 </Button>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-1.5 ml-auto">
+            <div className="flex items-center gap-1.5 ml-auto shrink-0">
               {canManageLanes && (
                 <Button size="sm" variant="outline" onClick={handleSaveLanes} title="Save" ariaLabel="Save" className="px-2">
                   <Save size={14} />
@@ -6808,6 +6851,32 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
               >
                 <div className="bg-slate-100/80 text-slate-800 px-2 py-1 flex justify-between items-center group/header border-b border-slate-200/90">
                   <div className="flex items-center gap-1.5">
+                    {canManageLanes && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedLaneKeys(prev => {
+                            const next = new Set(prev);
+                            const key = `${laneNumber}-${shift}`;
+                            if (next.has(key)) next.delete(key); else next.add(key);
+                            return next;
+                          });
+                        }}
+                        title="Select lane for bulk clear"
+                        className={`w-3 h-3 shrink-0 rounded-sm border transition-all cursor-pointer flex items-center justify-center ${
+                          selectedLaneKeys.has(`${laneNumber}-${shift}`)
+                            ? 'bg-red-500 border-red-600'
+                            : 'border-slate-300 bg-slate-100/50 hover:border-slate-400'
+                        }`}
+                      >
+                        {selectedLaneKeys.has(`${laneNumber}-${shift}`) && (
+                          <svg viewBox="0 0 10 10" className="w-2.5 h-2.5" fill="none">
+                            <polyline points="1.5,5 4,7.5 8.5,2" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </button>
+                    )}
                     <span className="font-bold text-[9px] uppercase tracking-widest">Lane {laneNum}</span>
                     <button
                       type="button"
@@ -7980,10 +8049,10 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
       </div>
 
       {!isScoreScreenMode && (
-      <div className="section-sticky-toolbar sticky top-[7.25rem] z-30 flex flex-col md:flex-row md:items-center md:justify-between gap-2 backdrop-blur-sm py-1 border-b">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="section-sticky-toolbar sticky top-[7.25rem] z-30 flex items-center justify-between gap-2 backdrop-blur-sm py-1 border-b overflow-x-auto">
+        <div className="flex items-center gap-2 shrink-0">
           {tournament.shifts_count > 1 && (
-          <div className={`${segmentedTabContainerClass} w-fit`}>
+          <div className="inline-flex items-center gap-0.5">
             {shiftNumbers.map(shift => (
               <button
                 key={shift}
@@ -8007,7 +8076,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto md:justify-end">
+        <div className="flex items-center gap-1.5 shrink-0 ml-auto">
           {onPresentScoreScreen && (
             <Button size="sm" variant="outline" onClick={onPresentScoreScreen} title="Present Score Screen" ariaLabel="Present Score Screen" className="px-2">
               <Eye size={14} />
@@ -8767,6 +8836,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   const [participants, setParticipants] = React.useState<Participant[]>([]);
   const [standings, setStandings] = React.useState<Standing[]>([]);
   const [bracketRows, setBracketRows] = React.useState<any[]>([]);
+  const [additionalScoresByKey, setAdditionalScoresByKey] = React.useState<Record<string, number>>({});
+  const [bonusScoresByKey, setBonusScoresByKey] = React.useState<Record<string, number>>({});
   const [loading, setLoading] = React.useState(false);
   const [loadError, setLoadError] = React.useState<string | null>(null);
 
@@ -9010,11 +9081,35 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       api.getParticipants(tournament.id).catch(() => []),
       api.getStandings(tournament.id).catch(() => []),
       api.getBrackets(tournament.id).catch(() => []),
-    ]).then(([p, s, b]) => {
+      api.getStandingsAdditionalScores(tournament.id).catch(() => []),
+      api.getStandingsBonuses(tournament.id).catch(() => []),
+    ]).then(([p, s, b, additionalRaw, bonusRaw]) => {
       if (cancelled) return;
       setParticipants(Array.isArray(p) ? p as Participant[] : []);
       setStandings(Array.isArray(s) ? s as Standing[] : []);
       setBracketRows(Array.isArray(b) ? b : []);
+      const addMap: Record<string, number> = {};
+      if (Array.isArray(additionalRaw)) {
+        for (const row of (additionalRaw as StandingAdditionalScore[])) {
+          const kind = row.target_kind === 'team' ? 'team' : 'participant';
+          const targetId = Number(row.target_id);
+          if (Number.isFinite(targetId) && targetId > 0) {
+            addMap[`${kind}-${targetId}`] = Number(row.additional_score) || 0;
+          }
+        }
+      }
+      setAdditionalScoresByKey(addMap);
+      const bonusMap: Record<string, number> = {};
+      if (Array.isArray(bonusRaw)) {
+        for (const row of (bonusRaw as StandingBonus[])) {
+          const kind = row.target_kind === 'team' ? 'team' : 'participant';
+          const targetId = Number(row.target_id);
+          if (Number.isFinite(targetId) && targetId > 0) {
+            bonusMap[`${kind}-${targetId}`] = Number(row.bonus) || 0;
+          }
+        }
+      }
+      setBonusScoresByKey(bonusMap);
     }).catch((e: any) => { if (!cancelled) setLoadError(e?.message || 'Failed to load'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -9116,22 +9211,32 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   const importedTopSeedEntries = React.useMemo(() => {
     if (seedImportMode !== 'top-seeds' || standings.length === 0) return [] as Array<{ id: string; name: string; seed: number; totalScore: number; teamName: string | null }>;
     if (!hasEnoughStandingsForTopSeeds) return [] as Array<{ id: string; name: string; seed: number; totalScore: number; teamName: string | null }>;
+    const isTeam = tournament.type === 'team';
+    const getExtra = (pid: number) => {
+      const key = `${isTeam ? 'team' : 'participant'}-${pid}`;
+      return (Number(additionalScoresByKey[key]) || 0) + (Number(bonusScoresByKey[key]) || 0);
+    };
     return [...standings]
-      .sort((a, b) => b.total_score - a.total_score)
+      .sort((a, b) => (b.total_score + getExtra(b.participant_id)) - (a.total_score + getExtra(a.participant_id)))
       .slice(0, normalizedTopSeedsCount)
       .map((standing, index) => ({
         id: `participant-${standing.participant_id}`,
         name: standing.participant_name || `Participant ${standing.participant_id}`,
         seed: index + 1,
-        totalScore: standing.total_score,
+        totalScore: standing.total_score + getExtra(standing.participant_id),
         teamName: standing.team_name || null,
       }));
-  }, [seedImportMode, standings, normalizedTopSeedsCount, hasEnoughStandingsForTopSeeds]);
+  }, [seedImportMode, standings, normalizedTopSeedsCount, hasEnoughStandingsForTopSeeds, additionalScoresByKey, bonusScoresByKey, tournament.type]);
 
   // ── Manually picked entries (mode: manual = standings-picker) ─────────────
   const pickedStandingsEntries = React.useMemo(() => {
     if (seedImportMode !== 'manual' || standings.length === 0) return [] as Array<{ id: string; name: string; seed: number; totalScore: number; teamName: string | null }>;
-    const sortedAll = [...standings].sort((a, b) => b.total_score - a.total_score);
+    const isTeam = tournament.type === 'team';
+    const getExtra = (pid: number) => {
+      const key = `${isTeam ? 'team' : 'participant'}-${pid}`;
+      return (Number(additionalScoresByKey[key]) || 0) + (Number(bonusScoresByKey[key]) || 0);
+    };
+    const sortedAll = [...standings].sort((a, b) => (b.total_score + getExtra(b.participant_id)) - (a.total_score + getExtra(a.participant_id)));
     return manualPickedIds
       .map((pid, index) => {
         const s = sortedAll.find(x => x.participant_id === pid);
@@ -9140,18 +9245,21 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           id: `participant-${s.participant_id}`,
           name: s.participant_name || `Participant ${s.participant_id}`,
           seed: index + 1,
-          totalScore: s.total_score,
+          totalScore: s.total_score + getExtra(s.participant_id),
           teamName: s.team_name || null,
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
-  }, [seedImportMode, standings, manualPickedIds]);
+  }, [seedImportMode, standings, manualPickedIds, additionalScoresByKey, bonusScoresByKey, tournament.type]);
 
   // ── Participant nodes ─────────────────────────────────────────────────────
   const shortenParticipantName = React.useCallback((fullName: string): string => {
     const parts = String(fullName || '').trim().split(/\s+/);
     if (parts.length < 2) return fullName;
-    return `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.`;
+    const lastPart = parts[parts.length - 1];
+    // Don't abbreviate if last part starts with a digit (e.g. team numbers like "Mixed 28")
+    if (/^\d/.test(lastPart)) return fullName;
+    return `${parts[0]} ${lastPart[0].toUpperCase()}.`;
   }, []);
 
   const participantNodes = React.useMemo((): TournamentParticipantNode[] => {
@@ -11843,32 +11951,25 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
             <div className="flex items-center rounded-md border border-black/10 overflow-hidden bg-white">
               <button
                 onClick={() => setBracketZoom(z => Math.max(0.25, +(z - 0.1).toFixed(2)))}
-                className="h-7 px-2 text-black/50 hover:bg-gray-100 hover:text-black transition-colors flex items-center gap-1 text-[11px] font-medium border-r border-black/10"
+                className="h-7 px-2.5 text-black/50 hover:bg-gray-100 hover:text-black transition-colors flex items-center gap-1 text-[11px] font-medium border-r border-black/10"
                 title="Zoom Out">
-                <ZoomOut size={12} /> <span className="hidden sm:inline">Zoom Out</span>
+                <ZoomOut size={12} /> <span>–</span>
               </button>
               <span className="px-2 text-[11px] font-mono text-black/50 select-none">{Math.round(bracketZoom * 100)}%</span>
               <button
                 onClick={() => setBracketZoom(z => Math.min(3, +(z + 0.1).toFixed(2)))}
-                className="h-7 px-2 text-black/50 hover:bg-gray-100 hover:text-black transition-colors flex items-center gap-1 text-[11px] font-medium border-l border-black/10"
+                className="h-7 px-2.5 text-black/50 hover:bg-gray-100 hover:text-black transition-colors flex items-center gap-1 text-[11px] font-medium border-l border-black/10"
                 title="Zoom In">
-                <ZoomIn size={12} /> <span className="hidden sm:inline">Zoom In</span>
+                <ZoomIn size={12} /> <span>+</span>
               </button>
             </div>
-            {/* Snap to View */}
-            <button
-              onClick={() => setBracketZoom(1)}
-              className="h-7 px-2.5 rounded-md border border-black/10 bg-white text-black/50 hover:bg-gray-100 hover:text-black transition-colors flex items-center gap-1 text-[11px] font-medium"
-              title="Reset zoom to 100%">
-              <Maximize2 size={12} /> <span>Snap to View</span>
-            </button>
             {/* Export PDF/Image */}
             <div className="relative">
               <button
                 onClick={() => setShowExportDialog(v => !v)}
                 className="h-7 px-2.5 rounded-md border border-black/10 bg-white text-black/50 hover:bg-gray-100 hover:text-black transition-colors flex items-center gap-1 text-[11px] font-medium"
                 title="Export bracket">
-                <Download size={12} /> <span>Export (PDF/Image)</span>
+                <Download size={12} /> <span>Export</span>
               </button>
               {showExportDialog && (
                 <div className="absolute left-0 top-9 z-50 bg-white border border-black/15 rounded-lg shadow-xl p-3 flex flex-col gap-2 min-w-[180px]">
@@ -11892,6 +11993,57 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                 </div>
               )}
             </div>
+            {/* Export bracket config as JSON */}
+            {activeBracketId && (() => {
+              const activeBkt = savedBrackets.find(b => b.id === activeBracketId);
+              return activeBkt ? (
+                <button
+                  onClick={() => {
+                    const blob = new Blob([JSON.stringify(activeBkt, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${activeBkt.name.replace(/[^a-z0-9]/gi, '_')}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="h-7 px-2.5 rounded-md border border-black/10 bg-white text-black/50 hover:bg-gray-100 hover:text-black transition-colors flex items-center gap-1 text-[11px] font-medium"
+                  title="Export bracket config as JSON">
+                  <Upload size={12} className="rotate-180" /> <span>Export JSON</span>
+                </button>
+              ) : null;
+            })()}
+            {/* Import bracket config from JSON */}
+            <label
+              className="h-7 px-2.5 rounded-md border border-black/10 bg-white text-black/50 hover:bg-gray-100 hover:text-black transition-colors flex items-center gap-1 text-[11px] font-medium cursor-pointer"
+              title="Import bracket config from JSON file">
+              <Upload size={12} /> <span>Import JSON</span>
+              <input
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (!file) return;
+                  try {
+                    const text = await file.text();
+                    const parsed = JSON.parse(text) as SavedBracketConfig;
+                    if (!parsed?.name || !Array.isArray(parsed?.rounds)) {
+                      alert('Invalid bracket file: missing required fields (name, rounds).');
+                      return;
+                    }
+                    const imported: SavedBracketConfig = { ...parsed, id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, createdAt: new Date().toISOString() };
+                    await api.saveBracketV2Config(tournament.id, imported);
+                    setSavedBrackets(prev => [...prev, imported]);
+                    setSaveBracketFeedback(`Imported "${imported.name}"`);
+                    setTimeout(() => setSaveBracketFeedback(null), 3000);
+                  } catch (err: any) {
+                    alert(`Failed to import bracket: ${err?.message || 'Unknown error'}`);
+                  }
+                }}
+              />
+            </label>
             {/* List / Visual toggle */}
             <div className="ml-auto flex items-center rounded-md border border-black/10 overflow-hidden bg-white">
               <button
@@ -12370,7 +12522,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const [additionalDrafts, setAdditionalDrafts] = useState<Record<string, string>>({});
   const [savingAdditionalKey, setSavingAdditionalKey] = useState<string | null>(null);
   const [additionalApiAvailable, setAdditionalApiAvailable] = useState(true);
-  const [standingsMode, setStandingsMode] = useState<'players' | 'teams'>('players');
+  const [standingsMode, setStandingsMode] = useState<'players' | 'teams'>(tournament.type === 'team' ? 'teams' : 'players');
   const [autoScrollSpeed, setAutoScrollSpeed] = useState<'slow' | 'medium' | 'fast'>('slow');
   const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -12385,6 +12537,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const [manualWinnersByKey, setManualWinnersByKey] = useState<Record<string, ManualWinnerEntry>>({});
   const [savingManualWinnerKey, setSavingManualWinnerKey] = useState<string | null>(null);
   const [winnerEditorTarget, setWinnerEditorTarget] = useState<{ division: 'all' | 'female' | 'male'; place: 'first' | 'second' | 'third' } | null>(null);
+  const [highlightsExpanded, setHighlightsExpanded] = useState(false);
   const [winnerEditorSelectValue, setWinnerEditorSelectValue] = useState('');
   const [winnerEditorManualInput, setWinnerEditorManualInput] = useState('');
   const [winnerEditorCandidatesText, setWinnerEditorCandidatesText] = useState('');
@@ -13796,8 +13949,23 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
               </Card>
 
               <Card className="p-2.5 md:p-3">
-                <h4 className="font-bold text-sm mb-0.5">{tx('Tournament Highlights')}</h4>
-                <p className="text-[11px] md:text-xs text-black/40 mb-1.5 md:mb-2">{tx('Quick stats and highest single game score by category')}</p>
+                {/* Header row — always visible; on small screens acts as toggle */}
+                <button
+                  type="button"
+                  onClick={() => setHighlightsExpanded(v => !v)}
+                  className="w-full flex items-center justify-between gap-2 md:cursor-default md:pointer-events-none"
+                >
+                  <div>
+                    <h4 className="font-bold text-sm mb-0.5 text-left">{tx('Tournament Highlights')}</h4>
+                    <p className="text-[11px] md:text-xs text-black/40 mb-0 text-left">{tx('Quick stats and highest single game score by category')}</p>
+                  </div>
+                  <ChevronDown
+                    size={16}
+                    className={`shrink-0 text-black/40 transition-transform md:hidden ${highlightsExpanded ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {/* Body — hidden on small screens unless expanded; always visible on md+ */}
+                <div className={`mt-1.5 md:mt-2 ${highlightsExpanded ? 'block' : 'hidden'} md:block`}>
 
                 <div className="grid grid-cols-3 gap-1.5 md:grid-cols-5 md:gap-2 mb-1.5 md:mb-2">
                   <div className="rounded-md border border-black/10 p-1.5 md:p-2 bg-black/[0.02] text-center">
@@ -13854,8 +14022,9 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     )}
                   </div>
                 </div>
+                </div>{/* end collapsible body */}
               </Card>
-            </div>
+            </div>{/* end 2-col grid */}
 
             {winnerEditorTarget && !isPublicView && (
           <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center p-4" onClick={closeWinnerEditor}>
@@ -14016,10 +14185,19 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
         <Card className="overflow-visible relative">
           {!isStandingsScreenMode && (
-          <div className="px-4 py-2 border-b border-black/5 flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-white/95">
-            <div>
-              {!isStandingsScreenMode && (
-                <>
+          <div className="border-b border-black/5 bg-white/95">
+            {/* Title row — visible on small screens above toolbar */}
+            <div className="flex items-center gap-2 px-4 pt-2 pb-1 sm:hidden">
+              <h4 className="font-bold text-sm">{tx('Ranking')}</h4>
+              {standingsMode === 'teams' && isTeamTournament && !teamsCountValid && (
+                <p className="text-xs text-amber-700">Team mismatch — review Participants page.</p>
+              )}
+            </div>
+            {/* Main toolbar row */}
+            <div className="px-4 py-2 flex items-center justify-between gap-2 overflow-x-auto">
+              {/* Left: title (hidden on small, shown on sm+) + mode toggle */}
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="hidden sm:block shrink-0">
                   <h4 className="font-bold text-sm">{tx('Ranking')}</h4>
                   {standingsMode === 'teams' && isTeamTournament && !teamsCountValid && (
                     <p className="text-xs mt-1 text-amber-700">
@@ -14029,7 +14207,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                   )}
                   {!bonusApiAvailable && (
                     <p className="text-xs mt-1 text-amber-700">
-                      Bonus editing is currently unavailable on this server build. Standings still load using score totals.
+                      Bonus editing is currently unavailable on this server build.
                     </p>
                   )}
                   {!additionalApiAvailable && hasAdditionalScores && (
@@ -14037,32 +14215,45 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       Additional score editing is currently unavailable on this server build.
                     </p>
                   )}
-                </>
-              )}
-            </div>
-            <div className="flex items-center justify-between gap-2 w-full md:flex-1">
-              {!isStandingsScreenMode && (
-                <div className="flex items-center">
-                <div className={`flex items-center gap-1 ${segmentedTabContainerClass} p-0.5`}>
-                  <button
-                    onClick={() => setStandingsMode('players')}
-                    className={getSegmentedTabButtonClass(standingsMode === 'players', 'compact', 'px-2.5 py-1 text-[10px]')}
-                  >
-                    Players
-                  </button>
-
+                </div>
+                {/* Mode toggle: icons with Teams-first for team tournaments */}
+                <div className="flex items-center gap-0.5">
+                  {isTeamTournament && (
+                    <button
+                      onClick={() => setStandingsMode('teams')}
+                      title="Teams"
+                      className={`h-7 w-7 flex items-center justify-center rounded-md transition-colors ${
+                        standingsMode === 'teams' ? 'bg-orange-500 text-white' : 'text-black/50 hover:text-black/80'
+                      }`}
+                    >
+                      <Users size={15} />
+                    </button>
+                  )}
+                  {/* Players icon — on small screens shows gender dropdown on click */}
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        setStandingsMode('players');
+                      }}
+                      title="Players"
+                      className={`h-7 w-7 flex items-center justify-center rounded-md transition-colors ${
+                        standingsMode === 'players' ? 'bg-orange-500 text-white' : 'text-black/50 hover:text-black/80'
+                      }`}
+                    >
+                      <User size={14} />
+                    </button>
+                  </div>
+                  {/* Gender filter — shown inline when players mode active */}
                   {standingsMode === 'players' && (
-                    <div className="flex items-center gap-1 ml-0.5">
-                      <select
-                        value={genderFilter}
-                        onChange={(e) => setGenderFilter(e.target.value as 'all' | 'male' | 'female')}
-                        className="text-[11px] font-semibold bg-white border border-black/15 rounded px-1 py-0.5 text-black/70 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                      >
-                        <option value="all">All</option>
-                        <option value="female">F</option>
-                        <option value="male">M</option>
-                      </select>
-                    </div>
+                    <select
+                      value={genderFilter}
+                      onChange={(e) => setGenderFilter(e.target.value as 'all' | 'male' | 'female')}
+                      className="h-7 text-[11px] font-semibold bg-transparent border-0 rounded px-1 py-0 text-black/60 focus:outline-none focus:ring-1 focus:ring-orange-400 cursor-pointer"
+                    >
+                      <option value="all">All</option>
+                      <option value="female">F</option>
+                      <option value="male">M</option>
+                    </select>
                   )}
                   {standingsMode === 'players' && hasDivisions && (
                     <div className="flex items-center gap-1 ml-0.5 border-l border-black/10 pl-1.5">
@@ -14070,7 +14261,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       <select
                         value={divisionFilter}
                         onChange={(e) => setDivisionFilter(e.target.value)}
-                        className="text-[11px] font-semibold bg-white border border-black/15 rounded px-1 py-0.5 text-black/70 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                        className="text-[11px] font-semibold bg-white border border-black/15 rounded px-1 py-0.5 text-black/70 focus:outline-none focus:ring-1 focus:ring-orange-400"
                       >
                         <option value="all">All</option>
                         {tournamentDivisions.map((d: string) => (
@@ -14079,20 +14270,10 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       </select>
                     </div>
                   )}
-
-                  {isTeamTournament && (
-                    <button
-                      onClick={() => setStandingsMode('teams')}
-                      className={getSegmentedTabButtonClass(standingsMode === 'teams', 'compact', 'px-2.5 py-1 text-[10px]')}
-                    >
-                      Teams
-                    </button>
-                  )}
                 </div>
-                </div>
-              )}
+              </div>
 
-              <div className="flex flex-wrap items-center gap-2 ml-auto">
+              <div className="flex items-center gap-2 ml-auto shrink-0">
               {!isStandingsScreenMode && onPresentStandingsScreen && (
                 <Button
                   variant="outline"

@@ -326,16 +326,30 @@ body {
 /* Outline buttons inside the dark toolbar: brighter icon/border + hover.
    Exclude orange (remove) and green (create) colored buttons. */
 .section-sticky-toolbar button.border:not([class*="bg-orange"]):not([class*="bg-emerald"]) {
-  border-color: rgba(148, 163, 184, 0.55) !important;
-  color: #CBD5E1 !important; /* slate-300 — bright enough to read */
-  background-color: transparent !important;
+  border-color: rgba(203, 213, 225, 0.7) !important;
+  color: #E2E8F0 !important; /* slate-200 */
+  background-color: rgba(255, 255, 255, 0.06) !important;
 }
 .section-sticky-toolbar button.border:not([class*="bg-orange"]):not([class*="bg-emerald"]):hover {
-  border-color: #94A3B8 !important; /* slate-400 */
-  color: #F1F5F9 !important; /* near-white */
-  background-color: rgba(148, 163, 184, 0.15) !important;
+  border-color: #CBD5E1 !important; /* slate-300 */
+  color: #F8FAFC !important; /* near-white */
+  background-color: rgba(203, 213, 225, 0.2) !important;
 }
 .section-sticky-toolbar button.border:not([class*="bg-orange"]):not([class*="bg-emerald"]) svg {
+  color: inherit !important;
+  stroke: currentColor !important;
+}
+.section-sticky-toolbar label.border {
+  border-color: rgba(203, 213, 225, 0.7) !important;
+  color: #E2E8F0 !important;
+  background-color: rgba(255, 255, 255, 0.06) !important;
+}
+.section-sticky-toolbar label.border:hover {
+  border-color: #CBD5E1 !important;
+  color: #F8FAFC !important;
+  background-color: rgba(203, 213, 225, 0.2) !important;
+}
+.section-sticky-toolbar label.border svg {
   color: inherit !important;
   stroke: currentColor !important;
 }
