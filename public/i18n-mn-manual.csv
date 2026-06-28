@@ -104,7 +104,7 @@ app.unnamed_sponsor,Unnamed sponsor,Нэргүй спонсор
 app.location_tba,Location TBA,Байршил тодорхойгүй
 app.organizer_tba,Organizer TBA,Зохион байгуулагч тодорхойгүй
 app.back_to_list,Back to List,Жагсаалт руу буцах
-app.footer_tagline,Total tournament control. From first frame to final payout.,Тэмцээнийг эхний фрэймээс эцсийн шагнал хүртэл бүрэн удирдана.
+app.footer_tagline,Total tournament control. From first frame to final payout.,Тэмцээнийг эхний фрэймээс эцсийн ялагч тодортол бүрэн удирдана.
 app.footer_copyright,© Murat D. 2026,© Murat D. 2026
 auth.login,Login,Нэвтрэх
 auth.login_subtitle,Moderator and Admin access only,Зөвхөн модератор болон админ нэвтэрнэ
@@ -262,7 +262,7 @@ brackets.rollback_seeds,Rollback All Seed Changes,Бүх оноолтын өөр
 brackets.save_setup,Save Bracket Setup,Бракет тохиргоо хадгалах
 players.save,Save Players,Тамирчдыг хадгалах
 teams.save,Save Teams,Багуудыг хадгалах
-players.search_placeholder,"Search by name, club, or email",Нэр клуб эсвэл и-мэйлээр хайх
+players.search_placeholder,"Search by name, club, or email",Нэрээр, клубаар эсвэл и-мэйлээр хайх
 players.search,Search Player,Тамирчин хайх
 players.sort_by_club,Sort by club,Клубээр эрэмбэлэх
 lanes.swap_next,Swap with next player,Дараагийн тамирчинтай солих
@@ -331,7 +331,7 @@ results.winner,Winner,Ялагч
 results.winner_team,Winner Team,Ялагч баг
 app.nav.admin_settings,Admin Settings,Админы тохиргоо
 auth.session_expired,Session expired. Please login again.,Нэвтрэх хугацаа дууссан. Дахин нэвтэрнэ үү.
-bracket.survivor_elimination,Survivor Elimination,Амьд үлдэх хасагдах шат
+bracket.survivor_elimination,Survivor Elimination,Шууд хасагдах шат
 dashboard.advertise_here,Advertise Here,Энд сурталчилгаагаа байршуулаарай
 dashboard.promo_subtitle,Promote your brand with a dashboard promo image.,Брэндээ самбарын сурталчилгааны зургаар танилцуулна.
 data.import_empty,Imported file is empty.,Импортолсон файл хоосон байна.
@@ -350,4 +350,216 @@ tournament.games,Games,Тоглолт
 tournament.lanes,Lanes,Замууд
 tournament.restore_confirm,Restore this tournament from archive?,Энэ тэмцээнийг архиваас сэргээх үү?
 tournament.shifts,Shifts,Ээлжүүд
-,,
+app.nav.account,Account,Бүртгэл
+auth.moderator_access,Moderator Access,Модераторын эрх
+confirm_password,Confirm Password,Нууц үг баталгаажуулах
+first_name,First Name,Нэр
+games_count,Games Count,Тоглолтын тоо
+genders_rule,Genders Rule,Хүйсийн дүрэм
+has_additional_scores,Has Additional Scores,Нэмэлт оноо ашиглах
+has_bonus,Has Bonus,Бонус ашиглах
+lanes_count,Lanes Count,Замын тоо
+last_name,Last Name,Овог
+match_play_type,Match Play Type,Бракет төрөл
+new_password,New Password,Шинэ нууц үг
+oil_pattern,Oil Pattern,Тосолгооны мэдээлэл
+players_per_lane,Players Per Lane,Нэг замд тоглох оролцогч
+players_per_team,Players Per Team,Нэг багийн оролцогч
+public.tab.brackets_v2,Brackets,Бракет
+qualified_count,Qualified Count,Шалгарах тоо
+shifts_count,Shifts Count,Ээлжийн тоо
+show_player_style,Show Player Style,Тоглогчийн стилийг харуулах
+tab.brackets_v2,Brackets,Бракет
+tab.league,League,Лиг
+team_id,Team ID,Багийн ID
+tournament_ids,Tournament IDs,Тэмцээний ID-ууд
+app.nav.go_home,Go to Home Page,Нүүр хуудас руу буцах
+app.dashboard_sponsors,Dashboard Sponsors,Самбарын спонсорууд
+app.no_dashboard_sponsors,No dashboard sponsors configured.,Самбарын спонсор тохируулаагүй байна.
+sponsors.manage_sponsors,Manage Sponsors,Спонсор удирдах
+sponsors.manage_ad_block,Manage Ad Block,Сурталчилгааны блок удирдах
+dashboard.promo_alt,Dashboard promo,Самбарын сурталчилгаа
+dashboard.upload_promo_image,Upload promo image,Сурталчилгааны зураг оруулах
+tournament.archive,Archive Tournament,Тэмцээнийг архивлах
+tournament.delete,Delete Tournament,Тэмцээн устгах
+archive.title,Archive,Архив
+archive.hide,Hide archive,Архив нуух
+archive.show,Show archive,Архив харуулах
+tournament.open,Open Tournament,тэмцээнийг нээх
+tournament.restore_from_archive,Restore from archive,Архиваас сэргээх
+standings.ui.edit_winner,Edit Winner,Ялагч засах
+standings.ui.rank_1,1st,1-р
+standings.ui.rank_2,2nd,2-р
+standings.ui.rank_3,3rd,3-р
+standings.ui.male,Male,Эрэгтэй
+standings.ui.open,Open,Нээлттэй
+standings.ui.division,division,ангилал
+standings.ui.place,place,байр
+standings.ui.all,All,Бүгд
+standings.ui.choose,Choose,Сонгох
+standings.ui.participant,participant,оролцогч
+standings.ui.candidates,Candidates,Нэр дэвшигчид
+standings.ui.save_winner,Save Winner,Ялагч хадгалах
+standings.ui.double_click_place,Double-click to edit this place,Энэ байрыг засахын тулд давхар дарна уу
+standings.ui.click_edit_or_replace,Click to edit or replace,Засах эсвэл солихын тулд дарна уу
+standings.ui.compact_winners_hint,"Compact manual winners grid. Double-click a medal to add, or click a winner name to edit or replace it.",Ялагчийг гараар сонгох товч хүснэгт. Медаль дээр давхар дарж нэмэх эсвэл ялагчийн нэр дээр дарж засах эсвэл солих боломжтой.
+standings.ui.top_score_male,Top Score Male (Top 3),Эрэгтэй дээд оноо (Шилдэг 3)
+standings.ui.top_score_female,Top Score Female (Top 3),Эмэгтэй дээд оноо (Шилдэг 3)
+standings.ui.no_male_result,No male result yet.,Эрэгтэй үр дүн хараахан алга.
+standings.ui.no_female_result,No female result yet.,Эмэгтэй үр дүн хараахан алга.
+standings.ui.no_candidates,No candidates added yet.,Одоогоор нэр дэвшигч нэмэгдээгүй байна.
+standings.ui.type_winner_name,Type winner name,Ялагчийн нэрийг бичнэ үү
+standings.ui.one_candidate_per_line,One candidate per line,Нэг мөрөнд нэг нэр дэвшигч
+standings.ui.add_manual_candidate,Add Manual Candidate,Гараар нэр дэвшигч нэмэх
+standings.ui.add_registered,Add Registered,Бүртгэлтэйг нэмэх
+standings.ui.team_mismatch,Team mismatch - review Participants page.,Багийн зөрүү илэрлээ - Оролцогчид хуудсыг шалгана уу.
+standings.ui.bonus_unavailable,Bonus editing is currently unavailable on this server build.,Энэ серверийн хувилбарт бонус засварлах боломжгүй байна.
+standings.ui.additional_unavailable,Additional score editing is currently unavailable on this server build.,Энэ серверийн хувилбарт нэмэлт оноо засварлах боломжгүй байна.
+standings.ui.ranking,Ranking,Чансаа
+standings.ui.rank_label,Rank,Байр
+standings.ui.tournament_result,Tournament Result,Тэмцээний дүн
+standings.ui.rank_lower,rank,байр
+standings.ui.tournament_result_lower,Tournament result,Тэмцээний дүн
+standings.ui.bonus_label,Bonus,Бонус
+standings.ui.grand_total_label,Grand Total,Нийт дүн
+league.ui.export_csv,Export CSV,CSV экспортлох
+league.ui.league,League,Лиг
+league.ui.selected_tournaments,Selected Tournaments,Сонгосон тэмцээнүүд
+league.ui.ranked_entries,Ranked Entries,Эрэмбэлэгдсэн мөрүүд
+league.ui.score_total,Score Total,Нийт онооны дүн
+league.ui.all_divisions,All divisions,Бүх ангилал
+league.ui.tournament_selection,Tournament Selection,Тэмцээний сонголт
+league.ui.tournament_selection_hint,Choose exactly which tournaments contribute to the cumulative league table.,Хуримтлагдсан лигийн хүснэгтэд орох тэмцээнүүдийг яг таг сонгоно уу.
+league.ui.filter_tournaments,Filter tournaments,Тэмцээн шүүх
+league.ui.select_all,Select all,Бүгдийг сонгох
+league.ui.select_all_tournaments,Select all tournaments,Бүх тэмцээнийг сонгох
+league.ui.clear_selection,Clear selection,Сонголтыг цэвэрлэх
+league.ui.clear_selected_tournaments,Clear selected tournaments,Сонгосон тэмцээнүүдийг цэвэрлэх
+league.ui.loading_tournaments,Loading tournaments...,Тэмцээнүүдийг ачаалж байна...
+league.ui.no_tournaments_match,No tournaments match the current league filter.,Одоогийн лигийн шүүлтүүрт тохирох тэмцээн алга.
+league.ui.no_date,No date,Огноо алга
+league.ui.unknown,unknown,тодорхойгүй
+league.ui.data_quality_warnings,Data Quality Warnings,Өгөгдлийн чанарын анхааруулга
+league.ui.data_quality_warnings_hint,Potential duplicate names and missing required identity fields detected in the selected tournaments.,Сонгосон тэмцээнүүдэд давхардсан нэр болон шаардлагатай мэдээлэл дутсан мөр илэрлээ.
+league.ui.warning,warning,анхааруулга
+league.ui.warnings,warnings,анхааруулгууд
+league.ui.more,more,илүү
+league.ui.cumulative_table,Cumulative Table,Хуримтлагдсан хүснэгт
+league.ui.cumulative_table_hint,Scores are aggregated across the selected tournaments.,Оноонууд сонгосон тэмцээнүүдээр нэгтгэгдсэн.
+league.ui.filter_teams,Filter teams,Баг шүүх
+league.ui.filter_players,Filter players,Тамирчин шүүх
+league.ui.loading_rankings,Loading league rankings...,Лигийн чансааг ачаалж байна...
+league.ui.no_rankings,No league rankings yet for selected filters.,Сонгосон шүүлтүүрт лигийн чансаа одоогоор алга.
+league.ui.events,Events,Тэмцээнүүд
+league.ui.avg_event,Avg/Event,Дундаж/Тэмцээн
+league.ui.read_only,Public view is read-only.,Нийтийн харагдац зөвхөн унших горимтой.
+league.ui.select_at_least_one,Select at least one tournament to build league scores.,Лигийн оноо бодохын тулд дор хаяж нэг тэмцээн сонгоно уу.
+league.ui.failed_load_rankings,Failed to load league rankings,Лигийн чансааг ачаалж чадсангүй
+league.ui.failed_load_tournaments,Failed to load tournaments,Тэмцээнүүдийг ачаалж чадсангүй
+brackets.ui.bracket,Bracket,Бракет
+brackets.ui.save_bracket_server,Save bracket to server,Бракетыг серверт хадгалах
+brackets.ui.close_bracket,Close bracket,Бракет хаах
+brackets.ui.new_bracket,New Bracket,Шинэ бракет
+brackets.ui.bracket_name,Bracket name,Бракет нэр
+brackets.ui.tournament_brackets,Tournament Brackets,Тэмцээний бракетууд
+brackets.ui.loading_brackets,Loading brackets...,Бракетуудыг ачаалж байна...
+brackets.ui.no_saved_brackets,No saved brackets yet.,Хадгалсан бракет одоогоор алга.
+brackets.ui.seeds_list,Seeds List,Оноолтын жагсаалт
+brackets.ui.auto_import,Auto Import,Автомат импорт
+brackets.ui.top_n_standings,"Top N from standings, by score",Чансааны оноогоор шилдэг N-г оруулах
+brackets.ui.manual_import,Manual Import,Гараар импорт
+brackets.ui.select_specific_participants,Select specific participants,Тодорхой оролцогч сонгох
+brackets.ui.create_list,Create List,Жагсаалт үүсгэх
+brackets.ui.type_participant_names,Type participant names,Оролцогчийн нэр бичих
+brackets.ui.seeds_to_import,Seeds to Import,Импортлох оноолтын тоо
+brackets.ui.no_standings_available,No standings available for this tournament.,Энэ тэмцээнд чансааны өгөгдөл алга.
+brackets.ui.filter_by_name,Filter by name…,Нэрээр шүүх…
+brackets.ui.no_standings_for_tournament,No standings for this tournament.,Энэ тэмцээнд чансаа алга.
+brackets.ui.name_press_enter_add,"Name, press Enter to add",Нэр бичээд Enter дарж нэмнэ үү
+brackets.ui.clear_all,Clear all,Бүгдийг цэвэрлэх
+brackets.ui.bracket_type,Bracket Type,Бракетын төрөл
+brackets.ui.available_tournament,Available Tournament,Боломжтой тэмцээний төрөл
+brackets.ui.preset_editor,Preset Editor,Пресет засварлагч
+brackets.ui.edit_structure_tournament_type,Edit structure of this tournament type,Энэ тэмцээний төрлийн бүтцийг засах
+brackets.ui.saved_brackets,Saved Brackets,Хадгалсан бракетууд
+brackets.ui.include_third_place,Include 3rd Place Match,3-р байрын тоглолтыг оруулах
+brackets.ui.generate_bracket,Generate Bracket,Бракет үүсгэх
+brackets.ui.preview_matches,Preview Matches,Урьдчилсан тоглолтууд
+brackets.ui.auto_generate_preview,Auto-generate preview when seeds or rounds change,Оноолт эсвэл шат өөрчлөгдөхөд урьдчилсан дүрслэлийг автоматаар үүсгэх
+brackets.ui.generate_preview,Generate Preview,Урьдчилсан дүрслэл үүсгэх
+brackets.ui.preview_hint,Build a fresh preview after seeds and bracket type are configured.,Оноолт ба бракетын төрлийг тохируулсны дараа шинэ урьдчилсан дүрслэл үүсгэнэ үү.
+brackets.ui.step4_live,Step 4 - Create Live Bracket,Алхам 4 - Шууд бракет үүсгэх
+brackets.ui.preview_looks_good,Preview looks good? Generate the actual bracket for scoring.,Урьдчилсан харагдац зөв үү? Оноолт оруулах бодит бракет үүсгэнэ үү.
+brackets.ui.generate_actual,Generate Actual Bracket,Бодит бракет үүсгэх
+brackets.ui.available_brackets,Available Brackets,Боломжтой бракетууд
+brackets.ui.select_bracket_load,Select a bracket to load it.,Ачаалах бракет сонгоно уу.
+brackets.ui.active,Active,Идэвхтэй
+brackets.ui.no_bracket_active,No bracket active,Идэвхтэй бракет алга
+brackets.ui.choose_saved_bracket,Choose a saved bracket above to load it.,Дээрх хадгалсан бракетаас сонгон ачаална уу.
+brackets.ui.create_or_load,Create a new bracket or load a saved one from the left panel.,Зүүн самбараас шинэ бракет үүсгэх эсвэл хадгалснаас ачаална уу.
+brackets.ui.results_podium,Results / Podium,Үр дүн / Шагналын тавцан
+brackets.ui.double_click_set_winner,Double-click a position to set the winner,Ялагч сонгохын тулд байр дээр давхар дарна уу
+brackets.ui.also_third_place,Also 3rd place:,Мөн 3-р байр:
+brackets.ui.set,Set,Тохируулах
+brackets.ui.zoom_out,Zoom Out,Томруулалтыг багасгах
+brackets.ui.zoom_in,Zoom In,Томруулах
+brackets.ui.export_bracket,Export bracket,Бракет экспортлох
+brackets.ui.export_as,Export as,Экспорт хэлбэр
+brackets.ui.png_image,PNG Image,PNG зураг
+brackets.ui.pdf_print,PDF (Print),PDF (Хэвлэх)
+brackets.ui.export_bracket_json,Export bracket config as JSON,Бракет тохиргоог JSON-оор экспортлох
+brackets.ui.export_json,Export JSON,JSON экспортлох
+brackets.ui.import_bracket_json,Import bracket config from JSON file,JSON файлаас бракет тохиргоо импортлох
+brackets.ui.import_json,Import JSON,JSON импортлох
+brackets.ui.invalid_bracket_file,"Invalid bracket file: missing required fields (name, rounds).",Бракет файл буруу байна: шаардлагатай талбарууд (name, rounds) дутуу.
+brackets.ui.failed_import_bracket,Failed to import bracket:,Бракет импортлож чадсангүй:
+brackets.ui.visual_view_disabled_small,Visual view is disabled on small portrait screens,Жижиг босоо дэлгэц дээр дүрслэл харагдац идэвхгүй.
+brackets.ui.visual_view,Visual view,Дүрслэл харагдац
+brackets.ui.visual,Visual,Дүрслэл
+brackets.ui.list_view,List view,Жагсаалт харагдац
+brackets.ui.list,List,Жагсаалт
+brackets.ui.small_portrait_list_only,Small portrait screen: list view only,Жижиг босоо дэлгэц: зөвхөн жагсаалт харагдана
+brackets.ui.qf,QF,Шөвгийн 8
+brackets.ui.sf,SF,Хагас финал
+brackets.ui.final,Final,Финал
+brackets.ui.qualifying_round,Qualifying Round,Шалгаруулах шат
+brackets.ui.final_round,Final Round,Финалын шат
+brackets.ui.round,Round,Шат
+brackets.ui.round_1,Round 1,Шат 1
+brackets.ui.match1_5v4,Match 1 (5th vs 4th),Тоглолт 1 (5-р vs 4-р)
+brackets.ui.match2_wv3,Match 2 (Winner vs 3rd),Тоглолт 2 (Ялагч vs 3-р)
+brackets.ui.match3_wv2,Match 3 (Winner vs 2nd),Тоглолт 3 (Ялагч vs 2-р)
+brackets.ui.final_wv1,Final (Winner vs 1st),Финал (Ялагч vs 1-р)
+brackets.ui.r1_qualifier,R1 Qualifier,R1 Шалгаруулалт
+brackets.ui.r2_vs4,R2 (vs Seed 4),R2 (4-р оноолттой)
+brackets.ui.r3_vs3,R3 (vs Seed 3),R3 (3-р оноолттой)
+brackets.ui.sf_vs2,SF (vs Seed 2),Хагас финал (2-р оноолттой)
+brackets.ui.final_vs1,Final (vs Seed 1),Финал (1-р оноолттой)
+brackets.ui.team_lower,team,баг
+brackets.ui.available,available.,боломжтой.
+brackets.ui.standings_entries,standings entries,чансааны мөр
+brackets.ui.but_only,but only,гэхдээ зөвхөн
+final.missing.first,1st,1-р
+final.missing.second,2nd,2-р
+final.missing.third,3rd,3-р
+final.missing.all,All,Бүгд
+final.missing.bracket_generation,Bracket Generation,Бракет үүсгэх
+final.missing.league_rankings,League Rankings,Лигийн чансаа
+final.missing.bracket_generation_sub,Generate and manage tournament brackets,Тэмцээний бракетуудыг үүсгэж удирдах
+final.missing.long_league_hint,Build cumulative league standings from selected tournaments and review data quality warnings before publishing.,Сонгосон тэмцээнүүдээр хуримтлагдсан лигийн чансаа гаргаж нийтлэхийн өмнө өгөгдлийн чанарын анхааруулгуудыг шалгана уу.
+final.missing.cancel,Cancel,Цуцлах
+final.missing.choose,Choose,Сонгох
+final.missing.custom,Custom,Тусгай
+final.missing.delete,Delete,Устгах
+final.missing.edit,Edit,Засах
+final.missing.load,Load,Ачаалах
+final.missing.male,Male,Эрэгтэй
+final.missing.need,Need,Шаардлагатай
+final.missing.new,New,Шинэ
+final.missing.rename,Rename,Нэр өөрчлөх
+final.missing.rounds,Rounds,Шатууд
+final.missing.save_winner,Save Winner,Ялагч хадгалах
+final.missing.unknown_error,Unknown error,Тодорхойгүй алдаа
+final.missing.participant,participant,оролцогч
+final.missing.custom_edit, (custom edit), (тусгай засвар)
+final.missing.generating,Generating...,Үүсгэж байна...

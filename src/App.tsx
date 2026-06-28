@@ -1893,8 +1893,10 @@ export default function App() {
   };
 
   const getStatusLabel = (status: 'active' | 'incoming' | 'finished' | 'archived') => {
-    if (status === 'incoming') return 'Incoming';
-    return status.charAt(0).toUpperCase() + status.slice(1);
+    if (status === 'incoming') return t('status.incoming', 'Incoming');
+    if (status === 'active') return t('status.active', 'Active');
+    if (status === 'finished') return t('status.finished', 'Finished');
+    return t('status.archived', 'Archived');
   };
 
   const getTournamentSortRank = (tournamentItem: Tournament) => {
@@ -1932,7 +1934,7 @@ export default function App() {
             className="w-11 h-11 rounded-full overflow-hidden border border-white/30 flex items-center justify-center cursor-pointer hover:shadow-lg transition shrink-0"
             style={{ backgroundColor: '#ffffff' }}
             onClick={() => window.location.href = '/'}
-            title="Go to Home Page"
+            title={t('app.nav.go_home', 'Go to Home Page')}
             tabIndex={0}
             role="button"
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') window.location.href = '/'; }}
@@ -2063,14 +2065,14 @@ export default function App() {
                   <div className="p-4">
                     {isAdmin && (
                       <div className="mb-3">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700">Dashboard Sponsors</p>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-emerald-700">{t('app.dashboard_sponsors', 'Dashboard Sponsors')}</p>
                       </div>
                     )}
 
                     <div className="grid grid-cols-3 gap-3">
                       {dashboardSponsors.length === 0 ? (
                         <div className="col-span-3 rounded-lg border border-dashed border-black/20 bg-black/[0.02] py-8 text-center text-sm text-black/45">
-                          No dashboard sponsors configured.
+                          {t('app.no_dashboard_sponsors', 'No dashboard sponsors configured.')}
                         </div>
                       ) : dashboardSponsors.map((sponsor) => (
                         <button
@@ -2089,7 +2091,7 @@ export default function App() {
                               }}
                             />
                           </div>
-                          <p className="mt-2 text-xs font-semibold text-black/85 truncate">{sponsor.name || 'Unnamed sponsor'}</p>
+                          <p className="mt-2 text-xs font-semibold text-black/85 truncate">{sponsor.name || t('app.unnamed_sponsor', 'Unnamed sponsor')}</p>
                         </button>
                       ))}
                     </div>
@@ -2100,10 +2102,10 @@ export default function App() {
                           variant="outline"
                           onClick={() => openSponsorsConfigEditor('sponsors')}
                           className="px-3"
-                          title="Manage Sponsors"
-                          ariaLabel="Manage Sponsors"
+                          title={t('sponsors.manage_sponsors', 'Manage Sponsors')}
+                          ariaLabel={t('sponsors.manage_sponsors', 'Manage Sponsors')}
                         >
-                          Manage Sponsors
+                          {t('sponsors.manage_sponsors', 'Manage Sponsors')}
                         </Button>
                       </div>
                     )}
@@ -2138,21 +2140,21 @@ export default function App() {
                         >
                           <img
                             src={normalizeWebUrl(dashboardPromo.image)}
-                            alt={dashboardPromo.title || 'Dashboard promo'}
+                            alt={dashboardPromo.title || t('dashboard.promo_alt', 'Dashboard promo')}
                             className="w-full block"
                             referrerPolicy="no-referrer"
                           />
                         </a>
                       ) : (
                         <div className="h-44 flex items-center justify-center text-sm text-black/45 bg-black/[0.02]">
-                          Upload promo image
+                          {t('dashboard.upload_promo_image', 'Upload promo image')}
                         </div>
                       )}
                       {isAdmin && (
                         <button
                           onClick={() => openSponsorsConfigEditor('adblock')}
                           className="absolute top-2 right-2 bg-white/80 hover:bg-white rounded p-1 shadow-sm"
-                          title="Manage Ad Block"
+                          title={t('sponsors.manage_ad_block', 'Manage Ad Block')}
                         >
                           <Edit size={13} className="text-orange-700" />
                         </button>
@@ -2248,21 +2250,21 @@ export default function App() {
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleEdit(tournamentItem); }}
                                 className="p-1 rounded hover:bg-emerald-50 text-black/35 hover:text-emerald-600 transition-all"
-                                title="Edit tournament"
+                                title={t('tournament.edit', 'Edit Tournament')}
                               >
                                 <Edit size={13} />
                               </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleArchiveToggle(tournamentItem.id, true); }}
                                 className="p-1 rounded hover:bg-slate-100 text-black/35 hover:text-slate-600 transition-all"
-                                title="Archive tournament"
+                                title={t('tournament.archive', 'Archive Tournament')}
                               >
                                 <Archive size={13} />
                               </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleDelete(tournamentItem.id); }}
                                 className="p-1 rounded hover:bg-red-50 text-black/35 hover:text-red-500 transition-all"
-                                title="Delete tournament"
+                                title={t('tournament.delete', 'Delete Tournament')}
                               >
                                 <Trash2 size={13} />
                               </button>
@@ -2278,14 +2280,14 @@ export default function App() {
               {!loading && archivedTournaments.length > 0 && (
                 <div className="pt-2">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-black/65">Archive ({archivedTournaments.length})</h3>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-black/65">{t('archive.title', 'Archive')} ({archivedTournaments.length})</h3>
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => setShowArchivedTournaments((prev) => !prev)}
                       className="px-2"
-                      title={showArchivedTournaments ? 'Hide archive' : 'Show archive'}
-                      ariaLabel={showArchivedTournaments ? 'Hide archive' : 'Show archive'}
+                      title={showArchivedTournaments ? t('archive.hide', 'Hide archive') : t('archive.show', 'Show archive')}
+                      ariaLabel={showArchivedTournaments ? t('archive.hide', 'Hide archive') : t('archive.show', 'Show archive')}
                     >
                       {showArchivedTournaments ? <EyeOff size={14} /> : <Eye size={14} />}
                     </Button>
@@ -2298,7 +2300,7 @@ export default function App() {
                           <div className="p-3 sm:p-4">
                             <div className="flex justify-between items-start gap-2">
                               <div>
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600 mb-1">Archived</p>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600 mb-1">{t('status.archived', 'Archived')}</p>
                                 <h4 className="text-sm font-semibold leading-tight text-black/80">{tournamentItem.name}</h4>
                                 <p className="text-[11px] text-black/50 mt-1">{formatTournamentDate(tournamentItem.date)}</p>
                               </div>
@@ -2306,7 +2308,7 @@ export default function App() {
                                 <button
                                   onClick={() => openTournament(tournamentItem)}
                                   className="p-1.5 rounded-md border border-black/10 bg-white text-black/60 hover:text-emerald-700"
-                                  title="Open tournament"
+                                  title={t('tournament.open', 'Open Tournament')}
                                 >
                                   <Eye size={14} />
                                 </button>
@@ -2314,7 +2316,7 @@ export default function App() {
                                   <button
                                     onClick={() => handleArchiveToggle(tournamentItem.id, false)}
                                     className="p-1.5 rounded-md border border-black/10 bg-white text-black/60 hover:text-emerald-700"
-                                    title="Restore from archive"
+                                    title={t('tournament.restore_from_archive', 'Restore from archive')}
                                   >
                                     <ArchiveRestore size={14} />
                                   </button>
@@ -3909,7 +3911,7 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
   const loadLeagueRankings = async () => {
     if (selectedTournamentIds.length === 0) {
       setData(null);
-      setError('Select at least one tournament to build league scores.');
+      setError(tx('Select at least one tournament to build league scores.'));
       return;
     }
     try {
@@ -3923,7 +3925,7 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
       });
       setData(payload);
     } catch (err: any) {
-      setError(err?.message || 'Failed to load league rankings');
+      setError(err?.message || tx('Failed to load league rankings'));
       setData(null);
     } finally {
       setLoading(false);
@@ -3938,7 +3940,7 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
         if (!cancelled) setTournamentOptions(Array.isArray(items) ? items : []);
       })
       .catch((err: any) => {
-        if (!cancelled) setError(err?.message || 'Failed to load tournaments');
+        if (!cancelled) setError(err?.message || tx('Failed to load tournaments'));
       })
       .finally(() => {
         if (!cancelled) setTournamentsLoading(false);
@@ -3963,6 +3965,18 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
   const rows = data?.rows || [];
   const includedTournaments = data?.tournaments || [];
   const warnings = data?.warnings || [];
+  const translateLeagueWarningMessage = React.useCallback((message: string) => {
+    const text = String(message || '').trim();
+    const duplicateTeamPrefix = 'Duplicate team names in ';
+    if (text.startsWith(duplicateTeamPrefix)) {
+      return `${tx('Duplicate team names in')} ${text.slice(duplicateTeamPrefix.length)}`;
+    }
+    const duplicateParticipantPrefix = 'Duplicate participant names in ';
+    if (text.startsWith(duplicateParticipantPrefix)) {
+      return `${tx('Duplicate participant names in')} ${text.slice(duplicateParticipantPrefix.length)}`;
+    }
+    return tx(text);
+  }, [tx]);
 
   const filteredRows = React.useMemo(() => {
     const query = rowFilter.trim().toLowerCase();
@@ -4024,10 +4038,10 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" onClick={() => void loadLeagueRankings()} title="Refresh" ariaLabel="Refresh">
+              <Button variant="outline" onClick={() => void loadLeagueRankings()} title={tx('Refresh')} ariaLabel={tx('Refresh')}>
                 <RefreshCw size={14} />
               </Button>
-              <Button variant="outline" onClick={exportCsv} title="Export CSV" ariaLabel="Export CSV" disabled={filteredRows.length === 0}>
+              <Button variant="outline" onClick={exportCsv} title={tx('Export CSV')} ariaLabel={tx('Export CSV')} disabled={filteredRows.length === 0}>
                 <Download size={14} />
               </Button>
             </div>
@@ -4036,19 +4050,19 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40">League</div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('League')}</div>
                 <div className="mt-1 text-sm font-semibold text-black/80">{league === 'mba' ? 'MBA' : 'B Bowling'}</div>
               </div>
               <div className="rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40">Selected Tournaments</div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Selected Tournaments')}</div>
                 <div className="mt-1 text-sm font-semibold text-black/80">{selectedTournamentCount}</div>
               </div>
               <div className="rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40">Ranked Entries</div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Ranked Entries')}</div>
                 <div className="mt-1 text-sm font-semibold text-black/80">{filteredRows.length}</div>
               </div>
               <div className="rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40">Score Total</div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Score Total')}</div>
                 <div className="mt-1 text-sm font-semibold text-black/80">{totalScoreAcrossRows}</div>
               </div>
             </div>
@@ -4069,8 +4083,8 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
                 className="h-9 rounded-md border border-black/15 bg-white px-2 text-xs"
                 aria-label="Mode"
               >
-                <option value="players">Players</option>
-                <option value="teams">Teams</option>
+                <option value="players">{tx('Players')}</option>
+                <option value="teams">{tx('Teams')}</option>
               </select>
               <select
                 value={mode === 'teams' ? 'all' : division}
@@ -4079,9 +4093,9 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
                 className="h-9 rounded-md border border-black/15 bg-white px-2 text-xs disabled:opacity-50"
                 aria-label="Division"
               >
-                <option value="all">All divisions</option>
-                <option value="female">Female</option>
-                <option value="male">Male</option>
+                <option value="all">{tx('All divisions')}</option>
+                <option value="female">{tx('Female')}</option>
+                <option value="male">{tx('Male')}</option>
               </select>
             </div>
           </div>
@@ -4089,8 +4103,8 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
           <div className="rounded-lg border border-black/10 bg-white p-3">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40">Tournament Selection</div>
-                <p className="mt-1 text-xs text-black/45">Choose exactly which tournaments contribute to the cumulative league table.</p>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Tournament Selection')}</div>
+                <p className="mt-1 text-xs text-black/45">{tx('Choose exactly which tournaments contribute to the cumulative league table.')}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative">
@@ -4098,7 +4112,7 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
                   <input
                     value={tournamentFilter}
                     onChange={(e) => setTournamentFilter(e.target.value)}
-                    placeholder="Filter tournaments"
+                    placeholder={tx('Filter tournaments')}
                     className="h-8 w-52 rounded-md border border-black/15 bg-white pl-7 pr-2 text-xs"
                   />
                 </div>
@@ -4106,28 +4120,28 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
                   size="sm"
                   variant="outline"
                   onClick={() => setSelectedTournamentIds(availableTournamentOptions.map((item) => item.id))}
-                  title="Select all"
-                  ariaLabel="Select all tournaments"
+                  title={tx('Select all')}
+                  ariaLabel={tx('Select all tournaments')}
                 >
-                  All
+                  {tx('All')}
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => setSelectedTournamentIds([])}
-                  title="Clear selection"
-                  ariaLabel="Clear selected tournaments"
+                  title={tx('Clear selection')}
+                  ariaLabel={tx('Clear selected tournaments')}
                 >
-                  Clear
+                  {tx('Clear')}
                 </Button>
               </div>
             </div>
 
             <div className="mt-3 max-h-56 overflow-y-auto rounded-md border border-black/10">
               {tournamentsLoading ? (
-                <div className="px-3 py-4 text-xs text-black/50">Loading tournaments...</div>
+                <div className="px-3 py-4 text-xs text-black/50">{tx('Loading tournaments...')}</div>
               ) : filteredTournamentOptions.length === 0 ? (
-                <div className="px-3 py-4 text-xs text-black/50">No tournaments match the current league filter.</div>
+                <div className="px-3 py-4 text-xs text-black/50">{tx('No tournaments match the current league filter.')}</div>
               ) : (
                 <div className="divide-y divide-black/10">
                   {filteredTournamentOptions.map((item) => {
@@ -4143,7 +4157,7 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
                         <div className="min-w-0 flex-1">
                           <div className="text-sm font-semibold text-black/80 truncate">{item.name}</div>
                           <div className="mt-0.5 text-[10px] uppercase tracking-widest text-black/40">
-                            {item.date || 'No date'} · {item.type || 'unknown'}
+                            {item.date || tx('No date')} · {item.type || tx('unknown')}
                           </div>
                         </div>
                       </label>
@@ -4162,17 +4176,17 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
         <Card className="p-4 border-amber-200 bg-amber-50">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div>
-              <h4 className="text-sm font-bold text-amber-800">Data Quality Warnings</h4>
-              <p className="text-xs text-amber-700/80 mt-0.5">Potential duplicate names and missing required identity fields detected in the selected tournaments.</p>
+              <h4 className="text-sm font-bold text-amber-800">{tx('Data Quality Warnings')}</h4>
+              <p className="text-xs text-amber-700/80 mt-0.5">{tx('Potential duplicate names and missing required identity fields detected in the selected tournaments.')}</p>
             </div>
             <span className="inline-flex items-center rounded-full border border-amber-300 bg-white px-2 py-0.5 text-[10px] font-bold text-amber-700">
-              {warnings.length} warning{warnings.length === 1 ? '' : 's'}
+              {warnings.length} {tx(warnings.length === 1 ? 'warning' : 'warnings')}
             </span>
           </div>
           <div className="mt-3 grid gap-3 lg:grid-cols-2">
             {warnings.map((warning, index) => (
               <div key={`${warning.type}-${index}`} className="rounded-md border border-amber-200 bg-white px-3 py-2">
-                <div className="text-xs font-semibold text-amber-800">{warning.message}</div>
+                <div className="text-xs font-semibold text-amber-800">{translateLeagueWarningMessage(warning.message)}</div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {warning.entries.slice(0, 8).map((entry) => (
                     <span key={entry} className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">
@@ -4181,7 +4195,7 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
                   ))}
                   {warning.entries.length > 8 && (
                     <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-800">
-                      +{warning.entries.length - 8} more
+                      +{warning.entries.length - 8} {tx('more')}
                     </span>
                   )}
                 </div>
@@ -4194,15 +4208,15 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
       <Card className="p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h4 className="text-sm font-bold text-black/80">Cumulative Table</h4>
-            <p className="text-xs text-black/45 mt-0.5">Scores are aggregated across the selected tournaments.</p>
+            <h4 className="text-sm font-bold text-black/80">{tx('Cumulative Table')}</h4>
+            <p className="text-xs text-black/45 mt-0.5">{tx('Scores are aggregated across the selected tournaments.')}</p>
           </div>
           <div className="relative">
             <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-black/40 pointer-events-none" />
             <input
               value={rowFilter}
               onChange={(e) => setRowFilter(e.target.value)}
-              placeholder={mode === 'teams' ? 'Filter teams' : 'Filter players'}
+              placeholder={mode === 'teams' ? tx('Filter teams') : tx('Filter players')}
               className="h-9 w-56 rounded-md border border-black/15 bg-white pl-7 pr-2 text-xs"
             />
           </div>
@@ -4211,26 +4225,26 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
 
       <Card className="overflow-hidden">
         {loading ? (
-          <p className="px-4 py-6 text-sm text-black/50">Loading league rankings...</p>
+          <p className="px-4 py-6 text-sm text-black/50">{tx('Loading league rankings...')}</p>
         ) : filteredRows.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-black/50">No league rankings yet for selected filters.</p>
+          <p className="px-4 py-6 text-sm text-black/50">{tx('No league rankings yet for selected filters.')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="dashboard-setup-table w-full min-w-[960px] border-collapse text-sm">
               <thead className="bg-[#e3f3f6]">
                 <tr>
-                  <th className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-black/60">Rank</th>
-                  <th className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-black/60">{mode === 'teams' ? 'Team' : 'Participant'}</th>
-                  {mode === 'players' && <th className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-black/60">Gender</th>}
-                  {mode === 'players' && <th className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-black/60">Club</th>}
+                  <th className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-black/60">{tx('Rank')}</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-black/60">{mode === 'teams' ? tx('Team') : tx('Participant')}</th>
+                  {mode === 'players' && <th className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-black/60">{tx('Gender')}</th>}
+                  {mode === 'players' && <th className="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-black/60">{tx('Club')}</th>}
                   {includedTournaments.map((item) => (
                     <th key={item.id} className="px-3 py-2 text-right text-[11px] font-bold uppercase tracking-wide text-black/60 min-w-[110px]">
                       {item.name}
                     </th>
                   ))}
-                  <th className="px-3 py-2 text-right text-[11px] font-bold uppercase tracking-wide text-black/60">Total</th>
-                  <th className="px-3 py-2 text-right text-[11px] font-bold uppercase tracking-wide text-black/60">Events</th>
-                  <th className="px-3 py-2 text-right text-[11px] font-bold uppercase tracking-wide text-black/60">Avg/Event</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-bold uppercase tracking-wide text-black/60">{tx('Total')}</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-bold uppercase tracking-wide text-black/60">{tx('Events')}</th>
+                  <th className="px-3 py-2 text-right text-[11px] font-bold uppercase tracking-wide text-black/60">{tx('Avg/Event')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -4252,7 +4266,7 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
                       </span>
                     </td>
                     <td className="px-3 py-2 font-semibold text-black/80">{row.name}</td>
-                    {mode === 'players' && <td className="px-3 py-2 text-black/60">{row.gender || 'unknown'}</td>}
+                    {mode === 'players' && <td className="px-3 py-2 text-black/60">{row.gender || tx('unknown')}</td>}
                     {mode === 'players' && <td className="px-3 py-2 text-black/60">{row.club || '-'}</td>}
                     {includedTournaments.map((item) => (
                       <td key={`${row.key}-${item.id}`} className="px-3 py-2 text-right text-black/60 tabular-nums">
@@ -4272,7 +4286,7 @@ function LeagueView({ tournament, role }: { tournament: Tournament; role: UserRo
 
       {!canManage && (
         <p className="text-xs text-black/45">
-          Public view is read-only.
+          {tx('Public view is read-only.')}
         </p>
       )}
     </div>
@@ -8886,12 +8900,12 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   const buildStandardPresetRounds = React.useCallback((type: 'single-elim' | 'stepladder' | 'playoff' | 'ladder' | 'mixed', includeThird: boolean): TournamentRoundConfig[] => {
     if (type === 'single-elim') {
       return [
-        { ...v2CreateRound(0), id: 'se-r1', name: 'QF', matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', manualMatchCount: null },
-        { ...v2CreateRound(1), id: 'se-r2', name: 'SF', matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', manualMatchCount: null },
+        { ...v2CreateRound(0), id: 'se-r1', name: tx('QF'), matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', manualMatchCount: null },
+        { ...v2CreateRound(1), id: 'se-r2', name: tx('SF'), matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', manualMatchCount: null },
         {
           ...v2CreateRound(2),
           id: 'se-final',
-          name: 'Final',
+          name: tx('Final'),
           matchType: 'head-to-head',
           sourceOutcome: includeThird ? 'both' : 'winner',
           playersPerMatch: 2,
@@ -8904,21 +8918,21 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
     if (type === 'stepladder') {
       return [
-        { ...v2CreateRound(0), id: 'sl-r1', name: 'Match 1 (5th vs 4th)', matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', injectParticipantSeeds: [5, 4] },
-        { ...v2CreateRound(1), id: 'sl-r2', name: 'Match 2 (Winner vs 3rd)', matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', injectParticipantSeeds: [3] },
-        { ...v2CreateRound(2), id: 'sl-r3', name: 'Match 3 (Winner vs 2nd)', matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', injectParticipantSeeds: [2] },
-        { ...v2CreateRound(3), id: 'sl-r4', name: 'Final (Winner vs 1st)', matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', injectParticipantSeeds: [1] },
+        { ...v2CreateRound(0), id: 'sl-r1', name: tx('Match 1 (5th vs 4th)'), matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', injectParticipantSeeds: [5, 4] },
+        { ...v2CreateRound(1), id: 'sl-r2', name: tx('Match 2 (Winner vs 3rd)'), matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', injectParticipantSeeds: [3] },
+        { ...v2CreateRound(2), id: 'sl-r3', name: tx('Match 3 (Winner vs 2nd)'), matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', injectParticipantSeeds: [2] },
+        { ...v2CreateRound(3), id: 'sl-r4', name: tx('Final (Winner vs 1st)'), matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', injectParticipantSeeds: [1] },
       ];
     }
 
     if (type === 'playoff') {
       return [
-        { ...v2CreateRound(0), id: 'po-r1', name: 'Qualifying Round', matchType: 'group', playersPerMatch: 4, advancementCount: 2, scoringType: 'pins', manualMatchCount: null },
-        { ...v2CreateRound(1), id: 'po-r2', name: 'SF', matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', manualMatchCount: null },
+        { ...v2CreateRound(0), id: 'po-r1', name: tx('Qualifying Round'), matchType: 'group', playersPerMatch: 4, advancementCount: 2, scoringType: 'pins', manualMatchCount: null },
+        { ...v2CreateRound(1), id: 'po-r2', name: tx('SF'), matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', manualMatchCount: null },
         {
           ...v2CreateRound(2),
           id: 'po-final',
-          name: includeThird ? 'Final Round' : 'Final',
+          name: includeThird ? tx('Final Round') : tx('Final'),
           matchType: 'head-to-head',
           sourceOutcome: includeThird ? 'both' : 'winner',
           playersPerMatch: 2,
@@ -8934,7 +8948,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         {
           ...v2CreateRound(0),
           id: 'mx-r1',
-          name: 'Round 1',
+          name: tx('Round 1'),
           matchType: 'shootout',
           playersPerMatch: 8,
           advancementCount: 4,
@@ -8944,7 +8958,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         {
           ...v2CreateRound(1),
           id: 'mx-final',
-          name: 'Final',
+          name: tx('Final'),
           matchType: 'shootout',
           playersPerMatch: 4,
           advancementCount: 1,
@@ -8956,11 +8970,11 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
     // Ladder: 3rd place is inferred from semifinal loser, not from an extra bronze match round.
     return [
-      { ...v2CreateRound(0), id: 'lad-r1', name: 'R1 Qualifier', matchType: 'group', playersPerMatch: 4, advancementCount: 4, scoringType: 'pins', manualMatchCount: null },
-      { ...v2CreateRound(1), id: 'lad-r2', name: 'R2 (vs Seed 4)', matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins' },
-      { ...v2CreateRound(2), id: 'lad-r3', name: 'R3 (vs Seed 3)', matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins' },
-      { ...v2CreateRound(3), id: 'lad-r4', name: 'SF (vs Seed 2)', matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins' },
-      { ...v2CreateRound(4), id: 'lad-final', name: 'Final (vs Seed 1)', matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins' },
+      { ...v2CreateRound(0), id: 'lad-r1', name: tx('R1 Qualifier'), matchType: 'group', playersPerMatch: 4, advancementCount: 4, scoringType: 'pins', manualMatchCount: null },
+      { ...v2CreateRound(1), id: 'lad-r2', name: tx('R2 (vs Seed 4)'), matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins' },
+      { ...v2CreateRound(2), id: 'lad-r3', name: tx('R3 (vs Seed 3)'), matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins' },
+      { ...v2CreateRound(3), id: 'lad-r4', name: tx('SF (vs Seed 2)'), matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins' },
+      { ...v2CreateRound(4), id: 'lad-final', name: tx('Final (vs Seed 1)'), matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins' },
     ];
   }, []);
 
@@ -8973,10 +8987,10 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
   const getAutoRoundName = React.useCallback((index: number, total: number): string => {
     const fromEnd = total - 1 - index;
-    if (fromEnd === 0) return 'Final';
-    if (fromEnd === 1 && total >= 3) return 'SF';
-    if (fromEnd === 2 && total >= 4) return 'QF';
-    return `Round ${index + 1}`;
+    if (fromEnd === 0) return tx('Final');
+    if (fromEnd === 1 && total >= 3) return tx('SF');
+    if (fromEnd === 2 && total >= 4) return tx('QF');
+    return `${tx('Round')} ${index + 1}`;
   }, []);
 
   const applyAutoNames = React.useCallback((rs: TournamentRoundConfig[]): TournamentRoundConfig[] =>
@@ -10849,7 +10863,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           {/* ── Bracket Management ──────────────────────────────────────── */}
           {canManageBracketV2 && (
             <Card className="p-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">1</span>Bracket</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">1</span>{tx('Bracket')}</p>
 
               {/* Active bracket indicator */}
               {activeBracketName && (
@@ -10860,15 +10874,15 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                     onClick={() => { void handleSaveBracket(); }}
                     disabled={savingBracketConfig}
                     className="text-[10px] text-emerald-700 font-semibold hover:text-emerald-900 shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded border border-emerald-300 bg-white hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Save bracket to server">
-                    <Save size={10} /> {savingBracketConfig ? 'Saving...' : 'Save'}
+                    title={tx('Save bracket to server')}>
+                    <Save size={10} /> {savingBracketConfig ? tx('Saving...') : tx('Save')}
                   </button>
                   <button
                     onClick={() => {
                       if (!confirm(`Close bracket "${activeBracketName}"? Any unsaved changes will be lost.`)) return;
                       setActiveBracketName(null); setBracketName(''); setActiveBracketId(null); setShowSaveAsPresetDialog(false);
                     }}
-                    title="Close bracket"
+                    title={tx('Close bracket')}
                     className="text-black/25 hover:text-red-500 shrink-0"><X size={11} /></button>
                 </div>
               )}
@@ -10878,20 +10892,20 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
               {/* New bracket section */}
               <div className="mb-3 rounded-lg border border-black/10 bg-white p-2">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-1">New Bracket</div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-1">{tx('New Bracket')}</div>
                 <div className="flex gap-1.5">
                   <input
                     value={bracketName}
                     onChange={e => setBracketName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') handleNewBracket(); }}
-                    placeholder="Bracket name"
+                    placeholder={tx('Bracket name')}
                     className="flex-1 h-8 px-2 rounded-md border border-black/15 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 bg-white"
                   />
                   <button
                     onClick={handleNewBracket}
                     disabled={!bracketName.trim()}
                     className="h-8 px-2.5 rounded-md border border-black/15 text-[10px] font-semibold bg-white hover:bg-emerald-50 hover:border-emerald-300 disabled:opacity-40 transition-colors flex items-center gap-1">
-                    <Plus size={11} /> New
+                    <Plus size={11} /> {tx('New')}
                   </button>
                 </div>
               </div>
@@ -10899,9 +10913,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               {/* Save-as-preset inline dialog (moved to Preset Editor section) */}
 
               {/* Saved brackets list */}
-              <div className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-1">Tournament Brackets</div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-1">{tx('Tournament Brackets')}</div>
               {savedBracketsLoading && (
-                <div className="text-[10px] text-black/35 mb-2">Loading brackets...</div>
+                <div className="text-[10px] text-black/35 mb-2">{tx('Loading brackets...')}</div>
               )}
               {savedBrackets.length > 0 ? (
                 <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
@@ -10935,14 +10949,14 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                             disabled={savingBracketRename}
                             className="text-[10px] text-blue-700 hover:text-blue-900 font-semibold shrink-0 px-1 disabled:opacity-50"
                           >
-                            Save
+                            {tx('Save')}
                           </button>
                           <button
                             onClick={handleCancelEditBracket}
                             disabled={savingBracketRename}
                             className="text-[10px] text-black/45 hover:text-black/70 font-semibold shrink-0 px-1 disabled:opacity-50"
                           >
-                            Cancel
+                            {tx('Cancel')}
                           </button>
                         </>
                       ) : (
@@ -10950,26 +10964,26 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                           onClick={() => handleEditBracket(bkt.id)}
                           className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold shrink-0 px-1"
                         >
-                          Edit
+                          {tx('Edit')}
                         </button>
                       )}
                       <button
                         onClick={() => handleLoadBracket(bkt.id)}
                         className="text-[10px] text-emerald-600 hover:text-emerald-800 font-semibold shrink-0 px-1"
                       >
-                        Load
+                        {tx('Load')}
                       </button>
                       <button
                         onClick={() => handleDeleteBracket(bkt.id)}
                         className="text-[10px] text-red-500 hover:text-red-700 font-semibold shrink-0 px-1"
                       >
-                        Delete
+                        {tx('Delete')}
                       </button>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-[10px] text-black/30">No saved brackets yet.</p>
+                <p className="text-[10px] text-black/30">{tx('No saved brackets yet.')}</p>
               )}
             </Card>
           )}
@@ -10977,12 +10991,12 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           {/* Seeds List */}
           {isAdmin && activeBracketName && (
             <Card className="p-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">2</span>Seeds List</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">2</span>{tx('Seeds List')}</p>
               <div className="flex flex-col gap-1.5 mb-3">
                 {([
-                  { value: 'top-seeds', label: 'Auto Import', desc: 'Top N from standings, by score' },
-                  { value: 'manual', label: 'Manual Import', desc: 'Select specific participants' },
-                  { value: 'create-list', label: 'Create List', desc: 'Type participant names' },
+                  { value: 'top-seeds', label: tx('Auto Import'), desc: tx('Top N from standings, by score') },
+                  { value: 'manual', label: tx('Manual Import'), desc: tx('Select specific participants') },
+                  { value: 'create-list', label: tx('Create List'), desc: tx('Type participant names') },
                 ] as Array<{ value: V2SeedImportMode; label: string; desc: string }>).map(opt => (
                   <button key={opt.value}
                     onClick={() => setSeedImportMode(opt.value)}
@@ -10997,7 +11011,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
               {seedImportMode === 'top-seeds' && (
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-1">Seeds to Import</label>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 block mb-1">{tx('Seeds to Import')}</label>
                   <input
                     type="number"
                     min={1}
@@ -11010,12 +11024,12 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   </p>
                   {standings.length === 0 && (
                     <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] text-amber-700">
-                      No standings available for this tournament.
+                      {tx('No standings available for this tournament.')}
                     </div>
                   )}
                   {standings.length > 0 && !hasEnoughStandingsForTopSeeds && (
                     <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] text-amber-700">
-                      Need {normalizedTopSeedsCount} standings entr{normalizedTopSeedsCount === 1 ? 'y' : 'ies'} but only {standings.length} available.
+                      {tx('Need')} {normalizedTopSeedsCount} {tx('standings entries')} {tx('but only')} {standings.length} {tx('available.')}
                     </div>
                   )}
                 </div>
@@ -11030,11 +11044,11 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                           <input
                             value={standingsFilter}
                             onChange={e => setStandingsFilter(e.target.value)}
-                            placeholder="Filter by name…"
+                            placeholder={tx('Filter by name…')}
                             className="flex-1 h-6 px-2 rounded-md border border-black/15 text-[11px] focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 bg-white"
                           />
                           {manualPickedIds.length > 0 && (
-                            <button onClick={() => setManualPickedIds([])} className="text-[10px] text-red-400 hover:text-red-600 shrink-0 whitespace-nowrap">Clear ({manualPickedIds.length})</button>
+                            <button onClick={() => setManualPickedIds([])} className="text-[10px] text-red-400 hover:text-red-600 shrink-0 whitespace-nowrap">{tx('Clear')} ({manualPickedIds.length})</button>
                           )}
                         </div>
                         <div className="flex flex-col gap-0 max-h-48 overflow-y-auto border border-black/[0.06] rounded-md divide-y divide-black/[0.05]">
@@ -11060,9 +11074,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                       </>
                     )}
                     {standings.length === 0 && (
-                      <div className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] text-amber-700">
-                        No standings for this tournament.
-                      </div>
+                      <div className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] text-amber-700">{tx('No standings for this tournament.')}</div>
                     )}
                   </div>
                 </div>
@@ -11073,7 +11085,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   <div className="flex gap-1.5">
                     <input value={customSeedInput} onChange={e => setCustomSeedInput(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter' && customSeedInput.trim()) { setCustomSeedList(p => [...p, customSeedInput.trim()]); setCustomSeedInput(''); } }}
-                      placeholder="Name, press Enter to add"
+                      placeholder={tx('Name, press Enter to add')}
                       className="flex-1 h-7 px-2 rounded-md border border-black/15 text-[11px] focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 bg-white" />
                     <button onClick={() => { if (customSeedInput.trim()) { setCustomSeedList(p => [...p, customSeedInput.trim()]); setCustomSeedInput(''); } }}
                       className="h-7 w-7 flex items-center justify-center rounded-md border border-black/10 hover:bg-emerald-50 hover:border-emerald-300 bg-white">
@@ -11090,7 +11102,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                     ))}
                   </div>
                   {customSeedList.length > 0 && (
-                    <button onClick={() => setCustomSeedList([])} className="text-[10px] text-red-400 hover:text-red-600 self-start">Clear all</button>
+                    <button onClick={() => setCustomSeedList([])} className="text-[10px] text-red-400 hover:text-red-600 self-start">{tx('Clear all')}</button>
                   )}
                 </div>
               )}
@@ -11101,21 +11113,21 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           {/* Bracket Type */}
           {isAdmin && activeBracketName && (
             <Card className="p-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">3</span>Bracket Type</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">3</span>{tx('Bracket Type')}</p>
               <div className="flex gap-1.5 mb-2">
                 <button
                   onClick={() => setBracketTypeMode('available')}
                   className={`flex-1 h-8 rounded-md border text-xs font-semibold transition-colors ${bracketTypeMode === 'available'
                     ? 'bg-emerald-600 border-emerald-500 text-white'
                     : 'bg-white border-black/10 text-black/55 hover:border-emerald-200 hover:text-emerald-700'}`}>
-                  Available Tournament
+                  {tx('Available Tournament')}
                 </button>
                 <button
                   onClick={() => { setBracketTypeMode('custom'); setSelectedBracketPreset('custom'); setSelectedPresetId(''); setPresetEditorStep('pick'); }}
                   className={`flex-1 h-8 rounded-md border text-xs font-semibold transition-colors ${bracketTypeMode === 'custom'
                     ? 'bg-emerald-600 border-emerald-500 text-white'
                     : 'bg-white border-black/10 text-black/55 hover:border-emerald-200 hover:text-emerald-700'}`}>
-                  Preset Editor
+                  {tx('Preset Editor')}
                 </button>
               </div>
 
@@ -11151,7 +11163,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                           </button>
                           {isSelected && (
                             <button
-                              title="Edit structure of this tournament type"
+                              title={tx('Edit structure of this tournament type')}
                               onClick={() => {
                                 setBracketTypeMode('custom');
                                 setSelectedBracketPreset(typeItem.id as any);
@@ -11224,7 +11236,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                                     </button>
                                     <button
                                       onClick={() => { setEditingPresetId(p.id); setEditingPresetName(p.name); }}
-                                      className="h-full px-1.5 py-1.5 text-black/20 hover:text-sky-600 opacity-0 group-hover:opacity-100 transition-opacity" title="Rename">
+                                      className="h-full px-1.5 py-1.5 text-black/20 hover:text-sky-600 opacity-0 group-hover:opacity-100 transition-opacity" title={tx('Rename')}>
                                       <Pencil size={11} />
                                     </button>
                                     <button
@@ -11237,7 +11249,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                                           setRulePresets(prev => prev.filter(x => x.id !== p.id));
                                         } catch { /* ignore */ } finally { setPresetActionBusy(null); }
                                       }}
-                                      className="h-full px-1.5 py-1.5 text-black/20 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-40" title="Delete">
+                                      className="h-full px-1.5 py-1.5 text-black/20 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-40" title={tx('Delete')}>
                                       {presetActionBusy === p.id ? <span className="text-[9px]">…</span> : <Trash2 size={11} />}
                                     </button>
                                   </div>
@@ -11251,7 +11263,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   })}
                   {savedBrackets.filter(b => b.id !== activeBracketId).length > 0 && (
                     <>
-                      <p className="text-[9px] uppercase tracking-widest text-black/30 mt-2 mb-0.5 px-1">Saved Brackets</p>
+                      <p className="text-[9px] uppercase tracking-widest text-black/30 mt-2 mb-0.5 px-1">{tx('Saved Brackets')}</p>
                       {savedBrackets.filter(b => b.id !== activeBracketId).map(b => (
                         <button key={b.id} onClick={() => handleLoadBracket(b.id)}
                           className="w-full text-left px-3 py-2 rounded-lg border border-purple-200 text-xs hover:bg-purple-50 hover:border-purple-400 transition-colors bg-white text-purple-700 font-medium flex items-center justify-between">
@@ -11273,7 +11285,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                                 onChange={(e) => setInclude3rdPlace(e.target.checked)}
                                 className="accent-emerald-600"
                               />
-                              <span>Include 3rd Place Match</span>
+                              <span>{tx('Include 3rd Place Match')}</span>
                             </label>
                           )}
               </div>
@@ -11515,18 +11527,18 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           {/* Generate Bracket */}
           {isAdmin && activeBracketName && (
             <Card className="p-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">4</span>Generate Bracket</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">4</span>{tx('Generate Bracket')}</p>
               <div className="grid grid-cols-3 gap-1.5 mb-2">
                 <div className="rounded-md border border-black/10 bg-gray-50 px-2 py-1">
-                  <div className="text-[9px] uppercase tracking-wider text-black/35">Seeds</div>
+                  <div className="text-[9px] uppercase tracking-wider text-black/35">{tx('Seeds')}</div>
                   <div className="text-xs font-semibold text-black/75">{participantNodes.length}</div>
                 </div>
                 <div className="rounded-md border border-black/10 bg-gray-50 px-2 py-1">
-                  <div className="text-[9px] uppercase tracking-wider text-black/35">Rounds</div>
+                  <div className="text-[9px] uppercase tracking-wider text-black/35">{tx('Rounds')}</div>
                   <div className="text-xs font-semibold text-black/75">{rounds.length}</div>
                 </div>
                 <div className="rounded-md border border-black/10 bg-gray-50 px-2 py-1">
-                  <div className="text-[9px] uppercase tracking-wider text-black/35">Preview Matches</div>
+                  <div className="text-[9px] uppercase tracking-wider text-black/35">{tx('Preview Matches')}</div>
                   <div className="text-xs font-semibold text-black/75">{engineResult?.matches.length || 0}</div>
                 </div>
               </div>
@@ -11537,26 +11549,26 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   onChange={e => setAutoGenerate(e.target.checked)}
                   className="accent-emerald-600"
                 />
-                Auto-generate preview when seeds or rounds change
+                {tx('Auto-generate preview when seeds or rounds change')}
               </label>
               <div className="flex items-center gap-2 mb-2">
                 <Button size="sm" variant="outline" onClick={generate} disabled={!canGeneratePreview} className="px-2 text-[10px] disabled:opacity-40">
-                  <RefreshCw size={11} /> Generate Preview
+                  <RefreshCw size={11} /> {tx('Generate Preview')}
                 </Button>
               </div>
               <p className="text-[10px] text-black/35">
-                Build a fresh preview after seeds and bracket type are configured.
+                {tx('Build a fresh preview after seeds and bracket type are configured.')}
               </p>
               {/* ── Generate Actual Bracket ── */}
               {isAdmin && engineResult && engineResult.matches.length > 0 && errors.length === 0 && (
                 <div className="mt-3 border-t border-black/10 pt-3">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 mb-1.5">Step 4 — Create Live Bracket</p>
-                  <p className="text-[10px] text-black/40 mb-2">Preview looks good? Generate the actual bracket for scoring.</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 mb-1.5">{tx('Step 4 - Create Live Bracket')}</p>
+                  <p className="text-[10px] text-black/40 mb-2">{tx('Preview looks good? Generate the actual bracket for scoring.')}</p>
                   <button
                     onClick={handleGenerateActualBracket}
                     disabled={generating || generationBlockers.length > 0}
                     className="w-full h-9 rounded-md bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-                    {generating ? <><RefreshCw size={13} className="animate-spin" /> Generating…</> : <><GitBranch size={13} /> Generate Actual Bracket</>}
+                    {generating ? <><RefreshCw size={13} className="animate-spin" /> {tx('Generating...')}</> : <><GitBranch size={13} /> {tx('Generate Actual Bracket')}</>}
                   </button>
                   {generateError && <p className="mt-1.5 text-[10px] text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{generateError}</p>}
                   {generateSuccess && <p className="mt-1.5 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-2 py-1">{generateSuccess}</p>}
@@ -11611,18 +11623,18 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           <Card className="p-3 max-w-sm">
             <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">Available Brackets</p>
-                <p className="text-[10px] text-black/35 mt-0.5">Select a bracket to load it.</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Available Brackets')}</p>
+                <p className="text-[10px] text-black/35 mt-0.5">{tx('Select a bracket to load it.')}</p>
               </div>
               {activeBracketName && (
                 <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                  Active: {activeBracketName}
+                  {tx('Active')}: {activeBracketName}
                 </span>
               )}
             </div>
-            {savedBracketsLoading && <span className="text-[10px] text-black/35">Loading brackets...</span>}
+            {savedBracketsLoading && <span className="text-[10px] text-black/35">{tx('Loading brackets...')}</span>}
             {!savedBracketsLoading && savedBrackets.length === 0 && (
-              <span className="text-[10px] text-black/35">No saved brackets yet.</span>
+              <span className="text-[10px] text-black/35">{tx('No saved brackets yet.')}</span>
             )}
             {!savedBracketsLoading && savedBrackets.length > 0 && (
               <div className="flex flex-col gap-1.5">
@@ -11641,12 +11653,12 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                         {bkt.name}
                       </span>
                       {isActive
-                        ? <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide whitespace-nowrap">Active</span>
+                        ? <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide whitespace-nowrap">{tx('Active')}</span>
                         : <button
                             onClick={() => handleLoadBracket(bkt.id)}
                             className="h-6 px-2.5 rounded border border-black/15 bg-white hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 text-[10px] font-semibold text-black/50 transition-colors whitespace-nowrap"
                           >
-                            Load
+                            {tx('Load')}
                           </button>
                       }
                     </div>
@@ -11663,7 +11675,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
             <div className="text-4xl">🏆</div>
             <div className="text-center">
               <p className="text-sm font-semibold text-black/40">No bracket active</p>
-              <p className="text-xs text-black/30 mt-1">{role === 'public' ? 'Choose a saved bracket above to load it.' : 'Create a new bracket or load a saved one from the left panel.'}</p>
+              <p className="text-xs text-black/30 mt-1">{role === 'public' ? tx('Choose a saved bracket above to load it.') : tx('Create a new bracket or load a saved one from the left panel.')}</p>
             </div>
           </div>
         )}
@@ -11811,9 +11823,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
         {activeBracketName && (podium || podiumMatchMeta.finalMatch != null) && (
           <Card className="p-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-3 text-center">Results / Podium</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-3 text-center">{tx('Results / Podium')}</p>
             {canManageBracketV2 && podiumMatchMeta.finalMatch != null && (
-              <p className="text-[9px] text-center text-black/30 mb-2">Double-click a position to set the winner</p>
+              <p className="text-[9px] text-center text-black/30 mb-2">{tx('Double-click a position to set the winner')}</p>
             )}
             <div className="flex items-end justify-center gap-3">
               {/* 2nd place */}
@@ -11823,7 +11835,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               >
                 <div className="w-12 h-12 rounded-full bg-gray-100 border-2 border-gray-300 flex items-center justify-center text-lg">🥈</div>
                 <div className="text-xs font-semibold text-black/60 text-center max-w-[80px] truncate">{podiumDisplayName(podium?.second || '')}</div>
-                <div className="bg-gray-200 w-16 h-10 rounded-t-md flex items-center justify-center text-xs font-bold text-gray-500">2nd</div>
+                <div className="bg-gray-200 w-16 h-10 rounded-t-md flex items-center justify-center text-xs font-bold text-gray-500">{tx('2nd')}</div>
               </div>
               {/* 1st place */}
               <div
@@ -11832,7 +11844,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               >
                 <div className="w-14 h-14 rounded-full bg-yellow-50 border-2 border-yellow-400 flex items-center justify-center text-xl">🥇</div>
                 <div className="text-sm font-bold text-black/80 text-center max-w-[100px] truncate">{podiumDisplayName(podium?.first || '')}</div>
-                <div className="bg-yellow-400 w-20 h-14 rounded-t-md flex items-center justify-center text-xs font-bold text-yellow-900">1st</div>
+                <div className="bg-yellow-400 w-20 h-14 rounded-t-md flex items-center justify-center text-xs font-bold text-yellow-900">{tx('1st')}</div>
               </div>
               {/* 3rd place */}
               <div
@@ -11841,12 +11853,12 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               >
                 <div className="w-12 h-12 rounded-full bg-orange-50 border-2 border-orange-300 flex items-center justify-center text-lg">🥉</div>
                 <div className="text-xs font-semibold text-black/60 text-center max-w-[80px] truncate">{podiumDisplayName(podium?.thirds[0] || '')}</div>
-                <div className="bg-orange-300 w-16 h-8 rounded-t-md flex items-center justify-center text-xs font-bold text-orange-900">3rd</div>
+                <div className="bg-orange-300 w-16 h-8 rounded-t-md flex items-center justify-center text-xs font-bold text-orange-900">{tx('3rd')}</div>
               </div>
             </div>
             {podium && podium.thirds.length > 1 && (
               <div className="mt-3 text-center">
-                <p className="text-[10px] text-black/40 mb-1">Also 3rd place:</p>
+                <p className="text-[10px] text-black/40 mb-1">{tx('Also 3rd place:')}</p>
                 <div className="flex flex-wrap gap-1.5 justify-center">
                   {podium.thirds.slice(1).map((name, i) => (
                     <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200 text-orange-700">{podiumDisplayName(name)}</span>
@@ -11863,14 +11875,14 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
             <div className="w-full max-w-sm rounded-2xl border border-black/10 bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between gap-3 border-b border-black/10 px-4 py-3">
                 <div>
-                  <h5 className="text-sm font-bold text-black/80">Set {podiumPickerSlot === 'first' ? '🥇 1st' : podiumPickerSlot === 'second' ? '🥈 2nd' : '🥉 3rd'} Place</h5>
+                  <h5 className="text-sm font-bold text-black/80">{tx('Set')} {podiumPickerSlot === 'first' ? `🥇 ${tx('1st')}` : podiumPickerSlot === 'second' ? `🥈 ${tx('2nd')}` : `🥉 ${tx('3rd')}`} {tx('Place')}</h5>
                 </div>
                 <button type="button" onClick={() => { setPodiumPickerSlot(null); setPodiumSelectValue(''); }} className="h-8 w-8 rounded-full border border-black/10 bg-white text-black/55 hover:text-black/80 flex items-center justify-center">✕</button>
               </div>
               <div className="px-4 py-4 space-y-4">
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-widest text-black/45 mb-1">
-                    {tournament.type === 'team' ? 'Team' : 'Participant'}
+                    {tournament.type === 'team' ? tx('Team') : tx('Participant')}
                   </label>
                   {(() => {
                     // Build options from final-round match participants
@@ -11930,7 +11942,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                         onChange={(e) => setPodiumSelectValue(e.target.value)}
                         className="w-full h-10 rounded-lg border border-black/15 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
                       >
-                        <option value="">Choose {tournament.type === 'team' ? 'team' : 'participant'}…</option>
+                        <option value="">{tx('Choose')} {tournament.type === 'team' ? tx('team') : tx('participant')}…</option>
                         {finalOpts.map((o) => (
                           <option key={o.id} value={String(o.id)}>{o.label}</option>
                         ))}
@@ -11939,7 +11951,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   })()}
                 </div>
                 <div className="flex items-center justify-end gap-2 pt-1">
-                  <button type="button" disabled={podiumSaving} onClick={() => { setPodiumPickerSlot(null); setPodiumSelectValue(''); }} className="h-9 px-3 rounded-lg border border-black/10 bg-white text-xs font-bold uppercase tracking-wide text-black/60 disabled:opacity-50">Cancel</button>
+                  <button type="button" disabled={podiumSaving} onClick={() => { setPodiumPickerSlot(null); setPodiumSelectValue(''); }} className="h-9 px-3 rounded-lg border border-black/10 bg-white text-xs font-bold uppercase tracking-wide text-black/60 disabled:opacity-50">{tx('Cancel')}</button>
                   <button
                     type="button"
                     disabled={podiumSaving || !podiumSelectValue}
@@ -11972,7 +11984,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                     }}
                     className="h-9 px-3 rounded-lg border border-emerald-300 bg-emerald-50 text-xs font-bold uppercase tracking-wide text-emerald-700 disabled:opacity-50"
                   >
-                    {podiumSaving ? 'Saving…' : 'Save Winner'}
+                    {podiumSaving ? tx('Saving...') : tx('Save Winner')}
                   </button>
                 </div>
               </div>
@@ -11989,14 +12001,14 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               <button
                 onClick={() => setBracketZoom(z => Math.max(0.25, +(z - 0.1).toFixed(2)))}
                 className="h-7 px-2.5 text-black/50 hover:bg-gray-100 hover:text-black transition-colors flex items-center gap-1 text-[11px] font-medium border-r border-black/10"
-                title="Zoom Out">
+                title={tx('Zoom Out')}>
                 <ZoomOut size={12} /> <span>–</span>
               </button>
               <span className="px-2 text-[11px] font-mono text-black/50 select-none">{Math.round(bracketZoom * 100)}%</span>
               <button
                 onClick={() => setBracketZoom(z => Math.min(3, +(z + 0.1).toFixed(2)))}
                 className="h-7 px-2.5 text-black/50 hover:bg-gray-100 hover:text-black transition-colors flex items-center gap-1 text-[11px] font-medium border-l border-black/10"
-                title="Zoom In">
+                title={tx('Zoom In')}>
                 <ZoomIn size={12} /> <span>+</span>
               </button>
             </div>
@@ -12005,19 +12017,19 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               <button
                 onClick={() => setShowExportDialog(v => !v)}
                 className="h-7 px-2.5 rounded-md border border-black/10 bg-white text-black/50 hover:bg-gray-100 hover:text-black transition-colors flex items-center gap-1 text-[11px] font-medium"
-                title="Export bracket">
-                <Download size={12} /> <span>Export</span>
+                title={tx('Export bracket')}>
+                <Download size={12} /> <span>{tx('Export')}</span>
               </button>
               {showExportDialog && (
                 <div className="absolute left-0 top-9 z-50 bg-white border border-black/15 rounded-lg shadow-xl p-3 flex flex-col gap-2 min-w-[180px]">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-1">Export as</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-1">{tx('Export as')}</p>
                   <button
                     onClick={async () => {
                       setShowExportDialog(false);
                       await exportBracketAsImage();
                     }}
                     className="flex items-center gap-2 px-3 py-2 rounded-md border border-black/10 hover:bg-gray-50 text-xs font-medium text-black/70 transition-colors">
-                    <FileImage size={13} className="text-sky-500" /> PNG Image
+                    <FileImage size={13} className="text-sky-500" /> {tx('PNG Image')}
                   </button>
                   <button
                     onClick={() => {
@@ -12025,7 +12037,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                       window.print();
                     }}
                     className="flex items-center gap-2 px-3 py-2 rounded-md border border-black/10 hover:bg-gray-50 text-xs font-medium text-black/70 transition-colors">
-                    <Printer size={13} className="text-rose-500" /> PDF (Print)
+                    <Printer size={13} className="text-rose-500" /> {tx('PDF (Print)')}
                   </button>
                 </div>
               )}
@@ -12045,8 +12057,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                     URL.revokeObjectURL(url);
                   }}
                   className="h-7 px-2.5 rounded-md border border-black/10 bg-white text-black/50 hover:bg-gray-100 hover:text-black transition-colors flex items-center gap-1 text-[11px] font-medium"
-                  title="Export bracket config as JSON">
-                  <Upload size={12} className="rotate-180" /> <span>Export JSON</span>
+                  title={tx('Export bracket config as JSON')}>
+                  <Upload size={12} className="rotate-180" /> <span>{tx('Export JSON')}</span>
                 </button>
               ) : null;
             })()}
@@ -12054,8 +12066,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
             {role !== 'public' && (
               <label
                 className="h-7 px-2.5 rounded-md border border-black/10 bg-white text-black/50 hover:bg-gray-100 hover:text-black transition-colors flex items-center gap-1 text-[11px] font-medium cursor-pointer"
-                title="Import bracket config from JSON file">
-                <Upload size={12} /> <span>Import JSON</span>
+                title={tx('Import bracket config from JSON file')}>
+                <Upload size={12} /> <span>{tx('Import JSON')}</span>
                 <input
                   type="file"
                   accept=".json"
@@ -12068,7 +12080,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                       const text = await file.text();
                       const parsed = JSON.parse(text) as SavedBracketConfig;
                       if (!parsed?.name || !Array.isArray(parsed?.rounds)) {
-                        alert('Invalid bracket file: missing required fields (name, rounds).');
+                        alert(tx('Invalid bracket file: missing required fields (name, rounds).'));
                         return;
                       }
                       const imported: SavedBracketConfig = { ...parsed, id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, createdAt: new Date().toISOString() };
@@ -12077,7 +12089,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                       setSaveBracketFeedback(`Imported "${imported.name}"`);
                       setTimeout(() => setSaveBracketFeedback(null), 3000);
                     } catch (err: any) {
-                      alert(`Failed to import bracket: ${err?.message || 'Unknown error'}`);
+                      alert(`${tx('Failed to import bracket:')} ${err?.message || tx('Unknown error')}`);
                     }
                   }}
                 />
@@ -12089,19 +12101,19 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                 onClick={() => { if (!forceListMode) setViewMode('visual'); }}
                 disabled={forceListMode}
                 className={`h-7 px-2.5 flex items-center gap-1 text-[11px] font-medium transition-colors ${effectiveViewMode === 'visual' ? 'bg-emerald-600 text-white' : 'text-black/50 hover:bg-gray-100'} ${forceListMode ? 'cursor-not-allowed opacity-40 hover:bg-white' : ''}`}
-                title={forceListMode ? 'Visual view is disabled on small portrait screens' : 'Visual view'}>
-                <GitBranch size={12} /> Visual
+                title={forceListMode ? tx('Visual view is disabled on small portrait screens') : tx('Visual view')}>
+                <GitBranch size={12} /> {tx('Visual')}
               </button>
               <button
                 onClick={() => setViewMode('list')}
                 className={`h-7 px-2.5 flex items-center gap-1 text-[11px] font-medium transition-colors ${effectiveViewMode === 'list' ? 'bg-emerald-600 text-white' : 'text-black/50 hover:bg-gray-100'}`}
-                title="List view">
-                <LayoutList size={12} /> List
+                title={tx('List view')}>
+                <LayoutList size={12} /> {tx('List')}
               </button>
             </div>
             {forceListMode && (
               <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                Small portrait screen: list view only
+                {tx('Small portrait screen: list view only')}
               </span>
             )}
           </div>
@@ -13062,9 +13074,9 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       const message = err instanceof Error ? err.message : String(err || 'Unknown error');
       if (message.includes('404') || message.toLowerCase().includes('not found')) {
         setBonusApiAvailable(false);
-        alert('Bonus API is not available on the running server. Restart server with latest code, then try again.');
+        alert(tx('Bonus API is not available on the running server. Restart server with latest code, then try again.'));
       } else {
-        alert(`Failed to save bonus: ${message}`);
+        alert(`${tx('Failed to save bonus:')} ${message}`);
       }
       console.error('Failed to save bonus:', err);
     } finally {
@@ -13095,7 +13107,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       } else {
         // Real error — roll back and warn
         setAdditionalByKey((prev) => ({ ...prev, [key]: previous }));
-        alert(`Failed to save additional score: ${message}`);
+        alert(`${tx('Failed to save additional score:')} ${message}`);
       }
     } finally {
       setSavingAdditionalKey(null);
@@ -13541,7 +13553,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
   const handleSaveStandings = async () => {
     await loadStandings();
-    alert('Tournament standings refreshed and saved.');
+    alert(tx('Tournament standings refreshed and saved.'));
   };
 
   const handleExportStandings = () => {
@@ -13663,7 +13675,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           }
 
           if (scorePayloads.length === 0 && additionalPayloads.length === 0 && bonusPayloads.length === 0) {
-            alert('No matching participants found in import file. Check that names match exactly.');
+            alert(tx('No matching participants found in import file. Check that names match exactly.'));
             return;
           }
 
@@ -13690,7 +13702,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           const gameNumberIndex = headers.indexOf('game_number');
           const scoreIndex = headers.indexOf('score');
           if (participantIdIndex === -1 || gameNumberIndex === -1 || scoreIndex === -1) {
-            alert('Invalid import file. Expected columns: participant, game_1, game_2... (or legacy: participant_id, game_number, score)');
+            alert(tx('Invalid import file. Expected columns: participant, game_1, game_2... (or legacy: participant_id, game_number, score)'));
             return;
           }
 
@@ -13724,7 +13736,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
     const printWindow = window.open('', '_blank', 'width=1000,height=700');
     if (!printWindow) {
-      alert('Unable to open print window. Please allow popups and try again.');
+      alert(tx('Unable to open print window. Please allow popups and try again.'));
       return;
     }
 
@@ -13752,17 +13764,17 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     return (
       <thead>
         <tr className="bg-[#AFDDE5]/35 border-b border-[#AFDDE5]/70">
-          <th className={`px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-black/70 w-12 bg-[#e3f3f6] sticky left-0 ${headerTopClass} z-[6]`}>Rank</th>
-          <th className={`px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-black/80 bg-[#e3f3f6] sticky left-12 ${headerTopClass} z-[6]`}>{standingsMode === 'teams' ? 'Team' : 'Participant'}</th>
+          <th className={`px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-black/70 w-12 bg-[#e3f3f6] sticky left-0 ${headerTopClass} z-[6]`}>{tx('Rank')}</th>
+          <th className={`px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-black/80 bg-[#e3f3f6] sticky left-12 ${headerTopClass} z-[6]`}>{standingsMode === 'teams' ? tx('Team') : tx('Participant')}</th>
           {standingsMode === 'players' && (
             <>
-              {showPlayerStyle && <th className={`${headerBaseClass} text-center`}>1H/2H</th>}
-              {hasClubData && <th className={headerBaseClass}>Club</th>}
-              {hasDivisions && <th className={`${headerBaseClass} text-center w-11`}>Zone</th>}
+              {showPlayerStyle && <th className={`${headerBaseClass} text-center`}>{tx('1H/2H')}</th>}
+              {hasClubData && <th className={headerBaseClass}>{tx('Club')}</th>}
+              {hasDivisions && <th className={`${headerBaseClass} text-center w-11`}>{tx('Zone')}</th>}
             </>
           )}
           {standingsMode === 'players' && isTeamTournament && (
-            <th className={headerBaseClass}>Team</th>
+            <th className={headerBaseClass}>{tx('Team')}</th>
           )}
           {gameNumbers.map((gameNumber) => (
             <th key={`game-th-${gameNumber}`} className={`${headerBaseClass} text-center`}>
@@ -13776,12 +13788,12 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           )}
           {hasBonus && (
             <th key="bonus-th" className={`px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 bg-[#e3f3f6] sticky ${headerTopClass} z-[4] text-center`}>
-              Bonus
+              {tx('Bonus')}
             </th>
           )}
           <th className={`${headerBaseClass} text-right text-emerald-700`}>{totalColumnLabel}</th>
           {standingsMode === 'players' && (
-            <th key="avg-th" className={`${headerBaseClass} text-center text-sky-700`}>Avg</th>
+            <th key="avg-th" className={`${headerBaseClass} text-center text-sky-700`}>{tx('Avg')}</th>
           )}
         </tr>
       </thead>
@@ -13810,7 +13822,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     </colgroup>
   );
 
-  const totalColumnLabel = hasAdditionalScores || hasBonus ? 'Grand Total' : 'Total';
+  const totalColumnLabel = hasAdditionalScores || hasBonus ? tx('Grand Total') : tx('Total');
 
   return (
     <div className="space-y-6">
@@ -13836,38 +13848,38 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
               type="button"
               onClick={exitPresentMode}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold text-sm transition-colors"
-              title="Exit Present Mode"
+              title={tx('Exit Present Mode')}
             >
               ← {tx('Back')}
             </button>
             {isTeamTournament && (
               <div className="inline-flex items-center gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">View</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">{tx('View')}</span>
                 <div className={segmentedTabContainerClass}>
                   <button
                     onClick={() => setStandingsMode('players')}
                     className={getSegmentedTabButtonClass(standingsMode === 'players', 'compact')}
                   >
-                    Players
+                    {tx('Players')}
                   </button>
                   <button
                     onClick={() => setStandingsMode('teams')}
                     className={getSegmentedTabButtonClass(standingsMode === 'teams', 'compact')}
                   >
-                    Teams
+                    {tx('Teams')}
                   </button>
                 </div>
               </div>
             )}
             {standingsMode === 'players' && (
               <div className="inline-flex items-center gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Gender</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">{tx('Gender')}</span>
                 <select
                   value={genderFilter}
                   onChange={(e) => setGenderFilter(e.target.value as 'all' | 'male' | 'female')}
                   className="text-[11px] font-semibold bg-white border border-black/15 rounded px-1.5 py-0.5 text-black/70 focus:outline-none focus:ring-1 focus:ring-emerald-400"
                 >
-                  <option value="all">All</option>
+                  <option value="all">{tx('All')}</option>
                   <option value="female">F</option>
                   <option value="male">M</option>
                 </select>
@@ -13875,13 +13887,13 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
             )}
             {standingsMode === 'players' && hasDivisions && (
               <div className="inline-flex items-center gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">Zone</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-black/50">{tx('Zone')}</span>
                 <select
                   value={divisionFilter}
                   onChange={(e) => setDivisionFilter(e.target.value)}
                   className="text-[11px] font-semibold bg-white border border-black/15 rounded px-1.5 py-0.5 text-black/70 focus:outline-none focus:ring-1 focus:ring-emerald-400"
                 >
-                  <option value="all">All</option>
+                  <option value="all">{tx('All')}</option>
                   {tournamentDivisions.map((d: string) => (
                     <option key={d} value={d}>{d}</option>
                   ))}
@@ -13924,7 +13936,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     <div>
                       <h4 className="font-bold">{tx('Tournament Winners')}</h4>
                       <p className="text-xs text-black/45 mt-0.5">
-                        Compact manual winners grid. Double-click a medal to add, or click a winner name to edit or replace it.
+                        {tx('Compact manual winners grid. Double-click a medal to add, or click a winner name to edit or replace it.')}
                       </p>
                     </div>
                   </div>
@@ -13952,7 +13964,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                               disabled={!canManageStandings}
                               onDoubleClick={() => openWinnerEditor(winnerDivisions[0] ?? 'all', place)}
                               className={`px-2 py-2 font-bold border-b border-black/10 ${rowBg} flex items-center justify-center disabled:cursor-default`}
-                              title={canManageStandings ? 'Double-click to edit this place' : `${rank} place`}
+                              title={canManageStandings ? tx('Double-click to edit this place') : `${rank} ${tx('place')}`}
                             >
                               <span className="relative inline-block align-middle" title={`${rank} place`}>
                                 <Medal size={20} className={medalColor} />
@@ -13973,7 +13985,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                                   disabled={cellDisabled || isPublicView}
                                   onClick={() => openWinnerEditor(division, place)}
                                   className={`px-2.5 py-2 border-b border-black/10 ${rowBg} text-left min-h-[56px] ${!isPublicView ? 'hover:bg-white/50 transition-colors' : ''} disabled:cursor-default`}
-                                  title={isPublicView ? displayName : 'Click to edit or replace'}
+                                  title={isPublicView ? displayName : tx('Click to edit or replace')}
                                 >
                                   <div className={`text-sm font-semibold leading-tight ${isEmpty ? 'text-black/35 italic' : 'text-black/80'}`}>{displayName}</div>
                                 </button>
@@ -14008,15 +14020,15 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
                 <div className="grid grid-cols-3 gap-1.5 md:grid-cols-5 md:gap-2 mb-1.5 md:mb-2">
                   <div className="rounded-md border border-black/10 p-1.5 md:p-2 bg-black/[0.02] text-center">
-                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">Players</p>
+                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Players')}</p>
                     <p className="text-xs md:text-sm font-bold mt-0.5">{totalPlayers}</p>
                   </div>
                   <div className="rounded-md border border-black/10 p-1.5 md:p-2 bg-black/[0.02] text-center">
-                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">Clubs</p>
+                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Clubs')}</p>
                     <p className="text-xs md:text-sm font-bold mt-0.5">{totalClubs}</p>
                   </div>
                   <div className="rounded-md border border-black/10 p-1.5 md:p-2 bg-black/[0.02] text-center">
-                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">Teams</p>
+                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Teams')}</p>
                     <p className="text-xs md:text-sm font-bold mt-0.5">{totalTeams}</p>
                   </div>
                   <div className="rounded-md border border-black/10 p-1.5 md:p-2 bg-black/[0.02] text-center">
@@ -14031,7 +14043,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 md:gap-2">
                   <div className="rounded-md border border-black/10 p-2 bg-black/[0.02]">
-                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">Top Score Male (Top 3)</p>
+                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Top Score Male (Top 3)')}</p>
                     {topMaleScores.length > 0 ? (
                       <div className="mt-1 space-y-0.5 md:space-y-1">
                         {topMaleScores.map((entry, index) => (
@@ -14042,11 +14054,11 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-black/40 mt-0.5">No male result yet.</p>
+                      <p className="text-xs text-black/40 mt-0.5">{tx('No male result yet.')}</p>
                     )}
                   </div>
                   <div className="rounded-md border border-black/10 p-2 bg-black/[0.02]">
-                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">Top Score Female (Top 3)</p>
+                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Top Score Female (Top 3)')}</p>
                     {topFemaleScores.length > 0 ? (
                       <div className="mt-1 space-y-0.5 md:space-y-1">
                         {topFemaleScores.map((entry, index) => (
@@ -14057,7 +14069,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-black/40 mt-0.5">No female result yet.</p>
+                      <p className="text-xs text-black/40 mt-0.5">{tx('No female result yet.')}</p>
                     )}
                   </div>
                 </div>
@@ -14070,18 +14082,18 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
             <div className="w-full max-w-md rounded-2xl border border-black/10 bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
               <div className="flex items-center justify-between gap-3 border-b border-black/10 px-4 py-3">
                 <div>
-                  <h5 className="text-sm font-bold text-black/80">Edit Winner</h5>
+                  <h5 className="text-sm font-bold text-black/80">{tx('Edit Winner')}</h5>
                   <p className="text-[11px] text-black/45 mt-0.5">
-                    {winnerEditorTarget.place === 'first' ? '1st' : winnerEditorTarget.place === 'second' ? '2nd' : '3rd'} place
+                    {winnerEditorTarget.place === 'first' ? tx('1st') : winnerEditorTarget.place === 'second' ? tx('2nd') : tx('3rd')} {tx('place')}
                     {' · '}
-                    {winnerEditorTarget.division === 'female' ? 'Female' : winnerEditorTarget.division === 'male' ? 'Male' : 'Open'} division
+                    {winnerEditorTarget.division === 'female' ? tx('Female') : winnerEditorTarget.division === 'male' ? tx('Male') : tx('Open')} {tx('division')}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={closeWinnerEditor}
                   className="h-8 w-8 rounded-full border border-black/10 bg-white text-black/55 hover:text-black/80"
-                  title="Close"
+                  title={tx('Close')}
                 >
                   <X size={16} className="mx-auto" />
                 </button>
@@ -14089,7 +14101,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
               <div className="space-y-4 px-4 py-4">
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-widest text-black/45 mb-1">Add Registered {isTeamTournament ? 'Team' : 'Participant'}</label>
+                  <label className="block text-[11px] font-bold uppercase tracking-widest text-black/45 mb-1">{tx('Add Registered')} {isTeamTournament ? tx('Team') : tx('Participant')}</label>
                   <div className="flex items-center gap-2">
                     <select
                       value={winnerEditorSelectValue}
@@ -14099,7 +14111,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       }}
                       className="flex-1 h-10 rounded-lg border border-black/15 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
                     >
-                      <option value="">Choose {isTeamTournament ? 'team' : 'participant'}...</option>
+                      <option value="">{tx('Choose')} {isTeamTournament ? tx('team') : tx('participant')}...</option>
                       {winnerEditorOptions.map((option) => (
                         <option key={`winner-editor-${option.value}`} value={option.value}>{option.label}</option>
                       ))}
@@ -14115,13 +14127,13 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       }}
                       className="h-10 px-3 rounded-lg border border-emerald-300 bg-emerald-50 text-xs font-bold uppercase tracking-wide text-emerald-700 disabled:opacity-50"
                     >
-                      Add
+                      {tx('Add')}
                     </button>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-widest text-black/45 mb-1">Add Manual Candidate</label>
+                  <label className="block text-[11px] font-bold uppercase tracking-widest text-black/45 mb-1">{tx('Add Manual Candidate')}</label>
                   <div className="flex items-center gap-2">
                     <input
                       value={winnerEditorManualInput}
@@ -14138,7 +14150,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                           setWinnerEditorManualInput('');
                         }
                       }}
-                      placeholder="Type winner name"
+                      placeholder={tx('Type winner name')}
                       className="flex-1 h-10 rounded-lg border border-black/15 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
                     />
                     <button
@@ -14152,22 +14164,22 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       }}
                       className="h-10 px-3 rounded-lg border border-emerald-300 bg-emerald-50 text-xs font-bold uppercase tracking-wide text-emerald-700 disabled:opacity-50"
                     >
-                      Add
+                      {tx('Add')}
                     </button>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-widest text-black/45 mb-1">Candidates ({winnerEditorCandidateNames.length})</label>
+                  <label className="block text-[11px] font-bold uppercase tracking-widest text-black/45 mb-1">{tx('Candidates')} ({winnerEditorCandidateNames.length})</label>
                   <textarea
                     value={winnerEditorCandidatesText}
                     disabled={winnerEditorSaving}
                     onChange={(event) => setWinnerEditorCandidatesText(event.target.value)}
-                    placeholder="One candidate per line"
+                    placeholder={tx('One candidate per line')}
                     className="w-full min-h-[84px] rounded-lg border border-black/15 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
                   />
                   {winnerEditorCandidateNames.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-black/15 bg-black/[0.02] px-3 py-2 text-xs text-black/45">No candidates added yet.</div>
+                    <div className="rounded-lg border border-dashed border-black/15 bg-black/[0.02] px-3 py-2 text-xs text-black/45">{tx('No candidates added yet.')}</div>
                   ) : (
                     <div className="max-h-40 overflow-auto space-y-1.5 rounded-lg border border-black/10 bg-black/[0.02] p-2">
                       {winnerEditorCandidateNames.map((name) => (
@@ -14179,7 +14191,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                             onClick={() => removeWinnerEditorName(name)}
                             className="h-7 px-2 rounded-md border border-rose-200 bg-rose-50 text-[10px] font-bold uppercase tracking-wide text-rose-700 disabled:opacity-50"
                           >
-                            Remove
+                            {tx('Remove')}
                           </button>
                         </div>
                       ))}
@@ -14194,7 +14206,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     disabled={winnerEditorSaving}
                     className="h-9 px-3 rounded-lg border border-rose-200 bg-rose-50 text-xs font-bold uppercase tracking-wide text-rose-700 disabled:opacity-50"
                   >
-                    Clear
+                    {tx('Clear')}
                   </button>
                   <div className="flex items-center gap-2">
                     <button
@@ -14203,7 +14215,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       disabled={winnerEditorSaving}
                       className="h-9 px-3 rounded-lg border border-black/10 bg-white text-xs font-bold uppercase tracking-wide text-black/60 disabled:opacity-50"
                     >
-                      Cancel
+                      {tx('Cancel')}
                     </button>
                     <button
                       type="button"
@@ -14211,7 +14223,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       disabled={winnerEditorSaving}
                       className="h-9 px-3 rounded-lg border border-emerald-300 bg-emerald-50 text-xs font-bold uppercase tracking-wide text-emerald-700 disabled:opacity-50"
                     >
-                      {winnerEditorSaving ? 'Saving...' : 'Save Winner'}
+                      {winnerEditorSaving ? tx('Saving...') : tx('Save Winner')}
                     </button>
                   </div>
                 </div>
@@ -14229,7 +14241,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
             <div className="flex items-center gap-2 px-4 pt-2 pb-1 sm:hidden">
               <h4 className="font-bold text-sm">{tx('Ranking')}</h4>
               {standingsMode === 'teams' && isTeamTournament && !teamsCountValid && (
-                <p className="text-xs text-amber-700">Team mismatch — review Participants page.</p>
+                <p className="text-xs text-amber-700">{tx('Team mismatch - review Participants page.')}</p>
               )}
             </div>
             {/* Main toolbar row */}
@@ -14239,19 +14251,16 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 <div className="hidden sm:block shrink-0">
                   <h4 className="font-bold text-sm">{tx('Ranking')}</h4>
                   {standingsMode === 'teams' && isTeamTournament && !teamsCountValid && (
-                    <p className="text-xs mt-1 text-amber-700">
-                      Team check: ranked teams = {rankedTeamsCount} (real teams only), assigned players = {assignedPlayersCount}, unassigned players = {unassignedPlayersCount}.
-                      {' Mismatch detected. Please review team assignments in Participants page.'}
-                    </p>
+                    <p className="text-xs mt-1 text-amber-700">{tx('Team mismatch - review Participants page.')}</p>
                   )}
                   {!bonusApiAvailable && (
                     <p className="text-xs mt-1 text-amber-700">
-                      Bonus editing is currently unavailable on this server build.
+                      {tx('Bonus editing is currently unavailable on this server build.')}
                     </p>
                   )}
                   {!additionalApiAvailable && hasAdditionalScores && (
                     <p className="text-xs mt-1 text-amber-700">
-                      Additional score editing is currently unavailable on this server build.
+                      {tx('Additional score editing is currently unavailable on this server build.')}
                     </p>
                   )}
                 </div>
@@ -14260,7 +14269,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                   {isTeamTournament && (
                     <button
                       onClick={() => setStandingsMode('teams')}
-                      title="Teams"
+                      title={tx('Teams')}
                       className={`h-7 w-7 flex items-center justify-center rounded-md transition-colors ${
                         standingsMode === 'teams' ? 'bg-orange-500 text-white' : 'text-black/50 hover:text-black/80'
                       }`}
@@ -14274,7 +14283,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       onClick={() => {
                         setStandingsMode('players');
                       }}
-                      title="Players"
+                      title={tx('Players')}
                       className={`h-7 w-7 flex items-center justify-center rounded-md transition-colors ${
                         standingsMode === 'players' ? 'bg-orange-500 text-white' : 'text-black/50 hover:text-black/80'
                       }`}
@@ -14289,20 +14298,20 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       onChange={(e) => setGenderFilter(e.target.value as 'all' | 'male' | 'female')}
                       className="h-7 text-[11px] font-semibold bg-transparent border-0 rounded px-1 py-0 text-black/60 focus:outline-none focus:ring-1 focus:ring-orange-400 cursor-pointer"
                     >
-                      <option value="all">All</option>
+                      <option value="all">{tx('All')}</option>
                       <option value="female">F</option>
                       <option value="male">M</option>
                     </select>
                   )}
                   {standingsMode === 'players' && hasDivisions && (
                     <div className="flex items-center gap-1 ml-0.5 border-l border-black/10 pl-1.5">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-black/40">Zone:</span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Zone')}:</span>
                       <select
                         value={divisionFilter}
                         onChange={(e) => setDivisionFilter(e.target.value)}
                         className="text-[11px] font-semibold bg-white border border-black/15 rounded px-1 py-0.5 text-black/70 focus:outline-none focus:ring-1 focus:ring-orange-400"
                       >
-                        <option value="all">All</option>
+                        <option value="all">{tx('All')}</option>
                         {tournamentDivisions.map((d: string) => (
                           <option key={d} value={d}>{d}</option>
                         ))}
@@ -14317,18 +14326,18 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 <Button
                   variant="outline"
                   onClick={() => onPresentStandingsScreen({ mode: standingsMode, gender: genderFilter })}
-                  title="Present Standings Screen"
-                  ariaLabel="Present Standings Screen"
+                  title={tx('Present Standings Screen')}
+                  ariaLabel={tx('Present Standings Screen')}
                 >
                   <Eye size={14} />
                 </Button>
               )}
               {!isStandingsScreenMode && !isPublicView && (
                 <>
-                  <Button variant="outline" onClick={handleSaveStandings} title="Save" ariaLabel="Save">
+                  <Button variant="outline" onClick={handleSaveStandings} title={tx('Save')} ariaLabel={tx('Save')}>
                     <Save size={14} />
                   </Button>
-                  <Button variant="outline" onClick={handleExportStandings} title="Export" ariaLabel="Export">
+                  <Button variant="outline" onClick={handleExportStandings} title={tx('Export')} ariaLabel={tx('Export')}>
                     <Upload size={14} />
                   </Button>
                   <input
@@ -14338,13 +14347,13 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     className="hidden"
                     onChange={handleImportStandings}
                   />
-                  <Button variant="outline" onClick={() => standingsImportInputRef.current?.click()} title="Import" ariaLabel="Import">
+                  <Button variant="outline" onClick={() => standingsImportInputRef.current?.click()} title={tx('Import')} ariaLabel={tx('Import')}>
                     <Download size={14} />
                   </Button>
                 </>
               )}
               {!isStandingsScreenMode && (
-                <Button variant="outline" onClick={handlePrintStandings} title="Print" ariaLabel="Print">
+                <Button variant="outline" onClick={handlePrintStandings} title={tx('Print')} ariaLabel={tx('Print')}>
                   <Printer size={14} />
                 </Button>
               )}
@@ -14355,7 +14364,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           {/* Mobile compact view — hidden on sm+ */}
           <div className="sm:hidden px-3 py-2 flex items-center gap-1.5 bg-[#AFDDE5]/10 border-b border-[#AFDDE5]/40">
             <span className="text-[10px] text-black/40 leading-snug">
-              Tap a name for compact details &bull; Rotate phone for full table
+              {tx('Tap a name for compact details')} &bull; {tx('Rotate phone for full table')}
             </span>
           </div>
           <div className="sm:hidden divide-y divide-black/5">
@@ -14379,7 +14388,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       <span className="text-sm font-extrabold tabular-nums leading-tight text-emerald-700">{s.grand_total}</span>
                     </span>
                     <span className="shrink-0 flex flex-col items-end">
-                      <span className="text-[9px] font-semibold uppercase tracking-wider text-sky-600 leading-none">Avg</span>
+                      <span className="text-[9px] font-semibold uppercase tracking-wider text-sky-600 leading-none">{tx('Avg')}</span>
                       <span className="text-xs font-bold tabular-nums text-sky-700 leading-tight">{s.average.toFixed(1)}</span>
                     </span>
                     <span className="shrink-0 text-black/30">{isExpanded ? '▲' : '▼'}</span>
@@ -14392,7 +14401,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       <p className="mt-1 text-[11px] leading-snug text-black/75">
                         <span className="font-semibold text-emerald-700">{totalColumnLabel}:</span> {s.grand_total}
                         {' | '}
-                        <span className="font-semibold text-sky-700">Avg:</span> {s.average.toFixed(1)}
+                        <span className="font-semibold text-sky-700">{tx('Avg')}:</span> {s.average.toFixed(1)}
                         {gameNumbers.map((gn, gi) => {
                           const score = s.games[gi];
                           const display = score === null || score === undefined || score === '' ? '-' : score;
@@ -14439,7 +14448,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
               );
             })}
             {((standingsMode === 'players' && standingsRowsForDisplay.length === 0) || (standingsMode === 'teams' && teamStandingsRows.length === 0)) && (
-              <p className="px-4 py-8 text-center text-black/40 italic text-xs">No scores recorded yet.</p>
+              <p className="px-4 py-8 text-center text-black/40 italic text-xs">{tx('No scores recorded yet.')}</p>
             )}
           </div>
 
@@ -14478,7 +14487,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                             type="button"
                             onClick={(e) => { e.stopPropagation(); setActiveWarningId(activeWarningId === `st-${s.participant_id}` ? null : `st-${s.participant_id}`); }}
                             className="text-red-500 hover:text-red-600 transition-colors"
-                            title="Issues found — click to read"
+                            title={tx('Issues found - click to read')}
                           >
                             <AlertCircle size={11} />
                           </button>
@@ -14584,7 +14593,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                   <td className="standings-sticky-col px-2 py-1.5 leading-tight sticky left-12 z-[2]">
                     <div className="text-xs font-bold text-black">{s.team_name}</div>
                     <div className="text-[10px] lowercase mt-0.5 text-black/60">
-                      {s.members.length > 0 ? s.members.join(', ') : 'no members'}
+                      {s.members.length > 0 ? s.members.join(', ') : tx('No members')}
                     </div>
                   </td>
                   {gameNumbers.map((gameNumber, gameIndex) => {
@@ -14641,7 +14650,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       : (2 + gameNumbers.length + 2 + (hasAdditionalScores ? 1 : 0) + (hasBonus ? 1 : 0));
                     return (
                       <td colSpan={colSpan} className="px-6 py-12 text-center text-black/40 italic">
-                        No scores recorded yet.
+                        {tx('No scores recorded yet.')}
                       </td>
                     );
                   })()}
@@ -14663,18 +14672,18 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                           target={standingsPresentAdBlock.left.link ? '_blank' : undefined}
                           rel={standingsPresentAdBlock.left.link ? 'noopener noreferrer' : undefined}
                           className="h-full w-full flex items-start justify-center p-3"
-                          title="Standings left ad"
+                          title={tx('Standings left ad')}
                         >
                           <img
                             src={standingsPresentAdBlock.left.image}
-                            alt="Standings left ad"
+                            alt={tx('Standings left ad')}
                             className="max-h-full max-w-full object-contain"
                           />
                         </a>
                       ) : (
                         <div className="h-full w-full flex flex-col items-center justify-center px-3 text-center">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-black/70">Ad Space</p>
-                          <p className="text-[11px] text-black/45 mt-1">Animated image can be placed here</p>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-black/70">{tx('Ad Space')}</p>
+                          <p className="text-[11px] text-black/45 mt-1">{tx('Animated image can be placed here')}</p>
                         </div>
                       )}
                     </div>
@@ -14691,18 +14700,18 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                           target={standingsPresentAdBlock.right.link ? '_blank' : undefined}
                           rel={standingsPresentAdBlock.right.link ? 'noopener noreferrer' : undefined}
                           className="h-full w-full flex items-start justify-center p-3"
-                          title="Standings right ad"
+                          title={tx('Standings right ad')}
                         >
                           <img
                             src={standingsPresentAdBlock.right.image}
-                            alt="Standings right ad"
+                            alt={tx('Standings right ad')}
                             className="max-h-full max-w-full object-contain"
                           />
                         </a>
                       ) : (
                         <div className="h-full w-full flex flex-col items-center justify-center px-3 text-center">
-                          <p className="text-[10px] font-black uppercase tracking-widest text-black/70">Ad Space</p>
-                          <p className="text-[11px] text-black/45 mt-1">Animated image can be placed here</p>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-black/70">{tx('Ad Space')}</p>
+                          <p className="text-[11px] text-black/45 mt-1">{tx('Animated image can be placed here')}</p>
                         </div>
                       )}
                     </div>
