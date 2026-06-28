@@ -7106,7 +7106,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   const scoringHeaderScrollRef = useRef<HTMLDivElement | null>(null);
   const scoringBodyScrollRef = useRef<HTMLDivElement | null>(null);
   const scoringScrollRef = useRef<HTMLDivElement | null>(null);
-  const scoringTableRef = useRef<HTMLDivElement | null>(null);
+  const scoringPrintSectionRef = useRef<HTMLDivElement | null>(null);
   const autoScrollSpeedRef = useRef<'slow' | 'medium' | 'fast'>('slow');
   const previousTeamTotalsRef = useRef<Map<string, number>>(new Map());
   const teamPulseTimeoutsRef = useRef<number[]>([]);
@@ -7917,8 +7917,8 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   };
 
   const handlePrintScores = () => {
-    const table = scoringTableRef.current;
-    if (!table) return;
+    const scoringPrintSection = scoringPrintSectionRef.current;
+    if (!scoringPrintSection) return;
 
     const printWindow = window.open('', '_blank', 'width=1000,height=700');
     if (!printWindow) {
@@ -7930,7 +7930,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
       tournament,
       pageTitle: `${tournament.name} - Shift ${currentShift} Scores`,
       pageSubtitle: `${tx('Scoring Table')} • ${tx('Shift')} ${currentShift}`,
-      contentHtml: `<h2>${tx('Scores')}</h2>${table.outerHTML}`,
+      contentHtml: `<h2>${tx('Scores')}</h2>${scoringPrintSection.outerHTML}`,
       extraStyles: `button { display: none !important; } input { border: none; width: 100%; text-align: center; font: inherit; background: transparent; }`,
     }));
   };
@@ -8113,7 +8113,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
       </div>
       )}
 
-      <Card ref={scoringTableRef} className="border-gray-200 overflow-visible relative">
+      <Card className="border-gray-200 overflow-visible relative">
         <div className="sm:hidden px-3 py-2 flex items-center gap-1.5 bg-black/5 border-b border-black/10">
           {isPublicUser ? (
             <span className="inline-flex items-center gap-1.5 text-[10px] text-black/50 leading-snug">
@@ -8244,27 +8244,28 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
             </div>
           ))}
         </div>
-        <div
-          ref={scoringHeaderScrollRef}
-          className={isScoreScreenMode
-            ? 'hidden sm:block overflow-x-auto overflow-y-hidden no-scrollbar border-b border-gray-200 scoring-table-surface'
-            : 'hidden sm:block sticky top-[7.25rem] sm:top-[10.5rem] z-[25] overflow-x-auto overflow-y-hidden no-scrollbar border-b border-gray-200 scoring-table-surface'}
-        >
+        <div ref={scoringPrintSectionRef} className="hidden sm:block">
+          <div
+            ref={scoringHeaderScrollRef}
+            className={isScoreScreenMode
+              ? 'overflow-x-auto overflow-y-hidden no-scrollbar border-b border-gray-200 scoring-table-surface'
+              : 'sticky top-[7.25rem] sm:top-[10.5rem] z-[25] overflow-x-auto overflow-y-hidden no-scrollbar border-b border-gray-200 scoring-table-surface'}
+          >
+            <table className="ui-table-minimal scoring-table-surface w-full text-left border-collapse text-[11px] sm:text-sm table-fixed">
+              {renderScoringColGroup()}
+              {renderScoringHeader()}
+            </table>
+          </div>
+          <div
+            ref={(node) => {
+              scoringScrollRef.current = node;
+              scoringBodyScrollRef.current = node;
+            }}
+            className={isScoreScreenMode ? 'overflow-auto max-h-[calc(100vh-14rem)]' : 'overflow-x-auto'}
+          >
           <table className="ui-table-minimal scoring-table-surface w-full text-left border-collapse text-[11px] sm:text-sm table-fixed">
             {renderScoringColGroup()}
-            {renderScoringHeader()}
-          </table>
-        </div>
-        <div
-          ref={(node) => {
-            scoringScrollRef.current = node;
-            scoringBodyScrollRef.current = node;
-          }}
-          className={isScoreScreenMode ? 'hidden sm:block overflow-auto max-h-[calc(100vh-14rem)]' : 'hidden sm:block overflow-x-auto'}
-        >
-        <table className="ui-table-minimal scoring-table-surface w-full text-left border-collapse text-[11px] sm:text-sm table-fixed">
-          {renderScoringColGroup()}
-          <tbody>
+            <tbody>
             {scoringShiftSections.map((section) => {
               const sectionTeamPositionMap = new Map<number, { index: number; count: number; teamHeaderKey: string }>();
               const teamIndexMap = new Map<string, number>();
@@ -8482,8 +8483,9 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                 </td>
               </tr>
             )}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+          </div>
         </div>
 
         {isScoreScreenMode && scoringPresentAdBlock.enabled && (
