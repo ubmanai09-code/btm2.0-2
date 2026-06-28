@@ -9827,6 +9827,41 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     setActiveBracketId(bkt.id);
   };
 
+  React.useEffect(() => {
+    if (savedBracketsLoading) return;
+    if (savedBrackets.length === 0) return;
+    if (activeBracketId || activeBracketName) return;
+
+    const isBracketCompleted = (bkt: SavedBracketConfig) => {
+      const drafts = bkt.scoreDrafts;
+      if (!drafts || typeof drafts !== 'object') return false;
+      for (const matchDraft of Object.values(drafts)) {
+        if (!matchDraft || typeof matchDraft !== 'object') continue;
+        for (const value of Object.values(matchDraft)) {
+          if (String(value ?? '').trim() !== '') return true;
+        }
+      }
+      return false;
+    };
+
+    const byNewestFirst = (left: SavedBracketConfig, right: SavedBracketConfig) => {
+      const leftTime = Date.parse(String(left.createdAt || ''));
+      const rightTime = Date.parse(String(right.createdAt || ''));
+      if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
+        return rightTime - leftTime;
+      }
+      return String(right.createdAt || '').localeCompare(String(left.createdAt || ''));
+    };
+
+    const completedBrackets = savedBrackets.filter(isBracketCompleted).sort(byNewestFirst);
+    const fallbackBrackets = [...savedBrackets].sort(byNewestFirst);
+    const defaultBracket = completedBrackets[0] || fallbackBrackets[0];
+
+    if (defaultBracket?.id) {
+      handleLoadBracket(defaultBracket.id);
+    }
+  }, [savedBracketsLoading, savedBrackets, activeBracketId, activeBracketName]);
+
   const handleEditBracket = (id: string) => {
     const bkt = savedBrackets.find((b) => b.id === id);
     if (!bkt) return;
@@ -11994,7 +12029,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               )}
             </div>
             {/* Export bracket config as JSON */}
-            {activeBracketId && (() => {
+            {role !== 'public' && activeBracketId && (() => {
               const activeBkt = savedBrackets.find(b => b.id === activeBracketId);
               return activeBkt ? (
                 <button
@@ -12014,36 +12049,38 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               ) : null;
             })()}
             {/* Import bracket config from JSON */}
-            <label
-              className="h-7 px-2.5 rounded-md border border-black/10 bg-white text-black/50 hover:bg-gray-100 hover:text-black transition-colors flex items-center gap-1 text-[11px] font-medium cursor-pointer"
-              title="Import bracket config from JSON file">
-              <Upload size={12} /> <span>Import JSON</span>
-              <input
-                type="file"
-                accept=".json"
-                className="hidden"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  e.target.value = '';
-                  if (!file) return;
-                  try {
-                    const text = await file.text();
-                    const parsed = JSON.parse(text) as SavedBracketConfig;
-                    if (!parsed?.name || !Array.isArray(parsed?.rounds)) {
-                      alert('Invalid bracket file: missing required fields (name, rounds).');
-                      return;
+            {role !== 'public' && (
+              <label
+                className="h-7 px-2.5 rounded-md border border-black/10 bg-white text-black/50 hover:bg-gray-100 hover:text-black transition-colors flex items-center gap-1 text-[11px] font-medium cursor-pointer"
+                title="Import bracket config from JSON file">
+                <Upload size={12} /> <span>Import JSON</span>
+                <input
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (!file) return;
+                    try {
+                      const text = await file.text();
+                      const parsed = JSON.parse(text) as SavedBracketConfig;
+                      if (!parsed?.name || !Array.isArray(parsed?.rounds)) {
+                        alert('Invalid bracket file: missing required fields (name, rounds).');
+                        return;
+                      }
+                      const imported: SavedBracketConfig = { ...parsed, id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, createdAt: new Date().toISOString() };
+                      await api.saveBracketV2Config(tournament.id, imported);
+                      setSavedBrackets(prev => [...prev, imported]);
+                      setSaveBracketFeedback(`Imported "${imported.name}"`);
+                      setTimeout(() => setSaveBracketFeedback(null), 3000);
+                    } catch (err: any) {
+                      alert(`Failed to import bracket: ${err?.message || 'Unknown error'}`);
                     }
-                    const imported: SavedBracketConfig = { ...parsed, id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, createdAt: new Date().toISOString() };
-                    await api.saveBracketV2Config(tournament.id, imported);
-                    setSavedBrackets(prev => [...prev, imported]);
-                    setSaveBracketFeedback(`Imported "${imported.name}"`);
-                    setTimeout(() => setSaveBracketFeedback(null), 3000);
-                  } catch (err: any) {
-                    alert(`Failed to import bracket: ${err?.message || 'Unknown error'}`);
-                  }
-                }}
-              />
-            </label>
+                  }}
+                />
+              </label>
+            )}
             {/* List / Visual toggle */}
             <div className="ml-auto flex items-center rounded-md border border-black/10 overflow-hidden bg-white">
               <button
@@ -12133,7 +12170,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                                         className={`truncate ${canSwapList ? 'cursor-pointer hover:underline hover:text-emerald-700' : ''} ${label === 'TBD' ? 'text-black/30 italic' : isWinner ? 'font-semibold text-black' : 'text-black/70'}`}
                                         onClick={canSwapList ? () => setEditingSlotKey(key) : undefined}
                                         title={canSwapList ? 'Click to swap participant' : label}
-                                      >{label}{slotOverrides[key] != null && <span className="ml-0.5 text-[8px] text-violet-500">✎</span>}</span>
+                                      >{label}{role !== 'public' && slotOverrides[key] != null && <span className="ml-0.5 text-[8px] text-violet-500">✎</span>}</span>
                                     )}
                                   </div>
                                   {canManageBracketV2 && (
@@ -12271,7 +12308,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                                   className={`flex-1 h-7 px-2 flex items-center text-[12px] leading-none truncate ${canSwap ? 'cursor-pointer hover:underline' : ''} ${isTbd ? 'text-black/25 italic' : isWinner ? 'font-medium text-[#111]' : 'text-[#222]'}`}
                                   onClick={canSwap ? (e) => { e.stopPropagation(); setEditingSlotKey(key); } : undefined}
                                   title={canSwap ? 'Click to swap participant' : undefined}
-                                >{compactLabel}{slotOverrides[key] != null && <span className="ml-1 text-[10px] text-violet-500">✎</span>}</span>
+                                >{compactLabel}{role !== 'public' && slotOverrides[key] != null && <span className="ml-1 text-[10px] text-violet-500">✎</span>}</span>
                               )}
                                   {canManageBracketV2 && (
                                 <input type="number" value={score ?? ''} placeholder="—"
