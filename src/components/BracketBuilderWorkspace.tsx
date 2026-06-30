@@ -1139,8 +1139,8 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
     try {
       await apiCompat.deleteBuilderRulePreset(id);
       setRulePresets((prev) => prev.filter((p) => p.id !== id));
-    } catch {
-      // ignore
+    } catch (err: any) {
+      alert(err?.message || 'Failed to delete preset');
     }
   };
 

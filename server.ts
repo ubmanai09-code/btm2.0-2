@@ -2203,11 +2203,8 @@ async function startServer() {
     const existingRow = db.prepare('SELECT id, is_system FROM bracket_presets WHERE id = ?').get(presetId) as any;
     if (!existingRow) return res.status(404).json({ error: 'Preset not found' });
 
-    const inUse = db.prepare('SELECT COUNT(*) as count FROM tournaments WHERE known_bracket_format_id = ?').get(presetId) as any;
-    if ((inUse?.count || 0) > 0) {
-      return res.status(400).json({ error: 'Preset is used by one or more tournaments' });
-    }
-
+    // Clear any tournament references to this preset before deleting
+    db.prepare('UPDATE tournaments SET known_bracket_format_id = NULL WHERE known_bracket_format_id = ?').run(presetId);
     db.prepare('DELETE FROM bracket_presets WHERE id = ?').run(presetId);
     return res.json({ success: true });
   });

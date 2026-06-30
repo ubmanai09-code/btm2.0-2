@@ -50,6 +50,7 @@ import {
   UserRoundPlus,
   UserRoundMinus,
   Eraser,
+  ChevronUp,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry, LeagueRankingResponse, StandingAdditionalScore, StandingBonus } from './services/api';
@@ -9008,6 +9009,10 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
   // ── Panel ─────────────────────────────────────────────────────────────────
   const [leftOpen, setLeftOpen] = React.useState(role !== 'public');
+  const [sectionOpenBracket, setSectionOpenBracket] = React.useState(false);
+  const [sectionOpenSeeds, setSectionOpenSeeds] = React.useState(false);
+  const [sectionOpenBracketType, setSectionOpenBracketType] = React.useState(false);
+  const [sectionOpenGenerate, setSectionOpenGenerate] = React.useState(false);
 
   // ── View ──────────────────────────────────────────────────────────────────
   const [viewMode, setViewMode] = React.useState<'visual' | 'list'>('visual');
@@ -10862,9 +10867,16 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
           {/* ── Bracket Management ──────────────────────────────────────── */}
           {canManageBracketV2 && (
-            <Card className="p-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">1</span>{tx('Bracket')}</p>
-
+            <Card className="p-0 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setSectionOpenBracket(v => !v)}
+                className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors"
+              >
+                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 m-0"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">1</span>{tx('Bracket')}</p>
+                {sectionOpenBracket ? <ChevronUp size={13} className="text-black/30 shrink-0" /> : <ChevronDown size={13} className="text-black/30 shrink-0" />}
+              </button>
+              {sectionOpenBracket && <div className="px-3 pb-3">
               {/* Active bracket indicator */}
               {activeBracketName && (
                 <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200">
@@ -10873,9 +10885,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                     type="button"
                     onClick={() => { void handleSaveBracket(); }}
                     disabled={savingBracketConfig}
-                    className="text-[10px] text-emerald-700 font-semibold hover:text-emerald-900 shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded border border-emerald-300 bg-white hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="text-emerald-700 hover:text-emerald-900 shrink-0 flex items-center justify-center w-6 h-6 rounded border border-emerald-300 bg-white hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title={tx('Save bracket to server')}>
-                    <Save size={10} /> {savingBracketConfig ? tx('Saving...') : tx('Save')}
+                    <Save size={12} />
                   </button>
                   <button
                     onClick={() => {
@@ -10904,8 +10916,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   <button
                     onClick={handleNewBracket}
                     disabled={!bracketName.trim()}
-                    className="h-8 px-2.5 rounded-md border border-black/15 text-[10px] font-semibold bg-white hover:bg-emerald-50 hover:border-emerald-300 disabled:opacity-40 transition-colors flex items-center gap-1">
-                    <Plus size={11} /> {tx('New')}
+                    className="h-8 w-8 rounded-md border border-black/15 bg-white hover:bg-emerald-50 hover:border-emerald-300 disabled:opacity-40 transition-colors flex items-center justify-center"
+                    title={tx('New')}>
+                    <Plus size={13} />
                   </button>
                 </div>
               </div>
@@ -10947,37 +10960,42 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                           <button
                             onClick={() => void handleSaveEditedBracket(bkt.id)}
                             disabled={savingBracketRename}
-                            className="text-[10px] text-blue-700 hover:text-blue-900 font-semibold shrink-0 px-1 disabled:opacity-50"
+                            className="w-6 h-6 flex items-center justify-center rounded text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 disabled:opacity-50"
+                            title={tx('Save')}
                           >
-                            {tx('Save')}
+                            <Save size={12} />
                           </button>
                           <button
                             onClick={handleCancelEditBracket}
                             disabled={savingBracketRename}
-                            className="text-[10px] text-black/45 hover:text-black/70 font-semibold shrink-0 px-1 disabled:opacity-50"
+                            className="w-6 h-6 flex items-center justify-center rounded text-black/40 hover:text-black/70 hover:bg-gray-100 disabled:opacity-50"
+                            title={tx('Cancel')}
                           >
-                            {tx('Cancel')}
+                            <X size={12} />
                           </button>
                         </>
                       ) : (
                         <button
                           onClick={() => handleEditBracket(bkt.id)}
-                          className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold shrink-0 px-1"
+                          className="w-6 h-6 flex items-center justify-center rounded text-black/30 hover:text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title={tx('Edit')}
                         >
-                          {tx('Edit')}
+                          <Pencil size={12} />
                         </button>
                       )}
                       <button
                         onClick={() => handleLoadBracket(bkt.id)}
-                        className="text-[10px] text-emerald-600 hover:text-emerald-800 font-semibold shrink-0 px-1"
+                        className="w-6 h-6 flex items-center justify-center rounded text-black/30 hover:text-emerald-600 hover:bg-emerald-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title={tx('Load')}
                       >
-                        {tx('Load')}
+                        <ArchiveRestore size={12} />
                       </button>
                       <button
                         onClick={() => handleDeleteBracket(bkt.id)}
-                        className="text-[10px] text-red-500 hover:text-red-700 font-semibold shrink-0 px-1"
+                        className="w-6 h-6 flex items-center justify-center rounded text-black/30 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title={tx('Delete')}
                       >
-                        {tx('Delete')}
+                        <Trash2 size={12} />
                       </button>
                     </div>
                   ))}
@@ -10985,14 +11003,22 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               ) : (
                 <p className="text-[10px] text-black/30">{tx('No saved brackets yet.')}</p>
               )}
+              </div>}
             </Card>
           )}
 
           {/* Seeds List */}
           {isAdmin && activeBracketName && (
-            <Card className="p-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">2</span>{tx('Seeds List')}</p>
-              <div className="flex flex-col gap-1.5 mb-3">
+            <Card className="p-0 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setSectionOpenSeeds(v => !v)}
+                className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors"
+              >
+                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 m-0"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">2</span>{tx('Seeds List')}</p>
+                {sectionOpenSeeds ? <ChevronUp size={13} className="text-black/30 shrink-0" /> : <ChevronDown size={13} className="text-black/30 shrink-0" />}
+              </button>
+              {sectionOpenSeeds && <div className="px-3 pb-3"><div className="flex flex-col gap-1.5 mb-3">
                 {([
                   { value: 'top-seeds', label: tx('Auto Import'), desc: tx('Top N from standings, by score') },
                   { value: 'manual', label: tx('Manual Import'), desc: tx('Select specific participants') },
@@ -11107,14 +11133,22 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                 </div>
               )}
 
+              </div>}
             </Card>
           )}
 
           {/* Bracket Type */}
           {isAdmin && activeBracketName && (
-            <Card className="p-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">3</span>{tx('Bracket Type')}</p>
-              <div className="flex gap-1.5 mb-2">
+            <Card className="p-0 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setSectionOpenBracketType(v => !v)}
+                className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors"
+              >
+                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 m-0"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">3</span>{tx('Bracket Type')}</p>
+                {sectionOpenBracketType ? <ChevronUp size={13} className="text-black/30 shrink-0" /> : <ChevronDown size={13} className="text-black/30 shrink-0" />}
+              </button>
+              {sectionOpenBracketType && <div className="px-3 pb-3"><div className="flex gap-1.5 mb-2">
                 <button
                   onClick={() => setBracketTypeMode('available')}
                   className={`flex-1 h-8 rounded-md border text-xs font-semibold transition-colors ${bracketTypeMode === 'available'
@@ -11247,7 +11281,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                                         try {
                                           await api.deleteBuilderRulePreset(p.id);
                                           setRulePresets(prev => prev.filter(x => x.id !== p.id));
-                                        } catch { /* ignore */ } finally { setPresetActionBusy(null); }
+                                        } catch (err: any) {
+                                          alert(err?.message || 'Failed to delete preset');
+                                        } finally { setPresetActionBusy(null); }
                                       }}
                                       className="h-full px-1.5 py-1.5 text-black/20 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-40" title={tx('Delete')}>
                                       {presetActionBusy === p.id ? <span className="text-[9px]">…</span> : <Trash2 size={11} />}
@@ -11521,14 +11557,22 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   )}
                 </div>
               )}
+            </div>}
             </Card>
           )}
 
           {/* Generate Bracket */}
           {isAdmin && activeBracketName && (
-            <Card className="p-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-2"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">4</span>{tx('Generate Bracket')}</p>
-              <div className="grid grid-cols-3 gap-1.5 mb-2">
+            <Card className="p-0 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setSectionOpenGenerate(v => !v)}
+                className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors"
+              >
+                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 m-0"><span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-black mr-1.5">4</span>{tx('Generate Bracket')}</p>
+                {sectionOpenGenerate ? <ChevronUp size={13} className="text-black/30 shrink-0" /> : <ChevronDown size={13} className="text-black/30 shrink-0" />}
+              </button>
+              {sectionOpenGenerate && <div className="px-3 pb-3"><div className="grid grid-cols-3 gap-1.5 mb-2">
                 <div className="rounded-md border border-black/10 bg-gray-50 px-2 py-1">
                   <div className="text-[9px] uppercase tracking-wider text-black/35">{tx('Seeds')}</div>
                   <div className="text-xs font-semibold text-black/75">{participantNodes.length}</div>
@@ -11595,6 +11639,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   ))}
                 </div>
               )}
+            </div>}
             </Card>
           )}
 
@@ -11615,58 +11660,28 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
         {/* Page Title */}
         <div className="flex flex-col">
-          <h3 className="text-xl font-bold text-emerald-800">{tx('Bracket Generation')}</h3>
-          <p className="text-xs text-black/50 mt-0.5">{tx('Generate and manage tournament brackets')}</p>
+          {role === 'public' ? (
+            <h3 className="text-xl font-bold text-emerald-800">{tx('Tournament Bracket')}</h3>
+          ) : (
+            <>
+              <h3 className="text-xl font-bold text-emerald-800">{tx('Bracket Generation')}</h3>
+              <p className="text-xs text-black/50 mt-0.5">{tx('Generate and manage tournament brackets')}</p>
+            </>
+          )}
         </div>
 
-        {role === 'public' && (
-          <Card className="p-3 max-w-sm">
-            <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Available Brackets')}</p>
-                <p className="text-[10px] text-black/35 mt-0.5">{tx('Select a bracket to load it.')}</p>
-              </div>
-              {activeBracketName && (
-                <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                  {tx('Active')}: {activeBracketName}
-                </span>
-              )}
-            </div>
-            {savedBracketsLoading && <span className="text-[10px] text-black/35">{tx('Loading brackets...')}</span>}
-            {!savedBracketsLoading && savedBrackets.length === 0 && (
-              <span className="text-[10px] text-black/35">{tx('No saved brackets yet.')}</span>
-            )}
-            {!savedBracketsLoading && savedBrackets.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                {savedBrackets.map((bkt) => {
-                  const isActive = bkt.id === activeBracketId;
-                  return (
-                    <div
-                      key={bkt.id}
-                      className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs ${
-                        isActive
-                          ? 'border-emerald-300 bg-emerald-50'
-                          : 'border-black/10 bg-white'
-                      }`}
-                    >
-                      <span className={`flex-1 min-w-0 truncate ${isActive ? 'text-emerald-800 font-semibold' : 'text-black/70'}`}>
-                        {bkt.name}
-                      </span>
-                      {isActive
-                        ? <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide whitespace-nowrap">{tx('Active')}</span>
-                        : <button
-                            onClick={() => handleLoadBracket(bkt.id)}
-                            className="h-6 px-2.5 rounded border border-black/15 bg-white hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 text-[10px] font-semibold text-black/50 transition-colors whitespace-nowrap"
-                          >
-                            {tx('Load')}
-                          </button>
-                      }
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </Card>
+        {role === 'public' && !savedBracketsLoading && savedBrackets.length > 1 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-black/40">{tx('Bracket')}:</span>
+            {savedBrackets.map((bkt) => {
+              const isActive = bkt.id === activeBracketId;
+              return isActive ? (
+                <span key={bkt.id} className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{bkt.name}</span>
+              ) : (
+                <button key={bkt.id} onClick={() => handleLoadBracket(bkt.id)} className="inline-flex items-center rounded-full border border-black/10 bg-white px-3 py-1 text-xs text-black/55 hover:border-emerald-300 hover:text-emerald-700 transition-colors">{bkt.name}</button>
+              );
+            })}
+          </div>
         )}
 
         {/* Empty state — no active bracket */}
@@ -11674,8 +11689,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           <div className="flex flex-col items-center justify-center h-64 gap-4 rounded-xl border-2 border-dashed border-black/10 text-black/30">
             <div className="text-4xl">🏆</div>
             <div className="text-center">
-              <p className="text-sm font-semibold text-black/40">No bracket active</p>
-              <p className="text-xs text-black/30 mt-1">{role === 'public' ? tx('Choose a saved bracket above to load it.') : tx('Create a new bracket or load a saved one from the left panel.')}</p>
+              <p className="text-sm font-semibold text-black/40">{role === 'public' ? tx('No bracket available yet') : 'No bracket active'}</p>
+              <p className="text-xs text-black/30 mt-1">{role === 'public' ? tx('The bracket will appear here once it\'s ready.') : tx('Create a new bracket or load a saved one from the left panel.')}</p>
             </div>
           </div>
         )}
@@ -11693,13 +11708,11 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   : selectedBracketPreset === 'playoff' ? tx('Play-Off')
                   : selectedBracketPreset === 'ladder' ? tx('Ladder')
                   : selectedBracketPreset === 'mixed' ? tx('Mixed')
-                  : null;
-                const cat = categoryLabel || tx('Custom');
-                const label = activeCustomPreset?.name ? `${cat} | ${activeCustomPreset.name}` : cat;
-                const isCustomEdit = bracketTypeMode === 'custom' && !activeCustomPreset;
+                  : tx('Custom');
+                const label = activeCustomPreset?.name ? `${categoryLabel} | ${activeCustomPreset.name}` : categoryLabel;
                 return (
-                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${isCustomEdit ? 'border border-sky-200 bg-sky-50 text-sky-700' : 'border border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
-                    {label}{isCustomEdit ? tx(' (custom edit)') : ''}
+                  <span className="text-xs font-bold text-black/60">
+                    {label}
                   </span>
                 );
               })()}
@@ -11711,7 +11724,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-red-700 text-xs">{loadError}</div>
         )}
 
-          {activeBracketName && participantNodes.length > 0 && (
+          {activeBracketName && participantNodes.length > 0 && role !== 'public' && (
             <Card className="p-3 flex flex-col">
             <div className="flex items-center justify-between gap-2 mb-2">
               <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">
