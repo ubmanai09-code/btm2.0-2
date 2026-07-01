@@ -10384,8 +10384,12 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     const forceStepladderRule = isStepladderCat && isDuelFinalStructure;
 
     // 3rd place: explicit placement first, then structural derivation.
+    // thirdIsExplicit = true when an admin action directly recorded the winner;
+    // those cases bypass the include3rdPlace toggle so the podium always shows them.
+    let thirdIsExplicit = false;
     const explicit3rdId = Number(finalMatch?.third_place_id || 0);
     if (explicit3rdId > 0) {
+      thirdIsExplicit = true;
       third = String((tournament.type === 'team' ? finalMatch?.third_place_team_name : null) || finalMatch?.third_place_name || '').trim() || 'TBD';
     } else if (forceStepladderRule) {
       // Stepladder rule: 3rd = loser of the penultimate round (semifinal), always.
@@ -10410,6 +10414,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       // Case B: separate bronze match
       const explicitBronzeWinnerId = Number(bronzeMatch!.winner_id || 0);
       if (explicitBronzeWinnerId > 0) {
+        thirdIsExplicit = true; // someone won the bronze match — always show
         const fromName = getBracketName(bronzeMatch!, 'winner');
         third = fromName !== 'TBD' ? fromName : getParticipantNameById(explicitBronzeWinnerId);
       }
@@ -10455,7 +10460,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     return {
       first: first === 'TBD' ? null : first,
       second: second === 'TBD' ? null : second,
-      thirds: include3rdPlace && third !== 'TBD' ? [third] : [],
+      thirds: (thirdIsExplicit || include3rdPlace) && third !== 'TBD' ? [third] : [],
     };
   }, [bracketRows, participants, tournament.type, tournament.match_play_type, selectedBracketPreset, include3rdPlace, activeCustomPreset]);
 
