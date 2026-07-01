@@ -10091,6 +10091,11 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   };
 
   // ── Podium ────────────────────────────────────────────────────────────────
+  const activeCustomPreset = React.useMemo(
+    () => rulePresets.find((preset) => String(preset.id) === String(selectedPresetId)) || null,
+    [rulePresets, selectedPresetId],
+  );
+
   const simulationPodium = React.useMemo(() => {
     if (!engineResult || engineResult.matches.length === 0) return null;
     const lastRoundIndex = Math.max(...engineResult.matches.map((match) => match.roundIndex));
@@ -10110,7 +10115,12 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     const isMultiPlayerFinal = championshipMatch.slots.length >= 3;
 
     // ── Step 2: preset / category as secondary confirmation ───────────────
+    // Rule: if the active preset's bracketCategory is 'stepladder', 3rd place
+    // is ALWAYS the semifinal loser. Use activeCustomPreset.bracketCategory
+    // first (most accurate), then fall back to selectedBracketPreset state.
     const isStepladderStyle = (
+      activeCustomPreset?.bracketCategory === 'stepladder' ||
+      activeCustomPreset?.bracketCategory === 'ladder' ||
       selectedBracketPreset === 'stepladder' ||
       selectedBracketPreset === 'ladder' ||
       selectedBracketPreset === 'mixed'
@@ -10150,8 +10160,26 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
     const thirds: string[] = [];
     if (include3rdPlace) {
+      // Stepladder rule: 3rd = loser of the semifinal (penultimate round), always.
+      // Takes priority over all other cases when the preset category is stepladder.
+      if (isStepladderStyle && isDuelFinal) {
+        const prevRoundMatches = engineResult.matches
+          .filter((m) => m.roundIndex === lastRoundIndex - 1)
+          .sort((a, b) => a.matchIndex - b.matchIndex);
+        const semiMatch = prevRoundMatches.find((m) => m.matchIndex === 0) || null;
+        if (semiMatch) {
+          const semiAdvancing = simulation.advancingSlots[semiMatch.id] || [];
+          // If scores are drafted, use the loser slot; otherwise use the non-advancing slot.
+          const loserSlot = semiMatch.slots.find((s) => !semiAdvancing.includes(s.slotIndex))
+            ?? (semiMatch.slots.length > 1 ? semiMatch.slots[1] : null);
+          if (loserSlot) {
+            const loserLabel = resolveLabel(semiMatch.id, loserSlot.slotIndex);
+            if (loserLabel && loserLabel !== 'TBD') thirds.push(loserLabel);
+          }
+        }
+      }
       // Case A: multi-player final — 3rd slot is within the championship match
-      if (isMultiPlayerFinal && third && third !== 'TBD') {
+      if (thirds.length === 0 && isMultiPlayerFinal && third && third !== 'TBD') {
         thirds.push(third);
       }
       // Case B: separate bronze match (single-elim/playoff with 3rd place match)
@@ -10180,7 +10208,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           }
         }
       }
-      // Case C: duel final with no bronze (stepladder / single-elim without bronze)
+      // Case C: duel final with no bronze (single-elim without bronze / custom)
       //         3rd = loser of the penultimate round match
       if (thirds.length === 0 && isDuelFinalNoBronze) {
         const prevRoundMatches = engineResult.matches
@@ -10199,7 +10227,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     }
     if (!first || first === 'TBD') return null;
     return { first, second: second || null, thirds };
-  }, [engineResult, simulation, include3rdPlace, scoreDrafts, selectedBracketPreset]);
+  }, [engineResult, simulation, include3rdPlace, scoreDrafts, selectedBracketPreset, activeCustomPreset]);
 
   const bracketResultPodium = React.useMemo(() => {
     if (!Array.isArray(bracketRows) || bracketRows.length === 0) return null;
@@ -10330,7 +10358,12 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     const isMultiPlayerFinalStructure = finalMatch ? !!finalMatch.participant3_id : false;
 
     // ── Step 2: preset / category as secondary confirmation ───────────────
+    // Rule: if the active preset's bracketCategory is 'stepladder', 3rd place
+    // is ALWAYS the semifinal loser. Use activeCustomPreset.bracketCategory
+    // first (most accurate), then fall back to selectedBracketPreset state.
     const isStepladderCat = (
+      activeCustomPreset?.bracketCategory === 'stepladder' ||
+      activeCustomPreset?.bracketCategory === 'ladder' ||
       tournament.match_play_type === 'stepladder' ||
       tournament.match_play_type === 'ladder' ||
       selectedBracketPreset === 'stepladder' ||
@@ -10346,11 +10379,33 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     // single-elim/playoff that opted out of a bronze, and custom brackets.
     const isDuelFinalNoBronze = isDuelFinalStructure && !hasBronze &&
       (isStepladderCat || isSingleElimCat || finalRoundMatchCount === 1);
+    // For stepladder specifically: always derive 3rd from the semifinal loser,
+    // even if a bronze match row happens to exist in the DB.
+    const forceStepladderRule = isStepladderCat && isDuelFinalStructure;
 
     // 3rd place: explicit placement first, then structural derivation.
     const explicit3rdId = Number(finalMatch?.third_place_id || 0);
     if (explicit3rdId > 0) {
       third = String((tournament.type === 'team' ? finalMatch?.third_place_team_name : null) || finalMatch?.third_place_name || '').trim() || 'TBD';
+    } else if (forceStepladderRule) {
+      // Stepladder rule: 3rd = loser of the penultimate round (semifinal), always.
+      // Final winner = 1st, final loser = 2nd, semifinal loser = 3rd.
+      const semifinalRound = finalRoundNumber - 1;
+      const semifinalMatch = allDivisionMatches.find(
+        (m) => Number(m?.round) === semifinalRound && Number(m?.match_index) === 0
+      ) || null;
+      if (semifinalMatch) {
+        const semiWinnerId = Number(semifinalMatch.winner_id || 0);
+        if (semiWinnerId > 0) {
+          const semiLoserId = semiWinnerId === Number(semifinalMatch.participant1_id)
+            ? Number(semifinalMatch.participant2_id || 0)
+            : Number(semifinalMatch.participant1_id || 0);
+          if (semiLoserId > 0) {
+            const n = getParticipantNameById(semiLoserId);
+            if (n !== 'TBD') third = n;
+          }
+        }
+      }
     } else if (hasBronze) {
       // Case B: separate bronze match
       const explicitBronzeWinnerId = Number(bronzeMatch!.winner_id || 0);
@@ -10368,7 +10423,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       }
     } else if (finalMatch) {
       if (isDuelFinalNoBronze) {
-        // Case C: duel final without bronze (stepladder / single-elim without bronze)
+        // Case C: duel final without bronze (single-elim without bronze / custom)
         //         3rd = loser of the penultimate round match
         const semifinalRound = finalRoundNumber - 1;
         const semifinalMatch = allDivisionMatches.find(
@@ -10402,7 +10457,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       second: second === 'TBD' ? null : second,
       thirds: include3rdPlace && third !== 'TBD' ? [third] : [],
     };
-  }, [bracketRows, participants, tournament.type, tournament.match_play_type, selectedBracketPreset, include3rdPlace]);
+  }, [bracketRows, participants, tournament.type, tournament.match_play_type, selectedBracketPreset, include3rdPlace, activeCustomPreset]);
 
   const podium = React.useMemo(() => {
     const first = bracketResultPodium?.first || simulationPodium?.first || null;
@@ -10448,11 +10503,6 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       alert(`Failed to save placement: ${err?.message || 'Unknown error'}`);
     }
   }, [tournament.id]);
-
-  const activeCustomPreset = React.useMemo(
-    () => rulePresets.find((preset) => String(preset.id) === String(selectedPresetId)) || null,
-    [rulePresets, selectedPresetId],
-  );
 
   const errors = engineResult?.issues.filter(i => i.level === 'error') ?? [];
   const warnings = engineResult?.issues.filter(i => i.level === 'warning') ?? [];
@@ -10859,6 +10909,14 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   }, [activeBracketName, exportAreaWidth]);
 
   return (
+    <div className="flex flex-col gap-3">
+      {/* Page Title */}
+      {role !== 'public' && (
+        <div className="flex flex-col">
+          <h3 className="text-xl font-bold text-emerald-800">{tx('Bracket Generation')}</h3>
+          <p className="text-xs text-black/50 mt-0.5">{tx('Generate and manage tournament brackets')}</p>
+        </div>
+      )}
     <div className="flex gap-0 items-start">
 
       {/* ── COLLAPSIBLE LEFT PANEL ──────────────────────────────────────────── */}
@@ -11659,16 +11717,11 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       <div className={`flex-1 flex flex-col gap-3 min-w-0 ${showLeftPanel ? 'pl-3' : ''}`}>
 
         {/* Page Title */}
-        <div className="flex flex-col">
-          {role === 'public' ? (
+        {role === 'public' && (
+          <div className="flex flex-col">
             <h3 className="text-xl font-bold text-emerald-800">{tx('Tournament Bracket')}</h3>
-          ) : (
-            <>
-              <h3 className="text-xl font-bold text-emerald-800">{tx('Bracket Generation')}</h3>
-              <p className="text-xs text-black/50 mt-0.5">{tx('Generate and manage tournament brackets')}</p>
-            </>
-          )}
-        </div>
+          </div>
+        )}
 
         {role === 'public' && !savedBracketsLoading && savedBrackets.length > 1 && (
           <div className="flex items-center gap-2 flex-wrap">
@@ -12532,6 +12585,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         )}
 
       </div>
+    </div>
     </div>
   );
 }
