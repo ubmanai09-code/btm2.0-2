@@ -10460,7 +10460,10 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     return {
       first: first === 'TBD' ? null : first,
       second: second === 'TBD' ? null : second,
-      thirds: (thirdIsExplicit || include3rdPlace) && third !== 'TBD' ? [third] : [],
+      // bracketResultPodium reflects actual played results from the DB.
+      // include3rdPlace only controls bracket generation (whether to add a bronze match);
+      // it must never suppress a 3rd place that was actually determined in the tournament.
+      thirds: third !== 'TBD' ? [third] : [],
     };
   }, [bracketRows, participants, tournament.type, tournament.match_play_type, selectedBracketPreset, include3rdPlace, activeCustomPreset]);
 
