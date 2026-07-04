@@ -598,6 +598,19 @@ const buildLiveMatchGraph = (rows: BracketRow[]): LiveGraphResult => {
     matchesByRound.set(match.roundIndex, roundMatches);
   });
 
+  const tallestCard = Math.max(0, ...matches.map((match) => match.height));
+  const shortestCard = Math.min(...matches.map((match) => match.height));
+  const cardHeightSpread = Math.max(0, tallestCard - shortestCard);
+  const maxRoundMatchCount = Math.max(0, ...Array.from(matchesByRound.values()).map((roundMatches) => roundMatches.length));
+  const hasMixedMatchTypes = new Set(matches.map((match) => match.matchType)).size > 1;
+  const liveRowGap = (() => {
+    if (hasMixedMatchTypes && maxRoundMatchCount >= 3) return 18;
+    if (maxRoundMatchCount >= 6) return 20;
+    if (maxRoundMatchCount >= 4 || tallestCard >= 260) return 26;
+    if (tallestCard >= 220) return 32;
+    return LIVE_ROW_GAP;
+  })();
+
   let layoutHeight = 260;
   const totalRounds = Math.max(1, ...matches.map((match) => match.roundIndex + 1));
   for (let roundIndex = 0; roundIndex < totalRounds; roundIndex += 1) {
@@ -606,19 +619,19 @@ const buildLiveMatchGraph = (rows: BracketRow[]): LiveGraphResult => {
 
     if (roundIndex === 0) {
       roundMatches.forEach((match, index) => {
-        match.y = index * (match.height + LIVE_ROW_GAP);
+        match.y = index * (match.height + liveRowGap);
       });
     } else {
       const preferred = roundMatches.map((match, index) => {
         if (match.previousMatchIds.length === 0) {
-          return index * (match.height + LIVE_ROW_GAP);
+          return index * (match.height + liveRowGap);
         }
         const feederCenters = match.previousMatchIds
           .map((matchId) => matchesById.get(matchId))
           .filter((node): node is LiveGraphMatch => Boolean(node))
           .map((node) => node.y + (node.height / 2));
         if (feederCenters.length === 0) {
-          return index * (match.height + LIVE_ROW_GAP);
+          return index * (match.height + liveRowGap);
         }
         return average(feederCenters) - (match.height / 2);
       }).sort((left, right) => left - right);
@@ -627,7 +640,7 @@ const buildLiveMatchGraph = (rows: BracketRow[]): LiveGraphResult => {
       roundMatches.forEach((match, index) => {
         const targetY = Math.max(cursorY, preferred[index] || 0);
         match.y = targetY;
-        cursorY = match.y + match.height + LIVE_ROW_GAP;
+        cursorY = match.y + match.height + liveRowGap;
       });
     }
 
@@ -635,27 +648,30 @@ const buildLiveMatchGraph = (rows: BracketRow[]): LiveGraphResult => {
     layoutHeight = Math.max(layoutHeight, roundBottom + 80);
   }
 
-  // Visually balance columns: keep round 1 anchored and vertically center later rounds.
-  // This reduces large empty areas below the right-side columns on tall brackets.
-  const visualCenterY = layoutHeight / 2;
-  for (let roundIndex = 1; roundIndex < totalRounds; roundIndex += 1) {
-    const roundMatches = [...(matchesByRound.get(roundIndex) || [])].sort((left, right) => left.matchIndex - right.matchIndex);
-    if (roundMatches.length === 0) continue;
+  const shouldVisuallyCenterColumns = !hasMixedMatchTypes && cardHeightSpread < 140;
+  if (shouldVisuallyCenterColumns) {
+    // Visually balance columns: keep round 1 anchored and vertically center later rounds.
+    // Skip this for mixed/tall-card layouts to preserve tight feeder alignment.
+    const visualCenterY = layoutHeight / 2;
+    for (let roundIndex = 1; roundIndex < totalRounds; roundIndex += 1) {
+      const roundMatches = [...(matchesByRound.get(roundIndex) || [])].sort((left, right) => left.matchIndex - right.matchIndex);
+      if (roundMatches.length === 0) continue;
 
-    const roundTop = Math.min(...roundMatches.map((match) => match.y));
-    const roundBottom = Math.max(...roundMatches.map((match) => match.y + match.height));
-    const roundCenter = (roundTop + roundBottom) / 2;
-    let shift = visualCenterY - roundCenter;
+      const roundTop = Math.min(...roundMatches.map((match) => match.y));
+      const roundBottom = Math.max(...roundMatches.map((match) => match.y + match.height));
+      const roundCenter = (roundTop + roundBottom) / 2;
+      let shift = visualCenterY - roundCenter;
 
-    // Prevent shifting any card above the canvas top.
-    const shiftedTop = roundTop + shift;
-    if (shiftedTop < 0) {
-      shift += -shiftedTop;
+      // Prevent shifting any card above the canvas top.
+      const shiftedTop = roundTop + shift;
+      if (shiftedTop < 0) {
+        shift += -shiftedTop;
+      }
+
+      roundMatches.forEach((match) => {
+        match.y += shift;
+      });
     }
-
-    roundMatches.forEach((match) => {
-      match.y += shift;
-    });
   }
 
   const adjustedBottom = matches.length > 0
@@ -695,8 +711,33 @@ const buildStepladderGraph = (rows: BracketRow[]): LiveGraphResult => {
   }
 
   const maxH = Math.max(...sorted.map((m) => m.height));
-  // STEP_Y controls how far up each rung is relative to the previous one
-  const STEP_Y = Math.max(90, Math.round(maxH * 0.42));
+  const minH = Math.min(...sorted.map((m) => m.height));
+  const distinctMatchTypes = new Set(sorted.map((match) => match.matchType));
+  const hasMixedTypes = distinctMatchTypes.size > 1;
+  const isDenseStepladder = n >= 6;
+  const isDenseMixedStepladder = hasMixedTypes && isDenseStepladder;
+
+  // STEP_Y controls how far up each rung is relative to the previous one.
+  // Keep exported images compact by tightening rung spacing for large stepladders,
+  // with extra compression for mixed match-type ladders.
+  let STEP_Y = Math.max(
+    isDenseStepladder ? 56 : 90,
+    Math.round(maxH * (isDenseMixedStepladder ? 0.26 : isDenseStepladder ? 0.32 : 0.42)),
+  );
+
+  if (hasMixedTypes) {
+    // Mixed rounds can produce one very tall card (e.g. large shootout) and one short card.
+    // Cap rung spacing so finals do not float too far away in preview/export.
+    const mixedHardCap = n <= 3 ? 120 : 140;
+    const mixedSoftCap = Math.max(78, Math.round(minH * (n <= 3 ? 0.55 : 0.7)));
+    STEP_Y = Math.min(STEP_Y, mixedHardCap, mixedSoftCap);
+  }
+
+  if (isDenseStepladder && n > 1) {
+    const MAX_STAIR_SPAN = isDenseMixedStepladder ? 500 : 620;
+    const maxStepBySpan = Math.max(52, Math.floor(MAX_STAIR_SPAN / (n - 1)));
+    STEP_Y = Math.min(STEP_Y, maxStepBySpan);
+  }
   const STEP_X = LIVE_COLUMN_WIDTH;
   const BASE_X = 32;
   const BASE_Y = 32;

@@ -1696,12 +1696,21 @@ function renderBowlingHybrid(bracket, canvas) {
 
   // ── 3. Stepladder H2H matches (vertical stack, bottom to top) ──
   const slCount = stepladderMatches.length;
-  const slTopY = topY + 20;
+  const STEP_Y = Math.max(54, Math.round(MATCH_H * 0.82));
   const matchPositions = {};
+
+  let slBaseY = topY + 20;
+  if (slCount > 0 && shootoutPositions.length > 0) {
+    const lastSR = shootoutPositions[shootoutPositions.length - 1];
+    const firstStepladderY = Math.round(lastSR.midY - MATCH_H / 2);
+    // Keep the bottom stepladder match vertically aligned with the shootout center,
+    // then stack previous rounds tightly above it.
+    slBaseY = firstStepladderY - (slCount - 1) * STEP_Y;
+  }
 
   stepladderMatches.forEach((match, i) => {
     const x = curX;
-    const y = slTopY + (slCount - 1 - i) * (MATCH_H + 48);
+    const y = slBaseY + (slCount - 1 - i) * STEP_Y;
     matchPositions[match.id] = { x, y };
 
     if (!match.p2 && match.byeSeed) match.p2 = getParticipantBySeed(bracket, match.byeSeed);
@@ -1743,7 +1752,7 @@ function renderBowlingHybrid(bracket, canvas) {
       const fromX = lastSR.x + SHOOTOUT_W;
       const fromY = lastSR.midY;
       const toX = firstSL.x;
-      const toY = firstSL.y + MATCH_H / 4;
+      const toY = firstSL.y + MATCH_H / 2;
       const midX = (fromX + toX) / 2;
       drawRightAngle(svg, fromX, fromY, midX, toY, false);
       drawHLine(svg, midX, toX, toY, false);

@@ -9593,18 +9593,20 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     const isStaircaseCategory = (selectedBracketPreset === 'stepladder' || selectedBracketPreset === 'ladder');
     const isStepladder = isStaircaseCategory && rounds.every(ri => (byRound.get(ri) || []).length === 1);
     if (isStepladder && rounds.length >= 2) {
-      const STEP_GAP = 20;
+      const STEP_GAP = 14;
       const STEP_X = 180; // tighter column spacing for staircase (vs engine default 280)
-      const maxH = Math.max(...engineResult.matches.map(m => m.height));
-      const stepH = maxH + STEP_GAP;
-      const totalRounds = rounds.length;
-      rounds.forEach((ri, i) => {
+
+      // Build the staircase from top round downward using each card's own height.
+      // This keeps spacing consistent even when one round has a tall shootout card.
+      let cursorY = 0;
+      for (let idx = rounds.length - 1; idx >= 0; idx -= 1) {
+        const ri = rounds[idx];
         const match = (byRound.get(ri) || [])[0];
-        if (!match) return;
-        const x = i * STEP_X;
-        const y = (totalRounds - 1 - i) * stepH;
-        pos.set(match.id, { x, y });
-      });
+        if (!match) continue;
+        const x = idx * STEP_X;
+        pos.set(match.id, { x, y: cursorY });
+        cursorY += match.height + STEP_GAP;
+      }
       return pos;
     }
 
@@ -10783,7 +10785,6 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       const targetPos = topAlignedPos.get(match.id) || { x: match.x, y: match.y };
       const targetX = targetPos.x;
       const targetCenterY = targetPos.y + (getMatchHeight(match) / 2);
-      const mergeX = targetX - 24;
 
       const incoming = match.slots
         .filter((slot) => slot.sourceType === 'advance' && Boolean(slot.fromMatchId))
@@ -10791,39 +10792,30 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           const sourceMatch = engineResult.matches.find((candidate) => candidate.id === slot.fromMatchId);
           if (!sourceMatch) return null;
           const sourcePos = topAlignedPos.get(sourceMatch.id) || { x: sourceMatch.x, y: sourceMatch.y };
+          const targetMatchHeight = getMatchHeight(match);
+          const targetSlotCount = Math.max(1, match.slots.length || 1);
+          const targetSlotHeight = targetMatchHeight / targetSlotCount;
+          const boundedSlotIndex = Math.max(0, Math.min(targetSlotCount - 1, Number(slot.slotIndex) || 0));
+          const targetSlotCenterY = targetPos.y + (boundedSlotIndex * targetSlotHeight) + (targetSlotHeight / 2);
           return {
             startX: sourcePos.x + sourceMatch.width,
             startY: sourcePos.y + (getMatchHeight(sourceMatch) / 2),
+            targetY: targetSlotCenterY,
           };
         })
-        .filter((entry): entry is { startX: number; startY: number } => entry !== null)
-        .sort((left, right) => left.startY - right.startY);
+        .filter((entry): entry is { startX: number; startY: number; targetY: number } => entry !== null)
+        .sort((left, right) => left.targetY - right.targetY || left.startY - right.startY);
 
       if (incoming.length === 0) return;
 
-      if (incoming.length === 1) {
-        const source = incoming[0];
-        const elbowX = source.startX + Math.max(12, Math.min(30, (targetX - source.startX) * 0.45));
-        paths.push({
-          key: `${match.id}-single`,
-          d: `M ${source.startX} ${source.startY} L ${elbowX} ${source.startY} L ${elbowX} ${targetCenterY} L ${targetX} ${targetCenterY}`,
-          kind: 'main',
-        });
-        return;
-      }
-
       incoming.forEach((source, index) => {
+        const elbowX = source.startX + Math.max(12, Math.min(30, (targetX - source.startX) * 0.45));
+        const isSingle = incoming.length === 1;
         paths.push({
-          key: `${match.id}-branch-${index}`,
-          d: `M ${source.startX} ${source.startY} L ${mergeX} ${source.startY} L ${mergeX} ${targetCenterY}`,
-          kind: 'branch',
+          key: `${match.id}-${isSingle ? 'single' : `branch-${index}`}`,
+          d: `M ${source.startX} ${source.startY} L ${elbowX} ${source.startY} L ${elbowX} ${source.targetY} L ${targetX} ${source.targetY}`,
+          kind: isSingle ? 'main' : 'branch',
         });
-      });
-
-      paths.push({
-        key: `${match.id}-main`,
-        d: `M ${mergeX} ${targetCenterY} L ${targetX} ${targetCenterY}`,
-        kind: 'main',
       });
     });
 
