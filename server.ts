@@ -888,6 +888,7 @@ async function startServer() {
       'lanes:manage',
     ]),
     moderator: new Set<Permission>([
+      'tournaments:manage',
       'participants:manage',
       'scores:manage',
       'brackets:manage',
@@ -2370,7 +2371,7 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/tournaments/:id", requirePermission('tournaments:manage'), (req, res) => {
+  app.delete("/api/tournaments/:id", requireAdmin, (req, res) => {
     db.prepare("DELETE FROM tournaments WHERE id = ?").run(req.params.id);
     res.json({ success: true });
   });

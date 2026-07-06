@@ -666,6 +666,7 @@ export default function App() {
   });
   const [publicDictionary, setPublicDictionary] = useState<Map<string, BilingualTerm>>(new Map());
   const isAdmin = currentRole === 'admin';
+  const canManageTournaments = currentRole === 'admin' || currentRole === 'moderator';
   const scoreScreenQueryParams = (() => {
     if (typeof window === 'undefined') {
       return {
@@ -919,11 +920,11 @@ export default function App() {
   }, [showAdminSettingsMenu]);
 
   useEffect(() => {
-    if (!isAdmin && (view === 'create' || view === 'edit')) {
+    if (!canManageTournaments && (view === 'create' || view === 'edit')) {
       setView('list');
       setEditingTournament(null);
     }
-  }, [isAdmin, view]);
+  }, [canManageTournaments, view]);
 
   useEffect(() => {
     if (view !== 'create' && view !== 'edit') {
@@ -2171,7 +2172,7 @@ export default function App() {
 
                 {/* Center: New Tournament */}
                 <div className="flex-1 flex justify-center">
-                  {isAdmin && (
+                  {canManageTournaments && (
                     <Button size="sm" variant="create" className="px-3" onClick={() => { setFormType('individual'); setView('create'); }} title={t('app.new_tournament', 'New Tournament')} ariaLabel={t('app.new_tournament', 'New Tournament')}>
                       <Plus size={16} />
                     </Button>
@@ -2224,7 +2225,7 @@ export default function App() {
                     <Trophy size={48} className="mx-auto text-black/10 mb-4" />
                     <h3 className="text-xl font-semibold uppercase tracking-wide">{t('app.no_tournaments', 'No tournaments yet')}</h3>
                     <p className="text-black/40 mb-6 text-sm">{t('app.no_tournaments_subtitle', 'Create your first tournament to get started')}</p>
-                    {isAdmin && (
+                    {canManageTournaments && (
                       <Button onClick={() => setView('create')} variant="create" className="mx-auto" title={t('app.create_tournament', 'Create Tournament')} ariaLabel={t('app.create_tournament', 'Create Tournament')}>
                         <Plus size={18} />
                       </Button>
@@ -2246,7 +2247,7 @@ export default function App() {
                               {formatTournamentDate(tournamentItem.date)}{tournamentItem.location ? ` · ${tournamentItem.location}` : ''}
                             </p>
                           </div>
-                          {isAdmin && (
+                          {canManageTournaments && (
                             <div className="flex gap-1 shrink-0">
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleEdit(tournamentItem); }}
@@ -2262,13 +2263,15 @@ export default function App() {
                               >
                                 <Archive size={13} />
                               </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleDelete(tournamentItem.id); }}
-                                className="p-1 rounded hover:bg-red-50 text-black/35 hover:text-red-500 transition-all"
-                                title={t('tournament.delete', 'Delete Tournament')}
-                              >
-                                <Trash2 size={13} />
-                              </button>
+                              {isAdmin && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleDelete(tournamentItem.id); }}
+                                  className="p-1 rounded hover:bg-red-50 text-black/35 hover:text-red-500 transition-all"
+                                  title={t('tournament.delete', 'Delete Tournament')}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
