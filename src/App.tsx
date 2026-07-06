@@ -9406,10 +9406,13 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   }, [rightPanelSeedEntries]);
 
   const podiumDisplayName = React.useCallback((raw: string | null | undefined) => {
-    const label = String(raw || '').trim();
-    if (!label) return '—';
-    if (tournament.type !== 'team') return label;
-    return teamNameByParticipantLabel.get(label) || label;
+    const rawLabel = String(raw || '').trim();
+    if (!rawLabel) return '—';
+    const resolved = tournament.type === 'team'
+      ? (teamNameByParticipantLabel.get(rawLabel) || rawLabel)
+      : rawLabel;
+    // Strip bowler hand-style suffix (1H / 2H) — not relevant on the podium.
+    return resolved.replace(/\s*\([12]H\)\s*$/i, '').trim() || '—';
   }, [tournament.type, teamNameByParticipantLabel]);
 
   const showTeamsOnRightPanel = React.useMemo(

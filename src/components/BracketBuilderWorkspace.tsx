@@ -248,6 +248,9 @@ const normalizeParticipantLabel = (value: string) => {
   return compact.replace(/\s+player$/i, '').trim() || 'TBD';
 };
 
+// Strip bowler hand-style suffix (1H / 2H) from podium-only display names.
+const stripHandsSuffix = (label: string) => label.replace(/\s*\([12]H\)\s*$/i, '').trim() || label;
+
 const shortenName = (fullName: string): string => {
   const parts = fullName.trim().split(/\s+/);
   if (parts.length < 2) return fullName;
@@ -1384,10 +1387,10 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
     if (championshipMatch) {
       const explicitWinnerId = Number(championshipMatch.winner_id || 0);
       if (explicitWinnerId > 0) {
-        first = normalizeParticipantLabel(getBracketDisplayName(championshipMatch, 'winner', isTeamTournament));
+        first = stripHandsSuffix(normalizeParticipantLabel(getBracketDisplayName(championshipMatch, 'winner', isTeamTournament)));
         second = Number(championshipMatch.winner_id) === Number(championshipMatch.participant1_id)
-          ? normalizeParticipantLabel(getBracketDisplayName(championshipMatch, 'p2', isTeamTournament))
-          : normalizeParticipantLabel(getBracketDisplayName(championshipMatch, 'p1', isTeamTournament));
+          ? stripHandsSuffix(normalizeParticipantLabel(getBracketDisplayName(championshipMatch, 'p2', isTeamTournament)))
+          : stripHandsSuffix(normalizeParticipantLabel(getBracketDisplayName(championshipMatch, 'p1', isTeamTournament)));
       }
     }
 
@@ -1395,10 +1398,12 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
     if (bronzeMatch) {
       const explicitBronzeWinnerId = Number(bronzeMatch.winner_id || 0);
       if (explicitBronzeWinnerId > 0) {
-        third = normalizeParticipantLabel(getBracketDisplayName(bronzeMatch, 'winner', isTeamTournament));
+        third = stripHandsSuffix(normalizeParticipantLabel(getBracketDisplayName(bronzeMatch, 'winner', isTeamTournament)));
       }
-    } else {
-      // No bronze match: stepladder/ladder/mixed duel finals → 3rd = loser of the semifinal
+    }
+    // If no explicit bronze winner yet, infer 3rd from the loser of the match immediately
+    // before the final (stepladder / ladder / bowling-hybrid all follow this pattern).
+    if (third === 'TBD') {
       const isStepladderLadderOrMixed = (
         tournament.match_play_type === 'stepladder' ||
         tournament.match_play_type === 'ladder' ||
@@ -1418,7 +1423,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
           const semiWinnerId = Number(semifinalMatch.winner_id || 0);
           if (semiWinnerId > 0) {
             const semiLoserSlot: 'p1' | 'p2' = semiWinnerId === Number(semifinalMatch.participant1_id) ? 'p2' : 'p1';
-            third = normalizeParticipantLabel(getBracketDisplayName(semifinalMatch, semiLoserSlot, isTeamTournament));
+            third = stripHandsSuffix(normalizeParticipantLabel(getBracketDisplayName(semifinalMatch, semiLoserSlot, isTeamTournament)));
           }
         }
       }
@@ -1444,9 +1449,13 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
       return result;
     };
 
-    // For stepladder/ladder/mixed: 3rd place candidates come from the semifinal match
-    // since there is no bronze match — only the loser of the semi is eligible.
-    let thirdCandidateMatch = livePodiumMatches.bronzeMatch;
+    // For stepladder/ladder/mixed/bowling-hybrid: 3rd place candidates come from the
+    // semifinal match (liveChampionshipRound - 1) when there is no bronze match OR when
+    // the bronze match has no participants assigned yet (bowling-hybrid pattern).
+    const bronzeHasParticipants = livePodiumMatches.bronzeMatch &&
+      (Number(livePodiumMatches.bronzeMatch.participant1_id || 0) > 0 ||
+       Number(livePodiumMatches.bronzeMatch.participant2_id || 0) > 0);
+    let thirdCandidateMatch = bronzeHasParticipants ? livePodiumMatches.bronzeMatch : null;
     if (!thirdCandidateMatch) {
       const isStepladderLadderOrMixed = (
         tournament.match_play_type === 'stepladder' ||
