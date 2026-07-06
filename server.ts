@@ -2123,7 +2123,7 @@ async function startServer() {
     res.json({ formats });
   });
 
-  app.post('/api/bracket-known-formats', requireAdmin, (req, res) => {
+  app.post('/api/bracket-known-formats', requirePermission('brackets:manage'), (req, res) => {
     const payload = normalizeKnownBracketFormatPayload(req.body);
     if (!payload) {
       return res.status(400).json({ error: 'Invalid preset payload' });
@@ -2154,7 +2154,7 @@ async function startServer() {
     return res.json({ success: true, format: getKnownBracketFormatById(payload.id) });
   });
 
-  app.put('/api/bracket-known-formats/:id', requireAdmin, (req, res) => {
+  app.put('/api/bracket-known-formats/:id', requirePermission('brackets:manage'), (req, res) => {
     const presetId = String(req.params.id || '').trim();
     if (!presetId) return res.status(400).json({ error: 'Invalid preset id' });
 

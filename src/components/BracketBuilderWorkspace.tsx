@@ -763,7 +763,7 @@ const buildStepladderGraph = (rows: BracketRow[]): LiveGraphResult => {
 
 export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
   const apiCompat = api as any;
-  const canConfigure = role === 'admin';
+  const canConfigure = role === 'admin' || role === 'moderator';
   const canScore = role === 'admin' || role === 'moderator';
   const canRenameRounds = canScore;
   const isPublic = role === 'public';
