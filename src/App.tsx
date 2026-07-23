@@ -51,6 +51,7 @@ import {
   UserRoundMinus,
   Eraser,
   ChevronUp,
+  BookOpen,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry, LeagueRankingResponse, StandingAdditionalScore, StandingBonus } from './services/api';
@@ -63,6 +64,7 @@ import {
   type TournamentParticipantNode,
   type TournamentRoundConfig,
 } from './utils/tournamentEngine';
+import GlossaryPage from './components/GlossaryPage';
 
 type UserRole = 'admin' | 'moderator' | 'public';
 
@@ -644,7 +646,7 @@ export default function App() {
   const [sponsorsConfigDraft, setSponsorsConfigDraft] = useState<SponsorsConfig>(DEFAULT_SPONSORS_CONFIG);
   const [sponsorsConfigScope, setSponsorsConfigScope] = useState<string>('global');
   const [sponsorsConfigError, setSponsorsConfigError] = useState('');
-  const [view, setView] = useState<'list' | 'detail' | 'create' | 'edit'>(() => {
+  const [view, setView] = useState<'list' | 'detail' | 'create' | 'edit' | 'glossary'>(() => {
     const savedView = localStorage.getItem('btm_view');
     return savedView === 'detail' ? 'detail' : 'list';
   });
@@ -1953,6 +1955,16 @@ export default function App() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Glossary nav link */}
+          <button
+            onClick={() => setView('glossary')}
+            className={`flex items-center gap-1.5 h-8 px-2.5 rounded-md border transition-colors text-xs font-bold uppercase tracking-wider ${view === 'glossary' ? 'border-orange-400 bg-orange-500/20 text-orange-300' : 'border-white/25 bg-white/10 hover:bg-white/20 text-white'}`}
+            title={publicLanguage === 'mn' ? 'Тайлбар толь' : 'Glossary'}
+            aria-label={publicLanguage === 'mn' ? 'Тайлбар толь' : 'Glossary'}
+          >
+            <BookOpen size={13} />
+            <span className="hidden sm:inline">{publicLanguage === 'mn' ? 'Толь' : 'Glossary'}</span>
+          </button>
           <button
             onClick={() => setPublicLanguage(publicLanguage === 'mn' ? 'en' : 'mn')}
             className="flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-white/25 bg-white/10 hover:bg-white/20 transition-colors text-xs font-bold uppercase tracking-wider text-white"
@@ -2055,6 +2067,9 @@ export default function App() {
       </nav>
 
       <main className="pt-24 pb-12 px-6 max-w-7xl mx-auto">
+        {view === 'glossary' && (
+          <GlossaryPage lang={publicLanguage === 'mn' ? 'mn' : 'en'} role={currentRole} authToken={authToken} />
+        )}
         {view === 'list' && (
             <div className="space-y-8">
               <div>

@@ -381,6 +381,16 @@ function initDb() {
       PRIMARY KEY (tournament_id, id),
       FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS glossary_terms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      en TEXT NOT NULL,
+      mn TEXT NOT NULL,
+      image TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   const accessTableInfo = db.prepare("PRAGMA table_info(moderator_tournament_access)").all() as any[];
@@ -1896,6 +1906,152 @@ async function startServer() {
 
   await ensureSeedUser(adminUsername, 'admin', adminPassword);
   await ensureSeedUser(moderatorUsername, 'moderator', moderatorPassword);
+
+  // ── Seed glossary from static data if table is empty ──────────────────
+  {
+    const glossaryCount = (db.prepare('SELECT COUNT(*) as c FROM glossary_terms').get() as any).c;
+    if (glossaryCount === 0) {
+      const staticTerms = [
+        { en: 'STRIKE', mn: 'Эхний шидэлтээр бүх 10 pin-ийг унагаахыг strike гэнэ; онооны хүснэгтэд X тэмдгээр бичдэг.', image: null },
+        { en: 'SPARE', mn: 'Эхний шидэлтээр үлдсэн бүх pin-ийг хоёр дахь шидэлтээр унагаахыг spare гэнэ; онооны хүснэгтэд / тэмдгээр бичдэг.', image: null },
+        { en: 'FRAME', mn: 'Нэг тоглолтыг бүрдүүлдэг 10 үеийн нэг бөгөөд ихэнх frame-д хоёр хүртэл шидэлт хийнэ.', image: null },
+        { en: 'BOWLING PIN', mn: 'Боулингийн замын төгсгөлд гурвалжин хэлбэрээр байрлуулсан, бөмбөгөөр онож унагаадаг 10 ширхэг бай.', image: '/glossary/bowling-pin.png' },
+        { en: 'PIN DECK', mn: 'Pin байрлах хэсэг: Lane (замын) -ийн хамгийн төгсгөлд арван pin байрлуулдаг талбай.', image: '/glossary/pin-deck.png' },
+        { en: 'POCKET', mn: 'Баруун гараар шиддэг тоглогчийн хувьд 1 ба 3-pin, зүүн гараар шиддэг тоглогчийн хувьд 1 ба 2-pin-ийн хоорондох strike хийхэд хамгийн тохиромжтой хэсэг.', image: '/glossary/pocket.png' },
+        { en: 'HOOK', mn: 'Бөмбөг замын хуурай хэсэгт хүрээд хажуу тийш чиглэлээ өөрчлөн pocket руу орох муруй хөдөлгөөн.', image: null },
+        { en: 'BROOKLYN', mn: 'Бөмбөг үндсэн pocket-ийн эсрэг талд орж цохихыг хэлнэ; баруун гартай тоглогчийн хувьд 1–2 pin-ийн завсар харин зүүн гараар шиддэг тоглогчийн хувьд 2 ба 3-pin-ийн завсар орно.', image: null },
+        { en: 'SPLIT', mn: 'Эхний шидэлтийн дараа хоорондоо зайтай, авахад хүндрэлтэй pin-үүд үлдэх байрлал; жишээ нь 7–10 split.', image: '/glossary/split.png' },
+        { en: 'OPEN FRAME', mn: 'Хоёр шидэлтийн дараа бүх pin-ийг унагаж чадаагүй, strike эсвэл spare аваагүй frame.', image: null },
+        { en: 'DOUBLE', mn: 'Хоёр frame дараалан strike хийхийг double гэнэ.', image: null },
+        { en: 'TURKEY', mn: 'Гурван frame дараалан strike хийхийг turkey гэнэ.', image: null },
+        { en: 'PERFECT GAME', mn: '12 strike дараалан хийж авсан 300 онооны тоглолт бөгөөд нэг тоглолтын хамгийн өндөр боломжит оноо.', image: null },
+        { en: 'LANE', mn: 'Foul line-оос pin deck хүртэлх бөмбөг өнхрөх үндсэн зам бөгөөд гадаргуу дээр нь тусгай тос түрхсэн байдаг.', image: null },
+        { en: 'FOUL LANE', mn: 'Хязгаарын зурвас: Approach буюу алхалтын хэсэг болон боулингийн замыг заагласан зурвас. Шидэх үед тоглогч энэ зурвасыг гишгэх эсвэл давбал foul / АЛДАА гэж тооцож, тухайн шидэлт 0 оноо болно.', image: '/glossary/foul-lane.png' },
+        { en: 'BREAKPOINT', mn: 'Эргэлтийн гол цэг: Бөмбөг хуурай хэсэгт барьц авч, чиглэлээ хамгийн тод өөрчилж эхлэх цэг.', image: '/glossary/breakpoint.png' },
+        { en: 'BOARD', mn: 'Lane-ийг уртааш нь хуваасан нарийн зурвас бөгөөд хөл, сум болон breakpoint-ийн байрлалыг board-оор тооцдог.', image: '/glossary/board.png' },
+        { en: 'ARROWS', mn: 'Lane дээр байрлах сум хэлбэрийн тэмдэглэгээнүүд бөгөөд тоглогчид бөмбөгийн чиглэлээ онилоход ашигладаг.', image: null },
+        { en: 'OIL PATTERN', mn: 'Lane дээр тосыг ямар урт, өргөн, хэмжээ болон хэлбэрээр тараасныг илэрхийлсэн зураглал.', image: '/glossary/oil-pattern.png' },
+        { en: 'LENGTH', mn: 'Foul line-оос Oil pattern дуусах хүртэлх урт бөгөөд ихэвчлэн feet-ээр хэмждэг, жишээ нь 36 ft, 40 ft, 44 ft.', image: '/glossary/length.png' },
+        { en: 'VOLUME', mn: 'Нэг lane дээр нийт хэдий хэмжээний тос түрхсэнийг хэлэх бөгөөд volume их байх тусам бөмбөг илүү удаан гулгах хандлагатай. Бага тос (20 ml -ээс бага), Дундаж тос  ихэнх тэмцээнүүдэд хэрэглэгддэг тосны хэмжээ (20-25 mL), Хүнд Их тос (25+ mL)', image: null },
+        { en: 'BACKEND', mn: 'Oil pattern дууссанаас pin хүртэлх замын төгсгөл хэсэг бөгөөд бөмбөгийн hook, эцсийн хариу үйлдэл энд хамгийн тод харагдана.', image: '/glossary/backend.png' },
+        { en: 'TRANSITION', mn: 'Олон бөмбөг явсны дараа замын тос задарч, зөөгдөн, өмнөх тоглолтын шугам болон бөмбөгийн хариу үйлдэл өөрчлөгдөх үйл явц.', image: null },
+        { en: 'CARRYDOWN', mn: 'Бөмбөг lane-ийн тосыг pattern-ийн төгсгөлөөс цааш зөөснөөр backend дээр бөмбөг гулсаад өнгөрөх магадлал нэмэгдэх үзэгдэл.', image: null },
+        { en: 'HOUSE SHOT', mn: 'Боулингийн төвийн өдөр тутмын, дотор талдаа тос их, гадна талдаа хуурай тул тоглогчийн бага зэргийн алдааг тодорхой хэмжээнд засаж өгдөг тосны зураглал.', image: null },
+        { en: 'SPORT SHOT', mn: 'Тосны дотор ба гадна талын ялгаа бага тул шидэлтийн алдааг бага уучилдаг тэмцээний тосны зураглал (oil pattern).', image: null },
+        { en: 'COVERSTOCK', mn: 'Lane-ийн тос болон хуурай хэсэгтэй шууд хүрэлцдэг бөмбөгийн гадна давхарга бөгөөд бөмбөгийн хариу үйлдэлд хамгийн их нөлөөлөх хэсгүүдийн нэг.', image: '/glossary/coverstock.png' },
+        { en: 'CORE', mn: 'Бөмбөгийн дотор байрлах жингийн тусгай бүтэц (цөм) бөгөөд бөмбөг хэр хурдан эргэлтэд орох, ямар хэлбэрээр хөдөлгөөн хийхэд нөлөөлнө.', image: '/glossary/core.png' },
+        { en: 'SYMMETRICAL and ASSYMETRICAL CORE', mn: 'Asymmetrical Core нь зориуд тэнцвэргүй бүтэцтэй байдаг тул илүү их эргүүлэх хүч үүсгэж, breakpoint дээр хөдөлгөөнөө хүчтэй өөрчилдөг.', image: '/glossary/symmetrical-and-assymetrical-core.png' },
+        { en: 'REACTIVE BALL', mn: 'Замын тосон хэсгээр харьцангуй гулсаж, хуурай хэсэгт хүрэх үед илүү сайн барьц авч муруй хөдөлгөөн үүсгэдэг гадаргуутай боулингийн бөмбөг.', image: null },
+        { en: 'SOLID', mn: 'Solid Reactive гадаргуутай, ихэвчлэн матт өнгөлгөөтэй бөмбөг. гадаргуу дахь бичил сүвнүүд нь замтай үүсэх үрэлтийг нэмэгдүүлж, бөмбөгийг тосон дээр эрт барьц авч, илүү жигд хариу үйлдэл үзүүлэхэд тусалдаг.', image: null },
+        { en: 'PEARL', mn: 'Lane-ийн ихэнх хэсгийг хөнгөн нэвтэрч, хуурай хэсэгт хүрэх үед илүү хурдан хариу үйлдэл үзүүлдэг, backend хөдөлгөөн нь тод байдаг гадаргуу.', image: null },
+        { en: 'HYBRID', mn: 'Solid болон Pearl гадаргууны шинжийг хослуулж, midlane-ийн барьц ба backend-ийн хөдөлгөөний дундаж тэнцвэрийг өгдөг төрөл.', image: null },
+        { en: 'URETHANE', mn: 'Reactive бөмбөгөөс бага муруй хөдөлгөөн үүсгэдэг, хөдөлгөөн нь илүү хяналттай бөгөөд ихэвчлэн богино, тос багатай замд ашигладаг гадаргуу.', image: null },
+        { en: 'HOUSE BALL', mn: 'Боулингийн төвөөс нийтэд зориулан ашиглуулдаг, стандарт нүхтэй нийтийн бөмбөг.', image: '/glossary/house-ball.png' },
+        { en: 'SKID – HOOK – ROLL', mn: 'Бөмбөг lane дээр эхлээд тосон дээр гулсаж (skid), дараа нь чиглэлээ өөрчилж (hook), эцэст нь pin рүү тогтвортой өнхөрөлт (roll).', image: '/glossary/skid-hook-roll.png' },
+        { en: 'RG — RADIUS OF GYRATION', mn: 'Бөмбөгийн жин төвдөө ойр эсвэл гадна талдаа тархсаныг илэрхийлдэг бөгөөд бага RG эргэлтэд хурдан, өндөр RG арай удаан ордог.', image: null },
+        { en: 'TRACK FLARE', mn: 'Бөмбөг замаар өнхрөхдөө эргэлтийн тэнхлэг нь бага багаар шилжиж, замтай шинэ гадаргуугаар хүрэлцэхийн улмаас тосны мөр олон тусдаа цагираг хэлбэрээр үүсэх үзэгдэл.', image: '/glossary/track-flare.png' },
+        { en: 'DIFFERENTIAL — DIFF', mn: 'Цөмийн хамгийн их болон хамгийн бага RG-ийн зөрүү бөгөөд бөмбөгийн эргэлтийн тэнхлэг хэр хэмжээгээр шилжиж, тосны мөр олон тусдаа цагираг хэлбэрээр үүсэх боломжийг илэрхийлнэ.', image: null },
+        { en: 'SURFACE', mn: 'Бөмбөгийн гадаргууны grit, polish болон тоглолтоос үүссэн өөрчлөлтийг нийтэд нь хэлэх бөгөөд surface өөрчлөхөд бөмбөгийн хөдөлгөөн мэдэгдэхүйц өөрчлөгдөнө.', image: null },
+        { en: 'GRIT', mn: 'Бөмбөгний гадаргуугийн барзгар эсвэл гөлгөр байдлыг илэрхийлэх үзүүлэлт. Бага грит (500-1000) нь барзгар, их грит (3000-5000) нь гөлгөр гадаргууг илэрхийлнэ.', image: null },
+        { en: 'PRO SHOP', mn: 'Бөмбөг сонгох, гар хэмжих, Layout гаргах, өрөмдөх, surface тохируулах болон засвар үйлчилгээ хийдэг мэргэжлийн газар.', image: null },
+        { en: 'LAYOUT', mn: 'Бөмбөгийг хэрхэн өрөмдөх төлөвлөгөө (зураглал). Энэ нь бөмбөгийн hook, эргэлтийн хугацаа болон хөдөлгөөний хэлбэрт нөлөөлдөг.', image: '/glossary/layout.png' },
+        { en: 'GRIP', mn: 'Бөмбөгийн нүх, span, pitch болон тоглогчийн гар бөмбөгт хэрхэн сууж байгааг бүхэлд нь хэлнэ.', image: '/glossary/grip.png' },
+        { en: 'SPAN', mn: 'Эрхий хурууны нүхнээс дунд болон ядам хурууны нүх хүртэлх зай бөгөөд хэт урт эсвэл богино span нь хуруу, бугуйнд өвдөлт өгч болно.', image: null },
+        { en: 'PITCH', mn: 'Хуруу болон эрхий хурууны нүхийг бөмбөгийн төв рүү эсвэл гадагш ямар өнцгөөр өрөмдсөнийг хэлэх бөгөөд атгалт, release-д шууд нөлөөлнө.', image: null },
+        { en: 'FINGERTIP GRIP', mn: 'Дунд болон ядам хурууг зөвхөн эхний үе хүртэл хийдэг, эргэлт гаргах болон release-ээ удирдахад тохиромжтой барилт.', image: '/glossary/fingertip-grip.png' },
+        { en: 'FINGER INSERTS', mn: 'Дунд болон ядам хурууны нүхэнд суулгадаг резинэн оруулга бөгөөд хурууны мэдрэмж, барилт болон release-ийг тогтвортой болгоно.', image: '/glossary/finger-inserts.png' },
+        { en: 'THUMB SLUG', mn: 'Эрхий хурууны нүхэнд суулгадаг хатуу материалтай оруулга бөгөөд нүхний дотор талыг жигд, цэвэр болгож release-ийг тогтвортой болгоно.', image: '/glossary/thumb-slug.png' },
+        { en: 'PAP — POSITIVE AXIS POINT', mn: 'Тоглогчийн бөмбөг анх эргэх тэнхлэгийн гадаргуу дээрх цэг бөгөөд хүн бүрийн PAP өөр байдаг тул Layout-ийг тоглогчид тааруулж гаргана.', image: null },
+        { en: 'PIN-TO-PAP', mn: 'Core Pin болон тоглогчийн PAP хоорондох зай бөгөөд Core хэр хурдан тогтворжих, track flare-ийн хэлбэрт нөлөөлнө.', image: null },
+        { en: 'PSA — PREFERRED SPIN AXIS', mn: 'Asymmetrical Core-ийн эргэлтэд хамгийн их нөлөөлдөг тэнхлэг бөгөөд ихэвчлэн Mass Bias тэмдэглэгээтэй холбоотой.', image: null },
+        { en: 'BEVEL', mn: 'Хурууны нүхний амсрыг зөөлөн дугуйлж зассан хэсэг бөгөөд зөв bevel нь хуруу хавчигдах, арьс үрэгдэх эрсдэлийг багасгана.', image: null },
+        { en: 'RESURFACE', mn: 'Элэгдэж, хэлбэрээ алдсан бөмбөгийн гадаргууг жигд зүлгэн сэргээж, анхны хариу үйлдэлд ойртуулах үйлчилгээ.', image: null },
+        { en: 'DETOX', mn: 'Reactive бөмбөгийн гадаргууд шингэсэн тосыг зориулалтын төхөөрөмжөөр гаргах үйлчилгээ бөгөөд хэт өндөр халуун эсвэл буруу арга нь бөмбөгийг гэмтээж болно.', image: null },
+        { en: 'STANCE', mn: 'Эхлэх байрлал: Шидэлт эхлэхийн өмнө хөл, бие болон бөмбөгөө зөв байрлуулсан бэлтгэл байрлал.', image: '/glossary/stance.png' },
+        { en: 'APPROACH', mn: 'Алхалт: Бөмбөгөө шидэхийн өмнө foul line руу хийдэг дараалсан алхмууд.', image: null },
+        { en: 'FOOTWORK', mn: 'Хөлийн ажиллагаа: Approach хийх үеийн алхмын дараалал, хэмнэл болон чиглэл.', image: null },
+        { en: 'SWING', mn: 'Гарын савалт: Бөмбөгийг арагш болон урагш чөлөөтэй савлуулан шидэлтэд бэлтгэх хөдөлгөөн.', image: '/glossary/swing.png' },
+        { en: 'TIMING', mn: 'Гар, хөлийн уялдаа: Алхалт болон гарын савалт release хийх мөчид зөв таарч байгааг хэлнэ.', image: null },
+        { en: 'SLIDE', mn: 'Гулсалт: Сүүлийн алхам дээр тулгуур хөлөөрөө foul line руу зөөлөн гулсах хөдөлгөөн.', image: null },
+        { en: 'RELEASE', mn: 'Бөмбөг гаргалт: Бөмбөг гараас салж зам дээр өнхөрч эхлэх мөч болон гарын хөдөлгөөн.', image: null },
+        { en: 'FOLLOW THROUGH', mn: 'Гарын үргэлжлэл: Бөмбөгөө гаргасны дараа гараа онилсон чиглэл рүү чөлөөтэй үргэлжлүүлэх хөдөлгөөн.', image: '/glossary/follow-through.png' },
+        { en: 'BALANCE', mn: 'Тэнцвэр: Шидэлтийн төгсгөлд хазайх, унахгүйгээр биеэ тогтвортой барих чадвар.', image: null },
+        { en: 'TARGET', mn: 'Онилох цэг: Бөмбөгөө чиглүүлэхээр сонгосон arrow, dot эсвэл board.', image: '/glossary/target.png' },
+        { en: 'BALL SPEED', mn: 'Бөмбөгийн хурд: Бөмбөг lane дээр ямар хурдтай явж байгааг хэлнэ.', image: null },
+        { en: 'REV RATE', mn: 'Бөмбөгийн эргэлт: Бөмбөг lane дээр явахдаа хэр хурдан эргэж байгааг илэрхийлнэ.', image: null },
+        { en: 'STRAIGHT/HOUSE SHOT', mn: 'Шулуун шидэлт: Hook бага ашиглан бөмбөгийг сонгосон бай руу харьцангуй шулуун явуулах шидэлт.', image: null },
+        { en: 'HOOK SHOT', mn: 'Эргэлттэй шидэлт: Бөмбөгийг эхлээд шулуун явуулж, дараа нь pocket руу чиглэлээ өөрчлөхөөр шидэх арга.', image: null },
+        { en: 'SPARE SHOT', mn: 'Спейр шидэлт: Эхний шидэлтээр үлдсэн pin-үүдийг унагаах зорилготой хоёр дахь шидэлт.', image: null },
+        { en: 'ONE/TWO-HANDED STYLE', mn: 'Нэг болон Хоёр гарт шидэлт: Swing болон release-ийг үндсэн нэг эсвэл хоёр гараар хийдэг уламжлалт хэв маяг.', image: '/glossary/one-two-handed-style.png' },
+        { en: 'STROKER', mn: 'Зөөлөн хэв маягийн тоглогч: Харьцангуй бага эргэлт, жигд хурдтай, хяналттай шиддэг тоглогч.', image: null },
+        { en: 'TWEENER', mn: 'Дундаж хэв маягийн тоглогч: Stroker болон Cranker-ийн дундах хурд, эргэлттэй тоглогч.', image: null },
+        { en: 'CRANKER', mn: 'Их эргэлттэй тоглогч: Бөмбөгт өндөр rev rate өгч, хүчтэй hook гаргадаг тоглогч.', image: null },
+      ];
+      const insertTerm = db.prepare('INSERT INTO glossary_terms (en, mn, image, sort_order) VALUES (?, ?, ?, ?)');
+      const insertMany = db.transaction((terms: typeof staticTerms) => {
+        terms.forEach((t, i) => insertTerm.run(t.en, t.mn, t.image ?? null, i));
+      });
+      insertMany(staticTerms);
+      console.log(`Glossary: seeded ${staticTerms.length} terms.`);
+    }
+  }
+
+  // ── Glossary API ──────────────────────────────────────────────────────
+  app.get('/api/glossary', (_req, res) => {
+    try {
+      const terms = db.prepare('SELECT id, en, mn, image, sort_order FROM glossary_terms ORDER BY sort_order ASC, id ASC').all();
+      return res.json(terms);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/glossary', requireAdmin, (req, res) => {
+    try {
+      const { en, mn, image } = req.body || {};
+      if (!en || !mn) return res.status(400).json({ error: 'en and mn are required' });
+      // Validate image is a URL or relative path (no JS injection)
+      const safeImage = typeof image === 'string' && image.trim() ? image.trim() : null;
+      if (safeImage && !/^(https?:\/\/|\/)/i.test(safeImage)) {
+        return res.status(400).json({ error: 'image must be a URL or a path starting with /' });
+      }
+      const maxOrder = (db.prepare('SELECT MAX(sort_order) as m FROM glossary_terms').get() as any).m ?? -1;
+      const result = db.prepare('INSERT INTO glossary_terms (en, mn, image, sort_order) VALUES (?, ?, ?, ?)').run(String(en).trim(), String(mn).trim(), safeImage, maxOrder + 1);
+      const term = db.prepare('SELECT id, en, mn, image, sort_order FROM glossary_terms WHERE id = ?').get(result.lastInsertRowid);
+      return res.status(201).json(term);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put('/api/glossary/:id', requireAdmin, (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { en, mn, image } = req.body || {};
+      if (!en || !mn) return res.status(400).json({ error: 'en and mn are required' });
+      const safeImage = typeof image === 'string' && image.trim() ? image.trim() : null;
+      if (safeImage && !/^(https?:\/\/|\/)/i.test(safeImage)) {
+        return res.status(400).json({ error: 'image must be a URL or a path starting with /' });
+      }
+      const result = db.prepare('UPDATE glossary_terms SET en = ?, mn = ?, image = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(String(en).trim(), String(mn).trim(), safeImage, id);
+      if (result.changes === 0) return res.status(404).json({ error: 'Term not found' });
+      const term = db.prepare('SELECT id, en, mn, image, sort_order FROM glossary_terms WHERE id = ?').get(id);
+      return res.json(term);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete('/api/glossary/:id', requireAdmin, (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const result = db.prepare('DELETE FROM glossary_terms WHERE id = ?').run(id);
+      if (result.changes === 0) return res.status(404).json({ error: 'Term not found' });
+      return res.json({ success: true });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
 
   // API Routes
 

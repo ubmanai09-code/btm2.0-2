@@ -13,3 +13,6 @@ coverage/
 
 # Server build artifacts
 dist-server/
+
+# Uploaded glossary images (stored externally as URLs)
+public/glossary/
