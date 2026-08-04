@@ -323,7 +323,7 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
                 </div>
                 {/* Thumbnail on the right, vertically centered */}
                 {term.image && (
-                  <div className="rounded-lg overflow-hidden border border-gray-200 h-14 w-14 flex items-center justify-center shrink-0" style={{ backgroundColor: '#ffffff' }}>
+                  <div className="rounded-lg overflow-hidden border border-black/10 dark:border-white/10 h-16 w-16 min-h-16 min-w-16 flex items-center justify-center shrink-0 bg-white dark:bg-white/5">
                     <img src={term.image} alt={term.en} className="h-full w-full object-contain" loading="lazy" />
                   </div>
                 )}
@@ -386,8 +386,8 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
             </div>
 
             {selectedTerm.image && (
-              <div className="rounded-xl overflow-hidden bg-black/5 dark:bg-white/5 flex items-center justify-center">
-                <img src={selectedTerm.image} alt={selectedTerm.en} className="w-full h-auto object-contain" />
+              <div className="rounded-xl overflow-hidden bg-black/5 dark:bg-white/5 flex items-center justify-center h-48">
+                <img src={selectedTerm.image} alt={selectedTerm.en} className="h-full w-full object-contain" />
               </div>
             )}
 
