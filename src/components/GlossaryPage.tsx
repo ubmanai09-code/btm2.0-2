@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BookOpen, Search, X, Award, Plus, Pencil, Trash2, Image as ImageIcon } from 'lucide-react';
-import { GLOSSARY_AUTHOR } from '../data/glossary';
+import { BookOpen, Search, X, Award, Plus, Pencil, Trash2, Image as ImageIcon, ArrowDownAZ, LayoutGrid } from 'lucide-react';
+import { GLOSSARY_AUTHOR, GLOSSARY_CATEGORIES } from '../data/glossary';
 
 interface GlossaryPageProps {
   lang?: 'mn' | 'en';
@@ -13,10 +13,29 @@ interface Term {
   en: string;
   mn: string;
   image?: string | null;
+  category: string | null;
   sort_order: number;
 }
 
-const EMPTY_FORM = { en: '', mn: '', image: '' };
+type SortMode = 'default' | 'alpha' | 'category';
+
+const CATEGORY_ORDER = ['scoring', 'lane', 'equipment', 'technique'] as const;
+
+const CATEGORY_TEXT_COLOR: Record<string, string> = {
+  scoring:   'text-orange-500 dark:text-orange-400',
+  lane:      'text-blue-500 dark:text-blue-400',
+  equipment: 'text-green-600 dark:text-green-400',
+  technique: 'text-purple-500 dark:text-purple-400',
+};
+
+const CATEGORY_BG: Record<string, string> = {
+  scoring:   'bg-orange-500',
+  lane:      'bg-blue-500',
+  equipment: 'bg-green-600',
+  technique: 'bg-purple-500',
+};
+
+const EMPTY_FORM = { en: '', mn: '', image: '', category: 'scoring' };
 
 const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public', authToken = '' }) => {
   const isAdmin = role === 'admin';
@@ -24,6 +43,7 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
   const [terms, setTerms] = useState<Term[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
+  const [sortMode, setSortMode] = useState<SortMode>('alpha');
   const [selectedTerm, setSelectedTerm] = useState<Term | null>(null);
 
   // Edit / Add modal state
@@ -48,13 +68,28 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
 
   useEffect(() => { fetchTerms(); }, [fetchTerms]);
 
-  const filtered = query.trim()
-    ? terms.filter(
-        (t) =>
-          t.en.toLowerCase().includes(query.toLowerCase()) ||
-          t.mn.toLowerCase().includes(query.toLowerCase())
-      )
-    : terms;
+  const filtered = (() => {
+    let result = query.trim()
+      ? terms.filter(
+          (t) =>
+            t.en.toLowerCase().includes(query.toLowerCase()) ||
+            t.mn.toLowerCase().includes(query.toLowerCase())
+        )
+      : [...terms];
+    if (sortMode === 'alpha') {
+      result = result.slice().sort((a, b) => a.en.localeCompare(b.en));
+    } else if (sortMode === 'category') {
+      result = result.slice().sort((a, b) => {
+        const ai = CATEGORY_ORDER.indexOf((a.category ?? '') as typeof CATEGORY_ORDER[number]);
+        const bi = CATEGORY_ORDER.indexOf((b.category ?? '') as typeof CATEGORY_ORDER[number]);
+        const ad = ai === -1 ? 99 : ai;
+        const bd = bi === -1 ? 99 : bi;
+        if (ad !== bd) return ad - bd;
+        return a.en.localeCompare(b.en);
+      });
+    }
+    return result;
+  })();
 
   const openAdd = () => {
     setEditTerm(null);
@@ -66,7 +101,7 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
   const openEdit = (term: Term, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditTerm(term);
-    setForm({ en: term.en, mn: term.mn, image: term.image ?? '' });
+    setForm({ en: term.en, mn: term.mn, image: term.image ?? '', category: term.category ?? 'scoring' });
     setSaveError('');
     setShowEditModal(true);
   };
@@ -87,7 +122,7 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
           'Content-Type': 'application/json',
           ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
         },
-        body: JSON.stringify({ en: form.en.trim(), mn: form.mn.trim(), image: form.image.trim() || null }),
+        body: JSON.stringify({ en: form.en.trim(), mn: form.mn.trim(), image: form.image.trim() || null, category: form.category }),
       });
       const data = await res.json();
       if (!res.ok) { setSaveError(data.error || 'Save failed'); return; }
@@ -179,6 +214,37 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
         )}
       </div>
 
+      {/* ── Sort controls ─────────────────────────────────────────── */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] text-black/35 dark:text-white/35 uppercase tracking-widest mr-0.5">
+          {lang === 'mn' ? 'Эрэмбэ' : 'Sort'}
+        </span>
+        <button
+          onClick={() => setSortMode('alpha')}
+          title={lang === 'mn' ? 'Цагаан толгойн дараалал' : 'Alphabetical'}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+            sortMode === 'alpha'
+              ? 'bg-orange-500 text-white'
+              : 'bg-black/8 dark:bg-white/8 text-black/50 dark:text-white/50 hover:bg-black/15'
+          }`}
+        >
+          <ArrowDownAZ size={12} />
+          {lang === 'mn' ? 'A–Z' : 'A–Z'}
+        </button>
+        <button
+          onClick={() => setSortMode('category')}
+          title={lang === 'mn' ? 'Ангиллаар' : 'By category'}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+            sortMode === 'category'
+              ? 'bg-orange-500 text-white'
+              : 'bg-black/8 dark:bg-white/8 text-black/50 dark:text-white/50 hover:bg-black/15'
+          }`}
+        >
+          <LayoutGrid size={12} />
+          {lang === 'mn' ? 'Ангилал' : 'Category'}
+        </button>
+      </div>
+
       {/* ── Term count ─────────────────────────────────────────────── */}
       {!loading && (
         <p className="text-xs text-black/35 dark:text-white/35 -mt-4">
@@ -207,11 +273,21 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
           {filtered.map((term) => (
             <div
               key={term.id}
-              className="relative text-left ui-card rounded-xl p-4 border border-black/10 dark:border-white/10 hover:border-orange-300 dark:hover:border-orange-600/50 hover:shadow-md transition-all group cursor-pointer"
+              className="relative text-left ui-card rounded-xl overflow-hidden border border-black/10 dark:border-white/10 hover:border-orange-300 dark:hover:border-orange-600/50 hover:shadow-md transition-all group cursor-pointer"
               onClick={() => setSelectedTerm(term)}
               onDoubleClick={isAdmin ? (e) => openEdit(term, e) : undefined}
               title={isAdmin ? (lang === 'mn' ? 'Давхар дарж засах' : 'Double-click to edit') : undefined}
             >
+              {/* Category header row */}
+              {term.category && (
+                <div className="px-3 py-1.5 flex items-center gap-1.5 border-b border-black/8 dark:border-white/8 bg-black/[0.025] dark:bg-white/[0.025]">
+                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${CATEGORY_BG[term.category] ?? 'bg-black/20'}`} />
+                  <span className="text-[9px] font-semibold uppercase tracking-widest text-black/40 dark:text-white/35">
+                    {GLOSSARY_CATEGORIES[term.category as keyof typeof GLOSSARY_CATEGORIES]?.[lang === 'mn' ? 'mn' : 'en'] ?? term.category}
+                  </span>
+                </div>
+              )}
+              <div className="p-4">
               {/* Admin hover buttons */}
               {isAdmin && (
                 <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
@@ -252,6 +328,7 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
                   </div>
                 )}
               </div>
+              </div>
             </div>
           ))}
         </div>
@@ -272,6 +349,11 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
                 <p className="text-[10px] font-bold uppercase tracking-widest text-orange-500 mb-1">
                   {lang === 'mn' ? 'Боулингийн нэр томьёо' : 'Bowling Term'}
                 </p>
+                {selectedTerm.category && (
+                  <span className={`text-[9px] font-bold uppercase tracking-widest block mb-1 ${CATEGORY_TEXT_COLOR[selectedTerm.category] ?? 'text-black/40 dark:text-white/40'}`}>
+                    {GLOSSARY_CATEGORIES[selectedTerm.category as keyof typeof GLOSSARY_CATEGORIES]?.[lang === 'mn' ? 'mn' : 'en'] ?? selectedTerm.category}
+                  </span>
+                )}
                 <h2 className="text-2xl font-bold text-[color:var(--text)]">{selectedTerm.en}</h2>
               </div>
               <div className="flex items-center gap-1 shrink-0">
@@ -342,6 +424,23 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
               >
                 <X size={16} />
               </button>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-black/50 dark:text-white/50 uppercase tracking-widest mb-1">
+                {lang === 'mn' ? 'Ангилал' : 'Category'}
+              </label>
+              <select
+                value={form.category}
+                onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                className="w-full px-3 py-2 text-sm rounded-lg border border-black/15 dark:border-white/15 bg-white dark:bg-white/5 text-[color:var(--text)] focus:outline-none focus:ring-2 focus:ring-orange-400/40"
+              >
+                {CATEGORY_ORDER.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {GLOSSARY_CATEGORIES[cat][lang === 'mn' ? 'mn' : 'en']}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
