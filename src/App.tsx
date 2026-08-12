@@ -54,7 +54,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
-import api, { Tournament, Participant, Team, LaneAssignment, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry, LeagueRankingResponse, StandingAdditionalScore, StandingBonus } from './services/api';
+import api, { Tournament, Participant, Team, LaneAssignment, WarmupSlot, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry, LeagueRankingResponse, StandingAdditionalScore, StandingBonus } from './services/api';
 import { buildKnownBracketTemplateDefaults } from './utils/bracketTemplates';
 import {
   buildTournamentEngine,
@@ -6024,6 +6024,11 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   const [lanePickerSearchQuery, setLanePickerSearchQuery] = useState('');
   const [activeWarningId, setActiveWarningId] = useState<string | null>(null);
   const importLanesInputRef = useRef<HTMLInputElement | null>(null);
+  const [warmupSlots, setWarmupSlots] = useState<WarmupSlot[]>([]);
+  const [warmupSession, setWarmupSession] = useState<'UT' | 'NT'>('UT');
+  const [warmupSlotCount, setWarmupSlotCount] = useState(5);
+  const [warmupPickerSlotNumber, setWarmupPickerSlotNumber] = useState<number | null>(null);
+  const [warmupPickerSearch, setWarmupPickerSearch] = useState('');
   const say = (message: string) => alert(tx(message));
   const ask = (message: string) => confirm(tx(message));
 
@@ -6042,14 +6047,16 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   const loadData = async () => {
     setLoading(true);
     try {
-      const [laneData, pData, tData] = await Promise.all([
+      const [laneData, pData, tData, warmupData] = await Promise.all([
         api.getLanes(tournament.id),
         api.getParticipants(tournament.id),
-        api.getTeams(tournament.id)
+        api.getTeams(tournament.id),
+        api.getWarmupSlots(tournament.id),
       ]);
       setLanes(laneData);
       setParticipants(pData);
       setTeams(tData);
+      setWarmupSlots(warmupData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -6161,6 +6168,30 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       console.error(err);
       say('Failed to auto-assign lanes.');
     }
+  };
+
+  const handleAddWarmupSlot = async (slotNumber: number, participantId: number) => {
+    if (!canManageLanes) return;
+    const existing = warmupSlots.find(s => s.slot_number === slotNumber && s.session === warmupSession);
+    if (existing) {
+      if (!ask(`Replace current player in ${warmupSession}-${slotNumber}?`)) return;
+      await api.deleteWarmupSlot(existing.id);
+    }
+    await api.addWarmupSlot(tournament.id, {
+      participant_id: tournament.type === 'individual' ? participantId : null,
+      team_id: tournament.type === 'team' ? participantId : null,
+      slot_number: slotNumber,
+      session: warmupSession,
+    });
+    await loadData();
+    setWarmupPickerSlotNumber(null);
+    setWarmupPickerSearch('');
+  };
+
+  const handleRemoveWarmupSlot = async (id: number) => {
+    if (!canManageLanes) return;
+    await api.deleteWarmupSlot(id);
+    await loadData();
   };
 
   const handleMoveToLane = async (laneNumber: number, targetShift: number = currentShift) => {
@@ -7063,6 +7094,115 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         </div>
       </div>
 
+      {/* UT/NT Virtual Lanes — isolated from tournament lane assignments */}
+      {canManageLanes && (
+        <div className="mt-6">
+          <div className="flex items-center gap-3 mb-3">
+            <div>
+              <h4 className="text-sm font-bold text-amber-800 uppercase tracking-widest">УТ / НТ Lanes</h4>
+              <p className="text-[10px] text-black/45 mt-0.5">Pre/post-tournament slots — never affected by auto-assign or clear</p>
+            </div>
+            <div className="flex items-center gap-1 ml-auto">
+              {(['UT', 'NT'] as const).map(s => (
+                <button key={s} type="button" onClick={() => setWarmupSession(s)}
+                  className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-all ${warmupSession === s ? (s === 'UT' ? 'bg-amber-500 border-amber-500 text-white' : 'bg-violet-500 border-violet-500 text-white') : 'bg-white border-black/15 text-black/50 hover:border-black/30'}`}>
+                  {s === 'UT' ? 'УТ' : 'НТ'}
+                </button>
+              ))}
+              <div className="flex items-center gap-0.5 ml-2 border border-black/15 rounded overflow-hidden">
+                <button type="button" onClick={() => setWarmupSlotCount(c => Math.max(1, c - 1))} className="px-2 py-1 text-xs font-bold text-black/50 hover:bg-black/5">−</button>
+                <span className="px-2 text-[11px] font-bold text-black/60 min-w-[1.5rem] text-center">{warmupSlotCount}</span>
+                <button type="button" onClick={() => setWarmupSlotCount(c => Math.min(20, c + 1))} className="px-2 py-1 text-xs font-bold text-black/50 hover:bg-black/5">+</button>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+            {Array.from({ length: warmupSlotCount }, (_, i) => i + 1).map(slotNum => {
+              const assignment = warmupSlots.find(s => s.slot_number === slotNum && s.session === warmupSession);
+              const sessionColor = warmupSession === 'UT' ? 'amber' : 'violet';
+              const borderClass = assignment ? `border-${sessionColor}-200 bg-${sessionColor}-50/40` : 'border-black/10 bg-white';
+              const headerClass = warmupSession === 'UT' ? 'bg-amber-100/80 text-amber-900' : 'bg-violet-100/80 text-violet-900';
+              const displayName = assignment
+                ? (assignment.first_name
+                  ? `${assignment.first_name} ${(assignment.last_name || '').charAt(0).toUpperCase()}.`
+                  : assignment.team_name || '—')
+                : null;
+              return (
+                <Card key={slotNum} className={`flex flex-col min-h-[90px] border transition-all ${borderClass}`}>
+                  <div className={`px-2 py-1 flex justify-between items-center border-b border-black/10 ${headerClass}`}>
+                    <span className="font-bold text-[9px] uppercase tracking-widest">{warmupSession === 'UT' ? 'УТ' : 'НТ'}-{slotNum}</span>
+                  </div>
+                  <div className="p-1.5 flex-1 flex flex-col justify-center">
+                    {assignment ? (
+                      <div className="flex items-center gap-1 group">
+                        <span className="flex-1 text-[11px] font-bold uppercase tracking-wide truncate">{displayName}</span>
+                        <button onClick={() => handleRemoveWarmupSlot(assignment.id)}
+                          className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-400 transition-all" title="Remove">
+                          <X size={10} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={() => { setWarmupPickerSlotNumber(slotNum); setWarmupPickerSearch(''); }}
+                        className="w-full flex items-center justify-center text-black/25 hover:text-black/50 transition-all">
+                        <Plus size={20} />
+                      </button>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* UT/NT slot picker modal */}
+      {warmupPickerSlotNumber !== null && (
+        <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center p-4" onClick={() => { setWarmupPickerSlotNumber(null); setWarmupPickerSearch(''); }}>
+          <div className="w-full max-w-lg bg-white rounded-lg border border-black/15 shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className={`px-4 py-3 border-b flex items-center justify-between gap-2 ${warmupSession === 'UT' ? 'bg-amber-50 border-amber-200' : 'bg-violet-50 border-violet-200'}`}>
+              <div>
+                <h4 className="text-sm font-bold uppercase tracking-wide">Assign to {warmupSession === 'UT' ? 'УТ' : 'НТ'}-{warmupPickerSlotNumber}</h4>
+                <p className="text-[11px] text-black/55">{warmupSession === 'UT' ? 'Урьдчилсан тоглолт' : 'Нөхөлт тоглолт'} — all registered players</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => { setWarmupPickerSlotNumber(null); setWarmupPickerSearch(''); }} title="Close" ariaLabel="Close"><X size={14} /></Button>
+            </div>
+            <div className="p-3 border-b border-black/10">
+              <div className="relative">
+                <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-black/40 pointer-events-none" />
+                <input type="text" value={warmupPickerSearch} onChange={e => setWarmupPickerSearch(e.target.value)}
+                  placeholder={tournament.type === 'individual' ? 'Search player or club' : 'Search team'}
+                  className="h-8 w-full rounded-md border border-black/15 bg-white pl-7 pr-2 text-xs text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-[#AFDDE5]" />
+              </div>
+            </div>
+            <div className="max-h-[360px] overflow-y-auto p-3 space-y-1.5">
+              {(() => {
+                const query = warmupPickerSearch.trim().toLowerCase();
+                const items = tournament.type === 'individual'
+                  ? participants.filter(p => {
+                      const name = `${p.first_name} ${p.last_name}`.toLowerCase();
+                      return !query || name.includes(query) || (p.club || '').toLowerCase().includes(query);
+                    })
+                  : teams.filter(t => !query || t.name.toLowerCase().includes(query));
+                if (items.length === 0) return <p className="text-xs text-black/40 italic text-center py-6">No matching players.</p>;
+                return items.map(item => {
+                  const label = tournament.type === 'individual'
+                    ? `${(item as Participant).first_name} ${(item as Participant).last_name}`.trim()
+                    : (item as Team).name;
+                  const secondary = tournament.type === 'individual' ? ((item as Participant).club || '') : '';
+                  return (
+                    <button key={item.id} type="button" onClick={() => handleAddWarmupSlot(warmupPickerSlotNumber!, item.id)}
+                      className="w-full text-left px-3 py-2 rounded border border-black/10 hover:border-emerald-300 hover:bg-emerald-50/40 transition-colors">
+                      <p className="text-sm font-semibold text-black uppercase tracking-wide">{label || '—'}</p>
+                      {secondary && <p className="text-[11px] text-black/50">{secondary}</p>}
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
       {lanePickerLaneNumber !== null && (
         <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center p-4" onClick={() => { setLanePickerLaneNumber(null); setLanePickerShift(1); setLanePickerSearchQuery(''); }}>
           <div className="w-full max-w-lg bg-white rounded-lg border border-[#AFDDE5]/70 shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
@@ -7135,6 +7275,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   const [presentShiftFilter, setPresentShiftFilter] = useState<number[] | null>(null);
   const [mobileExpandedScoreRow, setMobileExpandedScoreRow] = useState<string | null>(null);
   const [activeWarningId, setActiveWarningId] = useState<string | null>(null);
+  const [scoringWarmupSlots, setScoringWarmupSlots] = useState<WarmupSlot[]>([]);
   const importScoresInputRef = useRef<HTMLInputElement | null>(null);
   const scoringHeaderScrollRef = useRef<HTMLDivElement | null>(null);
   const scoringBodyScrollRef = useRef<HTMLDivElement | null>(null);
@@ -7291,14 +7432,16 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
       setLoading(true);
     }
     try {
-      const [pData, sData, lData] = await Promise.all([
+      const [pData, sData, lData, wData] = await Promise.all([
         api.getParticipants(tournament.id),
         api.getScores(tournament.id),
-        api.getLanes(tournament.id)
+        api.getLanes(tournament.id),
+        api.getWarmupSlots(tournament.id),
       ]);
       setParticipants(pData);
       setScores(sData);
       setLanes(lData);
+      setScoringWarmupSlots(wData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -8520,6 +8663,88 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
           </table>
           </div>
         </div>
+
+        {/* UT/NT players — shown regardless of lane assignment */}
+        {(['UT', 'NT'] as const).map(session => {
+          const sessionSlots = scoringWarmupSlots.filter(s => s.session === session);
+          if (sessionSlots.length === 0) return null;
+          const sessionLabel = session === 'UT' ? 'УТ — Урьдчилсан тоглолт' : 'НТ — Нөхөлт тоглолт';
+          const badgeClass = session === 'UT' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-violet-100 text-violet-800 border-violet-300';
+          const headerClass = session === 'UT' ? 'bg-amber-50/80 border-amber-200' : 'bg-violet-50/80 border-violet-200';
+          const assignedParticipantIds = new Set(sessionSlots.filter(s => s.participant_id).map(s => s.participant_id!));
+          const assignedTeamIds = new Set(sessionSlots.filter(s => s.team_id).map(s => s.team_id!));
+          const sessionParticipants = participants.filter(p =>
+            tournament.type === 'individual'
+              ? assignedParticipantIds.has(p.id)
+              : (p.team_id !== null && assignedTeamIds.has(p.team_id))
+          );
+          if (sessionParticipants.length === 0) return null;
+          return (
+            <div key={session} className={`mt-4 rounded-lg border overflow-hidden ${headerClass}`}>
+              <div className={`px-3 py-2 flex items-center gap-2 border-b ${headerClass}`}>
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${badgeClass}`}>{session}</span>
+                <span className="text-[11px] font-bold text-black/60 uppercase tracking-widest">{sessionLabel}</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-black/10">
+                      <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/50 w-8">#</th>
+                      <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/50">Player</th>
+                      {gameNumbers.map(g => (
+                        <th key={g} className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/50 text-center w-14">G{g}</th>
+                      ))}
+                      <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/50 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sessionParticipants.map((p, idx) => {
+                      const { total } = getParticipantStats(p.id);
+                      return (
+                        <tr key={p.id} className={`border-b border-black/5 ${idx % 2 === 0 ? 'bg-white' : 'bg-black/[0.015]'}`}>
+                          <td className="px-3 py-1 text-[11px] text-black/40">{idx + 1}</td>
+                          <td className="px-3 py-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-[9px] font-bold px-1 rounded border ${badgeClass}`}>{session}</span>
+                              <span className="text-xs font-bold uppercase tracking-wide">{p.first_name} {p.last_name}</span>
+                            </div>
+                          </td>
+                          {gameNumbers.map(g => {
+                            const key = `${p.id}-${g}`;
+                            const saved = scoreMap.get(key);
+                            const draft = (draftScores as Record<string, string>)[key] ?? '';
+                            return (
+                              <td key={g} className="px-1 py-1 text-center">
+                                {canManageScores ? (
+                                  <input
+                                    type="number" min={0} max={300}
+                                    value={draft !== '' ? draft : (saved !== undefined ? String(saved) : '')}
+                                    onChange={e => setDraftScores(prev => ({ ...prev, [key]: e.target.value }))}
+                                    onBlur={async e => {
+                                      const val = parseInt(e.target.value, 10);
+                                      if (!Number.isFinite(val) || val < 0 || val > 300) return;
+                                      await api.addScore(tournament.id, { participant_id: p.id, game_number: g, score: val });
+                                      setDraftScores(prev => { const n = { ...prev }; delete n[key]; return n; });
+                                      await loadData({ silent: true });
+                                    }}
+                                    className="w-12 h-7 text-center text-xs border border-black/15 rounded focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
+                                  />
+                                ) : (
+                                  <span className="text-xs tabular-nums">{saved !== undefined ? saved : '—'}</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td className="px-3 py-1 text-right font-bold text-sm tabular-nums text-black/70">{total > 0 ? total : '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
 
         {isScoreScreenMode && scoringPresentAdBlock.enabled && (
           <>
@@ -12645,6 +12870,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
+  const [standingsWarmupSlots, setStandingsWarmupSlots] = useState<WarmupSlot[]>([]);
 
   const exitPresentMode = () => {
     if (typeof window === 'undefined') return;
@@ -12903,13 +13129,14 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         setHasBonus(Boolean(latestTournamentConfig.has_bonus));
       }
 
-      const [standingsResult, participantsResult, scoresResult, teamsResult] = await Promise.allSettled([
+      const [standingsResult, participantsResult, scoresResult, teamsResult, warmupResult] = await Promise.allSettled([
         withTimeout(api.getStandings(tournament.id), 'standings'),
         withTimeout(api.getParticipants(tournament.id), 'participants'),
         withTimeout(api.getScores(tournament.id), 'scores'),
         tournament.type === 'team'
           ? withTimeout(api.getTeams(tournament.id), 'teams')
           : Promise.resolve([] as Team[]),
+        withTimeout(api.getWarmupSlots(tournament.id), 'warmupSlots'),
       ]);
 
       const toArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
@@ -12919,6 +13146,8 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       const participantsData = participantsResult.status === 'fulfilled' ? (toArray(participantsResult.value) as Participant[]) : [];
       const scoresData = scoresResult.status === 'fulfilled' ? (toArray(scoresResult.value) as Score[]) : [];
       const teamsData = teamsResult.status === 'fulfilled' ? (toArray(teamsResult.value) as Team[]) : [];
+      const warmupData = warmupResult.status === 'fulfilled' ? (warmupResult.value as WarmupSlot[]) : [];
+      setStandingsWarmupSlots(warmupData);
       const manualWinnersData: ManualWinnerEntry[] = [];
 
       if (standingsResult.status === 'fulfilled' && !Array.isArray(standingsResult.value)) {
@@ -13269,10 +13498,25 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       return (b[sortKey] - a[sortKey]) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name);
     });
 
+  // Build UT/NT participant ID sets from warmup slots
+  const utParticipantIds = new Set(standingsWarmupSlots.filter(s => s.session === 'UT' && s.participant_id).map(s => s.participant_id!));
+  const ntParticipantIds = new Set(standingsWarmupSlots.filter(s => s.session === 'NT' && s.participant_id).map(s => s.participant_id!));
+  const allWarmupParticipantIds = new Set([...utParticipantIds, ...ntParticipantIds]);
+
+  // UT/NT rows: -25 applied to grand_total, sorted independently
+  const utntStandingsRows = playerStandingsRows
+    .filter(r => allWarmupParticipantIds.has(r.participant_id) && (r.grand_total > 0 || r.total > 0))
+    .map(r => ({
+      ...r,
+      grand_total: r.grand_total - 25,
+      session: utParticipantIds.has(r.participant_id) ? 'UT' : 'NT' as 'UT' | 'NT',
+    }))
+    .sort((a, b) => (b.grand_total - a.grand_total) || a.participant_name.localeCompare(b.participant_name));
+
   const shiftNumbers = Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1);
 
-  // Filter by gender if selected
-  let filteredPlayerStandingsRows = playerStandingsRows;
+  // Filter by gender if selected — always exclude UT/NT from official standings
+  let filteredPlayerStandingsRows = playerStandingsRows.filter(r => !allWarmupParticipantIds.has(r.participant_id));
   if (standingsMode === 'players' && typeof genderFilter !== 'undefined' && genderFilter !== 'all') {
     filteredPlayerStandingsRows = playerStandingsRows.filter(row => (participantGenderMap.get(row.participant_id) || '').toLowerCase() === genderFilter);
   }
@@ -13432,6 +13676,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
   const getTopIdsByGender = (genderPrefix: 'm' | 'f', metric: 'grand_total' | 'average') => {
     const candidates = playerStandingsRows.filter((row) => {
+      if (allWarmupParticipantIds.has(row.participant_id)) return false; // exclude UT/NT
       const gender = (participantGenderMap.get(row.participant_id) || '').toLowerCase();
       if (!gender.startsWith(genderPrefix)) return false;
       return metric === 'grand_total' ? row.grand_total > 0 : row.average > 0;
@@ -14747,6 +14992,46 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
             </tbody>
           </table>
           </div>
+
+          {/* UT/NT rankings — info-only, -25 applied, excluded from official standings */}
+          {!isTeamTournament && utntStandingsRows.length > 0 && (
+            <div className="mt-6 rounded-lg border border-amber-200/80 overflow-hidden">
+              <div className="px-4 py-2 bg-amber-50/80 border-b border-amber-200/80 flex items-center gap-2">
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-amber-100 text-amber-800 border-amber-300">УТ/НТ</span>
+                <span className="text-[11px] font-bold uppercase tracking-widest text-black/55">Pre / Post Tournament Rankings</span>
+                <span className="ml-auto text-[10px] text-black/40 italic">−25 applied · not eligible for prizes</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-black/10 bg-white">
+                      <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/40 w-8">#</th>
+                      <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/40">Player</th>
+                      {gameNumbers.map(g => <th key={g} className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/40 text-center w-14">G{g}</th>)}
+                      <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/40 text-right">Total</th>
+                      <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/40 text-right">−25</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {utntStandingsRows.map((row, idx) => (
+                      <tr key={row.participant_id} className={`border-b border-black/5 ${idx % 2 === 0 ? 'bg-white' : 'bg-black/[0.015]'}`}>
+                        <td className="px-3 py-1.5 text-[11px] text-black/40">{idx + 1}</td>
+                        <td className="px-3 py-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-[9px] font-bold px-1 rounded border ${row.session === 'UT' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-violet-100 text-violet-800 border-violet-300'}`}>{row.session}</span>
+                            <span className="text-xs font-bold uppercase tracking-wide">{row.participant_name}</span>
+                          </div>
+                        </td>
+                        {gameNumbers.map((g, gi) => <td key={g} className="px-2 py-1.5 text-center text-sm">{row.games[gi] ?? 0}</td>)}
+                        <td className="px-3 py-1.5 text-right text-sm text-black/50">{row.total}</td>
+                        <td className="px-3 py-1.5 text-right font-bold text-sm text-emerald-700">{row.grand_total}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {isStandingsScreenMode && standingsPresentAdBlock.enabled && (
             <>

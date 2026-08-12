@@ -59,6 +59,18 @@ export interface LaneAssignment {
   team_name?: string;
 }
 
+export interface WarmupSlot {
+  id: number;
+  tournament_id: number;
+  participant_id: number | null;
+  team_id: number | null;
+  slot_number: number;
+  session: 'UT' | 'NT';
+  first_name?: string;
+  last_name?: string;
+  team_name?: string;
+}
+
 export interface Score {
   id: number;
   tournament_id: number;
@@ -583,6 +595,22 @@ const api = {
     const res = await fetch(`/api/lanes/${id}`, {
       method: 'DELETE',
     });
+    return res.json();
+  },
+  async getWarmupSlots(tournamentId: number): Promise<WarmupSlot[]> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/warmup-slots`);
+    return res.json();
+  },
+  async addWarmupSlot(tournamentId: number, data: { participant_id?: number | null; team_id?: number | null; slot_number: number; session: 'UT' | 'NT' }): Promise<{ id: number }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/warmup-slots`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+  async deleteWarmupSlot(id: number): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/warmup-slots/${id}`, { method: 'DELETE' });
     return res.json();
   },
   async bulkUpdateLanes(tournamentId: number, assignments: Partial<LaneAssignment>[]): Promise<{ success: boolean }> {

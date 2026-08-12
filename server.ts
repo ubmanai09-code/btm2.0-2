@@ -261,6 +261,18 @@ function initDb() {
       FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS warmup_slots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id INTEGER NOT NULL,
+      participant_id INTEGER,
+      team_id INTEGER,
+      slot_number INTEGER NOT NULL,
+      session TEXT NOT NULL DEFAULT 'pre',
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+      FOREIGN KEY (participant_id) REFERENCES participants(id) ON DELETE CASCADE,
+      FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS scores (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tournament_id INTEGER NOT NULL,
@@ -3128,6 +3140,38 @@ async function startServer() {
     });
     
     transaction(assignments);
+    res.json({ success: true });
+  });
+
+  // Warmup / practice slots (pre- and post-tournament, no effect on lane assignments)
+  app.get("/api/tournaments/:id/warmup-slots", (req, res) => {
+    const rows = db.prepare(`
+      SELECT ws.*, p.first_name, p.last_name, t.name as team_name
+      FROM warmup_slots ws
+      LEFT JOIN participants p ON ws.participant_id = p.id
+      LEFT JOIN teams t ON ws.team_id = t.id
+      WHERE ws.tournament_id = ?
+      ORDER BY ws.session, ws.slot_number
+    `).all(req.params.id);
+    res.json(rows);
+  });
+
+  app.post("/api/tournaments/:id/warmup-slots", requirePermission('lanes:manage'), (req, res) => {
+    const { participant_id, team_id, slot_number, session } = req.body;
+    const validSessions = ['UT', 'NT'];
+    const safeSession = validSessions.includes(session) ? session : 'UT';
+    const result = db.prepare(`
+      INSERT INTO warmup_slots (tournament_id, participant_id, team_id, slot_number, session)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(req.params.id, participant_id || null, team_id || null, slot_number, safeSession);
+    res.json({ id: result.lastInsertRowid });
+  });
+
+  app.delete("/api/warmup-slots/:id", requirePermission('lanes:manage', (req) => {
+    const row = db.prepare("SELECT tournament_id FROM warmup_slots WHERE id = ?").get(req.params.id) as any;
+    return row?.tournament_id ? String(row.tournament_id) : '';
+  }), (req, res) => {
+    db.prepare("DELETE FROM warmup_slots WHERE id = ?").run(req.params.id);
     res.json({ success: true });
   });
 
