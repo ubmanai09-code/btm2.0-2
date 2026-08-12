@@ -6085,69 +6085,75 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
   const handleAutoAssign = async () => {
     if (!canManageLanes) return;
-    const items = tournament.type === 'individual' ? eligibleParticipants : teams;
-    if (items.length === 0) {
+    const allItems = tournament.type === 'individual' ? eligibleParticipants : teams;
+    if (allItems.length === 0) {
       alert(tournament.type === 'individual' ? tx('No eligible players available for auto assignment.') : tx('No teams available for auto assignment.'));
       return;
     }
 
     const shiftNumbers = Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1);
-    const operationalByShift = shiftNumbers.map((shiftNumber) => ({
-      shiftNumber,
-      laneNumbers: getOperationalLaneNumbers(shiftNumber),
-    }));
 
-    const totalCapacity = operationalByShift.reduce(
-      (sum, shiftData) => sum + (shiftData.laneNumbers.length * tournament.players_per_lane),
-      0
+    // Collect already-assigned IDs so we skip them and preserve their lanes
+    const assignedIds = new Set<number>(
+      tournament.type === 'individual'
+        ? lanes.filter(l => l.participant_id != null).map(l => l.participant_id!)
+        : lanes.filter(l => l.team_id != null).map(l => l.team_id!)
     );
-    if (totalCapacity === 0) {
-      say('All lanes are set to out of operation. Mark at least one lane as operational to auto-assign.');
+    const unassignedItems = allItems.filter(item => !assignedIds.has(item.id));
+
+    if (unassignedItems.length === 0) {
+      say('All players are already assigned to lanes.');
       return;
     }
 
-    if (totalCapacity <= 0) {
-      say('Tournament lane capacity is invalid. Please check lanes, shifts, and players per lane.');
-      return;
-    }
-
-    if (lanes.length > 0) {
-      const exportFirst = window.confirm('Auto-Assign will replace all current lane assignments. Export current assignments first? Click OK to export first, or Cancel to skip export and continue.');
-      if (exportFirst) {
-        handleExportLanes();
+    // Build open slots per lane-shift, accounting for players already placed there
+    const availableSlots: Array<{ laneNumber: number; shiftNumber: number }> = [];
+    for (const shiftNumber of shiftNumbers) {
+      for (const laneNumber of getOperationalLaneNumbers(shiftNumber)) {
+        const existingCount = lanes.filter(l => l.lane_number === laneNumber && l.shift_number === shiftNumber).length;
+        const openSlots = tournament.players_per_lane - existingCount;
+        for (let i = 0; i < openSlots; i++) {
+          availableSlots.push({ laneNumber, shiftNumber });
+        }
       }
-      if (!ask('Auto-Assign will replace all current lane assignments. Continue?')) return;
     }
 
-    const shuffled = [...items];
+    if (availableSlots.length === 0) {
+      say('All lanes are set to out of operation or are full. No slots available for auto-assignment.');
+      return;
+    }
+
+    const hasSomePlaced = assignedIds.size > 0;
+    if (hasSomePlaced) {
+      if (!ask(`Auto-Assign will fill ${unassignedItems.length} unassigned player(s) into remaining open lane slots. Existing assignments will be preserved. Continue?`)) return;
+    } else if (lanes.length > 0) {
+      // Lanes exist but no participants identified — treat as a fresh full assign
+      if (!ask('Auto-Assign will assign all players to lanes. Continue?')) return;
+    }
+
+    const shuffled = [...unassignedItems];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
 
-    const assignable = shuffled.slice(0, totalCapacity);
     const assignments: Partial<LaneAssignment>[] = [];
-    let assignableIndex = 0;
-
-    for (const shiftData of operationalByShift) {
-      const perShiftCapacity = shiftData.laneNumbers.length * tournament.players_per_lane;
-      for (let slot = 0; slot < perShiftCapacity && assignableIndex < assignable.length; slot += 1) {
-        const item = assignable[assignableIndex];
-        assignableIndex += 1;
-        const laneNumber = shiftData.laneNumbers[Math.floor(slot / tournament.players_per_lane)];
-        assignments.push(
-          tournament.type === 'individual'
-            ? { participant_id: (item as Participant).id, lane_number: laneNumber, shift_number: shiftData.shiftNumber }
-            : { team_id: (item as Team).id, lane_number: laneNumber, shift_number: shiftData.shiftNumber }
-        );
-      }
+    for (let i = 0; i < Math.min(shuffled.length, availableSlots.length); i++) {
+      const item = shuffled[i];
+      const slot = availableSlots[i];
+      assignments.push(
+        tournament.type === 'individual'
+          ? { participant_id: (item as Participant).id, lane_number: slot.laneNumber, shift_number: slot.shiftNumber }
+          : { team_id: (item as Team).id, lane_number: slot.laneNumber, shift_number: slot.shiftNumber }
+      );
     }
 
     try {
-      await api.bulkUpdateLanes(tournament.id, assignments);
+      // Add assignments individually to preserve any existing lane placements
+      await Promise.all(assignments.map(a => api.addLaneAssignment(tournament.id, a)));
       setSelectedItem(null);
       await loadData();
-      const overflowCount = Math.max(0, items.length - totalCapacity);
+      const overflowCount = Math.max(0, unassignedItems.length - availableSlots.length);
       if (overflowCount > 0) {
         alert(`${overflowCount} ${tx(tournament.type === 'individual' ? 'player(s)' : 'team(s)')} ${tx('remain in waiting queue because lane capacity is full.')}`);
       }
@@ -6497,12 +6503,6 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
   const handleClearLanes = async () => {
     if (!canManageLanes) return;
-    if (lanes.length > 0) {
-      const exportFirst = window.confirm('Export lane assignments before clearing? Click OK to export first, or Cancel to skip export and go straight to clearing.');
-      if (exportFirst) {
-        handleExportLanes();
-      }
-    }
     if (!ask('Clear all lane assignments for this tournament?')) return;
     try {
       await api.bulkUpdateLanes(tournament.id, []);
