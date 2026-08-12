@@ -23,6 +23,7 @@ export interface Tournament {
   has_bonus?: number;
   show_player_style?: number;
   divisions?: string;
+  offday_penalty?: number;
   created_at: string;
 }
 

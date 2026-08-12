@@ -1003,6 +1003,7 @@ export default function App() {
       has_bonus: formData.get('has_bonus') ? 1 : 0,
       show_player_style: formData.get('show_player_style') ? 1 : 0,
       divisions: (formData.get('divisions') as string || '').trim() || null,
+      offday_penalty: parseNum(formData.get('offday_penalty'), 25),
     };
 
     if (view === 'edit') {
@@ -2491,6 +2492,16 @@ export default function App() {
                         defaultValue={editingTournament?.divisions || ''}
                       />
                       <p className="mt-1 text-[11px] text-black/40 px-1">Comma-separated division names. Participants can be assigned to a division, and standings can be filtered by division.</p>
+                    </div>
+                    <div>
+                      <Input
+                        label="Pre/Post-Tournament Score Penalty"
+                        name="offday_penalty"
+                        type="number"
+                        min="0"
+                        defaultValue={String(editingTournament?.offday_penalty ?? 25)}
+                      />
+                      <p className="mt-1 text-[11px] text-black/40 px-1">Points deducted from the grand total of Pre/Post-Tournament (УТ/НТ) players in standings. Default: 25.</p>
                     </div>
                   </div>
 
@@ -6106,7 +6117,13 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         ? lanes.filter(l => l.participant_id != null).map(l => l.participant_id!)
         : lanes.filter(l => l.team_id != null).map(l => l.team_id!)
     );
-    const unassignedItems = allItems.filter(item => !assignedIds.has(item.id));
+    // Also exclude players already in UT/NT slots — they play on a different day
+    const warmupIds = new Set<number>(
+      tournament.type === 'individual'
+        ? warmupSlots.filter(s => s.participant_id != null).map(s => s.participant_id!)
+        : warmupSlots.filter(s => s.team_id != null).map(s => s.team_id!)
+    );
+    const unassignedItems = allItems.filter(item => !assignedIds.has(item.id) && !warmupIds.has(item.id));
 
     if (unassignedItems.length === 0) {
       say('All players are already assigned to lanes.');
@@ -6656,9 +6673,15 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
   // Calculate waiting queue
   const assignedIds = new Set(lanes.map(l => tournament.type === 'individual' ? l.participant_id : l.team_id));
-  const waitingQueue = tournament.type === 'individual' 
-    ? eligibleParticipants.filter(p => !assignedIds.has(p.id))
-    : teams.filter(t => !assignedIds.has(t.id));
+  // Players/teams in any warmup slot are locked out of tournament lanes and vice-versa
+  const warmupAssignedIds = new Set<number>(
+    tournament.type === 'individual'
+      ? warmupSlots.filter(s => s.participant_id != null).map(s => s.participant_id!)
+      : warmupSlots.filter(s => s.team_id != null).map(s => s.team_id!)
+  );
+  const waitingQueue = tournament.type === 'individual'
+    ? eligibleParticipants.filter(p => !assignedIds.has(p.id) && !warmupAssignedIds.has(p.id))
+    : teams.filter(t => !assignedIds.has(t.id) && !warmupAssignedIds.has(t.id));
 
   const normalizedLanePickerSearch = lanePickerSearchQuery.trim().toLowerCase();
   const filteredLanePickerQueue = waitingQueue.filter((item) => {
@@ -7099,14 +7122,14 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         <div className="mt-6">
           <div className="flex items-center gap-3 mb-3">
             <div>
-              <h4 className="text-sm font-bold text-amber-800 uppercase tracking-widest">УТ / НТ Lanes</h4>
-              <p className="text-[10px] text-black/45 mt-0.5">Pre/post-tournament slots — never affected by auto-assign or clear</p>
+              <h4 className="text-sm font-bold text-amber-800 uppercase tracking-widest">{tx('Pre / Post-Tournament Lanes')}</h4>
+              <p className="text-[10px] text-black/45 mt-0.5">{tx('For players who bowl on a different day — scores count toward rankings with a penalty deduction but do not affect official winners')}</p>
             </div>
             <div className="flex items-center gap-1 ml-auto">
               {(['UT', 'NT'] as const).map(s => (
                 <button key={s} type="button" onClick={() => setWarmupSession(s)}
                   className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-all ${warmupSession === s ? (s === 'UT' ? 'bg-amber-500 border-amber-500 text-white' : 'bg-violet-500 border-violet-500 text-white') : 'bg-white border-black/15 text-black/50 hover:border-black/30'}`}>
-                  {s === 'UT' ? 'УТ' : 'НТ'}
+                  {s === 'UT' ? tx('Pre') : tx('Post')}
                 </button>
               ))}
               <div className="flex items-center gap-0.5 ml-2 border border-black/15 rounded overflow-hidden">
@@ -7130,7 +7153,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
               return (
                 <Card key={slotNum} className={`flex flex-col min-h-[90px] border transition-all ${borderClass}`}>
                   <div className={`px-2 py-1 flex justify-between items-center border-b border-black/10 ${headerClass}`}>
-                    <span className="font-bold text-[9px] uppercase tracking-widest">{warmupSession === 'UT' ? 'УТ' : 'НТ'}-{slotNum}</span>
+                    <span className="font-bold text-[9px] uppercase tracking-widest">{warmupSession === 'UT' ? tx('Pre') : tx('Post')}-{slotNum}</span>
                   </div>
                   <div className="p-1.5 flex-1 flex flex-col justify-center">
                     {assignment ? (
@@ -7161,8 +7184,8 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
           <div className="w-full max-w-lg bg-white rounded-lg border border-black/15 shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className={`px-4 py-3 border-b flex items-center justify-between gap-2 ${warmupSession === 'UT' ? 'bg-amber-50 border-amber-200' : 'bg-violet-50 border-violet-200'}`}>
               <div>
-                <h4 className="text-sm font-bold uppercase tracking-wide">Assign to {warmupSession === 'UT' ? 'УТ' : 'НТ'}-{warmupPickerSlotNumber}</h4>
-                <p className="text-[11px] text-black/55">{warmupSession === 'UT' ? 'Урьдчилсан тоглолт' : 'Нөхөлт тоглолт'} — all registered players</p>
+                <h4 className="text-sm font-bold uppercase tracking-wide">Assign to {warmupSession === 'UT' ? tx('Pre') : tx('Post')}-{warmupPickerSlotNumber}</h4>
+                <p className="text-[11px] text-black/55">{tx('Pre / Post-Tournament')} — {tx('all registered players')}</p>
               </div>
               <Button size="sm" variant="outline" onClick={() => { setWarmupPickerSlotNumber(null); setWarmupPickerSearch(''); }} title="Close" ariaLabel="Close"><X size={14} /></Button>
             </div>
@@ -7177,13 +7200,28 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
             <div className="max-h-[360px] overflow-y-auto p-3 space-y-1.5">
               {(() => {
                 const query = warmupPickerSearch.trim().toLowerCase();
+                // Exclude players already in any warmup slot or tournament lane
+                const alreadyInWarmup = new Set<number>(
+                  tournament.type === 'individual'
+                    ? warmupSlots.filter(s => s.participant_id != null).map(s => s.participant_id!)
+                    : warmupSlots.filter(s => s.team_id != null).map(s => s.team_id!)
+                );
+                const alreadyInLane = new Set<number>(
+                  tournament.type === 'individual'
+                    ? lanes.filter(l => l.participant_id != null).map(l => l.participant_id!)
+                    : lanes.filter(l => l.team_id != null).map(l => l.team_id!)
+                );
                 const items = tournament.type === 'individual'
                   ? participants.filter(p => {
+                      if (alreadyInWarmup.has(p.id) || alreadyInLane.has(p.id)) return false;
                       const name = `${p.first_name} ${p.last_name}`.toLowerCase();
                       return !query || name.includes(query) || (p.club || '').toLowerCase().includes(query);
                     })
-                  : teams.filter(t => !query || t.name.toLowerCase().includes(query));
-                if (items.length === 0) return <p className="text-xs text-black/40 italic text-center py-6">No matching players.</p>;
+                  : teams.filter(t => {
+                      if (alreadyInWarmup.has(t.id) || alreadyInLane.has(t.id)) return false;
+                      return !query || t.name.toLowerCase().includes(query);
+                    });
+                if (items.length === 0) return <p className="text-xs text-black/40 italic text-center py-6">No available players.</p>;
                 return items.map(item => {
                   const label = tournament.type === 'individual'
                     ? `${(item as Participant).first_name} ${(item as Participant).last_name}`.trim()
@@ -8664,13 +8702,13 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
           </div>
         </div>
 
-        {/* UT/NT players — shown regardless of lane assignment */}
+        {/* Pre/Post-Tournament players — same table format as regular rows, badge in name column */}
         {(['UT', 'NT'] as const).map(session => {
           const sessionSlots = scoringWarmupSlots.filter(s => s.session === session);
           if (sessionSlots.length === 0) return null;
-          const sessionLabel = session === 'UT' ? 'УТ — Урьдчилсан тоглолт' : 'НТ — Нөхөлт тоглолт';
+          const badgeText = session === 'UT' ? tx('Pre') : tx('Post');
           const badgeClass = session === 'UT' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-violet-100 text-violet-800 border-violet-300';
-          const headerClass = session === 'UT' ? 'bg-amber-50/80 border-amber-200' : 'bg-violet-50/80 border-violet-200';
+          const separatorClass = session === 'UT' ? 'bg-amber-50/60 border-amber-200' : 'bg-violet-50/60 border-violet-200';
           const assignedParticipantIds = new Set(sessionSlots.filter(s => s.participant_id).map(s => s.participant_id!));
           const assignedTeamIds = new Set(sessionSlots.filter(s => s.team_id).map(s => s.team_id!));
           const sessionParticipants = participants.filter(p =>
@@ -8680,68 +8718,72 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
           );
           if (sessionParticipants.length === 0) return null;
           return (
-            <div key={session} className={`mt-4 rounded-lg border overflow-hidden ${headerClass}`}>
-              <div className={`px-3 py-2 flex items-center gap-2 border-b ${headerClass}`}>
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${badgeClass}`}>{session}</span>
-                <span className="text-[11px] font-bold text-black/60 uppercase tracking-widest">{sessionLabel}</span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-black/10">
-                      <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/50 w-8">#</th>
-                      <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/50">Player</th>
-                      {gameNumbers.map(g => (
-                        <th key={g} className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/50 text-center w-14">G{g}</th>
-                      ))}
-                      <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/50 text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sessionParticipants.map((p, idx) => {
-                      const { total } = getParticipantStats(p.id);
-                      return (
-                        <tr key={p.id} className={`border-b border-black/5 ${idx % 2 === 0 ? 'bg-white' : 'bg-black/[0.015]'}`}>
-                          <td className="px-3 py-1 text-[11px] text-black/40">{idx + 1}</td>
-                          <td className="px-3 py-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`text-[9px] font-bold px-1 rounded border ${badgeClass}`}>{session}</span>
-                              <span className="text-xs font-bold uppercase tracking-wide">{p.first_name} {p.last_name}</span>
-                            </div>
-                          </td>
-                          {gameNumbers.map(g => {
-                            const key = `${p.id}-${g}`;
-                            const saved = scoreMap.get(key);
-                            const draft = (draftScores as Record<string, string>)[key] ?? '';
-                            return (
-                              <td key={g} className="px-1 py-1 text-center">
-                                {canManageScores ? (
-                                  <input
-                                    type="number" min={0} max={300}
-                                    value={draft !== '' ? draft : (saved !== undefined ? String(saved) : '')}
-                                    onChange={e => setDraftScores(prev => ({ ...prev, [key]: e.target.value }))}
-                                    onBlur={async e => {
-                                      const val = parseInt(e.target.value, 10);
-                                      if (!Number.isFinite(val) || val < 0 || val > 300) return;
-                                      await api.addScore(tournament.id, { participant_id: p.id, game_number: g, score: val });
-                                      setDraftScores(prev => { const n = { ...prev }; delete n[key]; return n; });
-                                      await loadData({ silent: true });
-                                    }}
-                                    className="w-12 h-7 text-center text-xs border border-black/15 rounded focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
-                                  />
-                                ) : (
-                                  <span className="text-xs tabular-nums">{saved !== undefined ? saved : '—'}</span>
-                                )}
-                              </td>
-                            );
-                          })}
-                          <td className="px-3 py-1 text-right font-bold text-sm tabular-nums text-black/70">{total > 0 ? total : '—'}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+            <div key={session} className="mt-2 overflow-x-auto rounded-lg border border-gray-200">
+              {renderScoringColGroup()}
+              <table className="ui-table-minimal w-full min-w-[400px] text-left border-collapse">
+                {renderScoringColGroup()}
+                <thead>
+                  <tr className={`border-b ${separatorClass}`}>
+                    <th className={`px-2 py-1.5 sm:px-4 text-[10px] font-semibold uppercase tracking-widest text-gray-500 sticky left-0 z-[5] ${separatorClass}`} colSpan={scoringTableColSpan}>
+                        {tx('Pre & Post Tournament Scores')}
+                    </th>
+                  </tr>
+                  {renderScoringHeader().props.children}
+                </thead>
+                <tbody>
+                  {sessionParticipants.map((p, idx) => {
+                    const { total, average } = getParticipantStats(p.id);
+                    const laneBadge = getLaneBadge(p);
+                    return (
+                      <tr key={p.id} className={`group scoring-table-surface border-b border-gray-100 hover:bg-gray-50/60 transition-colors ${idx % 2 === 1 ? 'bg-gray-50/40' : ''}`}>
+                        <td className="px-2 py-2 sm:px-4 sm:py-3 font-semibold text-[11px] sm:text-[13px] text-gray-800 sticky left-0 z-[2] scoring-table-surface max-w-[152px] sm:max-w-none">
+                          <span className="inline-flex items-center gap-1">
+                            {renderFemaleInitialUnderline(formatScoringName(p), p.gender?.toLowerCase() === 'female')}
+                            <span className={`text-[9px] font-bold px-1 rounded border ${badgeClass}`}>{badgeText}</span>
+                          </span>
+                        </td>
+                        {tournament.type === 'team' && <td />}
+                        <td className="px-2 py-2 sm:px-4 sm:py-3">
+                          <span className="text-[11px] sm:text-xs font-medium text-gray-500 whitespace-nowrap tabular-nums">{laneBadge}</span>
+                        </td>
+                        {gameNumbers.map(gameNumber => {
+                          const scoreKey = `${p.id}-${gameNumber}`;
+                          const currentScore = (draftScores as Record<string,string>)[scoreKey] !== undefined
+                            ? (draftScores as Record<string,string>)[scoreKey]
+                            : (scoreMap.get(scoreKey) ?? '');
+                          return (
+                            <td key={gameNumber} className="px-1.5 py-2 sm:px-3 sm:py-3 text-center">
+                              {canManageScores && !isScoreScreenMode ? (
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  value={currentScore}
+                                  onChange={e => handleScoreChange(p.id, gameNumber, e.target.value)}
+                                  onBlur={e => handleScoreBlur(p.id, gameNumber, e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
+                                  placeholder="—"
+                                  className="w-12 sm:w-14 text-center font-medium tabular-nums text-[11px] sm:text-sm bg-transparent border-b border-transparent hover:border-gray-300 focus:border-emerald-500 focus:outline-none"
+                                />
+                              ) : (
+                                <span className={`font-medium tabular-nums text-[11px] sm:text-sm ${currentScore !== '' ? 'text-gray-700' : 'text-gray-300'}`}>
+                                  {currentScore !== '' ? currentScore : '—'}
+                                </span>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td className="px-2 py-2 sm:px-4 sm:py-3 text-right font-bold text-[11px] sm:text-sm text-emerald-700 tabular-nums whitespace-nowrap sticky z-[2] scoring-table-surface"
+                          style={{ right: `${scoringTableWidths.avg}px` }}>
+                          {total > 0 ? total : '—'}
+                        </td>
+                        <td className="px-2 py-2 sm:px-4 sm:py-3 text-right font-bold text-[11px] sm:text-sm text-sky-700 tabular-nums whitespace-nowrap sticky right-0 z-[2] scoring-table-surface">
+                          {average > 0 ? average : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           );
         })}
@@ -13504,11 +13546,12 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const allWarmupParticipantIds = new Set([...utParticipantIds, ...ntParticipantIds]);
 
   // UT/NT rows: -25 applied to grand_total, sorted independently
+  const offdayPenalty = Math.max(0, Number(tournament.offday_penalty ?? 25));
   const utntStandingsRows = playerStandingsRows
     .filter(r => allWarmupParticipantIds.has(r.participant_id) && (r.grand_total > 0 || r.total > 0))
     .map(r => ({
       ...r,
-      grand_total: r.grand_total - 25,
+      grand_total: r.grand_total - offdayPenalty,
       session: utParticipantIds.has(r.participant_id) ? 'UT' : 'NT' as 'UT' | 'NT',
     }))
     .sort((a, b) => (b.grand_total - a.grand_total) || a.participant_name.localeCompare(b.participant_name));
@@ -13648,16 +13691,17 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const teamsCountValid = rankedTeamsCount === expectedTeamsFromPlayers || rankedTeamsCount === teams.length;
 
   const maleLeader = scores
-    .filter(score => participantGenderMap.get(score.participant_id) === 'male')
+    .filter(score => participantGenderMap.get(score.participant_id) === 'male' && !allWarmupParticipantIds.has(score.participant_id))
     .sort((a, b) => b.score - a.score)[0];
 
   const femaleLeader = scores
-    .filter(score => participantGenderMap.get(score.participant_id) === 'female')
+    .filter(score => participantGenderMap.get(score.participant_id) === 'female' && !allWarmupParticipantIds.has(score.participant_id))
     .sort((a, b) => b.score - a.score)[0];
 
-  const topMaleSourceScores = scores.filter((score) => participantGenderMap.get(score.participant_id) === 'male');
-  const topFemaleSourceScores = scores.filter((score) => participantGenderMap.get(score.participant_id) === 'female');
+  const topMaleSourceScores = scores.filter((score) => participantGenderMap.get(score.participant_id) === 'male' && !allWarmupParticipantIds.has(score.participant_id));
+  const topFemaleSourceScores = scores.filter((score) => participantGenderMap.get(score.participant_id) === 'female' && !allWarmupParticipantIds.has(score.participant_id));
   const fallbackTopSourceScores = scores
+    .filter(score => !allWarmupParticipantIds.has(score.participant_id))
     .slice()
     .sort((a, b) => b.score - a.score);
 
@@ -14990,48 +15034,58 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 </tr>
               )}
             </tbody>
+
+            {/* UT/NT rows appended to same table — same columns, penalty applied to grand total */}
+            {!isTeamTournament && utntStandingsRows.length > 0 && (
+              <tbody>
+                {(() => {
+                  const utntColSpan = 2
+                    + (showPlayerStyle ? 1 : 0)
+                    + (hasClubData ? 1 : 0)
+                    + (hasDivisions ? 1 : 0)
+                    + gameNumbers.length
+                    + (hasAdditionalScores ? 1 : 0)
+                    + (hasBonus ? 1 : 0)
+                    + 2; // total + avg
+                  return (
+                    <>
+                      <tr className="bg-amber-50/60 border-t-2 border-amber-200">
+                        <td colSpan={utntColSpan} className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/50">
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-amber-100 text-amber-800 border-amber-300">{tx('Pre/Post')}</span>
+                            {tx('Pre / Post-Tournament Rankings')}
+                            <span className="ml-2 font-normal normal-case tracking-normal text-black/35 italic">−{offdayPenalty} {tx('penalty applied · not eligible for prizes')}</span>
+                          </span>
+                        </td>
+                      </tr>
+                      {utntStandingsRows.map((row, idx) => (
+                        <tr key={row.participant_id} className={`border-b border-black/5 ${idx % 2 === 0 ? '' : 'bg-black/[0.015]'}`}>
+                          <td className="px-2 py-1.5 text-[11px] text-black/40 sticky left-0 bg-inherit w-12">{idx + 1}</td>
+                          <td className="px-2 py-1.5 sticky left-12 bg-inherit">
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className={`text-[9px] font-bold px-1 rounded border ${row.session === 'UT' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-violet-100 text-violet-800 border-violet-300'}`}>{row.session === 'UT' ? tx('Pre') : tx('Post')}</span>
+                              <span className="text-[11px] font-bold uppercase tracking-wide">{row.participant_name}</span>
+                            </span>
+                          </td>
+                          {showPlayerStyle && <td />}
+                          {hasClubData && <td />}
+                          {hasDivisions && <td />}
+                          {gameNumbers.map((g, gi) => (
+                            <td key={g} className="px-2.5 py-1.5 text-center text-sm">{row.games[gi] ?? 0}</td>
+                          ))}
+                          {hasAdditionalScores && <td />}
+                          {hasBonus && <td />}
+                          <td className="px-2.5 py-1.5 text-right font-bold text-sm text-emerald-700">{row.grand_total}</td>
+                          <td className="px-2.5 py-1.5 text-center text-sm text-sky-700">{row.average}</td>
+                        </tr>
+                      ))}
+                    </>
+                  );
+                })()}
+              </tbody>
+            )}
           </table>
           </div>
-
-          {/* UT/NT rankings — info-only, -25 applied, excluded from official standings */}
-          {!isTeamTournament && utntStandingsRows.length > 0 && (
-            <div className="mt-6 rounded-lg border border-amber-200/80 overflow-hidden">
-              <div className="px-4 py-2 bg-amber-50/80 border-b border-amber-200/80 flex items-center gap-2">
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-amber-100 text-amber-800 border-amber-300">УТ/НТ</span>
-                <span className="text-[11px] font-bold uppercase tracking-widest text-black/55">Pre / Post Tournament Rankings</span>
-                <span className="ml-auto text-[10px] text-black/40 italic">−25 applied · not eligible for prizes</span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-black/10 bg-white">
-                      <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/40 w-8">#</th>
-                      <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/40">Player</th>
-                      {gameNumbers.map(g => <th key={g} className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/40 text-center w-14">G{g}</th>)}
-                      <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/40 text-right">Total</th>
-                      <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-black/40 text-right">−25</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {utntStandingsRows.map((row, idx) => (
-                      <tr key={row.participant_id} className={`border-b border-black/5 ${idx % 2 === 0 ? 'bg-white' : 'bg-black/[0.015]'}`}>
-                        <td className="px-3 py-1.5 text-[11px] text-black/40">{idx + 1}</td>
-                        <td className="px-3 py-1.5">
-                          <div className="flex items-center gap-1.5">
-                            <span className={`text-[9px] font-bold px-1 rounded border ${row.session === 'UT' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-violet-100 text-violet-800 border-violet-300'}`}>{row.session}</span>
-                            <span className="text-xs font-bold uppercase tracking-wide">{row.participant_name}</span>
-                          </div>
-                        </td>
-                        {gameNumbers.map((g, gi) => <td key={g} className="px-2 py-1.5 text-center text-sm">{row.games[gi] ?? 0}</td>)}
-                        <td className="px-3 py-1.5 text-right text-sm text-black/50">{row.total}</td>
-                        <td className="px-3 py-1.5 text-right font-bold text-sm text-emerald-700">{row.grand_total}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
 
           {isStandingsScreenMode && standingsPresentAdBlock.enabled && (
             <>

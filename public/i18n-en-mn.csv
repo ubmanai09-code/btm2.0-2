@@ -499,3 +499,23 @@ final.missing.participant,participant,оролцогч
 final.missing.custom_edit, (custom edit), (тусгай засвар)
 final.missing.generating,Generating...,Үүсгэж байна...
 ,,
+scoring.pre_tournament_badge,Pre,УТ
+scoring.post_tournament_badge,Post,НТ
+scoring.pre_post_section_title,Pre & Post Tournament Scores,Урьдчилсан болон Нөхөлт тоглолтын оноо
+lanes.pre_post_title,Pre / Post-Tournament Lanes,Урьдчилсан / Нөхөлт тоглолтын замууд
+lanes.pre_post_subtitle,For players who bowl on a different day — scores count toward rankings with a penalty deduction but do not affect official winners,Өөр өдөр тоглосон тамирчдад зориулсан — оноо зэрэглэлд тооцогдох боловч албан ёсны ялагчийг тодорхойлоход нөлөөлөхгүй
+lanes.pre_post_section_title,Pre / Post-Tournament,Урьдчилсан / Нөхөлт тоглолт
+lanes.pre_post_picker_hint,all registered players,бүх бүртгэлтэй тамирчид
+lanes.pre_post_badge,Pre/Post,УТ/НТ
+standings.pre_post_section_title,Pre / Post-Tournament Rankings,Урьдчилсан / Нөхөлт тоглолтын зэрэглэл
+standings.pre_post_note,penalty applied · not eligible for prizes,торгууль тооцогдсон · шагналд хамаарахгүй
+Pre,Pre,УТ
+Post,Post,НТ
+Pre & Post Tournament Scores,Pre & Post Tournament Scores,Урьдчилсан болон Нөхөлт тоглолтын оноо
+Pre / Post-Tournament Lanes,Pre / Post-Tournament Lanes,Урьдчилсан / Нөхөлт тоглолтын замууд
+Pre / Post-Tournament,Pre / Post-Tournament,Урьдчилсан / Нөхөлт тоглолт
+Pre / Post-Tournament Rankings,Pre / Post-Tournament Rankings,Урьдчилсан / Нөхөлт тоглолтын зэрэглэл
+Pre/Post,Pre/Post,УТ/НТ
+all registered players,all registered players,бүх бүртгэлтэй тамирчид
+penalty applied · not eligible for prizes,penalty applied · not eligible for prizes,торгууль тооцогдсон · шагналд хамаарахгүй
+For players who bowl on a different day — scores count toward rankings with a penalty deduction but do not affect official winners,For players who bowl on a different day — scores count toward rankings with a penalty deduction but do not affect official winners,Өөр өдөр тоглосон тамирчдад зориулсан — оноо зэрэглэлд тооцогдох боловч албан ёсны ялагчийг тодорхойлоход нөлөөлөхгүй

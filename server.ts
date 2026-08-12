@@ -492,6 +492,14 @@ function initDb() {
     } catch (e) {}
   }
 
+  const tTournamentInfo = db.prepare("PRAGMA table_info(tournaments)").all() as any[];
+  const tTournamentColumns = tTournamentInfo.map((c: any) => c.name);
+  if (!tTournamentColumns.includes('offday_penalty')) {
+    try {
+      db.exec(`ALTER TABLE tournaments ADD COLUMN offday_penalty INTEGER NOT NULL DEFAULT 25`);
+    } catch (e) {}
+  }
+
   const tTableInfo = db.prepare("PRAGMA table_info(teams)").all();
   const tColumns = tTableInfo.map((c: any) => c.name);
   if (!tColumns.includes('active')) {
@@ -2501,7 +2509,7 @@ async function startServer() {
       const { 
         name, date, location, format, organizer, logo, match_play_type, qualified_count, playoff_winners_count, type, 
         games_count, genders_rule, lanes_count, 
-        players_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus, show_player_style, status, divisions
+        players_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus, show_player_style, status, divisions, offday_penalty
       } = req.body;
       const existing = db.prepare("SELECT * FROM tournaments WHERE id = ?").get(req.params.id) as any;
       if (!existing) {
@@ -2527,7 +2535,7 @@ async function startServer() {
         UPDATE tournaments SET 
           name = ?, date = ?, location = ?, format = ?, organizer = ?, logo = ?, match_play_type = ?, qualified_count = ?, playoff_winners_count = ?, type = ?, 
           games_count = ?, genders_rule = ?, lanes_count = ?, 
-          players_per_lane = ?, players_per_team = ?, shifts_count = ?, oil_pattern = ?, has_additional_scores = ?, has_bonus = ?, show_player_style = ?, status = ?, divisions = ?
+          players_per_lane = ?, players_per_team = ?, shifts_count = ?, oil_pattern = ?, has_additional_scores = ?, has_bonus = ?, show_player_style = ?, status = ?, divisions = ?, offday_penalty = ?
         WHERE id = ?
       `).run(
         name ?? existing.name,
@@ -2552,6 +2560,7 @@ async function startServer() {
         showPlayerStyle,
         status ?? existing.status ?? 'draft',
         divisions !== undefined ? (divisions || null) : (existing.divisions ?? null),
+        offday_penalty !== undefined ? parseIntOrFallback(offday_penalty, 25) : (Number(existing.offday_penalty) || 25),
         req.params.id
       );
       
