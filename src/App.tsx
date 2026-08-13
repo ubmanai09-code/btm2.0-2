@@ -4325,6 +4325,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [clubLogos, setClubLogos] = useState<Record<string, string>>({});
   const clubSlug = (name: string) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<number[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [mobileRosterTab, setMobileRosterTab] = useState<'players' | 'teams'>('players');
@@ -5855,6 +5856,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       </div>
 
       {/* Modals */}
+      {imagePreviewUrl && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm" onClick={() => setImagePreviewUrl(null)}>
+          <img src={imagePreviewUrl} alt="Preview" className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
+
       {canManageParticipants && showAddPlayer && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
             <div
@@ -5870,9 +5877,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   </div>
                   {editingPlayer && (
                     <div className="flex flex-col items-center gap-1 shrink-0">
-                      <label className="cursor-pointer group">
+                      <label className="cursor-pointer group relative">
                         {editingPlayer.photo_url
-                          ? <img src={`${editingPlayer.photo_url}?t=${Date.now()}`} alt="Player" className="w-16 h-16 rounded-full object-cover border-2 border-black/15 group-hover:border-emerald-400 transition-all" />
+                          ? <img src={`${editingPlayer.photo_url}?t=${Date.now()}`} alt="Player"
+                              className="w-16 h-16 rounded-full object-cover border-2 border-black/15 group-hover:border-emerald-400 transition-all"
+                              onClick={e => { e.preventDefault(); setImagePreviewUrl(editingPlayer.photo_url!); }} />
                           : <div className="w-16 h-16 rounded-full bg-black/8 border-2 border-dashed border-black/20 group-hover:border-emerald-400 flex items-center justify-center text-black/25 transition-all"><UserRound size={26} /></div>
                         }
                         <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
@@ -5943,7 +5952,9 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         <div className="flex flex-col items-center gap-0.5 pb-0.5">
                           <label className="cursor-pointer group">
                             {logoUrl
-                              ? <img src={`${logoUrl}?t=${Date.now()}`} alt="Club" className="w-9 h-9 rounded border border-black/15 object-contain bg-white group-hover:border-emerald-400 transition-all" />
+                              ? <img src={`${logoUrl}?t=${Date.now()}`} alt="Club"
+                                  className="w-9 h-9 rounded border border-black/15 object-contain bg-white group-hover:border-emerald-400 transition-all"
+                                  onClick={e => { e.preventDefault(); setImagePreviewUrl(logoUrl); }} />
                               : <div className="w-9 h-9 rounded border border-dashed border-black/20 group-hover:border-emerald-400 flex items-center justify-center text-black/25 transition-all"><Building2 size={14} /></div>
                             }
                             <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
