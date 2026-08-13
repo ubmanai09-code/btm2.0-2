@@ -4329,6 +4329,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const [viewingPlayer, setViewingPlayer] = useState<Participant | null>(null);
   const [photoCtx, setPhotoCtx] = useState(false);
   const [logoCtx, setLogoCtx] = useState(false);
+  const photoClickTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const logoClickTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<number[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [mobileRosterTab, setMobileRosterTab] = useState<'players' | 'teams'>('players');
@@ -5912,7 +5914,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   </div>
                   {editingPlayer && (
                     <div className="flex flex-col items-center gap-1 shrink-0">
-                      <div className="relative cursor-pointer" onClick={() => { if (editingPlayer.photo_url) setImagePreviewUrl(editingPlayer.photo_url); }} onDoubleClick={e => { e.preventDefault(); if (editingPlayer.photo_url) setPhotoCtx(c => !c); }}>
+                      <div className="relative cursor-pointer"
+                        onClick={() => {
+                          if (!editingPlayer.photo_url) return;
+                          if (photoClickTimer.current) { clearTimeout(photoClickTimer.current); photoClickTimer.current = null; setPhotoCtx(c => !c); }
+                          else { photoClickTimer.current = setTimeout(() => { photoClickTimer.current = null; setImagePreviewUrl(editingPlayer.photo_url!); }, 220); }
+                        }}>
                         {editingPlayer.photo_url
                           ? <img src={`${editingPlayer.photo_url}?t=${Date.now()}`} alt="Player" className="w-16 h-16 rounded-full object-cover border-2 border-black/15 hover:border-emerald-400 transition-all" />
                           : <label className="cursor-pointer group"><div className="w-16 h-16 rounded-full bg-black/8 border-2 border-dashed border-black/20 group-hover:border-emerald-400 flex items-center justify-center text-black/25 transition-all"><UserRound size={26} /></div><input type="file" accept="image/*" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; const fd = new FormData(); fd.append('photo', file); const res = await fetch(`/api/participant-photos/${editingPlayer.id}`, { method: 'POST', body: fd }); if (res.ok) { const data = await res.json(); setEditingPlayer(prev => prev ? { ...prev, photo_url: data.photo_url } : prev); setParticipants(ps => ps.map(p => p.id === editingPlayer.id ? { ...p, photo_url: data.photo_url } : p)); } }} /></label>
@@ -5969,7 +5976,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       if (!clubVal) return null;
                       return (
                         <div className="flex flex-col items-center gap-0.5 pb-0.5">
-                          <div className="relative cursor-pointer" onClick={() => { if (logoUrl) setImagePreviewUrl(logoUrl); }} onDoubleClick={e => { e.preventDefault(); if (logoUrl) setLogoCtx(c => !c); }}>
+                          <div className="relative cursor-pointer"
+                            onClick={() => {
+                              if (!logoUrl) return;
+                              if (logoClickTimer.current) { clearTimeout(logoClickTimer.current); logoClickTimer.current = null; setLogoCtx(c => !c); }
+                              else { logoClickTimer.current = setTimeout(() => { logoClickTimer.current = null; setImagePreviewUrl(logoUrl!); }, 220); }
+                            }}>
                             {logoUrl
                               ? <img src={`${logoUrl}?t=${Date.now()}`} alt="Club" className="w-9 h-9 rounded border border-black/15 object-contain bg-white hover:border-emerald-400 transition-all" />
                               : <label className="cursor-pointer group"><div className="w-9 h-9 rounded border border-dashed border-black/20 group-hover:border-emerald-400 flex items-center justify-center text-black/25 transition-all"><Building2 size={14} /></div><input type="file" accept="image/*" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; const fd = new FormData(); fd.append('logo', file); fd.append('club', clubVal); const res = await fetch('/api/club-logos', { method: 'POST', body: fd }); if (res.ok) { const data = await res.json(); setClubLogos(prev => ({ ...prev, [data.slug]: data.url })); } }} /></label>
