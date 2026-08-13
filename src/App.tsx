@@ -4326,6 +4326,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const [clubLogos, setClubLogos] = useState<Record<string, string>>({});
   const clubSlug = (name: string) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [viewingPlayer, setViewingPlayer] = useState<Participant | null>(null);
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<number[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [mobileRosterTab, setMobileRosterTab] = useState<'players' | 'teams'>('players');
@@ -5427,12 +5428,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         <button
                           type="button"
                           onClick={() => {
-                            if (!canManageParticipants) return;
-                            setEditingPlayer(p);
-                            setShowAddPlayer(true);
+                            if (canManageParticipants) { setEditingPlayer(p); setShowAddPlayer(true); }
+                            else { setViewingPlayer(p); }
                           }}
-                          className={`mt-0.5 text-left text-xs font-bold tracking-wide uppercase leading-tight ${canManageParticipants ? 'cursor-pointer hover:text-emerald-700' : ''} ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}
-                          title={canManageParticipants ? 'Tap to edit participant' : undefined}
+                          className={`mt-0.5 text-left text-xs font-bold tracking-wide uppercase leading-tight cursor-pointer hover:text-emerald-700 ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}
+                          title={canManageParticipants ? 'Tap to edit participant' : 'Tap to view details'}
                         >
                           {(p.first_name || '')} {(p.last_name || '')}
                         </button>
@@ -5574,16 +5574,17 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       <td className={`px-2 py-1.5 text-[10px] sticky left-0 z-[2] ${participantIssues.has(p.id) ? 'text-red-700 bg-red-50' : 'text-black/60 bg-white'}`}>{index + 1}</td>
                       <td
                         className={`px-1 py-1.5 uppercase text-xs sticky left-10 z-[2] ${participantIssues.has(p.id) ? 'text-red-700 bg-red-50' : 'text-black bg-white'}`}
-                        onDoubleClick={() => { if (canManageParticipants) { setEditingPlayer(p); setShowAddPlayer(true); } }}
+                        onDoubleClick={() => { if (canManageParticipants) { setEditingPlayer(p); setShowAddPlayer(true); } else { setViewingPlayer(p); } }}
                         onClick={() => {
-                          if (!canManageParticipants || typeof window === 'undefined') return;
+                          if (typeof window === 'undefined') return;
+                          if (!canManageParticipants) { setViewingPlayer(p); return; }
                           if (window.matchMedia('(hover: none)').matches) {
                             setEditingPlayer(p);
                             setShowAddPlayer(true);
                           }
                         }}
-                        style={{ cursor: canManageParticipants ? 'pointer' : undefined }}
-                        title={canManageParticipants ? 'Double-click or tap to edit participant' : undefined}
+                        style={{ cursor: 'pointer' }}
+                        title={canManageParticipants ? 'Double-click or tap to edit participant' : 'Click to view details'}
                       >
                         <span className="inline-flex items-center gap-1">
                           {renderNameWithFemaleSpotAfter(p, { includeLastName: false })}
@@ -5856,6 +5857,38 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       </div>
 
       {/* Modals */}
+      {viewingPlayer && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6" onClick={() => setViewingPlayer(null)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <Card className="p-6 border-emerald-200 shadow-xl">
+              <div className="flex items-start gap-4 mb-4">
+                {viewingPlayer.photo_url
+                  ? <img src={viewingPlayer.photo_url} alt="Player" className="w-16 h-16 rounded-full object-cover border-2 border-black/10 shrink-0" />
+                  : <div className="w-16 h-16 rounded-full bg-black/8 border-2 border-black/10 flex items-center justify-center text-black/20 shrink-0"><UserRound size={28} /></div>
+                }
+                <div className="min-w-0">
+                  <p className="text-lg font-bold text-black uppercase tracking-wide leading-tight">{viewingPlayer.first_name} {viewingPlayer.last_name}</p>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    {viewingPlayer.gender && <span className="text-[11px] font-bold text-black/50 uppercase">{(viewingPlayer.gender || '').toLowerCase().startsWith('f') ? 'F' : 'M'}</span>}
+                    {viewingPlayer.hands && showPlayerStyle && <span className="text-[11px] text-black/40">{normalizeHandsStyle(viewingPlayer.hands)}</span>}
+                    {viewingPlayer.average > 0 && <span className="text-[11px] text-black/50">Avg {viewingPlayer.average}</span>}
+                    {viewingPlayer.division && <span className="text-[11px] font-semibold text-emerald-700">{viewingPlayer.division}</span>}
+                  </div>
+                </div>
+              </div>
+              {viewingPlayer.club && (
+                <div className="flex items-center gap-2 border-t border-black/8 pt-3">
+                  {(() => { const s = clubSlug(viewingPlayer.club); const u = s ? clubLogos[s] : null; return u ? <img src={u} alt="Club" className="w-8 h-8 rounded border border-black/10 object-contain bg-white" /> : null; })()}
+                  <span className="text-sm font-semibold text-black/70">{viewingPlayer.club}</span>
+                </div>
+              )}
+              <button type="button" onClick={() => setViewingPlayer(null)} className="absolute top-3 right-3 text-black/30 hover:text-black/60 transition-colors"><X size={16} /></button>
+            </Card>
+          </div>
+        </div>
+      )}
+
       {imagePreviewUrl && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm" onClick={() => setImagePreviewUrl(null)}>
           <img src={imagePreviewUrl} alt="Preview" className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
