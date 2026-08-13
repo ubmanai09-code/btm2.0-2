@@ -6039,6 +6039,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   const [warmupSession, setWarmupSession] = useState<'UT' | 'NT'>('UT');
   const [warmupSlotCount, setWarmupSlotCount] = useState(5);
   const [warmupPickerSlotNumber, setWarmupPickerSlotNumber] = useState<number | null>(null);
+  const [warmupSectionOpen, setWarmupSectionOpen] = useState(false);
   const [warmupPickerSearch, setWarmupPickerSearch] = useState('');
   const say = (message: string) => alert(tx(message));
   const ask = (message: string) => confirm(tx(message));
@@ -7120,12 +7121,15 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       {/* UT/NT Virtual Lanes — isolated from tournament lane assignments */}
       {canManageLanes && (
         <div className="mt-6">
-          <div className="flex items-center gap-3 mb-3">
-            <div>
-              <h4 className="text-sm font-bold text-amber-800 uppercase tracking-widest">{tx('Pre / Post-Tournament Lanes')}</h4>
+          <button type="button" onClick={() => setWarmupSectionOpen(o => !o)}
+            className="flex items-center gap-3 w-full text-left mb-1 group">
+            <div className="flex-1">
+              <h4 className="text-sm font-bold text-amber-800 uppercase tracking-widest group-hover:text-amber-600 transition-colors">{tx('Pre / Post-Tournament Lanes')}</h4>
               <p className="text-[10px] text-black/45 mt-0.5">{tx('For players who bowl on a different day — scores count toward rankings with a penalty deduction but do not affect official winners')}</p>
             </div>
-            <div className="flex items-center gap-1 ml-auto">
+            <span className="text-amber-600 text-xs font-bold mr-1">{warmupSectionOpen ? '▲' : '▼'}</span>
+          </button>
+          {warmupSectionOpen && <div className="mb-3 flex items-center gap-1 justify-end">
               {(['UT', 'NT'] as const).map(s => (
                 <button key={s} type="button" onClick={() => setWarmupSession(s)}
                   className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-all ${warmupSession === s ? (s === 'UT' ? 'bg-amber-500 border-amber-500 text-white' : 'bg-violet-500 border-violet-500 text-white') : 'bg-white border-black/15 text-black/50 hover:border-black/30'}`}>
@@ -7137,9 +7141,8 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                 <span className="px-2 text-[11px] font-bold text-black/60 min-w-[1.5rem] text-center">{warmupSlotCount}</span>
                 <button type="button" onClick={() => setWarmupSlotCount(c => Math.min(20, c + 1))} className="px-2 py-1 text-xs font-bold text-black/50 hover:bg-black/5">+</button>
               </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+            </div>}
+          {warmupSectionOpen && <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
             {Array.from({ length: warmupSlotCount }, (_, i) => i + 1).map(slotNum => {
               const assignment = warmupSlots.find(s => s.slot_number === slotNum && s.session === warmupSession);
               const sessionColor = warmupSession === 'UT' ? 'amber' : 'violet';
@@ -7174,7 +7177,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                 </Card>
               );
             })}
-          </div>
+          </div>}
         </div>
       )}
 
