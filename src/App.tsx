@@ -48,6 +48,7 @@ import {
   Sun,
   AlertCircle,
   UserRound,
+  Building2,
   UserRoundPlus,
   UserRoundMinus,
   Eraser,
@@ -4322,6 +4323,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const canManageParticipants = role === 'admin' || role === 'moderator';
   const tx = React.useContext(UiTranslationContext);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [clubLogos, setClubLogos] = useState<Record<string, string>>({});
+  const clubSlug = (name: string) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<number[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [mobileRosterTab, setMobileRosterTab] = useState<'players' | 'teams'>('players');
@@ -4379,12 +4382,14 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const loadData = async () => {
     setLoading(true);
     try {
-      const [pData, tData] = await Promise.all([
+      const [pData, tData, logosData] = await Promise.all([
         api.getParticipants(tournament.id),
-        api.getTeams(tournament.id)
+        api.getTeams(tournament.id),
+        fetch('/api/club-logos').then(r => r.ok ? r.json() : {})
       ]);
       setParticipants(pData);
       setTeams(tData);
+      setClubLogos(logosData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -5892,6 +5897,46 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   </div>
 
                   <Input label="Team/Club" name="club" defaultValue={editingPlayer?.club} placeholder="e.g. City Bowlers" />
+
+                  {(() => {
+                    const clubVal = (editingPlayer?.club || '').trim();
+                    const slug = clubVal ? clubSlug(clubVal) : '';
+                    const logoUrl = slug ? clubLogos[slug] : null;
+                    if (!clubVal) return null;
+                    return (
+                      <div className="flex items-center gap-3 -mt-2">
+                        {logoUrl
+                          ? <img src={`${logoUrl}?t=${Date.now()}`} alt="Club" className="w-10 h-10 rounded border border-black/15 object-contain bg-white" />
+                          : <div className="w-10 h-10 rounded border border-dashed border-black/20 flex items-center justify-center text-black/25"><Building2 size={16} /></div>
+                        }
+                        <div className="flex flex-col gap-1">
+                          <label className="cursor-pointer inline-flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold rounded border border-black/15 bg-white hover:bg-black/5 transition-colors">
+                            <Upload size={11} />
+                            {logoUrl ? 'Change logo' : 'Upload logo'}
+                            <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const fd = new FormData();
+                              fd.append('logo', file);
+                              fd.append('club', clubVal);
+                              const res = await fetch('/api/club-logos', { method: 'POST', body: fd });
+                              if (res.ok) {
+                                const data = await res.json();
+                                setClubLogos(prev => ({ ...prev, [data.slug]: data.url }));
+                              }
+                            }} />
+                          </label>
+                          {logoUrl && (
+                            <button type="button" onClick={async () => {
+                              await fetch(`/api/club-logos/${slug}`, { method: 'DELETE' });
+                              setClubLogos(prev => { const n = { ...prev }; delete n[slug]; return n; });
+                            }} className="text-[11px] text-red-400 hover:text-red-600 transition-colors text-left">Remove logo</button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   <Input label="Contact Details" name="email" type="text" defaultValue={editingPlayer?.email} placeholder="Phone or email" />
 
                   {editingPlayer && (

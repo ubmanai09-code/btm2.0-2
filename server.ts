@@ -752,10 +752,12 @@ async function startServer() {
   const persistentSponsorsConfig = path.join(persistentDataDir, "sponsors-config.json");
   const persistentRootAssetsDir = path.join(persistentDataDir, "root-assets");
   const participantPhotosDir = path.join(persistentDataDir, "participant-photos");
+  const clubLogosDir = path.join(persistentDataDir, "club-logos");
 
   fs.mkdirSync(persistentSponsorsDir, { recursive: true });
   fs.mkdirSync(persistentRootAssetsDir, { recursive: true });
   fs.mkdirSync(participantPhotosDir, { recursive: true });
+  fs.mkdirSync(clubLogosDir, { recursive: true });
   // Keep user-uploaded files in persistent storage and only copy missing packaged assets.
   copyDirMissingFiles(publicSponsorsDir, persistentSponsorsDir);
   copyDirMissingFiles(distSponsorsDir, persistentSponsorsDir);
@@ -786,6 +788,7 @@ async function startServer() {
   app.use('/sponsors', express.static(distSponsorsDir));
   // Serve participant photos from persistent storage.
   app.use('/participant-photos', express.static(participantPhotosDir));
+  app.use('/club-logos', express.static(clubLogosDir));
   // Serve root-level logos (e.g., /logo.png, /MBA_logo.png) from persistent storage.
   app.use('/', express.static(persistentRootAssetsDir));
 
@@ -2731,7 +2734,7 @@ async function startServer() {
     }
   });
 
-  // Photo upload: stored in data/participant-photos/, resized to 400x400 JPEG
+  // Shared multer instance for all image uploads
   const photoUpload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 8 * 1024 * 1024 },
@@ -2740,6 +2743,40 @@ async function startServer() {
     },
   });
 
+  // Club logo upload: keyed by slugified club name, stored in data/club-logos/
+  const clubSlug = (name: string) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+  app.get("/api/club-logos", (_req, res) => {
+    try {
+      const files = fs.readdirSync(clubLogosDir).filter(f => f.endsWith('.jpg'));
+      const logos: Record<string, string> = {};
+      files.forEach(f => { logos[f.replace(/\.jpg$/, '')] = `/club-logos/${f}`; });
+      res.json(logos);
+    } catch { res.json({}); }
+  });
+
+  app.post("/api/club-logos", requirePermission('participants:manage', () => null), photoUpload.single('logo'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No image file provided' });
+    const club = String(req.body?.club || '').trim();
+    if (!club) return res.status(400).json({ error: 'club name required' });
+    const slug = clubSlug(club);
+    if (!slug) return res.status(400).json({ error: 'Invalid club name' });
+    const dest = path.join(clubLogosDir, `${slug}.jpg`);
+    try {
+      await (sharp as any)(req.file.buffer).resize(200, 200, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } }).jpeg({ quality: 90 }).toFile(dest);
+      res.json({ slug, url: `/club-logos/${slug}.jpg` });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/club-logos/:slug", requirePermission('participants:manage', () => null), (req, res) => {
+    const slug = req.params.slug.replace(/[^a-z0-9-]/g, '');
+    try { fs.unlinkSync(path.join(clubLogosDir, `${slug}.jpg`)); } catch { /* already gone */ }
+    res.json({ success: true });
+  });
+
+  // Photo upload: stored in data/participant-photos/, resized to 400x400 JPEG
   app.post("/api/participant-photos/:id", requirePermission('participants:manage', (req) => {
     const row = participantTournamentStmt.get(req.params.id) as any;
     return row ? String(row.tournament_id) : null;
