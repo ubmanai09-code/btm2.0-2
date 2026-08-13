@@ -5863,9 +5863,43 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
             />
             <div className="relative w-full max-w-lg">
               <Card className="p-8 border-emerald-200 bg-gradient-to-b from-white to-emerald-50/40 shadow-md">
-                <h3 className="text-2xl font-bold text-emerald-800 mb-2">{editingPlayer ? tx('Edit Player') : tx('Add New Player')}</h3>
-                <p className="text-xs text-black/50 mb-5">{tx('Enter participant details and assign a team if needed.')}</p>
-                <form onSubmit={handleAddPlayer} className="space-y-4">
+                <div className="flex items-start justify-between gap-4 mb-2">
+                  <div>
+                    <h3 className="text-2xl font-bold text-emerald-800">{editingPlayer ? tx('Edit Player') : tx('Add New Player')}</h3>
+                    <p className="text-xs text-black/50 mt-1">{tx('Enter participant details and assign a team if needed.')}</p>
+                  </div>
+                  {editingPlayer && (
+                    <div className="flex flex-col items-center gap-1 shrink-0">
+                      <label className="cursor-pointer group">
+                        {editingPlayer.photo_url
+                          ? <img src={`${editingPlayer.photo_url}?t=${Date.now()}`} alt="Player" className="w-16 h-16 rounded-full object-cover border-2 border-black/15 group-hover:border-emerald-400 transition-all" />
+                          : <div className="w-16 h-16 rounded-full bg-black/8 border-2 border-dashed border-black/20 group-hover:border-emerald-400 flex items-center justify-center text-black/25 transition-all"><UserRound size={26} /></div>
+                        }
+                        <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const fd = new FormData();
+                          fd.append('photo', file);
+                          const res = await fetch(`/api/participant-photos/${editingPlayer.id}`, { method: 'POST', body: fd });
+                          if (res.ok) {
+                            const data = await res.json();
+                            setEditingPlayer(prev => prev ? { ...prev, photo_url: data.photo_url } : prev);
+                            setParticipants(ps => ps.map(p => p.id === editingPlayer.id ? { ...p, photo_url: data.photo_url } : p));
+                          }
+                        }} />
+                      </label>
+                      {editingPlayer.photo_url
+                        ? <button type="button" onClick={async () => {
+                            await fetch(`/api/participant-photos/${editingPlayer.id}`, { method: 'DELETE' });
+                            setEditingPlayer(prev => prev ? { ...prev, photo_url: null } : prev);
+                            setParticipants(ps => ps.map(p => p.id === editingPlayer.id ? { ...p, photo_url: null } : p));
+                          }} className="text-[10px] text-red-400 hover:text-red-600 transition-colors">Remove</button>
+                        : <span className="text-[10px] text-black/35">Click to add</span>
+                      }
+                    </div>
+                  )}
+                </div>
+                <form onSubmit={handleAddPlayer} className="space-y-4 mt-3">
                   <div className="grid grid-cols-2 gap-4">
                     <Input label="First Name" name="first_name" defaultValue={editingPlayer?.first_name} placeholder="John" required />
                     <Input label="Family Name" name="last_name" defaultValue={editingPlayer?.last_name} placeholder="Doe" required />
@@ -5896,23 +5930,22 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     <Input label="Average score (optional)" name="average" type="number" defaultValue={editingPlayer?.average && editingPlayer.average > 0 ? String(editingPlayer.average) : ""} min="0" />
                   </div>
 
-                  <Input label="Team/Club" name="club" defaultValue={editingPlayer?.club} placeholder="e.g. City Bowlers" />
-
-                  {(() => {
-                    const clubVal = (editingPlayer?.club || '').trim();
-                    const slug = clubVal ? clubSlug(clubVal) : '';
-                    const logoUrl = slug ? clubLogos[slug] : null;
-                    if (!clubVal) return null;
-                    return (
-                      <div className="flex items-center gap-3 -mt-2">
-                        {logoUrl
-                          ? <img src={`${logoUrl}?t=${Date.now()}`} alt="Club" className="w-10 h-10 rounded border border-black/15 object-contain bg-white" />
-                          : <div className="w-10 h-10 rounded border border-dashed border-black/20 flex items-center justify-center text-black/25"><Building2 size={16} /></div>
-                        }
-                        <div className="flex flex-col gap-1">
-                          <label className="cursor-pointer inline-flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold rounded border border-black/15 bg-white hover:bg-black/5 transition-colors">
-                            <Upload size={11} />
-                            {logoUrl ? 'Change logo' : 'Upload logo'}
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <Input label="Team/Club" name="club" defaultValue={editingPlayer?.club} placeholder="e.g. City Bowlers" />
+                    </div>
+                    {(() => {
+                      const clubVal = (editingPlayer?.club || '').trim();
+                      const slug = clubVal ? clubSlug(clubVal) : '';
+                      const logoUrl = slug ? clubLogos[slug] : null;
+                      if (!clubVal) return null;
+                      return (
+                        <div className="flex flex-col items-center gap-0.5 pb-0.5">
+                          <label className="cursor-pointer group">
+                            {logoUrl
+                              ? <img src={`${logoUrl}?t=${Date.now()}`} alt="Club" className="w-9 h-9 rounded border border-black/15 object-contain bg-white group-hover:border-emerald-400 transition-all" />
+                              : <div className="w-9 h-9 rounded border border-dashed border-black/20 group-hover:border-emerald-400 flex items-center justify-center text-black/25 transition-all"><Building2 size={14} /></div>
+                            }
                             <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
                               const file = e.target.files?.[0];
                               if (!file) return;
@@ -5930,52 +5963,15 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                             <button type="button" onClick={async () => {
                               await fetch(`/api/club-logos/${slug}`, { method: 'DELETE' });
                               setClubLogos(prev => { const n = { ...prev }; delete n[slug]; return n; });
-                            }} className="text-[11px] text-red-400 hover:text-red-600 transition-colors text-left">Remove logo</button>
+                            }} className="text-[9px] text-red-400 hover:text-red-600 transition-colors">Remove</button>
                           )}
                         </div>
-                      </div>
-                    );
-                  })()}
+                      );
+                    })()}
+                  </div>
 
                   <Input label="Contact Details" name="email" type="text" defaultValue={editingPlayer?.email} placeholder="Phone or email" />
 
-                  {editingPlayer && (
-                    <div>
-                      <p className="text-[11px] font-semibold text-black/50 uppercase tracking-wide mb-1.5">Photo</p>
-                      <div className="flex items-center gap-3">
-                        {editingPlayer.photo_url
-                          ? <img src={`${editingPlayer.photo_url}?t=${Date.now()}`} alt="Player" className="w-14 h-14 rounded-full object-cover border border-black/15" />
-                          : <div className="w-14 h-14 rounded-full bg-black/8 flex items-center justify-center text-black/25"><UserRound size={24} /></div>
-                        }
-                        <div className="flex flex-col gap-1.5">
-                          <label className="cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded border border-black/15 bg-white hover:bg-black/5 transition-colors">
-                            <Upload size={12} />
-                            {editingPlayer.photo_url ? 'Change' : 'Upload'}
-                            <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              const fd = new FormData();
-                              fd.append('photo', file);
-                              const res = await fetch(`/api/participant-photos/${editingPlayer.id}`, { method: 'POST', body: fd });
-                              if (res.ok) {
-                                const data = await res.json();
-                                setEditingPlayer(prev => prev ? { ...prev, photo_url: data.photo_url } : prev);
-                                setParticipants(ps => ps.map(p => p.id === editingPlayer.id ? { ...p, photo_url: data.photo_url } : p));
-                              }
-                            }} />
-                          </label>
-                          {editingPlayer.photo_url && (
-                            <button type="button" onClick={async () => {
-                              await fetch(`/api/participant-photos/${editingPlayer.id}`, { method: 'DELETE' });
-                              setEditingPlayer(prev => prev ? { ...prev, photo_url: null } : prev);
-                              setParticipants(ps => ps.map(p => p.id === editingPlayer.id ? { ...p, photo_url: null } : p));
-                            }} className="text-[11px] text-red-400 hover:text-red-600 transition-colors text-left">Remove photo</button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  
                   {(() => {
                     const divisionList = (tournament.divisions || '').split(',').map((s: string) => s.trim()).filter(Boolean);
                     if (divisionList.length === 0) return null;
