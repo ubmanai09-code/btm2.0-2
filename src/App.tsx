@@ -4327,6 +4327,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const clubSlug = (name: string) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [viewingPlayer, setViewingPlayer] = useState<Participant | null>(null);
+  const [photoCtx, setPhotoCtx] = useState(false);
+  const [logoCtx, setLogoCtx] = useState(false);
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<number[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [mobileRosterTab, setMobileRosterTab] = useState<'players' | 'teams'>('players');
@@ -5899,7 +5901,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
             <div
               className="absolute inset-0 bg-emerald-950/35 backdrop-blur-sm"
-              onClick={() => { setShowAddPlayer(false); setEditingPlayer(null); }}
+              onClick={() => { setShowAddPlayer(false); setEditingPlayer(null); setPhotoCtx(false); setLogoCtx(false); }}
             />
             <div className="relative w-full max-w-lg">
               <Card className="p-8 border-emerald-200 bg-gradient-to-b from-white to-emerald-50/40 shadow-md">
@@ -5910,34 +5912,18 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   </div>
                   {editingPlayer && (
                     <div className="flex flex-col items-center gap-1 shrink-0">
-                      <label className="cursor-pointer group relative">
+                      <div className="relative cursor-pointer" onClick={() => { if (editingPlayer.photo_url) setImagePreviewUrl(editingPlayer.photo_url); }} onDoubleClick={e => { e.preventDefault(); if (editingPlayer.photo_url) setPhotoCtx(c => !c); }}>
                         {editingPlayer.photo_url
-                          ? <img src={`${editingPlayer.photo_url}?t=${Date.now()}`} alt="Player"
-                              className="w-16 h-16 rounded-full object-cover border-2 border-black/15 group-hover:border-emerald-400 transition-all"
-                              onClick={e => { e.preventDefault(); setImagePreviewUrl(editingPlayer.photo_url!); }} />
-                          : <div className="w-16 h-16 rounded-full bg-black/8 border-2 border-dashed border-black/20 group-hover:border-emerald-400 flex items-center justify-center text-black/25 transition-all"><UserRound size={26} /></div>
+                          ? <img src={`${editingPlayer.photo_url}?t=${Date.now()}`} alt="Player" className="w-16 h-16 rounded-full object-cover border-2 border-black/15 hover:border-emerald-400 transition-all" />
+                          : <label className="cursor-pointer group"><div className="w-16 h-16 rounded-full bg-black/8 border-2 border-dashed border-black/20 group-hover:border-emerald-400 flex items-center justify-center text-black/25 transition-all"><UserRound size={26} /></div><input type="file" accept="image/*" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; const fd = new FormData(); fd.append('photo', file); const res = await fetch(`/api/participant-photos/${editingPlayer.id}`, { method: 'POST', body: fd }); if (res.ok) { const data = await res.json(); setEditingPlayer(prev => prev ? { ...prev, photo_url: data.photo_url } : prev); setParticipants(ps => ps.map(p => p.id === editingPlayer.id ? { ...p, photo_url: data.photo_url } : p)); } }} /></label>
                         }
-                        <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          const fd = new FormData();
-                          fd.append('photo', file);
-                          const res = await fetch(`/api/participant-photos/${editingPlayer.id}`, { method: 'POST', body: fd });
-                          if (res.ok) {
-                            const data = await res.json();
-                            setEditingPlayer(prev => prev ? { ...prev, photo_url: data.photo_url } : prev);
-                            setParticipants(ps => ps.map(p => p.id === editingPlayer.id ? { ...p, photo_url: data.photo_url } : p));
-                          }
-                        }} />
-                      </label>
-                      {editingPlayer.photo_url
-                        ? <button type="button" onClick={async () => {
-                            await fetch(`/api/participant-photos/${editingPlayer.id}`, { method: 'DELETE' });
-                            setEditingPlayer(prev => prev ? { ...prev, photo_url: null } : prev);
-                            setParticipants(ps => ps.map(p => p.id === editingPlayer.id ? { ...p, photo_url: null } : p));
-                          }} className="text-[10px] text-red-400 hover:text-red-600 transition-colors">Remove</button>
-                        : <span className="text-[10px] text-black/35">Click to add</span>
-                      }
+                        {photoCtx && editingPlayer.photo_url && (
+                          <div className="absolute inset-0 rounded-full bg-black/65 flex flex-col items-center justify-center gap-1 z-10" onClick={e => e.stopPropagation()}>
+                            <label className="cursor-pointer text-[10px] font-bold text-white hover:text-emerald-300 transition-colors">Change<input type="file" accept="image/*" className="hidden" onChange={async (e) => { setPhotoCtx(false); const file = e.target.files?.[0]; if (!file) return; const fd = new FormData(); fd.append('photo', file); const res = await fetch(`/api/participant-photos/${editingPlayer.id}`, { method: 'POST', body: fd }); if (res.ok) { const data = await res.json(); setEditingPlayer(prev => prev ? { ...prev, photo_url: data.photo_url } : prev); setParticipants(ps => ps.map(p => p.id === editingPlayer.id ? { ...p, photo_url: data.photo_url } : p)); } }} /></label>
+                            <button type="button" className="text-[10px] font-bold text-red-300 hover:text-red-200 transition-colors" onClick={async () => { setPhotoCtx(false); await fetch(`/api/participant-photos/${editingPlayer.id}`, { method: 'DELETE' }); setEditingPlayer(prev => prev ? { ...prev, photo_url: null } : prev); setParticipants(ps => ps.map(p => p.id === editingPlayer.id ? { ...p, photo_url: null } : p)); }}>Remove</button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -5983,32 +5969,18 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       if (!clubVal) return null;
                       return (
                         <div className="flex flex-col items-center gap-0.5 pb-0.5">
-                          <label className="cursor-pointer group">
+                          <div className="relative cursor-pointer" onClick={() => { if (logoUrl) setImagePreviewUrl(logoUrl); }} onDoubleClick={e => { e.preventDefault(); if (logoUrl) setLogoCtx(c => !c); }}>
                             {logoUrl
-                              ? <img src={`${logoUrl}?t=${Date.now()}`} alt="Club"
-                                  className="w-9 h-9 rounded border border-black/15 object-contain bg-white group-hover:border-emerald-400 transition-all"
-                                  onClick={e => { e.preventDefault(); setImagePreviewUrl(logoUrl); }} />
-                              : <div className="w-9 h-9 rounded border border-dashed border-black/20 group-hover:border-emerald-400 flex items-center justify-center text-black/25 transition-all"><Building2 size={14} /></div>
+                              ? <img src={`${logoUrl}?t=${Date.now()}`} alt="Club" className="w-9 h-9 rounded border border-black/15 object-contain bg-white hover:border-emerald-400 transition-all" />
+                              : <label className="cursor-pointer group"><div className="w-9 h-9 rounded border border-dashed border-black/20 group-hover:border-emerald-400 flex items-center justify-center text-black/25 transition-all"><Building2 size={14} /></div><input type="file" accept="image/*" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; const fd = new FormData(); fd.append('logo', file); fd.append('club', clubVal); const res = await fetch('/api/club-logos', { method: 'POST', body: fd }); if (res.ok) { const data = await res.json(); setClubLogos(prev => ({ ...prev, [data.slug]: data.url })); } }} /></label>
                             }
-                            <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              const fd = new FormData();
-                              fd.append('logo', file);
-                              fd.append('club', clubVal);
-                              const res = await fetch('/api/club-logos', { method: 'POST', body: fd });
-                              if (res.ok) {
-                                const data = await res.json();
-                                setClubLogos(prev => ({ ...prev, [data.slug]: data.url }));
-                              }
-                            }} />
-                          </label>
-                          {logoUrl && (
-                            <button type="button" onClick={async () => {
-                              await fetch(`/api/club-logos/${slug}`, { method: 'DELETE' });
-                              setClubLogos(prev => { const n = { ...prev }; delete n[slug]; return n; });
-                            }} className="text-[9px] text-red-400 hover:text-red-600 transition-colors">Remove</button>
-                          )}
+                            {logoCtx && logoUrl && (
+                              <div className="absolute inset-0 rounded bg-black/65 flex flex-col items-center justify-center gap-0.5 z-10" onClick={e => e.stopPropagation()}>
+                                <label className="cursor-pointer text-[9px] font-bold text-white hover:text-emerald-300 transition-colors">Change<input type="file" accept="image/*" className="hidden" onChange={async (e) => { setLogoCtx(false); const file = e.target.files?.[0]; if (!file) return; const fd = new FormData(); fd.append('logo', file); fd.append('club', clubVal); const res = await fetch('/api/club-logos', { method: 'POST', body: fd }); if (res.ok) { const data = await res.json(); setClubLogos(prev => ({ ...prev, [data.slug]: data.url })); } }} /></label>
+                                <button type="button" className="text-[9px] font-bold text-red-300 hover:text-red-200 transition-colors" onClick={async () => { setLogoCtx(false); await fetch(`/api/club-logos/${slug}`, { method: 'DELETE' }); setClubLogos(prev => { const n = { ...prev }; delete n[slug]; return n; }); }}>Remove</button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
                     })()}
