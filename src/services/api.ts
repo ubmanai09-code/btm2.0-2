@@ -41,6 +41,7 @@ export interface Participant {
   team_order?: number;
   team_name?: string;
   division?: string;
+  photo_url?: string | null;
 }
 
 export interface Team {

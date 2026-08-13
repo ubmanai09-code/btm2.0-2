@@ -8,6 +8,8 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import type { Server as HttpServer } from "http";
+import multer from "multer";
+import sharp from "sharp";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -603,7 +605,8 @@ function initDb() {
       { name: 'club', type: 'TEXT' },
       { name: 'average', type: 'INTEGER DEFAULT 0' },
       { name: 'team_order', type: 'INTEGER DEFAULT 0' },
-      { name: 'division', type: 'TEXT' }
+      { name: 'division', type: 'TEXT' },
+      { name: 'photo_url', type: 'TEXT' }
     ];
     pMigrations.forEach(m => {
       if (!pColumns.includes(m.name)) {
@@ -748,9 +751,11 @@ async function startServer() {
   const persistentSponsorsDir = path.join(persistentDataDir, "sponsors");
   const persistentSponsorsConfig = path.join(persistentDataDir, "sponsors-config.json");
   const persistentRootAssetsDir = path.join(persistentDataDir, "root-assets");
+  const participantPhotosDir = path.join(persistentDataDir, "participant-photos");
 
   fs.mkdirSync(persistentSponsorsDir, { recursive: true });
   fs.mkdirSync(persistentRootAssetsDir, { recursive: true });
+  fs.mkdirSync(participantPhotosDir, { recursive: true });
   // Keep user-uploaded files in persistent storage and only copy missing packaged assets.
   copyDirMissingFiles(publicSponsorsDir, persistentSponsorsDir);
   copyDirMissingFiles(distSponsorsDir, persistentSponsorsDir);
@@ -779,6 +784,8 @@ async function startServer() {
   app.use('/sponsors', express.static(persistentSponsorsDir));
   app.use('/sponsors', express.static(publicSponsorsDir));
   app.use('/sponsors', express.static(distSponsorsDir));
+  // Serve participant photos from persistent storage.
+  app.use('/participant-photos', express.static(participantPhotosDir));
   // Serve root-level logos (e.g., /logo.png, /MBA_logo.png) from persistent storage.
   app.use('/', express.static(persistentRootAssetsDir));
 
@@ -2724,10 +2731,50 @@ async function startServer() {
     }
   });
 
+  // Photo upload: stored in data/participant-photos/, resized to 400x400 JPEG
+  const photoUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 8 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      cb(null, /^image\/(jpeg|png|webp|gif)$/.test(file.mimetype));
+    },
+  });
+
+  app.post("/api/participant-photos/:id", requirePermission('participants:manage', (req) => {
+    const row = participantTournamentStmt.get(req.params.id) as any;
+    return row ? String(row.tournament_id) : null;
+  }), photoUpload.single('photo'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No image file provided' });
+    const id = req.params.id;
+    const filename = `${id}.jpg`;
+    const dest = path.join(participantPhotosDir, filename);
+    try {
+      await sharp(req.file.buffer).resize(400, 400, { fit: 'cover' }).jpeg({ quality: 85 }).toFile(dest);
+      const url = `/participant-photos/${filename}`;
+      db.prepare("UPDATE participants SET photo_url = ? WHERE id = ?").run(url, id);
+      res.json({ photo_url: url });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/participant-photos/:id", requirePermission('participants:manage', (req) => {
+    const row = participantTournamentStmt.get(req.params.id) as any;
+    return row ? String(row.tournament_id) : null;
+  }), (req, res) => {
+    const id = req.params.id;
+    const dest = path.join(participantPhotosDir, `${id}.jpg`);
+    try { fs.unlinkSync(dest); } catch { /* already gone */ }
+    db.prepare("UPDATE participants SET photo_url = NULL WHERE id = ?").run(id);
+    res.json({ success: true });
+  });
+
   app.delete("/api/participants/:id", requirePermission('participants:manage', (req) => {
     const row = participantTournamentStmt.get(req.params.id) as any;
     return row ? String(row.tournament_id) : null;
   }), (req, res) => {
+    // Clean up photo file on participant delete
+    try { fs.unlinkSync(path.join(participantPhotosDir, `${req.params.id}.jpg`)); } catch { /* no photo */ }
     db.prepare("DELETE FROM participants WHERE id = ?").run(req.params.id);
     res.json({ success: true });
   });

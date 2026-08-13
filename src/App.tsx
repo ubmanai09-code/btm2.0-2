@@ -47,6 +47,7 @@ import {
   Moon,
   Sun,
   AlertCircle,
+  UserRound,
   UserRoundPlus,
   UserRoundMinus,
   Eraser,
@@ -701,19 +702,13 @@ export default function App() {
 
   useEffect(() => {
     const loadPublicDictionary = async () => {
-      const sources = ['/i18n-mn-manual.csv', '/i18n-en-mn.csv'];
-      for (const source of sources) {
-        try {
-          const res = await fetch(source);
-          if (!res.ok) continue;
-          const text = await res.text();
-          setPublicDictionary(parseBilingualCsv(text));
-          return;
-        } catch {
-          // Try the next source.
-        }
+      try {
+        const res = await fetch('/i18n-en-mn.csv');
+        if (res.ok) setPublicDictionary(parseBilingualCsv(await res.text()));
+        else setPublicDictionary(new Map());
+      } catch {
+        setPublicDictionary(new Map());
       }
-      setPublicDictionary(new Map());
     };
 
     loadPublicDictionary();
@@ -5898,6 +5893,43 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
                   <Input label="Team/Club" name="club" defaultValue={editingPlayer?.club} placeholder="e.g. City Bowlers" />
                   <Input label="Contact Details" name="email" type="text" defaultValue={editingPlayer?.email} placeholder="Phone or email" />
+
+                  {editingPlayer && (
+                    <div>
+                      <p className="text-[11px] font-semibold text-black/50 uppercase tracking-wide mb-1.5">Photo</p>
+                      <div className="flex items-center gap-3">
+                        {editingPlayer.photo_url
+                          ? <img src={`${editingPlayer.photo_url}?t=${Date.now()}`} alt="Player" className="w-14 h-14 rounded-full object-cover border border-black/15" />
+                          : <div className="w-14 h-14 rounded-full bg-black/8 flex items-center justify-center text-black/25"><UserRound size={24} /></div>
+                        }
+                        <div className="flex flex-col gap-1.5">
+                          <label className="cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded border border-black/15 bg-white hover:bg-black/5 transition-colors">
+                            <Upload size={12} />
+                            {editingPlayer.photo_url ? 'Change' : 'Upload'}
+                            <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const fd = new FormData();
+                              fd.append('photo', file);
+                              const res = await fetch(`/api/participant-photos/${editingPlayer.id}`, { method: 'POST', body: fd });
+                              if (res.ok) {
+                                const data = await res.json();
+                                setEditingPlayer(prev => prev ? { ...prev, photo_url: data.photo_url } : prev);
+                                setParticipants(ps => ps.map(p => p.id === editingPlayer.id ? { ...p, photo_url: data.photo_url } : p));
+                              }
+                            }} />
+                          </label>
+                          {editingPlayer.photo_url && (
+                            <button type="button" onClick={async () => {
+                              await fetch(`/api/participant-photos/${editingPlayer.id}`, { method: 'DELETE' });
+                              setEditingPlayer(prev => prev ? { ...prev, photo_url: null } : prev);
+                              setParticipants(ps => ps.map(p => p.id === editingPlayer.id ? { ...p, photo_url: null } : p));
+                            }} className="text-[11px] text-red-400 hover:text-red-600 transition-colors text-left">Remove photo</button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   
                   {(() => {
                     const divisionList = (tournament.divisions || '').split(',').map((s: string) => s.trim()).filter(Boolean);

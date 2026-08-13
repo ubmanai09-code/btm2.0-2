@@ -229,7 +229,7 @@ teams.delete,Delete Team,Баг устгах
 common.placeholder.doe,Doe,Дорж
 common.placeholder.city_bowlers,e.g. City Bowlers,ж.нь. Хотын боулингчид
 common.placeholder.team_name,e.g. The Strikers,ж.нь. The Strikers
-players.edit,Edit Player,Тамирчин засах
+players.edit,Edit Player,Тамирчингийн мэдээлэл
 teams.edit,Edit Team,Баг засах
 players.email,Email Address,И-мэйл хаяг
 brackets.export,Export Brackets,Бракет экспортлох
@@ -278,7 +278,7 @@ common.cleared,Cleared,Цэвэрлэгдсэн
 teams.rename_hint,Create a team or rename an existing one.,Баг шинээр үүсгэх эсвэл байгаа багийн нэрийг өөрчилнө.
 teams.create_new,Create New Team,Шинэ баг үүсгэх
 scoring.entry_hint,Enter game results for each participant,Оролцогч бүрийн тоглолтын дүнг оруулна
-players.entry_hint,Enter participant details and assign a team if needed.,Оролцогчийн мэдээллийг оруулж шаардлагатай бол багт хуваарилна.
+players.entry_hint,Enter participant details and assign a team if needed.,Оролцогчийн мэдээллийг оруулах, өөрчлөх, засварлах боломжтой.
 scoring.import_failed,Failed to import scores:,Оноо импортолж чадсангүй:
 standings.import_failed,Failed to import standings data. Please check file format.,Чансааны мэдээллийг импортолж чадсангүй. Файлын форматыг шалгана уу.
 teams.import_failed,Failed to import teams:,Багуудыг импортолж чадсангүй:
@@ -501,20 +501,20 @@ final.missing.generating,Generating...,Үүсгэж байна...
 ,,
 scoring.pre_tournament_badge,Pre,УТ
 scoring.post_tournament_badge,Post,НТ
-scoring.pre_post_section_title,Pre & Post Tournament Scores,Урьдчилсан болон Нөхөлт тоглолтын оноо
-lanes.pre_post_title,Pre / Post-Tournament Lanes,Урьдчилсан / Нөхөлт тоглолтын замууд
+scoring.pre_post_section_title,Pre & Post Tournament Scores,Урьдчилсан болон Нөхөн тоглолтын оноо
+lanes.pre_post_title,Pre / Post-Tournament Lanes,Урьдчилсан / Нөхөн тоглолтын замууд
 lanes.pre_post_subtitle,For players who bowl on a different day — scores count toward rankings with a penalty deduction but do not affect official winners,Өөр өдөр тоглосон тамирчдад зориулсан — оноо зэрэглэлд тооцогдох боловч албан ёсны ялагчийг тодорхойлоход нөлөөлөхгүй
-lanes.pre_post_section_title,Pre / Post-Tournament,Урьдчилсан / Нөхөлт тоглолт
+lanes.pre_post_section_title,Pre / Post-Tournament,Урьдчилсан / Нөхөн тоглолт
 lanes.pre_post_picker_hint,all registered players,бүх бүртгэлтэй тамирчид
 lanes.pre_post_badge,Pre/Post,УТ/НТ
-standings.pre_post_section_title,Pre / Post-Tournament Rankings,Урьдчилсан / Нөхөлт тоглолтын зэрэглэл
-standings.pre_post_note,penalty applied · not eligible for prizes,торгууль тооцогдсон · шагналд хамаарахгүй
+standings.pre_post_section_title,Pre / Post-Tournament Rankings,Урьдчилсан / Нөхөн тоглолтын зэрэглэл
+standings.pre_post_note,penalty applied · not eligible for prizes,торгууль тооцогдсон · шагналын байранд хамаарахгүй
 Pre,Pre,УТ
 Post,Post,НТ
-Pre & Post Tournament Scores,Pre & Post Tournament Scores,Урьдчилсан болон Нөхөлт тоглолтын оноо
-Pre / Post-Tournament Lanes,Pre / Post-Tournament Lanes,Урьдчилсан / Нөхөлт тоглолтын замууд
-Pre / Post-Tournament,Pre / Post-Tournament,Урьдчилсан / Нөхөлт тоглолт
-Pre / Post-Tournament Rankings,Pre / Post-Tournament Rankings,Урьдчилсан / Нөхөлт тоглолтын зэрэглэл
+Pre & Post Tournament Scores,Pre & Post Tournament Scores,Урьдчилсан болон Нөхөн тоглолтын оноо
+Pre / Post-Tournament Lanes,Pre / Post-Tournament Lanes,Урьдчилсан / Нөхөн тоглолтын замууд
+Pre / Post-Tournament,Pre / Post-Tournament,Урьдчилсан / Нөхөн тоглолт
+Pre / Post-Tournament Rankings,Pre / Post-Tournament Rankings,Урьдчилсан / Нөхөн тоглолтын зэрэглэл
 Pre/Post,Pre/Post,УТ/НТ
 all registered players,all registered players,бүх бүртгэлтэй тамирчид
 penalty applied · not eligible for prizes,penalty applied · not eligible for prizes,торгууль тооцогдсон · шагналд хамаарахгүй
