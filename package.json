@@ -37,7 +37,7 @@
     "vite": "^6.4.3"
   },
   "overrides": {
-    "protobufjs": "^7.6.5"
+    "protobufjs": "7.6.5"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
