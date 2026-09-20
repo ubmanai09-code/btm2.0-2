@@ -13230,7 +13230,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   }, [standingsMode, hasAdditionalScores, hasBonus, isTeamTournament]);
 
   useEffect(() => {
-    setStandingsMode('players');
+    setStandingsMode(tournament.type === 'team' ? 'teams' : 'players');
   }, [tournament.id, tournament.type]);
 
   useEffect(() => {
