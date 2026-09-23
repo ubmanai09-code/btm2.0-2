@@ -382,11 +382,48 @@ const api = {
     }
     return body;
   },
-  async deleteTournament(id: number): Promise<{ success: boolean }> {
-    const res = await fetch(`/api/tournaments/${id}`, {
+  async deleteTournament(id: number, options?: { force?: boolean }): Promise<{ success: boolean }> {
+    const qs = options?.force ? '?force=true' : '';
+    const res = await fetch(`/api/tournaments/${id}${qs}`, {
       method: 'DELETE',
     });
-    return res.json();
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to delete tournament');
+    }
+    return data;
+  },
+  async getTournamentSnapshots(tournamentId: number): Promise<Array<{ id: number; name: string; notes: string; created_at: string }>> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/snapshots`);
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to load snapshots');
+    }
+    return data;
+  },
+  async createTournamentSnapshot(tournamentId: number, label?: string): Promise<{ success: boolean; id?: number }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/snapshots`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: label || 'manual snapshot' }),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to create snapshot');
+    }
+    return data;
+  },
+  async restoreTournamentSnapshot(tournamentId: number, snapshotId: number): Promise<{ success: boolean; restored_snapshot_id?: number }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/snapshots/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ snapshot_id: snapshotId }),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to restore snapshot');
+    }
+    return data;
   },
   async saveSponsorsConfig(config: any): Promise<{ success: boolean }> {
     const res = await fetch('/api/sponsors-config', {
@@ -476,8 +513,9 @@ const api = {
     });
     return res.json();
   },
-  async clearParticipants(tournamentId: number): Promise<{ success: boolean; deleted: number }> {
-    const res = await fetch(`/api/tournaments/${tournamentId}/participants`, {
+  async clearParticipants(tournamentId: number, options?: { force?: boolean }): Promise<{ success: boolean; deleted: number }> {
+    const qs = options?.force ? '?force=true' : '';
+    const res = await fetch(`/api/tournaments/${tournamentId}/participants${qs}`, {
       method: 'DELETE',
     });
     if (!res.ok) {
@@ -489,7 +527,7 @@ const api = {
   async bulkAddParticipants(
     tournamentId: number,
     participants: Partial<Participant>[],
-    options?: { replaceExisting?: boolean }
+    options?: { replaceExisting?: boolean; allowDestructiveReplace?: boolean }
   ): Promise<{ success: boolean }> {
     const res = await fetch(`/api/tournaments/${tournamentId}/participants/bulk`, {
       method: 'POST',
@@ -497,6 +535,7 @@ const api = {
       body: JSON.stringify({
         participants,
         replace_existing: options?.replaceExisting === true,
+        allow_destructive_replace: options?.allowDestructiveReplace === true,
       }),
     });
     if (!res.ok) {

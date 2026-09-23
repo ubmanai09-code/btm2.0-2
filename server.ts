@@ -189,6 +189,127 @@ const openDatabaseWithRecovery = (targetDbPath: string): Database.Database => {
 
 const db = openDatabaseWithRecovery(dbPath);
 
+const getTableColumns = (tableName: string): string[] => {
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as { sql?: string } | undefined;
+  if (!row?.sql) return [];
+  return row.sql.match(/\(([^)]*)\)/)?.[1]?.split(',').map((segment) => segment.trim().split(/\s+/)[0].replace(/`/g, '')) || [];
+};
+
+const createTournamentSnapshot = (tournamentId: number, label: string = 'manual snapshot') => {
+  const tournamentRow = db.prepare("SELECT * FROM tournaments WHERE id = ?").get(tournamentId) as Record<string, any> | undefined;
+  const payload: Record<string, any> = {
+    tournament: tournamentRow ? [tournamentRow] : [],
+  };
+
+  const tablesForSnapshot = [
+    'teams',
+    'participants',
+    'lane_assignments',
+    'scores',
+    'brackets',
+    'bracket_v2_configs',
+    'standings_bonus',
+    'standings_additional_scores'
+  ];
+
+  for (const tableName of tablesForSnapshot) {
+    const columns = getTableColumns(tableName);
+    if (!columns.length) continue;
+    const hasTournamentId = columns.includes('tournament_id');
+    if (!hasTournamentId) continue;
+    payload[tableName] = db.prepare(`SELECT * FROM ${tableName} WHERE tournament_id = ?`).all(tournamentId);
+  }
+
+  const timestamp = new Date().toISOString();
+  const isAutomaticMutationCheckpoint = label.startsWith('pre-edit-');
+  if (isAutomaticMutationCheckpoint) {
+    const recent = db.prepare(`
+      SELECT id
+      FROM tournament_snapshots
+      WHERE tournament_id = ?
+        AND notes = ?
+        AND julianday(created_at) >= julianday('now', '-5 minutes')
+      ORDER BY id DESC
+      LIMIT 1
+    `).get(tournamentId, label) as { id?: number } | undefined;
+    if (recent?.id) return Number(recent.id);
+  }
+
+  const result = db.prepare(`
+    INSERT INTO tournament_snapshots (tournament_id, name, notes, payload, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(tournamentId, `${label} @ ${timestamp}`, label, JSON.stringify(payload), timestamp);
+
+  return Number(result.lastInsertRowid);
+};
+
+const restoreTournamentSnapshot = (snapshotId: number, tournamentId: number) => {
+  const snapshot = db.prepare("SELECT * FROM tournament_snapshots WHERE id = ? AND tournament_id = ?").get(snapshotId, tournamentId) as
+    | { payload?: string }
+    | undefined;
+
+  if (!snapshot?.payload) return false;
+
+  const parsed = JSON.parse(snapshot.payload) as Record<string, any>;
+  const tournamentRows = Array.isArray(parsed.tournament) ? parsed.tournament : [];
+  const tournamentRow = tournamentRows[0] as Record<string, any> | undefined;
+
+  if (!tournamentRow) return false;
+
+  const tablesToRestore = [
+    'teams',
+    'participants',
+    'lane_assignments',
+    'scores',
+    'standings_bonus',
+    'standings_additional_scores',
+    'brackets',
+    'bracket_v2_configs'
+  ];
+
+  const transaction = db.transaction(() => {
+    db.prepare(`DELETE FROM scores WHERE tournament_id = ?`).run(tournamentId);
+    db.prepare(`DELETE FROM standings_bonus WHERE tournament_id = ?`).run(tournamentId);
+    db.prepare(`DELETE FROM standings_additional_scores WHERE tournament_id = ?`).run(tournamentId);
+    db.prepare(`DELETE FROM lane_assignments WHERE tournament_id = ?`).run(tournamentId);
+    db.prepare(`DELETE FROM brackets WHERE tournament_id = ?`).run(tournamentId);
+    db.prepare(`DELETE FROM bracket_v2_configs WHERE tournament_id = ?`).run(tournamentId);
+    db.prepare(`DELETE FROM participants WHERE tournament_id = ?`).run(tournamentId);
+    db.prepare(`DELETE FROM teams WHERE tournament_id = ?`).run(tournamentId);
+
+    for (const tableName of tablesToRestore) {
+      const rows = Array.isArray(parsed[tableName]) ? parsed[tableName] : [];
+      if (!rows.length) continue;
+      const firstRow = rows[0] as Record<string, any>;
+      // Keep primary keys stable so scores and bracket references still point
+      // to the same participants after a restore.
+      const columns = Object.keys(firstRow);
+      if (!columns.length) continue;
+      const placeholders = columns.map(() => '?').join(', ');
+      const sql = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
+      const stmt = db.prepare(sql);
+      for (const row of rows) {
+        stmt.run(...columns.map((column) => row[column]));
+      }
+    }
+
+    const tournamentFields = Object.entries(tournamentRow)
+      .filter(([key]) => key !== 'id')
+      .map(([key]) => `${key} = ?`)
+      .join(', ');
+
+    if (tournamentFields) {
+      db.prepare(`UPDATE tournaments SET ${tournamentFields} WHERE id = ?`).run(
+        ...Object.entries(tournamentRow).filter(([key]) => key !== 'id').map(([, value]) => value),
+        tournamentId
+      );
+    }
+  });
+
+  transaction();
+  return true;
+};
+
 if (!configuredDbPath) {
   const mode = process.env.NODE_ENV === 'production' ? 'production' : 'development';
   console.log(`BTM_DB_PATH not set; using default ${mode} database path: ${dbPath}`);
@@ -224,6 +345,16 @@ function initDb() {
       show_player_style INTEGER NOT NULL DEFAULT 1,
       divisions TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS tournament_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      notes TEXT,
+      payload TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS teams (
@@ -957,6 +1088,43 @@ async function startServer() {
     public: new Set<Permission>([]),
   };
 
+  const checkpointTournamentMutation = (req: express.Request, mutationGroup: string) => {
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return;
+
+    const requestPath = req.path || req.originalUrl.split('?')[0];
+    // Snapshot creation itself is already the checkpoint. Restore gets a
+    // checkpoint so the restore operation can also be undone.
+    if (requestPath.endsWith('/snapshots') || requestPath.includes('/snapshots/restore')) {
+      if (!requestPath.includes('/snapshots/restore')) return;
+    }
+
+    let tournamentId: number | null = null;
+    const tournamentMatch = requestPath.match(/^\/api\/tournaments\/(\d+)/);
+    if (tournamentMatch) {
+      tournamentId = Number(tournamentMatch[1]);
+    } else {
+      const entityMatch = requestPath.match(/^\/api\/(lanes|teams|participants|participant-photos)\/(\d+)/);
+      if (entityMatch) {
+        const entityId = Number(entityMatch[2]);
+        const table = entityMatch[1] === 'lanes'
+          ? 'lane_assignments'
+          : entityMatch[1] === 'participant-photos' || entityMatch[1] === 'participants'
+            ? 'participants'
+            : 'teams';
+        const row = table === 'lane_assignments'
+          ? db.prepare(`SELECT tournament_id FROM ${table} WHERE id = ?`).get(entityId) as { tournament_id?: number } | undefined
+          : db.prepare(`SELECT tournament_id FROM ${table} WHERE id = ?`).get(entityId) as { tournament_id?: number } | undefined;
+        tournamentId = row?.tournament_id ? Number(row.tournament_id) : null;
+      }
+    }
+
+    if (!tournamentId || !Number.isFinite(tournamentId)) return;
+    const tournament = db.prepare('SELECT id FROM tournaments WHERE id = ?').get(tournamentId) as { id?: number } | undefined;
+    if (!tournament?.id) return;
+
+    createTournamentSnapshot(tournamentId, `pre-edit-${mutationGroup}`);
+  };
+
   const requirePermission = (permission: Permission, tournamentResolver?: (req: express.Request) => string | null) => {
     return (req: express.Request, res: express.Response, next: express.NextFunction) => {
       const role = getRequestRole(req);
@@ -970,6 +1138,8 @@ async function startServer() {
 
       // Moderators now have global rights for all tournaments
 
+      checkpointTournamentMutation(req, permission.replace(':manage', ''));
+
       return next();
     };
   };
@@ -978,6 +1148,7 @@ async function startServer() {
     if (getRequestRole(req) !== 'admin') {
       return res.status(403).json({ error: 'Forbidden: admin only' });
     }
+    checkpointTournamentMutation(req, 'tournament');
     return next();
   };
 
@@ -2581,8 +2752,68 @@ async function startServer() {
     }
   });
 
+  app.get("/api/tournaments/:id/snapshots", requirePermission('participants:manage', (req) => req.params.id), (req, res) => {
+    try {
+      const rows = db.prepare(`
+        SELECT id, name, notes, created_at
+        FROM tournament_snapshots
+        WHERE tournament_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 20
+      `).all(Number(req.params.id));
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to fetch snapshots' });
+    }
+  });
+
+  app.post("/api/tournaments/:id/snapshots", requirePermission('participants:manage', (req) => req.params.id), (req, res) => {
+    try {
+      const tournamentId = Number(req.params.id);
+      const label = String(req.body?.label || 'manual snapshot');
+      const snapshotId = createTournamentSnapshot(tournamentId, label);
+      res.json({ success: true, id: snapshotId });
+    } catch (err: any) {
+      console.error('Failed to create snapshot:', err);
+      res.status(500).json({ error: err.message || 'Failed to create snapshot' });
+    }
+  });
+
+  app.post("/api/tournaments/:id/snapshots/restore", requireAdmin, (req, res) => {
+    try {
+      const tournamentId = Number(req.params.id);
+      const snapshotId = Number(req.body?.snapshot_id);
+      if (!snapshotId) {
+        return res.status(400).json({ error: 'snapshot_id is required' });
+      }
+
+      const restored = restoreTournamentSnapshot(snapshotId, tournamentId);
+      if (!restored) {
+        return res.status(404).json({ error: 'Snapshot not found for that tournament' });
+      }
+
+      res.json({ success: true, restored_snapshot_id: snapshotId });
+    } catch (err: any) {
+      console.error('Failed to restore snapshot:', err);
+      res.status(500).json({ error: err.message || 'Failed to restore snapshot' });
+    }
+  });
+
   app.delete("/api/tournaments/:id", requireAdmin, (req, res) => {
-    db.prepare("DELETE FROM tournaments WHERE id = ?").run(req.params.id);
+    const force = req.query.force === 'true';
+    const tournamentId = Number(req.params.id);
+    const existing = db.prepare("SELECT * FROM tournaments WHERE id = ?").get(tournamentId) as any;
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+
+    if (!force) {
+      return res.status(400).json({ error: 'Delete requires force=true for admin confirmation.' });
+    }
+
+    createTournamentSnapshot(tournamentId, 'pre-delete');
+    db.prepare("DELETE FROM tournaments WHERE id = ?").run(tournamentId);
     res.json({ success: true });
   });
 
@@ -2818,7 +3049,20 @@ async function startServer() {
 
   app.delete("/api/tournaments/:id/participants", requirePermission('participants:manage', (req) => req.params.id), (req, res) => {
     try {
-      const info = db.prepare("DELETE FROM participants WHERE tournament_id = ?").run(req.params.id);
+      const force = req.query.force === 'true';
+      const tournamentId = Number(req.params.id);
+      const hasScores = (db.prepare("SELECT COUNT(*) AS count FROM scores WHERE tournament_id = ?").get(tournamentId) as { count: number } | undefined)?.count > 0;
+      const hasBrackets = (db.prepare("SELECT COUNT(*) AS count FROM brackets WHERE tournament_id = ?").get(tournamentId) as { count: number } | undefined)?.count > 0;
+
+      if (!force && (hasScores || hasBrackets)) {
+        return res.status(400).json({ error: 'Participant clear is blocked while scores or brackets exist. Use force=true to confirm destructive action.' });
+      }
+
+      if (force || hasScores || hasBrackets) {
+        createTournamentSnapshot(tournamentId, 'pre-clear-participants');
+      }
+
+      const info = db.prepare("DELETE FROM participants WHERE tournament_id = ?").run(tournamentId);
       res.json({ success: true, deleted: info.changes });
     } catch (err: any) {
       console.error('Error clearing participants:', err);
@@ -2830,7 +3074,29 @@ async function startServer() {
     try {
       const participants = Array.isArray(req.body?.participants) ? req.body.participants : [];
       const replaceExisting = req.body?.replace_existing === true;
-      const tournamentId = req.params.id;
+      const allowDestructiveReplace = req.body?.allow_destructive_replace === true;
+      const tournamentId = Number(req.params.id);
+
+      if (replaceExisting && !allowDestructiveReplace) {
+        const hasScores = (db.prepare("SELECT COUNT(*) AS count FROM scores WHERE tournament_id = ?").get(tournamentId) as { count: number } | undefined)?.count > 0;
+        const hasBrackets = (db.prepare("SELECT COUNT(*) AS count FROM brackets WHERE tournament_id = ?").get(tournamentId) as { count: number } | undefined)?.count > 0;
+        const hasParticipants = (db.prepare("SELECT COUNT(*) AS count FROM participants WHERE tournament_id = ?").get(tournamentId) as { count: number } | undefined)?.count > 0;
+
+        if (hasScores || hasBrackets || hasParticipants) {
+          return res.status(400).json({
+            error: 'Replace import is blocked because this tournament already has participant, score, or bracket data. Confirm from the UI before retrying.',
+          });
+        }
+      }
+
+      if (replaceExisting && allowDestructiveReplace) {
+        const hasScores = (db.prepare("SELECT COUNT(*) AS count FROM scores WHERE tournament_id = ?").get(tournamentId) as { count: number } | undefined)?.count > 0;
+        const hasBrackets = (db.prepare("SELECT COUNT(*) AS count FROM brackets WHERE tournament_id = ?").get(tournamentId) as { count: number } | undefined)?.count > 0;
+        const hasParticipants = (db.prepare("SELECT COUNT(*) AS count FROM participants WHERE tournament_id = ?").get(tournamentId) as { count: number } | undefined)?.count > 0;
+        if (hasScores || hasBrackets || hasParticipants) {
+          createTournamentSnapshot(tournamentId, 'pre-participant-import-replace');
+        }
+      }
 
       const normalizedPlayers = participants.map((p) => normalizeParticipant(p));
 
@@ -2866,7 +3132,7 @@ async function startServer() {
 
           for (const p of players) {
             const assignedTeamOrder = p.team_id
-              ? (p.team_order || getNextTeamOrder(tournamentId, p.team_id))
+              ? (p.team_order || getNextTeamOrder(String(tournamentId), p.team_id))
               : 0;
             const result = insert.run(
               tournamentId,
@@ -2897,7 +3163,7 @@ async function startServer() {
         } else {
           for (const p of players) {
             const assignedTeamOrder = p.team_id
-              ? (p.team_order || getNextTeamOrder(tournamentId, p.team_id))
+              ? (p.team_order || getNextTeamOrder(String(tournamentId), p.team_id))
               : 0;
             insert.run(
               tournamentId,
@@ -3026,6 +3292,13 @@ async function startServer() {
     const row = teamTournamentStmt.get(req.params.id) as any;
     return row ? String(row.tournament_id) : null;
   }), (req, res) => {
+    const team = db.prepare("SELECT tournament_id FROM teams WHERE id = ?").get(req.params.id) as { tournament_id?: number } | undefined;
+    if (team?.tournament_id) {
+      const laneCount = (db.prepare("SELECT COUNT(*) AS count FROM lane_assignments WHERE tournament_id = ? AND team_id = ?").get(team.tournament_id, req.params.id) as { count: number } | undefined)?.count || 0;
+      if (laneCount > 0) {
+        createTournamentSnapshot(Number(team.tournament_id), 'pre-team-delete-lanes');
+      }
+    }
     const transaction = db.transaction(() => {
       db.prepare("UPDATE teams SET active = 0 WHERE id = ?").run(req.params.id);
       db.prepare("DELETE FROM lane_assignments WHERE team_id = ?").run(req.params.id);
@@ -3044,6 +3317,13 @@ async function startServer() {
         const existingTeams = db.prepare("SELECT id, name FROM teams WHERE tournament_id = ? AND active = 1").all(tournamentId) as Array<{ id: number; name: string }>;
         const existingByName = new Map<string, number>(existingTeams.map((t) => [t.name.trim().toLowerCase(), t.id]));
         const newNames = new Set(data.map((t) => t.name.trim().toLowerCase()));
+        const removedTeamIds = existingTeams.filter((team) => !newNames.has(team.name.trim().toLowerCase())).map((team) => team.id);
+        if (removedTeamIds.length > 0) {
+          const laneCount = (db.prepare(`SELECT COUNT(*) AS count FROM lane_assignments WHERE tournament_id = ? AND team_id IN (${removedTeamIds.map(() => '?').join(',')})`).get(tournamentId, ...removedTeamIds) as { count: number } | undefined)?.count || 0;
+          if (laneCount > 0) {
+            createTournamentSnapshot(Number(tournamentId), 'pre-team-bulk-replace-lanes');
+          }
+        }
 
         // Deactivate and remove lane assignments only for teams not present in the new list
         for (const existing of existingTeams) {
@@ -3139,6 +3419,10 @@ async function startServer() {
   });
 
   app.delete("/api/lanes/:id", requirePermission('lanes:manage'), (req, res) => {
+    const lane = db.prepare("SELECT tournament_id FROM lane_assignments WHERE id = ?").get(req.params.id) as { tournament_id?: number } | undefined;
+    if (lane?.tournament_id) {
+      createTournamentSnapshot(Number(lane.tournament_id), 'pre-lane-delete');
+    }
     db.prepare("DELETE FROM lane_assignments WHERE id = ?").run(req.params.id);
     res.json({ success: true });
   });
@@ -3148,6 +3432,10 @@ async function startServer() {
     const tournament = db.prepare("SELECT * FROM tournaments WHERE id = ?").get(tournamentId) as any;
     if (!tournament) return res.status(404).json({ error: "Tournament not found" });
 
+    const existingLaneCount = (db.prepare("SELECT COUNT(*) AS count FROM lane_assignments WHERE tournament_id = ?").get(tournamentId) as { count: number } | undefined)?.count || 0;
+    if (existingLaneCount > 0) {
+      createTournamentSnapshot(Number(tournamentId), 'pre-lane-auto-assignment');
+    }
     db.prepare("DELETE FROM lane_assignments WHERE tournament_id = ?").run(tournamentId);
 
     const lanesCount = tournament.lanes_count;
@@ -3218,6 +3506,11 @@ async function startServer() {
   app.post("/api/tournaments/:id/lanes/bulk", requirePermission('lanes:manage'), (req, res) => {
     const { assignments } = req.body;
     const tournamentId = req.params.id;
+
+    const existingLaneCount = (db.prepare("SELECT COUNT(*) AS count FROM lane_assignments WHERE tournament_id = ?").get(tournamentId) as { count: number } | undefined)?.count || 0;
+    if (existingLaneCount > 0) {
+      createTournamentSnapshot(Number(tournamentId), 'pre-lane-bulk-replace');
+    }
     
     const deleteStmt = db.prepare("DELETE FROM lane_assignments WHERE tournament_id = ?");
     const insertStmt = db.prepare(`
@@ -3319,6 +3612,11 @@ async function startServer() {
   });
 
   app.delete("/api/tournaments/:id/scores", requirePermission('scores:manage', (req) => req.params.id), (req, res) => {
+    const tournamentId = Number(req.params.id);
+    const existingScoreCount = (db.prepare("SELECT COUNT(*) AS count FROM scores WHERE tournament_id = ?").get(tournamentId) as { count: number } | undefined)?.count || 0;
+    if (existingScoreCount > 0) {
+      createTournamentSnapshot(tournamentId, 'pre-score-clear');
+    }
     const info = db.prepare("DELETE FROM scores WHERE tournament_id = ?").run(req.params.id);
     res.json({ success: true, deleted: info.changes || 0 });
   });
@@ -3334,6 +3632,16 @@ async function startServer() {
 
       if (participantIds.length === 0) {
         return res.json({ success: true, deleted: 0 });
+      }
+
+      const tournamentId = Number(req.params.id);
+      const existingScoreCount = (db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM scores
+        WHERE tournament_id = ? AND participant_id IN (${participantIds.map(() => '?').join(',')})
+      `).get(tournamentId, ...participantIds) as { count: number } | undefined)?.count || 0;
+      if (existingScoreCount > 0) {
+        createTournamentSnapshot(tournamentId, 'pre-participant-score-clear');
       }
 
       const placeholders = participantIds.map(() => '?').join(',');

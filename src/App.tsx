@@ -1059,17 +1059,30 @@ export default function App() {
   };
 
   const handleDelete = async (id: number) => {
-    if (window.confirm('Are you sure you want to delete this tournament? All associated data will be lost.')) {
-      try {
-        await api.deleteTournament(id);
-        await loadTournaments();
-        return true;
-      } catch (err) {
-        console.error(err);
-        return false;
+    const tournamentItem = tournaments.find((item) => item.id === id);
+    if (!tournamentItem) return false;
+
+    const destructivePrompt = 'This will archive the tournament instead of deleting it. Type ARCHIVE to continue.';
+    const typed = window.prompt(destructivePrompt);
+    if (typed !== 'ARCHIVE') return false;
+
+    try {
+      await api.updateTournament(id, {
+        ...tournamentItem,
+        status: 'archived',
+      });
+      await api.createTournamentSnapshot(id, 'pre-archive');
+      await loadTournaments();
+      if (selectedTournament?.id === id) {
+        setSelectedTournament(null);
+        setView('list');
       }
+      return true;
+    } catch (err) {
+      console.error(err);
+      alert('Failed to archive tournament. Please check permissions and try again.');
+      return false;
     }
-    return false;
   };
 
   const handleArchiveToggle = async (id: number, shouldArchive: boolean) => {
@@ -2278,10 +2291,10 @@ export default function App() {
                               {isAdmin && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleDelete(tournamentItem.id); }}
-                                  className="p-1 rounded hover:bg-red-50 text-black/35 hover:text-red-500 transition-all"
-                                  title={t('tournament.delete', 'Delete Tournament')}
+                                  className="p-1 rounded hover:bg-amber-50 text-black/35 hover:text-amber-600 transition-all"
+                                  title={t('tournament.archive', 'Archive Tournament')}
                                 >
-                                  <Trash2 size={13} />
+                                  <Archive size={13} />
                                 </button>
                               )}
                             </div>
@@ -3460,6 +3473,65 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
     return window.matchMedia('(max-width: 640px)').matches;
   });
   const [selectedTournamentSponsor, setSelectedTournamentSponsor] = useState<SponsorInfo | null>(null);
+  const [snapshots, setSnapshots] = useState<Array<{ id: number; name: string; notes: string; created_at: string }>>([]);
+  const [showSnapshotsModal, setShowSnapshotsModal] = useState(false);
+  const [snapshotError, setSnapshotError] = useState('');
+  const [snapshotDragOffset, setSnapshotDragOffset] = useState({ x: 0, y: 0 });
+  const snapshotDragRef = useRef<{ startX: number; startY: number; offsetX: number; offsetY: number } | null>(null);
+
+  useEffect(() => {
+    if (!showSnapshotsModal) {
+      snapshotDragRef.current = null;
+      setSnapshotDragOffset({ x: 0, y: 0 });
+    }
+  }, [showSnapshotsModal]);
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const drag = snapshotDragRef.current;
+      if (!drag) return;
+      setSnapshotDragOffset({
+        x: drag.offsetX + event.clientX - drag.startX,
+        y: drag.offsetY + event.clientY - drag.startY,
+      });
+    };
+    const handlePointerUp = () => {
+      snapshotDragRef.current = null;
+    };
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, []);
+
+  const startSnapshotDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    snapshotDragRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      offsetX: snapshotDragOffset.x,
+      offsetY: snapshotDragOffset.y,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const loadSnapshots = async () => {
+    try {
+      const data = await api.getTournamentSnapshots(tournament.id);
+      setSnapshots(Array.isArray(data) ? data : []);
+      setSnapshotError('');
+    } catch (err) {
+      console.error('Failed to load snapshots:', err);
+      setSnapshots([]);
+      setSnapshotError(err instanceof Error ? err.message : 'Failed to load snapshots');
+    }
+  };
+
+  useEffect(() => {
+    void loadSnapshots();
+  }, [tournament.id]);
 
   const loadAccessData = async () => {
     if (role !== 'admin' && role !== 'moderator') {
@@ -3698,6 +3770,22 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
     <div className="space-y-4">
       {!isPresentScreenMode && (
       <div className="space-y-4">
+        <div className="flex justify-end pt-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setShowSnapshotsModal(true);
+              void loadSnapshots();
+            }}
+            title="Restore snapshot"
+            ariaLabel="Restore snapshot"
+          >
+            <ArchiveRestore size={14} />
+            Restore snapshot
+          </Button>
+        </div>
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_430px] gap-4">
           <Card className="p-2 border border-emerald-200 bg-gradient-to-br from-white via-emerald-50/60 to-[#AFDDE5]/35 shadow-sm xl:col-span-2">
             <div className="space-y-2">
@@ -3852,6 +3940,84 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
         {activeTab === 'standings' && <StandingsView tournament={tournament} role={effectiveRole} sponsorsConfig={sponsorsConfig} onPresentStandingsScreen={blockPublicPresentModeOnSmallScreen ? undefined : openStandingsScreenMode} standingsScreenMode={isStandingsScreenMode} />}
         {activeTab === 'league' && <LeagueView tournament={tournament} role={effectiveRole} />}
       </div>
+
+      {showSnapshotsModal && (
+        <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4" onClick={() => setShowSnapshotsModal(false)}>
+          <Card
+            className="w-full max-w-lg p-4"
+            style={{ transform: `translate(${snapshotDragOffset.x}px, ${snapshotDragOffset.y}px)` }}
+            onClick={(e: any) => e.stopPropagation()}
+          >
+            <div
+              className="flex items-center justify-between gap-3 mb-3 cursor-move select-none"
+              onPointerDown={startSnapshotDrag}
+              title="Drag to move snapshot window"
+            >
+              <h3 className="text-lg font-bold">Tournament snapshots</h3>
+              <Button size="sm" variant="outline" onClick={() => setShowSnapshotsModal(false)} title={t('common.close', 'Close')} ariaLabel={t('common.close', 'Close')}>
+                <X size={14} />
+              </Button>
+            </div>
+            <p className="mb-3 text-xs text-black/50">
+              Repeated changes of the same type within five minutes share one checkpoint. This keeps the list manageable while preserving the state before the editing session.
+            </p>
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+              {snapshotError ? (
+                <p className="text-sm text-rose-700">{snapshotError}</p>
+              ) : snapshots.length === 0 ? (
+                <p className="text-sm text-black/50">No snapshots available yet.</p>
+              ) : (
+                (() => {
+                  const restoreSnapshots = snapshots.filter((snapshot) => !snapshot.notes.includes('snapshots-restore'));
+                  const undoRestoreSnapshots = snapshots.filter((snapshot) => snapshot.notes.includes('snapshots-restore'));
+                  const renderSnapshot = (snapshot: typeof snapshots[number]) => (
+                    <div key={snapshot.id} className="flex items-center justify-between gap-3 rounded-md border border-black/10 bg-black/[0.02] p-3">
+                      <div>
+                        <p className="text-sm font-semibold">{snapshot.name}</p>
+                        <p className="text-[11px] text-black/50">{new Date(snapshot.created_at).toLocaleString()}</p>
+                        <p className="text-[10px] text-emerald-700">Snapshot #{snapshot.id} - restore this saved state</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          const confirmed = window.confirm(`Restore snapshot “${snapshot.name}”? This will revert tournament data to the saved state.`);
+                          if (!confirmed) return;
+                          try {
+                            await api.restoreTournamentSnapshot(tournament.id, snapshot.id);
+                            setShowSnapshotsModal(false);
+                            window.location.reload();
+                          } catch (err) {
+                            alert(err instanceof Error ? err.message : 'Failed to restore snapshot');
+                          }
+                        }}
+                        title="Restore snapshot"
+                        ariaLabel="Restore snapshot"
+                      >
+                        Restore
+                      </Button>
+                    </div>
+                  );
+                  return (
+                    <>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-black/45">Before tournament changes</p>
+                      {restoreSnapshots.length === 0 ? (
+                        <p className="text-sm text-black/50">No pre-change snapshots available.</p>
+                      ) : restoreSnapshots.map(renderSnapshot)}
+                      {undoRestoreSnapshots.length > 0 && (
+                        <details className="pt-2">
+                          <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-wider text-black/45">Undo restore checkpoints</summary>
+                          <div className="mt-2 space-y-2">{undoRestoreSnapshots.map(renderSnapshot)}</div>
+                        </details>
+                      )}
+                    </>
+                  );
+                })()
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
 
       {selectedTournamentSponsor && (
         <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4" onClick={() => setSelectedTournamentSponsor(null)}>
@@ -4347,6 +4513,9 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const [showTeamsSearch, setShowTeamsSearch] = useState(false);
   const [showPlayersClearMenu, setShowPlayersClearMenu] = useState(false);
   const [isPlayerSelectionMode, setIsPlayerSelectionMode] = useState(false);
+  const [showDestructiveImportModal, setShowDestructiveImportModal] = useState(false);
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  const [destructiveImportConfirmation, setDestructiveImportConfirmation] = useState('');
   const [playerSort, setPlayerSort] = useState<{ key: 'none' | 'club' | 'average' | 'first_name' | 'last_name' | 'gender' | 'hand'; direction: 'asc' | 'desc' }>({
     key: 'none',
     direction: 'asc',
@@ -4485,7 +4654,17 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     const inputEl = e.target;
     const file = inputEl.files?.[0];
     if (!file) return;
-    if (!confirm('Importing Players will replace all existing Players data for this tournament. Continue?')) {
+
+    const hasTournamentData = participants.length > 0 || scores.length > 0 || brackets.length > 0;
+    if (hasTournamentData) {
+      setPendingImportFile(file);
+      setDestructiveImportConfirmation('');
+      setShowDestructiveImportModal(true);
+      inputEl.value = '';
+      return;
+    }
+
+    if (!confirm('Importing players will replace all existing player data for this tournament. Continue?')) {
       inputEl.value = '';
       return;
     }
@@ -4561,9 +4740,110 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         division?: string;
       } => participant !== null);
 
-      await api.bulkAddParticipants(tournament.id, newParticipants, { replaceExisting: true });
+      const hasTournamentData = participants.length > 0 || scores.length > 0 || brackets.length > 0;
+      if (hasTournamentData) {
+        await api.createTournamentSnapshot(tournament.id, 'pre-participant-import-replace');
+      }
+
+      await api.bulkAddParticipants(tournament.id, newParticipants, {
+        replaceExisting: true,
+        allowDestructiveReplace: hasTournamentData,
+      });
       loadData();
       inputEl.value = '';
+    };
+    reader.readAsText(file);
+  };
+
+  const handleProceedWithDestructiveImport = async () => {
+    if (!pendingImportFile) return;
+    if (destructiveImportConfirmation.trim() !== 'REPLACE IMPORT') {
+      alert('Please type REPLACE IMPORT to confirm the destructive import.');
+      return;
+    }
+    setShowDestructiveImportModal(false);
+    const inputEl = importCSVInputRef.current;
+    const file = pendingImportFile;
+    setPendingImportFile(null);
+    setDestructiveImportConfirmation('');
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = (event.target?.result as string).replace(/^\uFEFF/, '');
+      const lines = text.split('\n');
+      const parsedHeaders = (lines[0] || '').split(',').map((s) => s.trim().toLowerCase());
+      const hasHeader = parsedHeaders.includes('first name') || parsedHeaders.includes('last name');
+      const firstNameIndex = hasHeader ? parsedHeaders.indexOf('first name') : 0;
+      const lastNameIndex = hasHeader ? parsedHeaders.indexOf('last name') : 1;
+      const genderIndex = hasHeader ? parsedHeaders.indexOf('gender') : 2;
+      const handsIndex = hasHeader ? parsedHeaders.indexOf('hands') : -1;
+      const clubIndex = hasHeader ? parsedHeaders.indexOf('club') : 3;
+      const averageIndex = hasHeader ? parsedHeaders.indexOf('average') : 4;
+      const emailIndex = hasHeader
+        ? (() => {
+          const contactIndex = parsedHeaders.indexOf('contact details');
+          return contactIndex >= 0 ? contactIndex : parsedHeaders.indexOf('email');
+        })()
+        : 5;
+      const divisionIndex = hasHeader ? parsedHeaders.indexOf('division') : -1;
+      const dataLines = hasHeader ? lines.slice(1) : lines;
+
+      const newParticipants = dataLines.filter(line => line.trim()).map(line => {
+        const columns = line.split(',').map(s => s.trim());
+        let first_name = (firstNameIndex >= 0 ? columns[firstNameIndex] : columns[0]) || '';
+        let last_name = (lastNameIndex >= 0 ? columns[lastNameIndex] : columns[1]) || '';
+        const gender = (genderIndex >= 0 ? columns[genderIndex] : columns[2]) || '';
+        const hands = handsIndex >= 0 ? (columns[handsIndex] || '') : '';
+        const club = (clubIndex >= 0 ? columns[clubIndex] : columns[3]) || '';
+        const average = (averageIndex >= 0 ? columns[averageIndex] : columns[4]) || '';
+        const email = (emailIndex >= 0 ? columns[emailIndex] : columns[5]) || '';
+        const division = divisionIndex >= 0 ? (columns[divisionIndex] || '') : '';
+
+        if (first_name && !last_name) {
+          const parts = first_name.split(/\s+/).filter(Boolean);
+          if (parts.length > 1) {
+            first_name = parts[0];
+            last_name = parts.slice(1).join(' ');
+          } else {
+            last_name = 'Player';
+          }
+        }
+
+        if (!first_name && last_name) {
+          first_name = 'Unknown';
+        }
+
+        if (!first_name && !last_name) {
+          return null;
+        }
+
+        return {
+          first_name,
+          last_name,
+          gender,
+          hands: normalizeHandsStyle(hands),
+          club,
+          average: parseInt(average) || 0,
+          email,
+          division: division || undefined,
+        };
+      }).filter((participant): participant is {
+        first_name: string;
+        last_name: string;
+        gender: string;
+        hands: string;
+        club: string;
+        average: number;
+        email: string;
+        division?: string;
+      } => participant !== null);
+
+      await api.bulkAddParticipants(tournament.id, newParticipants, {
+        replaceExisting: true,
+        allowDestructiveReplace: true,
+      });
+      loadData();
+      if (inputEl) inputEl.value = '';
     };
     reader.readAsText(file);
   };
@@ -4574,9 +4854,18 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   };
 
   const handleClearParticipants = async () => {
-    if (!confirm('Clear all participants from this tournament?')) return;
+    const hasTournamentData = participants.length > 0 || scores.length > 0 || brackets.length > 0;
+    if (hasTournamentData) {
+      const typed = window.prompt(
+        'This will clear the tournament roster and related data. Type CLEAR PARTICIPANTS to continue.'
+      );
+      if (typed !== 'CLEAR PARTICIPANTS') return;
+    } else if (!confirm('Clear all participants from this tournament?')) {
+      return;
+    }
+
     try {
-      const result = await api.clearParticipants(tournament.id);
+      const result = await api.clearParticipants(tournament.id, { force: hasTournamentData });
       await loadData();
       alert(`Cleared ${result.deleted} participant(s).`);
     } catch (err) {
@@ -5230,6 +5519,79 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
   return (
     <div className="space-y-6 relative">
+      {showDestructiveImportModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => {
+          setShowDestructiveImportModal(false);
+          setPendingImportFile(null);
+          setDestructiveImportConfirmation('');
+        }}>
+          <Card className="w-full max-w-lg p-5" onClick={(e: any) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="text-lg font-bold text-rose-700">Destructive import warning</h3>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setShowDestructiveImportModal(false);
+                  setPendingImportFile(null);
+                  setDestructiveImportConfirmation('');
+                }}
+                title="Close"
+                ariaLabel="Close"
+              >
+                <X size={14} />
+              </Button>
+            </div>
+
+            <div className="space-y-4 text-sm text-black/75">
+              <p className="font-semibold text-black">This import will overwrite participant data in this tournament.</p>
+              <ul className="list-disc space-y-1 pl-5 text-black/65">
+                <li>Existing participants will be replaced.</li>
+                <li>Scores, standings, and bracket data can be affected by the roster change.</li>
+                <li>A snapshot is created before the replace so you can restore the tournament state later.</li>
+              </ul>
+
+              <label className="block text-xs font-bold uppercase tracking-wide text-black/55">
+                Type <span className="font-mono">REPLACE IMPORT</span> to continue
+              </label>
+              <input
+                type="text"
+                value={destructiveImportConfirmation}
+                onChange={(e) => setDestructiveImportConfirmation(e.target.value)}
+                className="h-10 w-full rounded-md border border-rose-200 bg-white px-3 text-sm text-black focus:outline-none focus:ring-2 focus:ring-rose-200"
+                placeholder="REPLACE IMPORT"
+                aria-label="Confirm destructive import"
+              />
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setShowDestructiveImportModal(false);
+                    setPendingImportFile(null);
+                    setDestructiveImportConfirmation('');
+                  }}
+                  title="Cancel"
+                  ariaLabel="Cancel"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  variant="remove"
+                  onClick={() => void handleProceedWithDestructiveImport()}
+                  title="Confirm replacement"
+                  ariaLabel="Confirm destructive import"
+                >
+                  Replace existing data
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div>
           <h3 className="text-xl font-bold text-emerald-800">{canManageParticipants ? tx('Manage Participants') : tx('Participants')}</h3>
