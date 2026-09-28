@@ -15,6 +15,7 @@ export interface Tournament {
   genders_rule: string;
   lanes_count: number;
   players_per_lane: number;
+  singles_per_lane?: number;
   players_per_team: number;
   shifts_count: number;
   oil_pattern: string;
@@ -24,6 +25,9 @@ export interface Tournament {
   show_player_style?: number;
   divisions?: string;
   offday_penalty?: number;
+  // Lets a Team tournament also register standalone Singles entrants and run a
+  // separate Male/Female Singles division/bracket from the same recorded games.
+  enable_singles_division?: number | boolean;
   created_at: string;
 }
 
@@ -42,6 +46,9 @@ export interface Participant {
   team_name?: string;
   division?: string;
   photo_url?: string | null;
+  // Marks a team-tournament participant who also competes in a Singles division,
+  // so their team-game scores can seed a separate Male/Female singles bracket.
+  singles_entrant?: number | boolean;
 }
 
 export interface Team {
@@ -89,6 +96,7 @@ export interface Standing {
   total_score: number;
   average_score: number;
   games_played: number;
+  score_range?: number;
 }
 
 export interface LeagueRankingRow {
@@ -730,6 +738,15 @@ const api = {
   },
   async getStandings(tournamentId: number): Promise<Standing[]> {
     const res = await fetch(`/api/tournaments/${tournamentId}/standings`);
+    return res.json();
+  },
+  // For team tournaments, ranks participants flagged `singles_entrant` (using the same
+  // recorded scores) split by gender — lets one tournament produce Team + Singles brackets.
+  async getSinglesStandings(tournamentId: number, division?: 'all' | 'male' | 'female'): Promise<Standing[]> {
+    const params = new URLSearchParams();
+    if (division && division !== 'all') params.set('division', division);
+    const query = params.toString();
+    const res = await fetch(`/api/tournaments/${tournamentId}/singles-standings${query ? `?${query}` : ''}`);
     return res.json();
   },
   async getLeagueRankings(options: {

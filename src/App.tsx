@@ -266,9 +266,12 @@ const escapePrintHtml = (value: unknown) => String(value ?? '')
   .replace(/'/g, '&#39;');
 
 const getTournamentShortInfo = (tournament: Tournament) => {
-  const typeLabel = tournament.type === 'team' ? t('tournament.type.team', 'Team') : t('tournament.type.individual', 'Individual');
-  const laneUnit = tournament.type === 'team' ? t('tournament.teams_per_lane', 'Teams/Lane') : t('tournament.players_per_lane', 'Players/Lane');
-  return `${typeLabel} • ${tournament.lanes_count} ${t('tournament.lanes', 'Lanes')} • ${tournament.shifts_count} ${t('tournament.shifts', 'Shifts')} • ${tournament.players_per_lane} ${laneUnit} • ${tournament.games_count} ${t('tournament.games', 'Games')}`;
+  const isBoth = tournament.type === 'team' && Boolean(tournament.enable_singles_division);
+  const typeLabel = isBoth ? t('tournament.type.both', 'Team + Singles') : tournament.type === 'team' ? t('tournament.type.team', 'Team') : t('tournament.type.individual', 'Individual');
+  const laneCounts = isBoth
+    ? `${tournament.players_per_lane} ${t('tournament.teams_per_lane', 'Teams/Lane')} + ${tournament.singles_per_lane || 2} ${t('tournament.players_per_lane', 'Singles/Lane')}`
+    : `${tournament.players_per_lane} ${tournament.type === 'team' ? t('tournament.teams_per_lane', 'Teams/Lane') : t('tournament.players_per_lane', 'Players/Lane')}`;
+  return `${typeLabel} • ${tournament.lanes_count} ${t('tournament.lanes', 'Lanes')} • ${tournament.shifts_count} ${t('tournament.shifts', 'Shifts')} • ${laneCounts} • ${tournament.games_count} ${t('tournament.games', 'Games')}`;
 };
 
 const getTournamentFormatLabel = (value: string) => {
@@ -660,7 +663,7 @@ export default function App() {
     return (localStorage.getItem('btm_tab') as any) || 'participants';
   });
   const [loading, setLoading] = useState(true);
-  const [formType, setFormType] = useState<'individual' | 'team'>('individual');
+  const [formType, setFormType] = useState<'individual' | 'team' | 'both'>('individual');
   const [formUseCustomSponsors, setFormUseCustomSponsors] = useState(false);
   const [formSponsors, setFormSponsors] = useState<SponsorInfo[]>([]);
   const [showFormSponsorsModal, setShowFormSponsorsModal] = useState(false);
@@ -987,11 +990,12 @@ export default function App() {
       match_play_type: (formData.get('match_play_type') as string) || 'single_elimination',
       organizer: formData.get('organizer') as string,
       logo: formData.get('logo') as string,
-      type: formType,
+      type: formType === 'both' ? 'team' : formType,
       games_count: parseNum(formData.get('games_count'), 3),
       genders_rule: formData.get('genders_rule') as string,
       lanes_count: parseNum(formData.get('lanes_count'), 12),
       players_per_lane: parseNum(formData.get('players_per_lane'), 2),
+      singles_per_lane: parseNum(formData.get('singles_per_lane'), 2),
       players_per_team: parseNum(formData.get('players_per_team'), 1),
       shifts_count: parseNum(formData.get('shifts_count'), 1),
       oil_pattern: formData.get('oil_pattern') as string,
@@ -1000,6 +1004,7 @@ export default function App() {
       show_player_style: formData.get('show_player_style') ? 1 : 0,
       divisions: (formData.get('divisions') as string || '').trim() || null,
       offday_penalty: parseNum(formData.get('offday_penalty'), 25),
+      enable_singles_division: formType === 'both' ? 1 : 0,
     };
 
     if (view === 'edit') {
@@ -1054,7 +1059,7 @@ export default function App() {
 
   const handleEdit = (t: Tournament) => {
     setEditingTournament(t);
-    setFormType(t.type);
+    setFormType(t.type === 'team' && Boolean(t.enable_singles_division) ? 'both' : t.type);
     setView('edit');
   };
 
@@ -1167,6 +1172,7 @@ export default function App() {
           genders_rule: String(raw?.genders_rule || ''),
           lanes_count: Number(raw?.lanes_count) || 10,
           players_per_lane: Number(raw?.players_per_lane) || 2,
+          singles_per_lane: Number(raw?.singles_per_lane) || 2,
           players_per_team: Number(raw?.players_per_team) || 1,
           shifts_count: Number(raw?.shifts_count) || 1,
           oil_pattern: String(raw?.oil_pattern || ''),
@@ -2419,7 +2425,8 @@ export default function App() {
                       onChange={(e: any) => setFormType(e.target.value)}
                       options={[
                         { value: 'individual', label: t('tournament.type.individual', 'Individual') },
-                        { value: 'team', label: t('tournament.type.team', 'Team') }
+                        { value: 'team', label: t('tournament.type.team', 'Team') },
+                        { value: 'both', label: t('tournament.type.both', 'Team + Singles') }
                       ]} 
                     />
                   </div>
@@ -2441,19 +2448,28 @@ export default function App() {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Input 
-                      label={formType === 'team' ? t('tournament.teams_per_lane', 'Teams per Lane') : t('tournament.players_per_lane', 'Players per Lane')} 
+                      label={formType !== 'individual' ? t('tournament.teams_per_lane', 'Teams per Lane') : t('tournament.players_per_lane', 'Players per Lane')} 
                       name="players_per_lane" 
                       type="number" 
                       defaultValue={editingTournament?.players_per_lane || "2"} 
                       min="1" 
                     />
-                    {formType === 'team' && (
+                    {formType !== 'individual' && (
                       <Input 
                         label={t('tournament.players_per_team', 'Players per Team')} 
                         name="players_per_team" 
                         type="number" 
                         defaultValue={editingTournament?.players_per_team || "1"} 
                         min="1" 
+                      />
+                    )}
+                    {formType === 'both' && (
+                      <Input
+                        label={t('tournament.singles_per_lane', 'Singles Players per Lane')}
+                        name="singles_per_lane"
+                        type="number"
+                        defaultValue={editingTournament?.singles_per_lane || "2"}
+                        min="1"
                       />
                     )}
                     <Input label={t('tournament.shifts_count', 'Shift #')} name="shifts_count" type="number" defaultValue={editingTournament?.shifts_count || "1"} min="1" />
@@ -2491,6 +2507,12 @@ export default function App() {
                       <span className="text-sm font-semibold text-black/80">Track Player Style (1H/2H)</span>
                     </label>
                   </div>
+
+                  {formType === 'both' && (
+                    <div className="px-3 py-2 rounded-md border border-indigo-200 bg-indigo-50/50 text-xs text-black/70">
+                      {t('tournament.both_hint', 'Players registered on a team roster count toward the Team bracket. Players not assigned to any team automatically count toward the Singles division (Male/Female); team members can also be flagged as Singles Entrant on their profile to count in both.')}
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 gap-4">
                     <div>
@@ -2533,7 +2555,7 @@ export default function App() {
                     </button>
                   </div>
 
-                  {formType === 'team' && (
+                  {formType !== 'individual' && (
                     <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
                       <Input label={t('tournament.oil_pattern', 'Oil Pattern Info')} name="oil_pattern" placeholder={t('tournament.oil_pattern_placeholder', 'e.g. House Shot')} defaultValue={editingTournament?.oil_pattern} />
                     </div>
@@ -3864,8 +3886,12 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                     </span>
                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
                       <Users size={12} />
-                      <span>{(tournament.type === 'team' ? tPublic('public.tournament.type.team', 'team') : tPublic('public.tournament.type.individual', 'individual')).replace(/^([a-z])/, (m) => m.toUpperCase())}</span>
-                      {tournament.type === 'team' && <span>({tournament.players_per_team}/team)</span>}
+                      <span>{(tournament.type === 'team' && Boolean(tournament.enable_singles_division)
+                        ? tPublic('public.tournament.type.both', 'Team + Singles')
+                        : tournament.type === 'team'
+                          ? tPublic('public.tournament.type.team', 'team')
+                          : tPublic('public.tournament.type.individual', 'individual')).replace(/^([a-z])/, (m) => m.toUpperCase())}</span>
+                      {tournament.type === 'team' && !Boolean(tournament.enable_singles_division) && <span>({tournament.players_per_team}/team)</span>}
                     </span>
                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
                       <ClipboardList size={12} />
@@ -3881,7 +3907,9 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                     </span>
                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
                       <Columns4 size={12} />
-                      {tournament.players_per_lane} {tournament.type === 'team' ? tPublic('public.tournament.teams', 'Teams') : tPublic('public.tournament.players', 'Players')} / {tPublic('lanes.lane', 'Lane')}
+                      {tournament.type === 'team' && Boolean(tournament.enable_singles_division)
+                        ? `${tournament.players_per_lane} ${tPublic('public.tournament.teams', 'Teams')} + ${tournament.singles_per_lane || 2} ${tPublic('public.tournament.singles', 'Singles')} / ${tPublic('lanes.lane', 'Lane')}`
+                        : `${tournament.players_per_lane} ${tournament.type === 'team' ? tPublic('public.tournament.teams', 'Teams') : tPublic('public.tournament.players', 'Players')} / ${tPublic('lanes.lane', 'Lane')}`}
                     </span>
                     {tournament.location && (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 col-span-3 h-full">
@@ -4590,6 +4618,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       email: formData.get('email') as string,
       team_id: formData.get('team_id') ? parseInt(formData.get('team_id') as string) : null,
       division: (formData.get('division') as string || '').trim() || null,
+      singles_entrant: formData.get('singles_entrant') === 'on' ? 1 : 0,
     };
     
     console.log('Submitting player data:', data);
@@ -4941,6 +4970,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         average: participant.average || 0,
         email: participant.email || '',
         team_id: teamId,
+        singles_entrant: participant.singles_entrant || 0,
       });
     };
 
@@ -5954,6 +5984,14 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       >
                         <span className="inline-flex items-center gap-1">
                           {renderNameWithFemaleSpotAfter(p, { includeLastName: false })}
+                          {tournament.type === 'team' && Boolean(tournament.enable_singles_division) && (Boolean(p.singles_entrant) || p.team_id === null) && (
+                            <span
+                              className="inline-flex items-center justify-center h-3.5 w-3.5 rounded-full bg-indigo-100 text-indigo-700 text-[8px] font-black border border-indigo-200"
+                              title={p.team_id === null ? tx('Not on a team — automatically in Singles division') : tx('Also entered in Singles division')}
+                            >
+                              S
+                            </span>
+                          )}
                           {participantIssues.has(p.id) && (
                             <div className="relative inline-block">
                               <button
@@ -6377,6 +6415,21 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       />
                     );
                   })()}
+
+                  {tournament.type === 'team' && Boolean(tournament.enable_singles_division) && (
+                    editingPlayer && editingPlayer.team_id === null ? (
+                      <p className="text-xs text-black/50 px-1">{tx('Not on a team \u2014 automatically counted in the Singles division.')}</p>
+                    ) : (
+                      <label className="flex items-center gap-2 text-xs font-semibold text-black/70 px-1">
+                        <input
+                          type="checkbox"
+                          name="singles_entrant"
+                          defaultChecked={Boolean(editingPlayer?.singles_entrant)}
+                        />
+                        {tx('Also entered in Singles division (team members only \u2014 ranks by their team-game scores)')}
+                      </label>
+                    )
+                  )}
                   
                   <div className="pt-4 flex gap-3 border-t border-emerald-100/80">
                     <Button type="submit" className="flex-1 justify-center" title={editingPlayer ? 'Save Changes' : 'Add Player'} ariaLabel={editingPlayer ? 'Save Changes' : 'Add Player'}>
@@ -6487,7 +6540,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentShift, setCurrentShift] = useState(1);
-  const [selectedItem, setSelectedItem] = useState<{ id: number, type: 'assignment' | 'waiting' } | null>(null);
+  const [selectedItem, setSelectedItem] = useState<{ id: number, type: 'assignment' | 'waiting', kind?: 'participant' | 'team' } | null>(null);
   const [selectedLaneKeys, setSelectedLaneKeys] = useState<Set<string>>(new Set());
   const [showClearLanesMenu, setShowClearLanesMenu] = useState(false);
   const [outOfOperationLanesByShift, setOutOfOperationLanesByShift] = useState<Record<number, number[]>>({});
@@ -6549,6 +6602,21 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   };
 
   const eligibleParticipants = participants.filter(isParticipantAllowedByRule);
+  // Mixed events lane-assign teams and singles entrants as separate entities.
+  const isMixedLanes = tournament.type === 'team' && Boolean(tournament.enable_singles_division);
+  const standaloneSinglesParticipants = eligibleParticipants.filter(p => p.team_id === null);
+  const isParticipantItem = (item: Participant | Team): item is Participant => 'first_name' in item;
+  const laneItemKind = (item: Participant | Team): 'participant' | 'team' => isParticipantItem(item) ? 'participant' : 'team';
+  const laneKindCapacity = (kind: 'participant' | 'team') =>
+    isMixedLanes && kind === 'participant'
+      ? Math.max(1, Number(tournament.singles_per_lane) || 2)
+      : Math.max(1, Number(tournament.players_per_lane) || 2);
+  const laneHasKindCapacity = (assignments: LaneAssignment[], kind: 'participant' | 'team') => {
+    const hasOtherKind = assignments.some(lane => kind === 'participant' ? lane.team_id != null : lane.participant_id != null);
+    if (isMixedLanes && hasOtherKind) return false;
+    const count = assignments.filter(lane => kind === 'participant' ? lane.participant_id != null : lane.team_id != null).length;
+    return count < laneKindCapacity(kind);
+  };
   const getOutOfOperationLanes = (shiftNumber: number) => outOfOperationLanesByShift[shiftNumber] || [];
   const getOperationalLaneNumbers = (shiftNumber: number) =>
     Array.from({ length: tournament.lanes_count }, (_, i) => i + 1)
@@ -6565,43 +6633,52 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     });
   };
 
-  const handleAutoAssign = async () => {
+  const handleAutoAssign = async (requestedKind?: 'participant' | 'team') => {
     if (!canManageLanes) return;
-    const allItems = tournament.type === 'individual' ? eligibleParticipants : teams;
+    type LaneAutoItem = { kind: 'participant' | 'team'; id: number };
+    const assignmentKind = isMixedLanes
+      ? (requestedKind || 'team')
+      : (tournament.type === 'team' ? 'team' : 'participant');
+    const allItems: LaneAutoItem[] = assignmentKind === 'team'
+      ? teams.map((t) => ({ kind: 'team' as const, id: t.id }))
+      : (isMixedLanes ? standaloneSinglesParticipants : eligibleParticipants)
+          .map((p) => ({ kind: 'participant' as const, id: p.id }));
+    const categoryLabel = assignmentKind === 'team' ? tx('teams') : tx('singles players');
     if (allItems.length === 0) {
-      alert(tournament.type === 'individual' ? tx('No eligible players available for auto assignment.') : tx('No teams available for auto assignment.'));
+      alert(assignmentKind === 'team' ? tx('No teams available for auto assignment.') : tx('No eligible singles players available for auto assignment.'));
       return;
     }
 
     const shiftNumbers = Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1);
 
     // Collect already-assigned IDs so we skip them and preserve their lanes
-    const assignedIds = new Set<number>(
-      tournament.type === 'individual'
-        ? lanes.filter(l => l.participant_id != null).map(l => l.participant_id!)
-        : lanes.filter(l => l.team_id != null).map(l => l.team_id!)
-    );
+    const assignedParticipantIds = new Set<number>(lanes.filter(l => l.participant_id != null).map(l => l.participant_id!));
+    const assignedTeamIds = new Set<number>(lanes.filter(l => l.team_id != null).map(l => l.team_id!));
     // Also exclude players already in UT/NT slots — they play on a different day
-    const warmupIds = new Set<number>(
-      tournament.type === 'individual'
-        ? warmupSlots.filter(s => s.participant_id != null).map(s => s.participant_id!)
-        : warmupSlots.filter(s => s.team_id != null).map(s => s.team_id!)
-    );
-    const unassignedItems = allItems.filter(item => !assignedIds.has(item.id) && !warmupIds.has(item.id));
+    const warmupParticipantIds = new Set<number>(warmupSlots.filter(s => s.participant_id != null).map(s => s.participant_id!));
+    const warmupTeamIds = new Set<number>(warmupSlots.filter(s => s.team_id != null).map(s => s.team_id!));
+    const isAssigned = (item: LaneAutoItem) => item.kind === 'participant' ? assignedParticipantIds.has(item.id) : assignedTeamIds.has(item.id);
+    const isWarmup = (item: LaneAutoItem) => item.kind === 'participant' ? warmupParticipantIds.has(item.id) : warmupTeamIds.has(item.id);
+    const unassignedItems = allItems.filter(item => !isAssigned(item) && !isWarmup(item));
 
     if (unassignedItems.length === 0) {
       say('All players are already assigned to lanes.');
       return;
     }
 
-    // Build open slots per lane-shift, accounting for players already placed there
-    const availableSlots: Array<{ laneNumber: number; shiftNumber: number }> = [];
+    // Build separate Team and Singles slots for each lane in a mixed event.
+    const availableSlots: Array<{ laneNumber: number; shiftNumber: number; kind: 'participant' | 'team' }> = [];
     for (const shiftNumber of shiftNumbers) {
       for (const laneNumber of getOperationalLaneNumbers(shiftNumber)) {
-        const existingCount = lanes.filter(l => l.lane_number === laneNumber && l.shift_number === shiftNumber).length;
-        const openSlots = tournament.players_per_lane - existingCount;
-        for (let i = 0; i < openSlots; i++) {
-          availableSlots.push({ laneNumber, shiftNumber });
+        const laneAssignments = lanes.filter(l => l.lane_number === laneNumber && l.shift_number === shiftNumber);
+        const kind = assignmentKind;
+        if (isMixedLanes && laneAssignments.some(l => kind === 'participant' ? l.team_id != null : l.participant_id != null)) continue;
+        const capacity = isMixedLanes && kind === 'participant'
+          ? Number(tournament.singles_per_lane) || 2
+          : Number(tournament.players_per_lane) || 2;
+        const existingCount = laneAssignments.filter(l => kind === 'participant' ? l.participant_id != null : l.team_id != null).length;
+        for (let i = existingCount; i < capacity; i++) {
+          availableSlots.push({ laneNumber, shiftNumber, kind });
         }
       }
     }
@@ -6611,12 +6688,12 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       return;
     }
 
-    const hasSomePlaced = assignedIds.size > 0;
+    const hasSomePlaced = assignedParticipantIds.size > 0 || assignedTeamIds.size > 0;
     if (hasSomePlaced) {
-      if (!ask(`Auto-Assign will fill ${unassignedItems.length} unassigned player(s) into remaining open lane slots. Existing assignments will be preserved. Continue?`)) return;
+      if (!ask(`Auto-Assign will place ${unassignedItems.length} unassigned ${categoryLabel} into their remaining lane capacity. Existing assignments will be preserved. Continue?`)) return;
     } else if (lanes.length > 0) {
       // Lanes exist but no participants identified — treat as a fresh full assign
-      if (!ask('Auto-Assign will assign all players to lanes. Continue?')) return;
+      if (!ask(`Auto-Assign will place ${unassignedItems.length} ${categoryLabel} into lanes. Continue?`)) return;
     }
 
     const shuffled = [...unassignedItems];
@@ -6626,13 +6703,14 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     }
 
     const assignments: Partial<LaneAssignment>[] = [];
-    for (let i = 0; i < Math.min(shuffled.length, availableSlots.length); i++) {
-      const item = shuffled[i];
-      const slot = availableSlots[i];
+    for (const item of shuffled) {
+      const slotIndex = availableSlots.findIndex(slot => slot.kind === item.kind);
+      if (slotIndex < 0) continue;
+      const [slot] = availableSlots.splice(slotIndex, 1);
       assignments.push(
-        tournament.type === 'individual'
-          ? { participant_id: (item as Participant).id, lane_number: slot.laneNumber, shift_number: slot.shiftNumber }
-          : { team_id: (item as Team).id, lane_number: slot.laneNumber, shift_number: slot.shiftNumber }
+        item.kind === 'participant'
+          ? { participant_id: item.id, lane_number: slot.laneNumber, shift_number: slot.shiftNumber }
+          : { team_id: item.id, lane_number: slot.laneNumber, shift_number: slot.shiftNumber }
       );
     }
 
@@ -6641,9 +6719,9 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       await Promise.all(assignments.map(a => api.addLaneAssignment(tournament.id, a)));
       setSelectedItem(null);
       await loadData();
-      const overflowCount = Math.max(0, unassignedItems.length - availableSlots.length);
+      const overflowCount = Math.max(0, unassignedItems.length - assignments.length);
       if (overflowCount > 0) {
-        alert(`${overflowCount} ${tx(tournament.type === 'individual' ? 'player(s)' : 'team(s)')} ${tx('remain in waiting queue because lane capacity is full.')}`);
+        alert(`${overflowCount} ${tx('player(s)/team(s)')} ${tx('remain in waiting queue because lane capacity is full.')}`);
       }
     } catch (err) {
       console.error(err);
@@ -6682,8 +6760,15 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     const currentLaneAssignments = lanes.filter(
       (lane) => lane.lane_number === laneNumber && lane.shift_number === targetShift
     );
-    if (currentLaneAssignments.length >= tournament.players_per_lane) {
-      say('This lane is already full for the selected shift.');
+    const movingAssignment = selectedItem.type === 'assignment'
+      ? lanes.find(lane => lane.id === selectedItem.id)
+      : null;
+    const kind = selectedItem.type === 'waiting'
+      ? (selectedItem.kind ?? (tournament.type === 'individual' ? 'participant' : 'team'))
+      : (movingAssignment?.participant_id != null ? 'participant' : 'team');
+    const alreadyInTarget = Boolean(movingAssignment && movingAssignment.lane_number === laneNumber && movingAssignment.shift_number === targetShift);
+    if (!alreadyInTarget && !laneHasKindCapacity(currentLaneAssignments, kind)) {
+      say(kind === 'participant' ? 'Singles player capacity is full for this lane.' : 'Team capacity is full for this lane.');
       return;
     }
 
@@ -6694,7 +6779,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
           lane_number: laneNumber,
           shift_number: targetShift
         };
-        if (tournament.type === 'individual') {
+        if (kind === 'participant') {
           const player = participants.find((p) => p.id === selectedItem.id);
           if (!player) {
             say('Selected player not found.');
@@ -6723,14 +6808,19 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     }
   };
 
-  const handleAssignWaitingItemToLane = async (waitingItemId: number, laneNumber: number, targetShift: number = currentShift) => {
+  const handleAssignWaitingItemToLane = async (
+    waitingItemId: number,
+    laneNumber: number,
+    targetShift: number = currentShift,
+    kind: 'participant' | 'team' = tournament.type === 'individual' ? 'participant' : 'team'
+  ) => {
     if (!canManageLanes) return;
 
     const currentLaneAssignments = lanes.filter(
       (lane) => lane.lane_number === laneNumber && lane.shift_number === targetShift
     );
-    if (currentLaneAssignments.length >= tournament.players_per_lane) {
-      say('This lane is already full for the selected shift.');
+    if (!laneHasKindCapacity(currentLaneAssignments, kind)) {
+      say(kind === 'participant' ? 'Singles player capacity is full for this lane.' : 'Team capacity is full for this lane.');
       return;
     }
 
@@ -6740,7 +6830,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         shift_number: targetShift,
       };
 
-      if (tournament.type === 'individual') {
+      if (kind === 'participant') {
         const player = participants.find((p) => p.id === waitingItemId);
         if (!player) {
           say('Selected player not found.');
@@ -7077,9 +7167,9 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       const grouped = groupedLanesByShift[shift] || {};
       const laneRowsHtml = Object.entries(grouped).map(([laneNum, assignments]) => {
         const names = assignments.map((assignment) => {
-          if (tournament.type === 'individual') {
+          if (assignment.participant_id) {
             const participant = participants.find((p) => p.id === assignment.participant_id);
-            return participant ? `${participant.first_name || ''} ${participant.last_name || ''}`.trim() : '';
+            return participant ? `${participant.first_name || ''} ${participant.last_name || ''}`.trim() : (assignment.participant_name || '');
           }
           return assignment.team_name || '';
         }).filter(Boolean).join(', ') || '-';
@@ -7136,22 +7226,25 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   };
 
   // Calculate waiting queue
-  const assignedIds = new Set(lanes.map(l => tournament.type === 'individual' ? l.participant_id : l.team_id));
+  const assignedParticipantIds = new Set<number>(lanes.filter(l => l.participant_id != null).map(l => l.participant_id!));
+  const assignedTeamIds = new Set<number>(lanes.filter(l => l.team_id != null).map(l => l.team_id!));
   // Players/teams in any warmup slot are locked out of tournament lanes and vice-versa
-  const warmupAssignedIds = new Set<number>(
-    tournament.type === 'individual'
-      ? warmupSlots.filter(s => s.participant_id != null).map(s => s.participant_id!)
-      : warmupSlots.filter(s => s.team_id != null).map(s => s.team_id!)
-  );
-  const waitingQueue = tournament.type === 'individual'
-    ? eligibleParticipants.filter(p => !assignedIds.has(p.id) && !warmupAssignedIds.has(p.id))
-    : teams.filter(t => !assignedIds.has(t.id) && !warmupAssignedIds.has(t.id));
+  const warmupParticipantIds = new Set<number>(warmupSlots.filter(s => s.participant_id != null).map(s => s.participant_id!));
+  const warmupTeamIds = new Set<number>(warmupSlots.filter(s => s.team_id != null).map(s => s.team_id!));
+  const waitingQueue: Array<Participant | Team> = tournament.type === 'individual'
+    ? eligibleParticipants.filter(p => !assignedParticipantIds.has(p.id) && !warmupParticipantIds.has(p.id))
+    : [
+        ...teams.filter(t => !assignedTeamIds.has(t.id) && !warmupTeamIds.has(t.id)),
+        ...(isMixedLanes
+          ? standaloneSinglesParticipants.filter(p => !assignedParticipantIds.has(p.id) && !warmupParticipantIds.has(p.id))
+          : []),
+      ];
 
   const normalizedLanePickerSearch = lanePickerSearchQuery.trim().toLowerCase();
   const filteredLanePickerQueue = waitingQueue.filter((item) => {
     if (!normalizedLanePickerSearch) return true;
-    if (tournament.type === 'individual') {
-      const participant = item as Participant;
+    if (isParticipantItem(item)) {
+      const participant = item;
       const fullName = `${participant.first_name || ''} ${participant.last_name || ''}`.trim().toLowerCase();
       const club = (participant.club || '').trim().toLowerCase();
       return fullName.includes(normalizedLanePickerSearch) || club.includes(normalizedLanePickerSearch);
@@ -7172,24 +7265,26 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     groupedLanesByShift[shift] = grouped;
   });
 
-  // Compute per-entity lane issues (e.g. assigned to multiple lanes in same shift)
-  const laneIssues = new Map<number, string[]>();
+  // Compute per-entity lane issues (e.g. assigned to multiple lanes in same shift).
+  // Keyed by "kind-id" since a team and a standalone participant can share the same numeric id.
+  const laneIssues = new Map<string, string[]>();
   const entityShiftCounts = new Map<string, number[]>();
   lanes.forEach((lane) => {
-    const entityId = tournament.type === 'individual' ? lane.participant_id : lane.team_id;
-    if (!entityId) return;
-    const key = `${lane.shift_number}-${entityId}`;
+    const kind = lane.participant_id != null ? 'p' : (lane.team_id != null ? 't' : null);
+    const entityId = lane.participant_id ?? lane.team_id;
+    if (!kind || !entityId) return;
+    const key = `${lane.shift_number}-${kind}-${entityId}`;
     const laneNums = entityShiftCounts.get(key) || [];
     laneNums.push(lane.lane_number);
     entityShiftCounts.set(key, laneNums);
   });
   entityShiftCounts.forEach((laneNums, key) => {
     if (laneNums.length <= 1) return;
-    const parts = key.split('-');
-    const entityId = Number(parts[1]);
-    const issues = laneIssues.get(entityId) || [];
-    issues.push(`Assigned to multiple lanes in Shift ${parts[0]}: lanes ${laneNums.join(', ')}`);
-    laneIssues.set(entityId, issues);
+    const [shiftPart, kindPart, idPart] = key.split('-');
+    const entityKey = `${kindPart}-${idPart}`;
+    const issues = laneIssues.get(entityKey) || [];
+    issues.push(`Assigned to multiple lanes in Shift ${shiftPart}: lanes ${laneNums.join(', ')}`);
+    laneIssues.set(entityKey, issues);
   });
 
   const waitingQueueHeightClass = waitingQueue.length > 16
@@ -7206,7 +7301,9 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
           {!isPublic && (
             <>
               <p className="text-[10px] text-black/50 font-bold uppercase tracking-widest">
-                {tournament.lanes_count} {tx('Lanes')} • {tournament.shifts_count} {tx('Shifts')} • {tournament.players_per_lane} {tournament.type === 'team' ? tx('Teams') : tx('Players')} / {tx('Lane')}
+                {tournament.lanes_count} {tx('Lanes')} • {tournament.shifts_count} {tx('Shifts')} • {isMixedLanes
+                  ? `${tournament.players_per_lane} ${tx('Teams')} + ${tournament.singles_per_lane || 2} ${tx('Singles players')} / ${tx('Lane')}`
+                  : `${tournament.players_per_lane} ${tournament.type === 'team' ? tx('Teams') : tx('Players')} / ${tx('Lane')}`}
               </p>
               <p className="text-[10px] text-black/50 mt-0.5">
                 {tx('Auto assigns randomly by tournament rules; Manual assigns from Waiting Queue to a selected lane.')}
@@ -7227,16 +7324,18 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
               </h4>
               <div className={`flex flex-wrap gap-1 overflow-y-auto no-scrollbar ${waitingQueueHeightClass}`}>
                 {waitingQueue.map(item => {
-                  const teamMembers = tournament.type === 'team'
+                  const itemIsParticipant = isParticipantItem(item);
+                  const teamMembers = !itemIsParticipant
                     ? participants.filter(p => p.team_id === item.id)
                     : [];
+                  const isSelected = selectedItem?.type === 'waiting' && selectedItem.id === item.id && selectedItem.kind === laneItemKind(item);
 
                   return (
                     <div
-                      key={item.id}
-                      onClick={() => setSelectedItem({ id: item.id, type: 'waiting' })}
+                      key={`${itemIsParticipant ? 'p' : 't'}-${item.id}`}
+                      onClick={() => setSelectedItem({ id: item.id, type: 'waiting', kind: laneItemKind(item) })}
                       className={`min-w-[150px] flex-1 p-1 rounded border transition-all cursor-pointer group ${
-                        selectedItem?.id === item.id && selectedItem.type === 'waiting'
+                        isSelected
                           ? 'bg-emerald-700 text-white border-emerald-700'
                           : 'bg-white border-black/10 hover:border-emerald-300 hover:bg-emerald-50/30'
                       }`}
@@ -7245,15 +7344,15 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                         <div className="flex-1 min-w-0">
                           <div className="text-xs font-bold uppercase tracking-wide flex items-center gap-0.5 truncate">
                             <span>{renderFemaleInitialUnderline(
-                              tournament.type === 'individual'
-                                ? `${(item as Participant).first_name} ${(item as Participant).last_name.charAt(0).toUpperCase()}.`
+                              itemIsParticipant
+                                ? `${item.first_name} ${item.last_name.charAt(0).toUpperCase()}.`
                                 : (item as Team).name,
-                              tournament.type === 'individual' && (item as Participant).gender?.toLowerCase() === 'female'
+                              itemIsParticipant && item.gender?.toLowerCase() === 'female'
                             )}</span>
                           </div>
-                          {tournament.type === 'team' && teamMembers.length > 0 && (
+                          {!itemIsParticipant && teamMembers.length > 0 && (
                             <div className={`text-[8px] mt-0.5 font-medium truncate ${
-                              selectedItem?.id === item.id && selectedItem.type === 'waiting'
+                              isSelected
                                 ? 'text-white/60'
                                 : 'text-black/40'
                             }`}>
@@ -7269,7 +7368,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                           )}
                         </div>
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleRemoveFromTournament(item.id, tournament.type === 'individual' ? 'participant' : 'team'); }}
+                          onClick={(e) => { e.stopPropagation(); handleRemoveFromTournament(item.id, itemIsParticipant ? 'participant' : 'team'); }}
                           className="opacity-0 group-hover:opacity-100 p-1 rounded hover:text-red-500 transition-all"
                           title="Delete from Tournament"
                         >
@@ -7324,9 +7423,20 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                 </div>
               )}
               {canManageLanes && (
-                <Button size="sm" onClick={handleAutoAssign} variant="outline" title="Auto-Assign" ariaLabel="Auto-Assign" className="px-3 font-bold text-emerald-600">
-                  Auto Assign
-                </Button>
+                isMixedLanes ? (
+                  <>
+                    <Button size="sm" onClick={() => { void handleAutoAssign('team'); }} variant="outline" title="Auto-assign teams first" ariaLabel="Auto-assign teams first" className="px-2 font-bold border border-emerald-200 bg-emerald-50 text-emerald-950 hover:bg-emerald-100">
+                      <Users size={13} /> Teams
+                    </Button>
+                    <Button size="sm" onClick={() => { void handleAutoAssign('participant'); }} variant="outline" title="Auto-assign singles into remaining lanes" ariaLabel="Auto-assign singles" className="px-2 font-bold border border-sky-200 bg-sky-50 text-sky-950 hover:bg-sky-100">
+                      <User size={13} /> Singles
+                    </Button>
+                  </>
+                ) : (
+                  <Button size="sm" onClick={() => { void handleAutoAssign(); }} variant="outline" title="Auto-Assign" ariaLabel="Auto-Assign" className="px-3 font-bold text-emerald-600">
+                    Auto Assign
+                  </Button>
+                )
               )}
             </div>
             <div className="flex items-center gap-1.5 ml-auto shrink-0">
@@ -7394,8 +7504,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                     return;
                   }
                   if (isLaneOutOfOperation) return;
-                  if (assignments.length >= tournament.players_per_lane) return;
-                  if (waitingQueue.length === 0) return;
+                  if (!waitingQueue.some(item => laneHasKindCapacity(assignments, laneItemKind(item)))) return;
                   setLanePickerShift(shift);
                   setLanePickerLaneNumber(laneNumber);
                 }}
@@ -7429,6 +7538,11 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                       </button>
                     )}
                     <span className="font-bold text-[9px] uppercase tracking-widest">Lane {laneNum}</span>
+                    {isMixedLanes && (
+                      <span className="text-[8px] font-semibold text-black/50 whitespace-nowrap">
+                        T {assignments.filter(a => a.team_id != null).length}/{laneKindCapacity('team')} · S {assignments.filter(a => a.participant_id != null).length}/{laneKindCapacity('participant')}
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={(e) => e.stopPropagation()}
@@ -7465,7 +7579,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                     </div>
                   ) : (
                     assignments.map((a) => {
-                      const teamMembers = tournament.type === 'team' && a.team_id
+                      const teamMembers = a.team_id
                         ? participants.filter(p => p.team_id === a.team_id)
                         : [];
 
@@ -7477,13 +7591,13 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                         })
                         .filter(Boolean);
                       
-                      const participant = tournament.type === 'individual' && a.participant_id
+                      const participant = a.participant_id
                         ? participants.find(p => p.id === a.participant_id)
                         : null;
 
-                      const displayName = tournament.type === 'individual' && participant
+                      const displayName = participant
                         ? `${participant.first_name} ${participant.last_name.charAt(0).toUpperCase()}.`
-                        : a.team_name;
+                        : (a.team_name || a.participant_name);
 
                       return (
                         <div 
@@ -7511,7 +7625,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                             ? 'bg-cyan-700 text-white'
                             : 'text-black'
                           }`}
-                          title={tournament.type === 'team' && teamMembers.length > 0 ? teamMembers.map(p => `${p.first_name} ${p.last_name}`).join(', ') : ''}
+                          title={teamMembers.length > 0 ? teamMembers.map(p => `${p.first_name} ${p.last_name}`).join(', ') : ''}
                         >
                           {canManageLanes && isDesktopViewport && (
                             <span className="hidden md:inline-flex items-center text-black/35 group-hover:text-cyan-700" title="Drag to reorder within lane">
@@ -7520,9 +7634,9 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                           )}
                           <span className="min-w-0 flex-1 text-left">
                             <span className="block truncate">
-                              {renderFemaleInitialUnderline(displayName, tournament.type === 'individual' && participant?.gender?.toLowerCase() === 'female')}
+                              {renderFemaleInitialUnderline(displayName, Boolean(participant) && participant?.gender?.toLowerCase() === 'female')}
                             </span>
-                            {tournament.type === 'team' && teamMemberNames.length > 0 && (
+                            {teamMemberNames.length > 0 && (
                               <span className={`mt-0.5 grid grid-cols-2 gap-x-1 gap-y-0 text-[9px] normal-case tracking-normal font-medium leading-tight whitespace-normal ${selectedItem?.id === a.id && selectedItem.type === 'assignment' ? 'text-white/75' : 'text-black/55'}`}>
                                 {teamMemberNames.map((memberName, memberIndex) => (
                                   <span key={`${a.id}-member-${memberIndex}`} className="truncate">{memberName}</span>
@@ -7538,8 +7652,8 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                             <X size={10} />
                           </button>
                           {(() => {
-                            const entityId = tournament.type === 'individual' ? a.participant_id : a.team_id;
-                            const issues = entityId ? laneIssues.get(entityId) : undefined;
+                            const entityKey = a.participant_id != null ? `p-${a.participant_id}` : (a.team_id != null ? `t-${a.team_id}` : null);
+                            const issues = entityKey ? laneIssues.get(entityKey) : undefined;
                             return issues && issues.length > 0 ? (
                               <div className="relative inline-block">
                                 <button
@@ -7562,12 +7676,19 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                       );
                     })
                   )}
-                  {selectedItem && assignments.length < tournament.players_per_lane && (
+                  {selectedItem && (() => {
+                    const selectedKind = selectedItem.type === 'waiting'
+                      ? (selectedItem.kind ?? (tournament.type === 'individual' ? 'participant' : 'team'))
+                      : (lanes.find(lane => lane.id === selectedItem.id)?.participant_id != null ? 'participant' : 'team');
+                    const selectedAssignment = selectedItem.type === 'assignment' ? lanes.find(lane => lane.id === selectedItem.id) : null;
+                    const alreadyHere = Boolean(selectedAssignment && selectedAssignment.lane_number === laneNumber && selectedAssignment.shift_number === shift);
+                    return alreadyHere || laneHasKindCapacity(assignments, selectedKind);
+                  })() && (
                     <div className="w-full text-center text-[7px] font-bold text-cyan-700 uppercase tracking-widest py-1">
                       Click to place
                     </div>
                   )}
-                  {!selectedItem && canManageLanes && !isLaneOutOfOperation && assignments.length < tournament.players_per_lane && waitingQueue.length > 0 && (
+                  {!selectedItem && canManageLanes && !isLaneOutOfOperation && waitingQueue.some(item => laneHasKindCapacity(assignments, laneItemKind(item))) && (
                     <div className="w-full text-center text-[7px] font-bold text-cyan-700 uppercase tracking-widest py-1">
                       Click to add
                     </div>
@@ -7713,7 +7834,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
             <div className="px-4 py-3 border-b border-[#AFDDE5]/70 bg-[#eaf7fa] flex items-center justify-between gap-2">
               <div>
                 <h4 className="text-sm font-bold text-emerald-800 uppercase tracking-wide">Assign to Lane {lanePickerLaneNumber} • {tx('Shift')} {lanePickerShift}</h4>
-                <p className="text-[11px] text-black/55">Pick a {tournament.type === 'individual' ? 'player' : 'team'} from waiting queue</p>
+                <p className="text-[11px] text-black/55">Pick a {isMixedLanes ? 'player or team' : (tournament.type === 'individual' ? 'player' : 'team')} from waiting queue</p>
               </div>
               <Button size="sm" variant="outline" onClick={() => { setLanePickerLaneNumber(null); setLanePickerShift(1); setLanePickerSearchQuery(''); }} title="Close" ariaLabel="Close">
                 <X size={14} />
@@ -7726,7 +7847,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                   type="text"
                   value={lanePickerSearchQuery}
                   onChange={(e) => setLanePickerSearchQuery(e.target.value)}
-                  placeholder={tournament.type === 'individual' ? 'Search player or club' : 'Search team'}
+                  placeholder={isMixedLanes ? 'Search player, club, or team' : (tournament.type === 'individual' ? 'Search player or club' : 'Search team')}
                   className="h-8 w-full rounded-md border border-black/15 bg-white pl-7 pr-2 text-xs text-black placeholder:text-black/40 focus:outline-none focus:ring-2 focus:ring-[#AFDDE5]"
                 />
               </div>
@@ -7736,18 +7857,20 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                 <p className="text-xs text-black/40 italic text-center py-6">No matching queue items.</p>
               ) : (
                 filteredLanePickerQueue.map((item) => {
-                  const label = tournament.type === 'individual'
-                    ? `${(item as Participant).first_name || ''} ${(item as Participant).last_name || ''}`.trim()
+                  const itemIsParticipant = isParticipantItem(item);
+                  const label = itemIsParticipant
+                    ? `${item.first_name || ''} ${item.last_name || ''}`.trim()
                     : ((item as Team).name || '').trim();
-                  const secondary = tournament.type === 'individual' ? ((item as Participant).club || '').trim() : '';
+                  const secondary = itemIsParticipant ? (item.club || '').trim() : '';
                   return (
                     <button
-                      key={item.id}
+                      key={`${itemIsParticipant ? 'p' : 't'}-${item.id}`}
                       type="button"
-                      onClick={() => handleAssignWaitingItemToLane(item.id, lanePickerLaneNumber, lanePickerShift)}
-                      className="w-full text-left px-3 py-2 rounded border border-black/10 hover:border-emerald-300 hover:bg-emerald-50/40 transition-colors"
+                      disabled={!laneHasKindCapacity(lanes.filter(l => l.lane_number === lanePickerLaneNumber && l.shift_number === lanePickerShift), laneItemKind(item))}
+                      onClick={() => handleAssignWaitingItemToLane(item.id, lanePickerLaneNumber, lanePickerShift, laneItemKind(item))}
+                      className="w-full text-left px-3 py-2 rounded border border-black/10 hover:border-emerald-300 hover:bg-emerald-50/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-black/10 disabled:hover:bg-white"
                     >
-                      <p className="text-sm font-semibold text-black uppercase tracking-wide">{label || '-'}</p>
+                      <p className="text-sm font-semibold text-black uppercase tracking-wide">{label || '-'} <span className="text-[9px] text-black/40">{itemIsParticipant ? tx('Singles') : tx('Team')}</span></p>
                       {secondary && <p className="text-[11px] text-black/50">{secondary}</p>}
                     </button>
                   );
@@ -7791,6 +7914,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   const say = (message: string) => alert(tx(message));
   const ask = (message: string) => confirm(tx(message));
   const scoringPresentAdBlock = sponsorsConfig?.presentModeAds?.scoring || DEFAULT_PRESENT_MODE_ADS.scoring;
+  const isMixedScoring = tournament.type === 'team' && Boolean(tournament.enable_singles_division);
 
   const exitPresentMode = () => {
     if (typeof window === 'undefined') return;
@@ -8024,11 +8148,15 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   ) => {
     const resolvedLaneMaps = laneMaps || getShiftLaneMaps(shiftNumber);
     if (tournament.type === 'team') {
-      if (!participant.team_id) return '-';
-      const lane = resolvedLaneMaps.teamLaneMap.get(participant.team_id);
-      if (!lane) return '-';
-      const position = teamMemberPositionMap.get(participant.id) || 1;
-      return `L${lane.lane_number}-${position}`;
+      if (participant.team_id !== null) {
+        const lane = resolvedLaneMaps.teamLaneMap.get(participant.team_id);
+        if (!lane) return '-';
+        const position = teamMemberPositionMap.get(participant.id) || 1;
+        return `L${lane.lane_number}-${position}`;
+      }
+      if (!isMixedScoring) return '-';
+      const singlesLane = resolvedLaneMaps.participantLaneMap.get(participant.id);
+      return singlesLane ? `L${singlesLane.lane_number}-S` : '-';
     }
     const lane = resolvedLaneMaps.participantLaneMap.get(participant.id);
     return lane ? `L${lane.lane_number}` : '-';
@@ -8042,15 +8170,21 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
     return participants
       .filter((participant) => {
         if (tournament.type === 'team') {
-          return participant.team_id !== null && resolvedLaneMaps.teamLaneMap.has(participant.team_id);
+          if (participant.team_id !== null) return resolvedLaneMaps.teamLaneMap.has(participant.team_id);
+          return isMixedScoring && resolvedLaneMaps.participantLaneMap.has(participant.id);
         }
         return resolvedLaneMaps.participantLaneMap.has(participant.id);
       })
       .sort((a, b) => {
         if (tournament.type === 'team') {
-          const laneA = a.team_id ? (resolvedLaneMaps.teamLaneMap.get(a.team_id)?.lane_number || Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
-          const laneB = b.team_id ? (resolvedLaneMaps.teamLaneMap.get(b.team_id)?.lane_number || Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER;
+          const laneA = a.team_id !== null
+            ? (resolvedLaneMaps.teamLaneMap.get(a.team_id)?.lane_number || Number.MAX_SAFE_INTEGER)
+            : (resolvedLaneMaps.participantLaneMap.get(a.id)?.lane_number || Number.MAX_SAFE_INTEGER);
+          const laneB = b.team_id !== null
+            ? (resolvedLaneMaps.teamLaneMap.get(b.team_id)?.lane_number || Number.MAX_SAFE_INTEGER)
+            : (resolvedLaneMaps.participantLaneMap.get(b.id)?.lane_number || Number.MAX_SAFE_INTEGER);
           if (laneA !== laneB) return laneA - laneB;
+          if ((a.team_id === null) !== (b.team_id === null)) return a.team_id === null ? 1 : -1;
 
           const teamA = (a.team_name || '').toLowerCase();
           const teamB = (b.team_name || '').toLowerCase();
@@ -8133,10 +8267,9 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   if (tournament.type === 'team') {
     for (const section of scoringShiftSections) {
       for (const participant of section.participants) {
+        if (participant.team_id === null) continue;
         const teamLabel = participant.team_name || 'Unassigned';
-        const teamHeaderKey = participant.team_id !== null
-          ? `${section.shiftNumber}-team-${participant.team_id}`
-          : `${section.shiftNumber}-unassigned-${teamLabel}`;
+        const teamHeaderKey = `${section.shiftNumber}-team-${participant.team_id}`;
         const runningTotal = teamTotalsByHeaderKey.get(teamHeaderKey) || 0;
         teamTotalsByHeaderKey.set(teamHeaderKey, runningTotal + getParticipantStats(participant.id).total);
       }
@@ -8820,10 +8953,10 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                 const isExpanded = mobileExpandedScoreRow === rowKey;
                 const laneBadge = getLaneBadgeForShift(p, section.shiftNumber, section.laneMaps);
                 const { total, average } = getParticipantStats(p.id);
-                const teamLabel = p.team_name || 'Unassigned';
+                const teamLabel = isMixedScoring && p.team_id === null ? tx('Singles') : (p.team_name || 'Unassigned');
                 const teamHeaderKey = p.team_id !== null
                   ? `${section.shiftNumber}-team-${p.team_id}`
-                  : `${section.shiftNumber}-unassigned-${teamLabel}`;
+                  : isMixedScoring ? `${section.shiftNumber}-singles` : `${section.shiftNumber}-unassigned-${teamLabel}`;
                 const teamTotalScore = teamTotalsByHeaderKey.get(teamHeaderKey) || 0;
                 const showTeamHeader = tournament.type === 'team' && (
                   index === 0 || teamLabel !== (section.participants[index - 1].team_name || 'Unassigned')
@@ -8833,10 +8966,12 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                     {showTeamHeader && (
                       <div className="mobile-score-team-header flex items-center justify-between px-3 py-1.5 bg-gray-100 border-t-2 border-gray-200">
                         <span className="mobile-score-team-name text-[10px] font-bold uppercase tracking-wider text-gray-500 truncate mr-2">{teamLabel}</span>
-                        <span className="shrink-0 flex items-baseline gap-1">
-                          <span className="mobile-score-team-total-label text-[9px] text-gray-400 leading-none">Total</span>
-                          <span className="mobile-score-team-total text-sm font-bold tabular-nums text-green-700">{teamTotalScore}</span>
-                        </span>
+                        {p.team_id !== null && (
+                          <span className="shrink-0 flex items-baseline gap-1">
+                            <span className="mobile-score-team-total-label text-[9px] text-gray-400 leading-none">Total</span>
+                            <span className="mobile-score-team-total text-sm font-bold tabular-nums text-green-700">{teamTotalScore}</span>
+                          </span>
+                        )}
                       </div>
                     )}
                     <div>
@@ -8917,7 +9052,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
               {section.participants.length === 0 && (
                 <p className="px-4 py-5 text-center text-black/40 text-xs">
                   {tournament.type === 'team'
-                    ? `No team participants assigned to Shift ${section.shiftNumber}.`
+                    ? `${isMixedScoring ? 'No team or Singles participants' : 'No team participants'} assigned to Shift ${section.shiftNumber}.`
                     : `No participants assigned to Shift ${section.shiftNumber}.`}
                 </p>
               )}
@@ -8952,10 +9087,10 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
               if (tournament.type === 'team') {
                 const participantsByTeamKey = new Map<string, Participant[]>();
                 for (const participant of section.participants) {
-                  const teamLabel = participant.team_name || 'Unassigned';
+                  const teamLabel = isMixedScoring && participant.team_id === null ? tx('Singles') : (participant.team_name || 'Unassigned');
                   const teamHeaderKey = participant.team_id !== null
                     ? `${section.shiftNumber}-team-${participant.team_id}`
-                    : `${section.shiftNumber}-unassigned-${teamLabel}`;
+                    : isMixedScoring ? `${section.shiftNumber}-singles` : `${section.shiftNumber}-unassigned-${teamLabel}`;
                   const members = participantsByTeamKey.get(teamHeaderKey) || [];
                   members.push(participant);
                   participantsByTeamKey.set(teamHeaderKey, members);
@@ -8966,7 +9101,9 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                   teamIndexMap.set(teamHeaderKey, teamOrdinal++);
                   const count = members.length;
                   members.forEach((member, index) => {
-                    sectionTeamPositionMap.set(member.id, { index, count, teamHeaderKey });
+                    if (member.team_id !== null) {
+                      sectionTeamPositionMap.set(member.id, { index, count, teamHeaderKey });
+                    }
                   });
                 }
               }
@@ -8982,12 +9119,15 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                 )}
                 {section.participants.map((p, index) => {
                   const { total, average } = getParticipantStats(p.id);
-                  const teamLabel = p.team_name || 'Unassigned';
-                  const previousTeamLabel = index > 0 ? (section.participants[index - 1].team_name || 'Unassigned') : null;
+                  const teamLabel = isMixedScoring && p.team_id === null ? tx('Singles') : (p.team_name || 'Unassigned');
+                  const previousParticipant = index > 0 ? section.participants[index - 1] : null;
+                  const previousTeamLabel = previousParticipant
+                    ? (isMixedScoring && previousParticipant.team_id === null ? tx('Singles') : (previousParticipant.team_name || 'Unassigned'))
+                    : null;
                   const showTeamHeader = tournament.type === 'team' && teamLabel !== previousTeamLabel;
                   const teamHeaderKey = p.team_id !== null
                     ? `${section.shiftNumber}-team-${p.team_id}`
-                    : `${section.shiftNumber}-unassigned-${teamLabel}`;
+                    : isMixedScoring ? `${section.shiftNumber}-singles` : `${section.shiftNumber}-unassigned-${teamLabel}`;
                   const teamTotalScore = teamTotalsByHeaderKey.get(teamHeaderKey) || 0;
                   const teamPosition = sectionTeamPositionMap.get(p.id);
                   const showMergedTeamTotal = Boolean(
@@ -9039,6 +9179,9 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                           {teamTotalScore}
                         </span>
                       </td>
+                    )}
+                    {isMixedScoring && p.team_id === null && (
+                      <td aria-hidden="true" className="px-2 sm:px-3" />
                     )}
                     <td className="px-2 py-2 sm:px-4 sm:py-3">
                       {tournament.type === 'team' ? (
@@ -9146,7 +9289,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                   <tr>
                     <td className="px-4 py-6 text-center text-black/40" colSpan={scoringTableColSpan}>
                       {tournament.type === 'team'
-                        ? `No team participants assigned to Shift ${section.shiftNumber}.`
+                        ? `${isMixedScoring ? 'No team or Singles participants' : 'No team participants'} assigned to Shift ${section.shiftNumber}.`
                         : `No participants assigned to Shift ${section.shiftNumber}.`}
                     </td>
                   </tr>
@@ -9329,6 +9472,9 @@ type SavedBracketConfig = {
   scoreDrafts?: Record<string, Record<number, string>>;
   slotOverrides?: Record<string, string | number>;
   seedImportMode?: V2SeedImportMode;
+  // Which pool this bracket is seeded/stored under: 'all' (Team, for team tournaments,
+  // or the whole field for individual ones) or a Singles gender split.
+  division?: 'all' | 'male' | 'female';
 };
 
 type V2SeedImportMode = 'top-seeds' | 'manual' | 'create-list' | 'custom';
@@ -9624,6 +9770,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   const [loadBracketId, setLoadBracketId] = React.useState('');
   const showLeftPanel = role !== 'public';
 
+  // ── Division (Team vs Singles Male/Female, within one team tournament) ────
+  const [division, setDivision] = React.useState<'all' | 'male' | 'female'>('all');
+
   // ── Seeds ─────────────────────────────────────────────────────────────────
   const [seedImportMode, setSeedImportMode] = React.useState<V2SeedImportMode>('top-seeds');
   const [topSeedsCount, setTopSeedsCount] = React.useState(16);
@@ -9649,7 +9798,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   const [presetEditorStep, setPresetEditorStep] = React.useState<'pick' | 'edit'>('pick');
   const [visualMatchHeights, setVisualMatchHeights] = React.useState<Record<string, number>>({});
 
-  const buildStandardPresetRounds = React.useCallback((type: 'single-elim' | 'stepladder' | 'playoff' | 'ladder' | 'mixed', includeThird: boolean): TournamentRoundConfig[] => {
+  const buildStandardPresetRounds = React.useCallback((type: 'single-elim' | 'stepladder' | 'playoff' | 'ladder' | 'mixed', includeThird: boolean, entrantCount = topSeedsCount): TournamentRoundConfig[] => {
     if (type === 'single-elim') {
       return [
         { ...v2CreateRound(0), id: 'se-r1', name: tx('QF'), matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', manualMatchCount: null },
@@ -9678,11 +9827,31 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     }
 
     if (type === 'playoff') {
-      return [
+      const qualifyingMatchCount = Math.max(1, Math.ceil(Math.max(entrantCount, 1) / 4));
+      let advancingEntrants = Math.min(entrantCount, qualifyingMatchCount * 2);
+      const playoffRounds: TournamentRoundConfig[] = [
         { ...v2CreateRound(0), id: 'po-r1', name: tx('Qualifying Round'), matchType: 'group', playersPerMatch: 4, advancementCount: 2, scoringType: 'pins', manualMatchCount: null },
-        { ...v2CreateRound(1), id: 'po-r2', name: tx('SF'), matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', manualMatchCount: null },
+      ];
+      let knockoutRoundIndex = 1;
+      while (advancingEntrants > 4) {
+        const matchCount = Math.ceil(advancingEntrants / 2);
+        playoffRounds.push({
+          ...v2CreateRound(knockoutRoundIndex),
+          id: `po-knockout-${knockoutRoundIndex}`,
+          name: matchCount === 4 ? tx('QF') : tx('Playoff Round'),
+          matchType: 'head-to-head',
+          playersPerMatch: 2,
+          advancementCount: 1,
+          scoringType: 'pins',
+          manualMatchCount: null,
+        });
+        advancingEntrants = matchCount;
+        knockoutRoundIndex += 1;
+      }
+      playoffRounds.push(
+        { ...v2CreateRound(knockoutRoundIndex), id: 'po-sf', name: tx('SF'), matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins', manualMatchCount: 2 },
         {
-          ...v2CreateRound(2),
+          ...v2CreateRound(knockoutRoundIndex + 1),
           id: 'po-final',
           name: includeThird ? tx('Final Round') : tx('Final'),
           matchType: 'head-to-head',
@@ -9692,7 +9861,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           manualMatchCount: includeThird ? 2 : 1,
           scoringType: 'pins',
         },
-      ];
+      );
+      return playoffRounds;
     }
 
     if (type === 'mixed') {
@@ -9728,7 +9898,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       { ...v2CreateRound(3), id: 'lad-r4', name: tx('SF (vs Seed 2)'), matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins' },
       { ...v2CreateRound(4), id: 'lad-final', name: tx('Final (vs Seed 1)'), matchType: 'head-to-head', playersPerMatch: 2, advancementCount: 1, scoringType: 'pins' },
     ];
-  }, []);
+  }, [topSeedsCount]);
 
   // ── Presets ───────────────────────────────────────────────────────────────
   const [rulePresets, setRulePresets] = React.useState<BuilderRulePreset[]>([]);
@@ -9819,6 +9989,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       }
       if (typeof s.selectedPresetId === 'string') setSelectedPresetId(s.selectedPresetId);
       if (s.bracketTypeMode === 'available' || s.bracketTypeMode === 'custom') setBracketTypeMode(s.bracketTypeMode);
+      if (s.division === 'male' || s.division === 'female' || s.division === 'all') setDivision(s.division);
     } catch { /* ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -9841,18 +10012,24 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         selectedPresetId,
         bracketTypeMode,
         include3rdPlace,
+        division,
       }));
     } catch { /* quota */ }
-  }, [storageKey, rounds, seedImportMode, topSeedsCount, manualPickedIds, customSeedList, autoGenerate, scoreDrafts, matchOverrides, slotOverrides, activeBracketName, activeBracketId, selectedBracketPreset, selectedPresetId, bracketTypeMode, include3rdPlace]);
+  }, [storageKey, rounds, seedImportMode, topSeedsCount, manualPickedIds, customSeedList, autoGenerate, scoreDrafts, matchOverrides, slotOverrides, activeBracketName, activeBracketId, selectedBracketPreset, selectedPresetId, bracketTypeMode, include3rdPlace, division]);
 
   // ── Load data ─────────────────────────────────────────────────────────────
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    // A Team tournament's Team bracket (division 'all') seeds from team standings; a
+    // Male/Female division within it instead seeds from singles-entrant standings.
+    const standingsRequest = tournament.type === 'team' && division !== 'all'
+      ? api.getSinglesStandings(tournament.id, division)
+      : api.getStandings(tournament.id);
     Promise.all([
       api.getParticipants(tournament.id).catch(() => []),
-      api.getStandings(tournament.id).catch(() => []),
-      api.getBrackets(tournament.id).catch(() => []),
+      standingsRequest.catch(() => []),
+      api.getBrackets(tournament.id, { division }).catch(() => []),
       api.getStandingsAdditionalScores(tournament.id).catch(() => []),
       api.getStandingsBonuses(tournament.id).catch(() => []),
     ]).then(([p, s, b, additionalRaw, bonusRaw]) => {
@@ -9885,7 +10062,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     }).catch((e: any) => { if (!cancelled) setLoadError(e?.message || 'Failed to load'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [tournament.id]);
+  }, [tournament.id, tournament.type, division]);
 
   // ── Load saved bracket configs from server (with localStorage migration) ──
   React.useEffect(() => {
@@ -9922,7 +10099,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
     const refreshBrackets = async () => {
       try {
-        const rows = await api.getBrackets(tournament.id);
+        const rows = await api.getBrackets(tournament.id, { division });
         if (!cancelled) setBracketRows(Array.isArray(rows) ? rows : []);
       } catch {
         // Keep the last successful bracket snapshot when refresh fails.
@@ -9939,7 +10116,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       window.clearInterval(intervalId);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [tournament.id, activeBracketName]);
+  }, [tournament.id, activeBracketName, division]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -9982,14 +10159,17 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
   const importedTopSeedEntries = React.useMemo(() => {
     if (seedImportMode !== 'top-seeds' || standings.length === 0) return [] as Array<{ id: string; name: string; seed: number; totalScore: number; teamName: string | null }>;
-    if (!hasEnoughStandingsForTopSeeds) return [] as Array<{ id: string; name: string; seed: number; totalScore: number; teamName: string | null }>;
-    const isTeam = tournament.type === 'team';
+    const isTeam = tournament.type === 'team' && division === 'all';
     const getExtra = (pid: number) => {
       const key = `${isTeam ? 'team' : 'participant'}-${pid}`;
       return (Number(additionalScoresByKey[key]) || 0) + (Number(bonusScoresByKey[key]) || 0);
     };
     return [...standings]
-      .sort((a, b) => (b.total_score + getExtra(b.participant_id)) - (a.total_score + getExtra(a.participant_id)))
+      .sort((a, b) =>
+        ((b.total_score + getExtra(b.participant_id)) - (a.total_score + getExtra(a.participant_id)))
+        || ((Number(a.score_range) || 0) - (Number(b.score_range) || 0))
+        || (b.average_score - a.average_score)
+      )
       .slice(0, normalizedTopSeedsCount)
       .map((standing, index) => ({
         id: `participant-${standing.participant_id}`,
@@ -9998,17 +10178,21 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         totalScore: standing.total_score + getExtra(standing.participant_id),
         teamName: standing.team_name || null,
       }));
-  }, [seedImportMode, standings, normalizedTopSeedsCount, hasEnoughStandingsForTopSeeds, additionalScoresByKey, bonusScoresByKey, tournament.type]);
+  }, [seedImportMode, standings, normalizedTopSeedsCount, additionalScoresByKey, bonusScoresByKey, tournament.type, division]);
 
   // ── Manually picked entries (mode: manual = standings-picker) ─────────────
   const pickedStandingsEntries = React.useMemo(() => {
     if (seedImportMode !== 'manual' || standings.length === 0) return [] as Array<{ id: string; name: string; seed: number; totalScore: number; teamName: string | null }>;
-    const isTeam = tournament.type === 'team';
+    const isTeam = tournament.type === 'team' && division === 'all';
     const getExtra = (pid: number) => {
       const key = `${isTeam ? 'team' : 'participant'}-${pid}`;
       return (Number(additionalScoresByKey[key]) || 0) + (Number(bonusScoresByKey[key]) || 0);
     };
-    const sortedAll = [...standings].sort((a, b) => (b.total_score + getExtra(b.participant_id)) - (a.total_score + getExtra(a.participant_id)));
+    const sortedAll = [...standings].sort((a, b) =>
+      ((b.total_score + getExtra(b.participant_id)) - (a.total_score + getExtra(a.participant_id)))
+      || ((Number(a.score_range) || 0) - (Number(b.score_range) || 0))
+      || (b.average_score - a.average_score)
+    );
     return manualPickedIds
       .map((pid, index) => {
         const s = sortedAll.find(x => x.participant_id === pid);
@@ -10022,7 +10206,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
-  }, [seedImportMode, standings, manualPickedIds, additionalScoresByKey, bonusScoresByKey, tournament.type]);
+  }, [seedImportMode, standings, manualPickedIds, additionalScoresByKey, bonusScoresByKey, tournament.type, division]);
 
   // ── Participant nodes ─────────────────────────────────────────────────────
   const shortenParticipantName = React.useCallback((fullName: string): string => {
@@ -10167,8 +10351,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   }, [tournament.type, teamNameByParticipantLabel]);
 
   const showTeamsOnRightPanel = React.useMemo(
-    () => rightPanelSeedEntries.some((entry) => Boolean((entry.teamName || '').trim())),
-    [rightPanelSeedEntries],
+    () => tournament.type === 'team' && division === 'all' && rightPanelSeedEntries.some((entry) => Boolean((entry.teamName || '').trim())),
+    [tournament.type, division, rightPanelSeedEntries],
   );
 
   const rightPanelSeedCardCount = React.useMemo(
@@ -10521,6 +10705,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       selectedPresetId,
       bracketTypeMode,
       include3rdPlace,
+      division,
     };
     entry.scoreDrafts = scoreDrafts;
     entry.slotOverrides = slotOverrides;
@@ -10599,6 +10784,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     setMatchOverrides(bkt.matchOverrides as typeof matchOverrides || {});
     setSlotOverrides(bkt.slotOverrides || {});
     setScoreDrafts(bkt.scoreDrafts || {});
+    setDivision(bkt.division === 'male' || bkt.division === 'female' ? bkt.division : 'all');
     setLoadBracketId(id);
     setActiveBracketName(bkt.name);
     setActiveBracketId(bkt.id);
@@ -10706,7 +10892,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       setGenerateError('Generate a preview first before creating the actual bracket.');
       return;
     }
-    if (!window.confirm('This will replace all current bracket data for this tournament. Continue?')) return;
+    const divisionLabel = division === 'male' ? 'Singles Male' : division === 'female' ? 'Singles Female' : (tournament.type === 'team' ? 'Team' : 'All');
+    if (!window.confirm(`This will replace the current "${divisionLabel}" bracket data for this tournament. Continue?`)) return;
 
     setGenerating(true);
     setGenerateError(null);
@@ -10778,9 +10965,10 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         round_rules: roundRules,
         winners_mode: include3rdPlace ? '3' : '1',
         engine_matches: engineMatchesPayload,
+        division,
       });
 
-      const rows = await api.getBrackets(tournament.id);
+      const rows = await api.getBrackets(tournament.id, { division });
       setBracketRows(Array.isArray(rows) ? rows : []);
       setGenerateSuccess('Bracket generated! Score each match below, then save the bracket.');
     } catch (e: any) {
@@ -10818,7 +11006,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           { participant_id: Number(p2Id), score: s2 },
         ]);
       }
-      const rows = await api.getBrackets(tournament.id);
+      const rows = await api.getBrackets(tournament.id, { division });
       setBracketRows(Array.isArray(rows) ? rows : []);
       setLiveMatchFeedback(prev => ({ ...prev, [rowId]: 'Saved!' }));
       setLiveScoreDrafts(prev => { const n = { ...prev }; delete n[rowId]; return n; });
@@ -10835,7 +11023,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     setSavingLiveMatchId(rowId);
     try {
       await api.resetBracketMatchScores(tournament.id, rowId);
-      const rows = await api.getBrackets(tournament.id);
+      const rows = await api.getBrackets(tournament.id, { division });
       setBracketRows(Array.isArray(rows) ? rows : []);
       setLiveMatchFeedback(prev => ({ ...prev, [rowId]: 'Reset.' }));
       setLiveScoreDrafts(prev => { const n = { ...prev }; delete n[rowId]; return n; });
@@ -11237,7 +11425,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   const podiumMatchMeta = React.useMemo(() => {
     if (!Array.isArray(bracketRows) || bracketRows.length === 0) return { finalMatch: null, bronzeMatch: null, finalRoundMatches: [] };
     const allMatches = bracketRows
-      .filter((m) => String(m?.division || 'all') === 'all')
+      .filter((m) => String(m?.division || 'all') === division)
       .sort((a, b) => (Number(a?.round) - Number(b?.round)) || (Number(a?.match_index) - Number(b?.match_index)));
     const finalRound = allMatches.reduce((max, m) => Math.max(max, Number(m?.round) || 0), 0);
     const finalRoundMatches = allMatches.filter((m) => Number(m?.round) === finalRound);
@@ -11249,24 +11437,24 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   const handlePodiumSetWinner = React.useCallback(async (matchId: number, winnerId: number) => {
     try {
       await api.setBracketWinner(tournament.id, matchId, winnerId);
-      const rows = await api.getBrackets(tournament.id);
+      const rows = await api.getBrackets(tournament.id, { division });
       setBracketRows(Array.isArray(rows) ? rows : []);
     } catch (err: any) {
       console.error('[Podium] Error:', err);
       alert(`Failed to save winner: ${err?.message || 'Unknown error'}`);
     }
-  }, [tournament.id]);
+  }, [tournament.id, division]);
 
   const handlePodiumSetPlacement = React.useCallback(async (matchId: number, place: 2 | 3, participantId: number) => {
     try {
       await api.setBracketPlacement(tournament.id, matchId, place, participantId);
-      const rows = await api.getBrackets(tournament.id);
+      const rows = await api.getBrackets(tournament.id, { division });
       setBracketRows(Array.isArray(rows) ? rows : []);
     } catch (err: any) {
       console.error('[Podium] Placement error:', err);
       alert(`Failed to save placement: ${err?.message || 'Unknown error'}`);
     }
-  }, [tournament.id]);
+  }, [tournament.id, division]);
 
   const errors = engineResult?.issues.filter(i => i.level === 'error') ?? [];
   const warnings = engineResult?.issues.filter(i => i.level === 'warning') ?? [];
@@ -11275,11 +11463,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     if (!activeBracketName) blockers.push('Create or load a bracket first.');
     if (participantNodes.length < 2) blockers.push('Need at least 2 seeded participants.');
     if (rounds.length < 1) blockers.push('Add at least 1 round before generating.');
-    if (seedImportMode === 'top-seeds' && standings.length > 0 && !hasEnoughStandingsForTopSeeds) {
-      blockers.push(`Top seeds import requests ${normalizedTopSeedsCount}, but only ${standings.length} standings entries are available.`);
-    }
     return blockers;
-  }, [activeBracketName, participantNodes.length, rounds.length, seedImportMode, standings.length, hasEnoughStandingsForTopSeeds, normalizedTopSeedsCount]);
+  }, [activeBracketName, participantNodes.length, rounds.length]);
   const canGeneratePreview = generationBlockers.length === 0;
   const showThirdPlaceToggle = React.useMemo(() => {
     if (bracketTypeMode === 'custom') return true;
@@ -11303,22 +11488,22 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
   // ── Standard bracket presets ──────────────────────────────────────────────
   const applyStandardPreset = React.useCallback((type: 'single-elim' | 'stepladder' | 'playoff' | 'ladder' | 'mixed') => {
-    setRounds(buildStandardPresetRounds(type, include3rdPlace));
+    setRounds(buildStandardPresetRounds(type, include3rdPlace, participantNodes.length || topSeedsCount));
     setScoreDrafts({});
     setSelectedMatchId(null);
     setSelectedBracketPreset(type);
     setSelectedPresetId('');
-  }, [buildStandardPresetRounds, include3rdPlace]);
+  }, [buildStandardPresetRounds, include3rdPlace, participantNodes.length, topSeedsCount]);
 
   React.useEffect(() => {
     if (bracketTypeMode !== 'available') return;
     if (selectedBracketPreset === 'custom') return;
     // Keep explicitly selected category presets intact (do not overwrite with base template).
     if (selectedPresetId) return;
-    setRounds(buildStandardPresetRounds(selectedBracketPreset, include3rdPlace));
+    setRounds(buildStandardPresetRounds(selectedBracketPreset, include3rdPlace, participantNodes.length || topSeedsCount));
     setScoreDrafts({});
     setSelectedMatchId(null);
-  }, [bracketTypeMode, selectedBracketPreset, include3rdPlace, buildStandardPresetRounds, selectedPresetId]);
+  }, [bracketTypeMode, selectedBracketPreset, include3rdPlace, buildStandardPresetRounds, selectedPresetId, participantNodes.length, topSeedsCount]);
 
   React.useEffect(() => {
     if (bracketTypeMode !== 'custom') return;
@@ -11693,6 +11878,11 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               {activeBracketName && (
                 <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200">
                   <span className="flex-1 text-xs font-semibold text-emerald-800 truncate">{activeBracketName}</span>
+                  {tournament.type === 'team' && division !== 'all' && (
+                    <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide text-indigo-700 bg-indigo-100 border border-indigo-200 rounded-full px-1.5 py-0.5">
+                      {division === 'female' ? tx('Singles F') : tx('Singles M')}
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => { void handleSaveBracket(); }}
@@ -11717,6 +11907,21 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               {/* New bracket section */}
               <div className="mb-3 rounded-lg border border-black/10 bg-white p-2">
                 <div className="text-[10px] font-bold uppercase tracking-widest text-black/40 mb-1">{tx('New Bracket')}</div>
+                {tournament.type === 'team' && Boolean(tournament.enable_singles_division) && (
+                  <div className="mb-1.5">
+                    <label className="block text-[9px] font-bold uppercase tracking-widest text-black/35 mb-0.5">{tx('Division')}</label>
+                    <select
+                      value={division}
+                      onChange={(e) => setDivision(e.target.value === 'male' ? 'male' : e.target.value === 'female' ? 'female' : 'all')}
+                      className="w-full h-8 px-2 rounded-md border border-black/15 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200"
+                    >
+                      <option value="all">{tx('Team')}</option>
+                      <option value="female">{tx('Singles \u2014 Female')}</option>
+                      <option value="male">{tx('Singles \u2014 Male')}</option>
+                    </select>
+                    <p className="mt-0.5 text-[9px] text-black/35">{tx('Singles brackets rank players flagged \u201cSingles Entrant\u201d by their recorded game scores.')}</p>
+                  </div>
+                )}
                 <div className="flex gap-1.5">
                   <input
                     value={bracketName}
@@ -11858,7 +12063,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                     className="w-full h-8 px-2 rounded-md border border-black/15 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-200 bg-white mb-2"
                   />
                   <p className="text-[10px] text-black/35 mt-1">
-                    Imports exactly top {normalizedTopSeedsCount} seed{normalizedTopSeedsCount === 1 ? '' : 's'} from current tournament standings. {standings.length} standing entr{standings.length === 1 ? 'y' : 'ies'} available.
+                    Imports up to top {normalizedTopSeedsCount} seed{normalizedTopSeedsCount === 1 ? '' : 's'} from current tournament standings. {standings.length} standing entr{standings.length === 1 ? 'y' : 'ies'} available.
                   </p>
                   {standings.length === 0 && (
                     <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] text-amber-700">
@@ -11866,8 +12071,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                     </div>
                   )}
                   {standings.length > 0 && !hasEnoughStandingsForTopSeeds && (
-                    <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] text-amber-700">
-                      {tx('Need')} {normalizedTopSeedsCount} {tx('standings entries')} {tx('but only')} {standings.length} {tx('available.')}
+                    <div className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 text-[10px] text-sky-700">
+                      {tx('Only')} {standings.length} {tx('entries are available; all available entries will be imported.')}
                     </div>
                   )}
                 </div>
@@ -13977,6 +14182,9 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     .map((p) => {
       const allGames = gameNumbers.map((gameNumber) => scoreByParticipantGame.get(`${p.id}-${gameNumber}`) ?? 0);
       const officialGames = officialGameNumbers.map((gameNumber) => scoreByParticipantGame.get(`${p.id}-${gameNumber}`) ?? 0);
+      const playedScores = officialGameNumbers
+        .map((gameNumber) => scoreByParticipantGame.get(`${p.id}-${gameNumber}`))
+        .filter((value): value is number => value !== undefined);
       const total = officialGames.reduce((sum, value) => sum + value, 0);
       const additional = getAdditional('participant', p.id);
       const bonus = hasBonus ? getBonus('participant', p.id) : 0;
@@ -13985,6 +14193,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       const grandTotal = total + visibleAdditional + bonus;
       const gamesPlayed = officialGames.filter((value) => value > 0).length;
       const average = gamesPlayed > 0 ? Number((total / gamesPlayed).toFixed(1)) : 0;
+      const scoreRange = playedScores.length > 1 ? Math.max(...playedScores) - Math.min(...playedScores) : 0;
       return {
         participant_id: p.id,
         participant_name: formatStandingsName(p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown'),
@@ -13998,12 +14207,13 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         total, // only first N games
         grand_total: grandTotal,
         average,
+        score_range: scoreRange,
       };
     })
     // Sort by grand_total when additional scores or bonus (handicap) are present, otherwise by total (first N games)
     .sort((a, b) => {
       const sortKey = (hasAdditionalScores || hasBonus) ? 'grand_total' : 'total';
-      return (b[sortKey] - a[sortKey]) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name);
+      return (b[sortKey] - a[sortKey]) || (a.score_range - b.score_range) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name);
     });
 
   // Build UT/NT participant ID sets from warmup slots
@@ -14020,7 +14230,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       grand_total: r.grand_total - offdayPenalty,
       session: utParticipantIds.has(r.participant_id) ? 'UT' : 'NT' as 'UT' | 'NT',
     }))
-    .sort((a, b) => (b.grand_total - a.grand_total) || a.participant_name.localeCompare(b.participant_name));
+    .sort((a, b) => (b.grand_total - a.grand_total) || (a.score_range - b.score_range) || a.participant_name.localeCompare(b.participant_name));
 
   const shiftNumbers = Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1);
 
@@ -14054,9 +14264,10 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         total,
         grand_total: total,
         average,
+        score_range: Number(row.score_range) || 0,
       };
     })
-    .sort((a, b) => (b.total - a.total) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name));
+    .sort((a, b) => (b.total - a.total) || (a.score_range - b.score_range) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name));
 
   const standingsRowsForDisplay = filteredPlayerStandingsRows.length > 0
     ? filteredPlayerStandingsRows
@@ -14091,7 +14302,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
   const teamSizeForCheck = Math.max(1, Number(tournament.players_per_team) || 3);
 
-  const teamMap = new Map<string, { key: string; team_id: number | null; team_name: string; games: number[]; total: number; members: string[] }>();
+  const teamMap = new Map<string, { key: string; team_id: number | null; team_name: string; games: number[]; gameScoreCounts: number[]; total: number; members: string[] }>();
   if (isTeamTournament && teams.length > 0) {
     for (const team of teams) {
       const key = `team-${team.id}`;
@@ -14100,6 +14311,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         team_id: team.id,
         team_name: team.name,
         games: gameNumbers.map(() => 0),
+        gameScoreCounts: gameNumbers.map(() => 0),
         total: 0,
         members: [],
       });
@@ -14114,13 +14326,15 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     const key = p.team_id !== null ? `team-${p.team_id}` : `unassigned-${p.id}`;
     const teamName = p.team_name || (p.team_id !== null ? `Team ${p.team_id}` : 'Unassigned');
     if (!teamMap.has(key)) {
-      teamMap.set(key, { key, team_id: p.team_id, team_name: teamName, games: gameNumbers.map(() => 0), total: 0, members: [] });
+      teamMap.set(key, { key, team_id: p.team_id, team_name: teamName, games: gameNumbers.map(() => 0), gameScoreCounts: gameNumbers.map(() => 0), total: 0, members: [] });
     }
     const entry = teamMap.get(key)!;
     entry.members.push(formatTeamMemberCompact(p));
     // Only sum official games for team total
     for (let index = 0; index < officialGameNumbers.length; index++) {
-      const value = scoreByParticipantGame.get(`${p.id}-${officialGameNumbers[index]}`) ?? 0;
+      const scoreKey = `${p.id}-${officialGameNumbers[index]}`;
+      const value = scoreByParticipantGame.get(scoreKey) ?? 0;
+      if (scoreByParticipantGame.has(scoreKey)) entry.gameScoreCounts[index] += 1;
       entry.games[index] += value;
       entry.total += value;
     }
@@ -14132,17 +14346,22 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       const additional = hasAdditionalScores && teamId > 0 ? getAdditional('team', teamId) : 0;
       const bonus = hasBonus && teamId > 0 ? getBonus('team', teamId) : 0;
       const grandTotal = row.total + additional + bonus;
+      const playedGameTotals = row.games
+        .slice(0, officialGameNumbers.length)
+        .filter((_, index) => row.gameScoreCounts[index] > 0);
+      const scoreRange = playedGameTotals.length > 1 ? Math.max(...playedGameTotals) - Math.min(...playedGameTotals) : 0;
       return {
         ...row,
         additional,
         bonus,
         grand_total: grandTotal,
+        score_range: scoreRange,
       };
     })
     // Sort by grand_total when additional scores or bonus (handicap) are present, otherwise by total
     .sort((a, b) => {
       const sortKey = (hasAdditionalScores || hasBonus) ? 'grand_total' : 'total';
-      return (b[sortKey] - a[sortKey]) || a.team_name.localeCompare(b.team_name);
+      return (b[sortKey] - a[sortKey]) || (a.score_range - b.score_range) || a.team_name.localeCompare(b.team_name);
     });
   // In present mode hide teams with no scores entered yet
   const teamStandingsRows = isStandingsScreenMode

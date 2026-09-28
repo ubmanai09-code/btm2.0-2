@@ -336,6 +336,7 @@ function initDb() {
       genders_rule TEXT,
       lanes_count INTEGER DEFAULT 10,
       players_per_lane INTEGER DEFAULT 2,
+      singles_per_lane INTEGER NOT NULL DEFAULT 2,
       players_per_team INTEGER DEFAULT 1,
       shifts_count INTEGER DEFAULT 1,
       oil_pattern TEXT,
@@ -344,6 +345,8 @@ function initDb() {
       has_bonus INTEGER NOT NULL DEFAULT 0,
       show_player_style INTEGER NOT NULL DEFAULT 1,
       divisions TEXT,
+      offday_penalty INTEGER NOT NULL DEFAULT 25,
+      enable_singles_division INTEGER NOT NULL DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -378,6 +381,7 @@ function initDb() {
       team_id INTEGER,
       team_order INTEGER DEFAULT 0,
       division TEXT,
+      singles_entrant INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
       FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL
     );
@@ -583,6 +587,7 @@ function initDb() {
     { name: 'genders_rule', type: 'TEXT' },
     { name: 'lanes_count', type: 'INTEGER DEFAULT 10' },
     { name: 'players_per_lane', type: 'INTEGER DEFAULT 2' },
+    { name: 'singles_per_lane', type: 'INTEGER NOT NULL DEFAULT 2' },
     { name: 'players_per_team', type: 'INTEGER DEFAULT 1' },
     { name: 'shifts_count', type: 'INTEGER DEFAULT 1' },
     { name: 'oil_pattern', type: 'TEXT' },
@@ -630,6 +635,11 @@ function initDb() {
   if (!tTournamentColumns.includes('offday_penalty')) {
     try {
       db.exec(`ALTER TABLE tournaments ADD COLUMN offday_penalty INTEGER NOT NULL DEFAULT 25`);
+    } catch (e) {}
+  }
+  if (!tTournamentColumns.includes('enable_singles_division')) {
+    try {
+      db.exec(`ALTER TABLE tournaments ADD COLUMN enable_singles_division INTEGER NOT NULL DEFAULT 0`);
     } catch (e) {}
   }
 
@@ -737,7 +747,8 @@ function initDb() {
       { name: 'average', type: 'INTEGER DEFAULT 0' },
       { name: 'team_order', type: 'INTEGER DEFAULT 0' },
       { name: 'division', type: 'TEXT' },
-      { name: 'photo_url', type: 'TEXT' }
+      { name: 'photo_url', type: 'TEXT' },
+      { name: 'singles_entrant', type: 'INTEGER NOT NULL DEFAULT 0' }
     ];
     pMigrations.forEach(m => {
       if (!pColumns.includes(m.name)) {
@@ -831,6 +842,7 @@ const normalizeParticipant = (raw: any) => {
     team_id: Number.isFinite(parsedTeamId) ? parsedTeamId : null,
     team_order: Number.isFinite(parsedTeamOrder) && parsedTeamOrder > 0 ? parsedTeamOrder : null,
     division: (raw?.division ?? '').toString().trim() || null,
+    singles_entrant: raw?.singles_entrant ? 1 : 0,
   };
 };
 
@@ -2658,8 +2670,8 @@ async function startServer() {
     const { 
       name, date, location, format, organizer, logo, match_play_type, qualified_count, playoff_winners_count, type, 
       games_count, genders_rule, lanes_count,
-      players_per_lane, players_per_team, shifts_count, oil_pattern,
-      has_additional_scores, has_bonus, show_player_style, divisions
+      players_per_lane, singles_per_lane, players_per_team, shifts_count, oil_pattern,
+      has_additional_scores, has_bonus, show_player_style, divisions, enable_singles_division
     } = req.body;
     const hasAdditional = toBinaryFlag(has_additional_scores, 0);
     const hasBonus = toBinaryFlag(has_bonus, 0);
@@ -2669,12 +2681,12 @@ async function startServer() {
       INSERT INTO tournaments (
         name, date, location, format, organizer, logo, match_play_type, qualified_count, playoff_winners_count, type, 
         games_count, genders_rule, lanes_count, 
-        players_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus, show_player_style, divisions
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        players_per_lane, singles_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus, show_player_style, divisions, enable_singles_division
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       name, date, location, format, organizer, logo, match_play_type || 'single_elimination', Number.isFinite(Number.parseInt(qualified_count, 10)) ? Number.parseInt(qualified_count, 10) : 0, Number.isFinite(Number.parseInt(playoff_winners_count, 10)) ? Number.parseInt(playoff_winners_count, 10) : 1, type, 
       games_count || 3, genders_rule, lanes_count || 10, 
-      players_per_lane || 2, players_per_team || 1, shifts_count || 1, oil_pattern, hasAdditional, hasBonus, showPlayerStyle, divisions || null
+      players_per_lane || 2, singles_per_lane || 2, players_per_team || 1, shifts_count || 1, oil_pattern, hasAdditional, hasBonus, showPlayerStyle, divisions || null, toBinaryFlag(enable_singles_division, 0)
     );
     res.json({ id: info.lastInsertRowid });
   });
@@ -2690,7 +2702,7 @@ async function startServer() {
       const { 
         name, date, location, format, organizer, logo, match_play_type, qualified_count, playoff_winners_count, type, 
         games_count, genders_rule, lanes_count, 
-        players_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus, show_player_style, status, divisions, offday_penalty
+        players_per_lane, singles_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus, show_player_style, status, divisions, offday_penalty, enable_singles_division
       } = req.body;
       const existing = db.prepare("SELECT * FROM tournaments WHERE id = ?").get(req.params.id) as any;
       if (!existing) {
@@ -2716,7 +2728,7 @@ async function startServer() {
         UPDATE tournaments SET 
           name = ?, date = ?, location = ?, format = ?, organizer = ?, logo = ?, match_play_type = ?, qualified_count = ?, playoff_winners_count = ?, type = ?, 
           games_count = ?, genders_rule = ?, lanes_count = ?, 
-          players_per_lane = ?, players_per_team = ?, shifts_count = ?, oil_pattern = ?, has_additional_scores = ?, has_bonus = ?, show_player_style = ?, status = ?, divisions = ?, offday_penalty = ?
+          players_per_lane = ?, singles_per_lane = ?, players_per_team = ?, shifts_count = ?, oil_pattern = ?, has_additional_scores = ?, has_bonus = ?, show_player_style = ?, status = ?, divisions = ?, offday_penalty = ?, enable_singles_division = ?
         WHERE id = ?
       `).run(
         name ?? existing.name,
@@ -2733,6 +2745,7 @@ async function startServer() {
         genders_rule ?? existing.genders_rule,
         parseIntOrFallback(lanes_count, Number(existing.lanes_count) || 10),
         parseIntOrFallback(players_per_lane, Number(existing.players_per_lane) || 2),
+        parseIntOrFallback(singles_per_lane, Number(existing.singles_per_lane) || 2),
         parseIntOrFallback(players_per_team, Number(existing.players_per_team) || 1),
         parseIntOrFallback(shifts_count, Number(existing.shifts_count) || 1),
         oil_pattern ?? existing.oil_pattern,
@@ -2742,6 +2755,7 @@ async function startServer() {
         status ?? existing.status ?? 'draft',
         divisions !== undefined ? (divisions || null) : (existing.divisions ?? null),
         offday_penalty !== undefined ? parseIntOrFallback(offday_penalty, 25) : (Number(existing.offday_penalty) || 25),
+        enable_singles_division !== undefined ? toBinaryFlag(enable_singles_division, Number(existing.enable_singles_division) || 0) : (Number(existing.enable_singles_division) || 0),
         req.params.id
       );
       
@@ -2812,7 +2826,7 @@ async function startServer() {
       return res.status(400).json({ error: 'Delete requires force=true for admin confirmation.' });
     }
 
-    createTournamentSnapshot(tournamentId, 'pre-delete');
+    // requireAdmin already snapshotted this tournament before this handler ran.
     db.prepare("DELETE FROM tournaments WHERE id = ?").run(tournamentId);
     res.json({ success: true });
   });
@@ -2831,13 +2845,13 @@ async function startServer() {
 
   app.post("/api/tournaments/:id/participants", requirePermission('participants:manage', (req) => req.params.id), (req, res) => {
     try {
-      const { first_name, last_name, gender, hands, club, average, email, team_id, team_order, division } = normalizeParticipant(req.body);
+      const { first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant } = normalizeParticipant(req.body);
       const assignedTeamOrder = team_id ? (team_order || getNextTeamOrder(req.params.id, team_id)) : 0;
-      console.log('Adding participant:', { first_name, last_name, gender, hands, club, average, email, team_id, team_order: assignedTeamOrder, division });
+      console.log('Adding participant:', { first_name, last_name, gender, hands, club, average, email, team_id, team_order: assignedTeamOrder, division, singles_entrant });
       const info = db.prepare(`
-        INSERT INTO participants (tournament_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order, division) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(req.params.id, first_name, last_name, gender, hands, club, average || 0, email, team_id || null, assignedTeamOrder, division || null);
+        INSERT INTO participants (tournament_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(req.params.id, first_name, last_name, gender, hands, club, average || 0, email, team_id || null, assignedTeamOrder, division || null, singles_entrant);
       if (team_id) resequenceTeamMembers(team_id);
       res.json({ id: info.lastInsertRowid });
     } catch (err: any) {
@@ -2854,13 +2868,13 @@ async function startServer() {
     if (!existing) {
       return res.status(404).json({ error: 'Participant not found' });
     }
-    const { first_name, last_name, gender, hands, club, average, email, team_id, team_order, division } = normalizeParticipant(req.body);
+    const { first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant } = normalizeParticipant(req.body);
     const assignedTeamOrder = team_id ? (team_order || getNextTeamOrder(existing.tournament_id.toString(), team_id)) : 0;
     db.prepare(`
       UPDATE participants SET 
-        first_name = ?, last_name = ?, gender = ?, hands = ?, club = ?, average = ?, email = ?, team_id = ?, team_order = ?, division = ?
+        first_name = ?, last_name = ?, gender = ?, hands = ?, club = ?, average = ?, email = ?, team_id = ?, team_order = ?, division = ?, singles_entrant = ?
       WHERE id = ?
-    `).run(first_name, last_name, gender, hands, club, average || 0, email, team_id || null, assignedTeamOrder, division || null, req.params.id);
+    `).run(first_name, last_name, gender, hands, club, average || 0, email, team_id || null, assignedTeamOrder, division || null, singles_entrant, req.params.id);
     if (existing?.team_id && existing.team_id !== team_id) {
       resequenceTeamMembers(existing.team_id);
     }
@@ -3058,10 +3072,7 @@ async function startServer() {
         return res.status(400).json({ error: 'Participant clear is blocked while scores or brackets exist. Use force=true to confirm destructive action.' });
       }
 
-      if (force || hasScores || hasBrackets) {
-        createTournamentSnapshot(tournamentId, 'pre-clear-participants');
-      }
-
+      // requirePermission already snapshotted this tournament before this handler ran.
       const info = db.prepare("DELETE FROM participants WHERE tournament_id = ?").run(tournamentId);
       res.json({ success: true, deleted: info.changes });
     } catch (err: any) {
@@ -3089,14 +3100,7 @@ async function startServer() {
         }
       }
 
-      if (replaceExisting && allowDestructiveReplace) {
-        const hasScores = (db.prepare("SELECT COUNT(*) AS count FROM scores WHERE tournament_id = ?").get(tournamentId) as { count: number } | undefined)?.count > 0;
-        const hasBrackets = (db.prepare("SELECT COUNT(*) AS count FROM brackets WHERE tournament_id = ?").get(tournamentId) as { count: number } | undefined)?.count > 0;
-        const hasParticipants = (db.prepare("SELECT COUNT(*) AS count FROM participants WHERE tournament_id = ?").get(tournamentId) as { count: number } | undefined)?.count > 0;
-        if (hasScores || hasBrackets || hasParticipants) {
-          createTournamentSnapshot(tournamentId, 'pre-participant-import-replace');
-        }
-      }
+      // requirePermission already snapshotted this tournament before this handler ran.
 
       const normalizedPlayers = participants.map((p) => normalizeParticipant(p));
 
@@ -3292,13 +3296,7 @@ async function startServer() {
     const row = teamTournamentStmt.get(req.params.id) as any;
     return row ? String(row.tournament_id) : null;
   }), (req, res) => {
-    const team = db.prepare("SELECT tournament_id FROM teams WHERE id = ?").get(req.params.id) as { tournament_id?: number } | undefined;
-    if (team?.tournament_id) {
-      const laneCount = (db.prepare("SELECT COUNT(*) AS count FROM lane_assignments WHERE tournament_id = ? AND team_id = ?").get(team.tournament_id, req.params.id) as { count: number } | undefined)?.count || 0;
-      if (laneCount > 0) {
-        createTournamentSnapshot(Number(team.tournament_id), 'pre-team-delete-lanes');
-      }
-    }
+    // requirePermission already snapshotted this tournament before this handler ran.
     const transaction = db.transaction(() => {
       db.prepare("UPDATE teams SET active = 0 WHERE id = ?").run(req.params.id);
       db.prepare("DELETE FROM lane_assignments WHERE team_id = ?").run(req.params.id);
@@ -3318,13 +3316,8 @@ async function startServer() {
         const existingByName = new Map<string, number>(existingTeams.map((t) => [t.name.trim().toLowerCase(), t.id]));
         const newNames = new Set(data.map((t) => t.name.trim().toLowerCase()));
         const removedTeamIds = existingTeams.filter((team) => !newNames.has(team.name.trim().toLowerCase())).map((team) => team.id);
-        if (removedTeamIds.length > 0) {
-          const laneCount = (db.prepare(`SELECT COUNT(*) AS count FROM lane_assignments WHERE tournament_id = ? AND team_id IN (${removedTeamIds.map(() => '?').join(',')})`).get(tournamentId, ...removedTeamIds) as { count: number } | undefined)?.count || 0;
-          if (laneCount > 0) {
-            createTournamentSnapshot(Number(tournamentId), 'pre-team-bulk-replace-lanes');
-          }
-        }
 
+        // requirePermission already snapshotted this tournament before this handler ran.
         // Deactivate and remove lane assignments only for teams not present in the new list
         for (const existing of existingTeams) {
           if (!newNames.has(existing.name.trim().toLowerCase())) {
@@ -3419,10 +3412,7 @@ async function startServer() {
   });
 
   app.delete("/api/lanes/:id", requirePermission('lanes:manage'), (req, res) => {
-    const lane = db.prepare("SELECT tournament_id FROM lane_assignments WHERE id = ?").get(req.params.id) as { tournament_id?: number } | undefined;
-    if (lane?.tournament_id) {
-      createTournamentSnapshot(Number(lane.tournament_id), 'pre-lane-delete');
-    }
+    // requirePermission already snapshotted this tournament before this handler ran.
     db.prepare("DELETE FROM lane_assignments WHERE id = ?").run(req.params.id);
     res.json({ success: true });
   });
@@ -3432,10 +3422,7 @@ async function startServer() {
     const tournament = db.prepare("SELECT * FROM tournaments WHERE id = ?").get(tournamentId) as any;
     if (!tournament) return res.status(404).json({ error: "Tournament not found" });
 
-    const existingLaneCount = (db.prepare("SELECT COUNT(*) AS count FROM lane_assignments WHERE tournament_id = ?").get(tournamentId) as { count: number } | undefined)?.count || 0;
-    if (existingLaneCount > 0) {
-      createTournamentSnapshot(Number(tournamentId), 'pre-lane-auto-assignment');
-    }
+    // requirePermission already snapshotted this tournament before this handler ran.
     db.prepare("DELETE FROM lane_assignments WHERE tournament_id = ?").run(tournamentId);
 
     const lanesCount = tournament.lanes_count;
@@ -3507,11 +3494,7 @@ async function startServer() {
     const { assignments } = req.body;
     const tournamentId = req.params.id;
 
-    const existingLaneCount = (db.prepare("SELECT COUNT(*) AS count FROM lane_assignments WHERE tournament_id = ?").get(tournamentId) as { count: number } | undefined)?.count || 0;
-    if (existingLaneCount > 0) {
-      createTournamentSnapshot(Number(tournamentId), 'pre-lane-bulk-replace');
-    }
-    
+    // requirePermission already snapshotted this tournament before this handler ran.
     const deleteStmt = db.prepare("DELETE FROM lane_assignments WHERE tournament_id = ?");
     const insertStmt = db.prepare(`
       INSERT INTO lane_assignments (tournament_id, participant_id, team_id, lane_number, shift_number)
@@ -3612,11 +3595,7 @@ async function startServer() {
   });
 
   app.delete("/api/tournaments/:id/scores", requirePermission('scores:manage', (req) => req.params.id), (req, res) => {
-    const tournamentId = Number(req.params.id);
-    const existingScoreCount = (db.prepare("SELECT COUNT(*) AS count FROM scores WHERE tournament_id = ?").get(tournamentId) as { count: number } | undefined)?.count || 0;
-    if (existingScoreCount > 0) {
-      createTournamentSnapshot(tournamentId, 'pre-score-clear');
-    }
+    // requirePermission already snapshotted this tournament before this handler ran.
     const info = db.prepare("DELETE FROM scores WHERE tournament_id = ?").run(req.params.id);
     res.json({ success: true, deleted: info.changes || 0 });
   });
@@ -3634,16 +3613,7 @@ async function startServer() {
         return res.json({ success: true, deleted: 0 });
       }
 
-      const tournamentId = Number(req.params.id);
-      const existingScoreCount = (db.prepare(`
-        SELECT COUNT(*) AS count
-        FROM scores
-        WHERE tournament_id = ? AND participant_id IN (${participantIds.map(() => '?').join(',')})
-      `).get(tournamentId, ...participantIds) as { count: number } | undefined)?.count || 0;
-      if (existingScoreCount > 0) {
-        createTournamentSnapshot(tournamentId, 'pre-participant-score-clear');
-      }
-
+      // requirePermission already snapshotted this tournament before this handler ran.
       const placeholders = participantIds.map(() => '?').join(',');
       const info = db.prepare(`
         DELETE FROM scores
@@ -3997,38 +3967,95 @@ async function startServer() {
 
     if (tournament.type === 'team') {
       const teamRows = db.prepare(`
+        WITH team_game_totals AS (
+          SELECT p.team_id, s.game_number, SUM(s.score) as game_total
+          FROM participants p
+          JOIN scores s ON s.participant_id = p.id
+          WHERE p.tournament_id = ?
+          GROUP BY p.team_id, s.game_number
+        ), team_ranges AS (
+          SELECT team_id, MAX(game_total) - MIN(game_total) as score_range
+          FROM team_game_totals
+          GROUP BY team_id
+        )
         SELECT
           t.id as participant_id,
           t.name as participant_name,
           t.name as team_name,
           COALESCE(SUM(s.score), 0) as total_score,
           COALESCE(AVG(s.score), 0) as average_score,
-          COUNT(s.game_number) as games_played
+          COUNT(s.game_number) as games_played,
+          COALESCE(tr.score_range, 0) as score_range
         FROM teams t
         LEFT JOIN participants p ON p.team_id = t.id
         LEFT JOIN scores s ON s.participant_id = p.id
+        LEFT JOIN team_ranges tr ON tr.team_id = t.id
         WHERE t.tournament_id = ?
         GROUP BY t.id
-        ORDER BY total_score DESC, t.id ASC
-      `).all(req.params.id);
+        ORDER BY total_score DESC, score_range ASC, t.id ASC
+      `).all(req.params.id, req.params.id);
       return res.json(teamRows);
     }
 
     const rows = db.prepare(`
+      WITH participant_ranges AS (
+        SELECT participant_id, MAX(score) - MIN(score) as score_range
+        FROM scores
+        GROUP BY participant_id
+      )
       SELECT 
         p.id as participant_id,
         (p.first_name || ' ' || p.last_name) as participant_name,
         t.name as team_name,
         COALESCE(SUM(s.score), 0) as total_score,
         COALESCE(AVG(s.score), 0) as average_score,
-        COUNT(s.game_number) as games_played
+        COUNT(s.game_number) as games_played,
+        COALESCE(pr.score_range, 0) as score_range
       FROM participants p
       LEFT JOIN teams t ON p.team_id = t.id
       LEFT JOIN scores s ON p.id = s.participant_id
+      LEFT JOIN participant_ranges pr ON pr.participant_id = p.id
       WHERE p.tournament_id = ?
       GROUP BY p.id
-      ORDER BY total_score DESC, p.id ASC
+      ORDER BY total_score DESC, score_range ASC, average_score DESC, p.id ASC
     `).all(req.params.id);
+    res.json(rows);
+  });
+
+  // Singles standings — ranks individual participants (flagged singles_entrant, or all
+  // participants for individual-type tournaments) by their own game scores, split by
+  // gender. Lets a team tournament also run a separate Male/Female singles bracket
+  // sourced from the same recorded games, without needing a second tournament.
+  app.get("/api/tournaments/:id/singles-standings", (req, res) => {
+    const tournament = db.prepare("SELECT type FROM tournaments WHERE id = ?").get(req.params.id) as any;
+    if (!tournament) return res.status(404).json({ error: "Tournament not found" });
+
+    const division = parseBracketDivision(req.query.division);
+    const genderFilter = divisionGenderFilter(division);
+
+    const rows = db.prepare(`
+      WITH participant_ranges AS (
+        SELECT participant_id, MAX(score) - MIN(score) as score_range
+        FROM scores
+        GROUP BY participant_id
+      )
+      SELECT
+        p.id as participant_id,
+        (p.first_name || ' ' || p.last_name) as participant_name,
+        t.name as team_name,
+        COALESCE(SUM(s.score), 0) as total_score,
+        COALESCE(AVG(s.score), 0) as average_score,
+        COUNT(s.game_number) as games_played,
+        COALESCE(pr.score_range, 0) as score_range
+      FROM participants p
+      LEFT JOIN teams t ON p.team_id = t.id
+      LEFT JOIN scores s ON p.id = s.participant_id
+      LEFT JOIN participant_ranges pr ON pr.participant_id = p.id
+      WHERE p.tournament_id = ?
+        AND (? IS NULL OR ${sqlGenderExpr} = ?)
+      GROUP BY p.id
+      ORDER BY total_score DESC, score_range ASC, average_score DESC, p.id ASC
+    `).all(req.params.id, genderFilter, genderFilter);
     res.json(rows);
   });
 
@@ -4334,17 +4361,30 @@ async function startServer() {
 
     if (tournament.type === 'team') {
       const rankedTeams = db.prepare(`
+        WITH team_game_totals AS (
+          SELECT p.team_id, s.game_number, SUM(s.score) as game_total
+          FROM participants p
+          JOIN scores s ON s.participant_id = p.id
+          WHERE p.tournament_id = ?
+          GROUP BY p.team_id, s.game_number
+        ), team_ranges AS (
+          SELECT team_id, MAX(game_total) - MIN(game_total) as score_range
+          FROM team_game_totals
+          GROUP BY team_id
+        )
         SELECT
           t.id as id,
           t.name as name,
-          COALESCE(SUM(s.score), 0) as total_score
+          COALESCE(SUM(s.score), 0) as total_score,
+          COALESCE(tr.score_range, 0) as score_range
         FROM teams t
         LEFT JOIN participants p ON p.team_id = t.id
         LEFT JOIN scores s ON s.participant_id = p.id
+        LEFT JOIN team_ranges tr ON tr.team_id = t.id
         WHERE t.tournament_id = ?
         GROUP BY t.id
-        ORDER BY total_score DESC, t.id ASC
-      `).all(tournamentId) as any[];
+        ORDER BY total_score DESC, score_range ASC, t.id ASC
+      `).all(tournamentId, tournamentId) as any[];
 
       const effectiveQualified = requestedQualified > 0
         ? Math.min(requestedQualified, rankedTeams.length)
@@ -4366,13 +4406,20 @@ async function startServer() {
     }
 
     const rankedParticipants = db.prepare(`
+      WITH participant_ranges AS (
+        SELECT participant_id, MAX(score) - MIN(score) as score_range
+        FROM scores
+        GROUP BY participant_id
+      )
       SELECT
         p.id as id,
         (p.first_name || CASE WHEN p.last_name IS NOT NULL AND p.last_name != '' THEN (' ' || UPPER(SUBSTR(p.last_name,1,1)) || '.') ELSE '' END || CASE WHEN p.hands IS NOT NULL AND p.hands != '' THEN (' (' || p.hands || ')') ELSE '' END) as name,
         COALESCE(SUM(s.score), 0) + COALESCE(extra.additional_score, 0) as total_score,
+        COALESCE(pr.score_range, 0) as score_range,
         ${sqlGenderExpr} as normalized_gender
       FROM participants p
       LEFT JOIN scores s ON s.participant_id = p.id
+      LEFT JOIN participant_ranges pr ON pr.participant_id = p.id
       LEFT JOIN standings_additional_scores extra
         ON extra.tournament_id = p.tournament_id
         AND extra.target_kind = 'participant'
@@ -4380,7 +4427,7 @@ async function startServer() {
       WHERE p.tournament_id = ?
         AND (? = '' OR ${sqlGenderExpr} = ?)
       GROUP BY p.id
-      ORDER BY total_score DESC, p.id ASC
+      ORDER BY total_score DESC, score_range ASC, p.id ASC
     `).all(tournamentId, requestedGenderFilter, requestedGenderFilter) as any[];
 
     const effectiveQualified = requestedQualified > 0
@@ -4574,7 +4621,13 @@ async function startServer() {
       }
     }
 
-    if (qualifiedEntries.length === 0 && tournament.type === 'team') {
+    // Team tournaments generate the "Team" bracket (division 'all') from team totals; a
+    // Male/Female division within a team tournament instead ranks individually flagged
+    // singles entrants, so one tournament can produce Team + Singles brackets together.
+    const useTeamRanking = tournament.type === 'team' && division === 'all';
+    const restrictToSinglesEntrants = tournament.type === 'team' && division !== 'all';
+
+    if (qualifiedEntries.length === 0 && useTeamRanking) {
       const rankedTeams = db.prepare(`
         SELECT
           t.id as team_id,
@@ -4605,12 +4658,14 @@ async function startServer() {
           AND extra.target_kind = 'participant'
           AND extra.target_id = p.id
         WHERE p.tournament_id = ?
+          AND (? = 0 OR p.singles_entrant = 1 OR p.team_id IS NULL)
           AND (? IS NULL OR ${sqlGenderExpr} = ?)
         GROUP BY p.id
         ORDER BY total_score DESC, p.id ASC
-      `).all(tournamentId, requestedGenderFilter, requestedGenderFilter) as any[];
+      `).all(tournamentId, restrictToSinglesEntrants ? 1 : 0, requestedGenderFilter, requestedGenderFilter) as any[];
       qualifiedEntries = rankedParticipants;
     }
+
 
     const effectiveQualifiedCount = requestedQualifiedCount > 0
       ? Math.min(requestedQualifiedCount, qualifiedEntries.length)
