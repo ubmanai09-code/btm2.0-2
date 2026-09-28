@@ -271,6 +271,23 @@ body {
 .mobile-score-team-name {
   color: #ffffff !important;
 }
+.mobile-score-team-group {
+  position: relative;
+}
+.mobile-score-team-total {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+  white-space: nowrap;
+}
 .mobile-score-team-total-label {
   color: rgba(203, 213, 225, 0.8) !important; /* slate-300 */
 }

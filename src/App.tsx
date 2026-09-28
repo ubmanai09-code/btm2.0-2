@@ -8996,32 +8996,40 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                   {tx('Shift')} {section.shiftNumber}
                 </div>
               )}
-              {section.participants.map((p, index) => {
-                const rowKey = `${section.shiftNumber}-${p.id}`;
-                const isExpanded = mobileExpandedScoreRow === rowKey;
-                const laneBadge = getLaneBadgeForShift(p, section.shiftNumber, section.laneMaps);
-                const { total, average } = getParticipantStats(p.id);
-                const teamLabel = isMixedScoring && p.team_id === null ? tx('Singles') : (p.team_name || 'Unassigned');
-                const teamHeaderKey = p.team_id !== null
-                  ? `${section.shiftNumber}-team-${p.team_id}`
-                  : isMixedScoring ? `${section.shiftNumber}-singles` : `${section.shiftNumber}-unassigned-${teamLabel}`;
-                const teamTotalScore = teamTotalsByHeaderKey.get(teamHeaderKey) || 0;
-                const showTeamHeader = tournament.type === 'team' && (
-                  index === 0 || teamLabel !== (section.participants[index - 1].team_name || 'Unassigned')
-                );
-                return (
-                  <React.Fragment key={`score-mobile-row-${rowKey}`}>
-                    {showTeamHeader && (
-                      <div className="mobile-score-team-header flex items-center justify-between px-3 py-1.5 bg-gray-100 border-t-2 border-gray-200">
-                        <span className="mobile-score-team-name text-[10px] font-bold uppercase tracking-wider text-gray-500 truncate mr-2">{teamLabel}</span>
-                        {p.team_id !== null && (
-                          <span className="shrink-0 flex items-baseline gap-1">
+              {(() => {
+                const mobileGroups: Array<{ key: string; label: string; teamId: number | null; participants: Participant[] }> = [];
+                section.participants.forEach((participant) => {
+                  const label = isMixedScoring && participant.team_id === null ? tx('Singles') : (participant.team_name || 'Unassigned');
+                  const key = participant.team_id !== null
+                    ? `${section.shiftNumber}-team-${participant.team_id}`
+                    : isMixedScoring ? `${section.shiftNumber}-singles` : `${section.shiftNumber}-unassigned-${label}`;
+                  const currentGroup = mobileGroups[mobileGroups.length - 1];
+                  if (currentGroup?.key === key) currentGroup.participants.push(participant);
+                  else mobileGroups.push({ key, label, teamId: participant.team_id, participants: [participant] });
+                });
+
+                return mobileGroups.map((group) => {
+                  const teamTotalScore = teamTotalsByHeaderKey.get(group.key) || 0;
+                  return (
+                    <React.Fragment key={group.key}>
+                      {tournament.type === 'team' && (
+                        <div className="mobile-score-team-header px-3 py-1.5 bg-gray-100 border-t-2 border-gray-200">
+                          <span className="mobile-score-team-name block text-[10px] font-bold uppercase tracking-wider text-gray-500 truncate">{group.label}</span>
+                        </div>
+                      )}
+                      <div className={`mobile-score-team-group ${group.teamId !== null ? 'has-team-total' : ''}`}>
+                        {group.teamId !== null && (
+                          <div className="mobile-score-team-total" aria-hidden="true">
                             <span className="mobile-score-team-total-label text-[9px] text-gray-400 leading-none">Total</span>
-                            <span className="mobile-score-team-total text-sm font-bold tabular-nums text-green-700">{teamTotalScore}</span>
-                          </span>
+                            <span className="text-2xl font-extrabold tabular-nums text-green-700">{teamTotalScore}</span>
+                          </div>
                         )}
-                      </div>
-                    )}
+                        {group.participants.map((p) => {
+                          const rowKey = `${section.shiftNumber}-${p.id}`;
+                          const isExpanded = mobileExpandedScoreRow === rowKey;
+                          const laneBadge = getLaneBadgeForShift(p, section.shiftNumber, section.laneMaps);
+                          const { total, average } = getParticipantStats(p.id);
+                          return (
                     <div>
                       <button
                         type="button"
@@ -9030,10 +9038,10 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                       >
                         {/* Row 1: name + expand arrow */}
                         <span className="flex items-center gap-1.5 w-full">
-                          <span className="flex-1 text-xs font-semibold text-black leading-tight truncate">
+                          <span className={`${p.team_id !== null ? 'max-w-[42%]' : 'flex-1'} min-w-0 text-xs font-semibold text-black leading-tight truncate`}>
                             {renderFemaleInitialUnderline(formatScoringName(p), p.gender?.toLowerCase() === 'female')}
                           </span>
-                          <span className="shrink-0 text-[10px] text-black/40">{isExpanded ? '▴' : '▾'}</span>
+                          <span className="ml-auto shrink-0 text-[10px] text-black/40">{isExpanded ? '▴' : '▾'}</span>
                         </span>
                         {/* Row 2: lane badge + stats */}
                         <span className="flex items-baseline gap-2 mt-0.5 w-full">
@@ -9093,10 +9101,14 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                           )}
                         </div>
                       )}
-                    </div>
-                  </React.Fragment>
-                );
-              })}
+                          </div>
+                          );
+                        })}
+                      </div>
+                    </React.Fragment>
+                  );
+                });
+              })()}
               {section.participants.length === 0 && (
                 <p className="px-4 py-5 text-center text-black/40 text-xs">
                   {tournament.type === 'team'
