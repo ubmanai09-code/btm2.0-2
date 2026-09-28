@@ -467,7 +467,7 @@ const api = {
     const res = await fetch(`/api/tournaments/${tournamentId}/participants`);
     return res.json();
   },
-  async addParticipant(tournamentId: number, data: Partial<Participant>): Promise<{ id: number }> {
+  async addParticipant(tournamentId: number, data: Partial<Participant>): Promise<{ id: number; family_name_filled?: boolean; last_name?: string }> {
     const res = await fetch(`/api/tournaments/${tournamentId}/participants`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -536,7 +536,7 @@ const api = {
     tournamentId: number,
     participants: Partial<Participant>[],
     options?: { replaceExisting?: boolean; allowDestructiveReplace?: boolean }
-  ): Promise<{ success: boolean }> {
+  ): Promise<{ success: boolean; family_names_filled?: number }> {
     const res = await fetch(`/api/tournaments/${tournamentId}/participants/bulk`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -846,6 +846,70 @@ const normalizeParticipant = (raw: any) => {
   };
 };
 
+const normalizeParticipantMatchValue = (value: unknown) => String(value || '')
+  .normalize('NFKC')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLocaleLowerCase();
+
+const inferParticipantFamilyName = (tournamentId: string | number, raw: any) => {
+  const firstName = String(raw?.first_name || '').trim();
+  const currentLastName = String(raw?.last_name || '').trim();
+  const isMissingLastName = !currentLastName || normalizeParticipantMatchValue(currentLastName) === 'player';
+  if (!firstName || !isMissingLastName) return raw;
+
+  const nameParts = firstName.split(/\s+/).filter(Boolean);
+  if (nameParts.length > 1) {
+    return { ...raw, first_name: nameParts[0], last_name: nameParts.slice(1).join(' ') };
+  }
+
+  const teamId = Number.parseInt(String(raw?.team_id || ''), 10);
+  const currentTeamName = Number.isFinite(teamId)
+    ? String((db.prepare('SELECT name FROM teams WHERE id = ? AND tournament_id = ?').get(teamId, tournamentId) as any)?.name || '')
+    : String(raw?.team_name || raw?.team || '');
+  const clubKey = normalizeParticipantMatchValue(raw?.club);
+  const teamKey = normalizeParticipantMatchValue(currentTeamName);
+  if (!clubKey && !teamKey) return raw;
+
+  const firstNameVariants = [...new Set([firstName, firstName.toLocaleLowerCase(), firstName.toLocaleUpperCase()])];
+  const placeholders = firstNameVariants.map(() => '?').join(', ');
+  const historicalRows = db.prepare(`
+    SELECT p.first_name, p.last_name, p.club, t.name as team_name
+    FROM participants p
+    LEFT JOIN teams t ON t.id = p.team_id
+    WHERE p.tournament_id != ?
+      AND p.first_name IN (${placeholders})
+      AND TRIM(COALESCE(p.last_name, '')) != ''
+      AND LOWER(TRIM(COALESCE(p.last_name, ''))) != 'player'
+  `).all(tournamentId, ...firstNameVariants) as Array<{
+    first_name: string;
+    last_name: string;
+    club: string | null;
+    team_name: string | null;
+  }>;
+
+  const sameFirstNameRows = historicalRows.filter((row) =>
+    normalizeParticipantMatchValue(row.first_name) === normalizeParticipantMatchValue(firstName)
+  );
+  const clubMatches = clubKey
+    ? sameFirstNameRows.filter((row) => normalizeParticipantMatchValue(row.club) === clubKey)
+    : [];
+  const teamMatches = teamKey
+    ? sameFirstNameRows.filter((row) => normalizeParticipantMatchValue(row.team_name) === teamKey)
+    : [];
+  const matchingRows = clubMatches.length > 0 ? clubMatches : teamMatches;
+  const familyNames = new Map<string, string>();
+  matchingRows.forEach((row) => {
+    const familyName = String(row.last_name || '').trim();
+    const key = normalizeParticipantMatchValue(familyName);
+    if (key && !familyNames.has(key)) familyNames.set(key, familyName);
+  });
+
+  return familyNames.size === 1
+    ? { ...raw, last_name: [...familyNames.values()][0] }
+    : raw;
+};
+
 const getNextTeamOrder = (tournamentId: string, teamId: number) => {
   const row = db.prepare(`
     SELECT COALESCE(MAX(team_order), 0) as max_order
@@ -2845,7 +2909,9 @@ async function startServer() {
 
   app.post("/api/tournaments/:id/participants", requirePermission('participants:manage', (req) => req.params.id), (req, res) => {
     try {
-      const { first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant } = normalizeParticipant(req.body);
+      const resolvedBody = inferParticipantFamilyName(req.params.id, req.body);
+      const familyNameFilled = resolvedBody !== req.body;
+      const { first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant } = normalizeParticipant(resolvedBody);
       const assignedTeamOrder = team_id ? (team_order || getNextTeamOrder(req.params.id, team_id)) : 0;
       console.log('Adding participant:', { first_name, last_name, gender, hands, club, average, email, team_id, team_order: assignedTeamOrder, division, singles_entrant });
       const info = db.prepare(`
@@ -2853,7 +2919,7 @@ async function startServer() {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(req.params.id, first_name, last_name, gender, hands, club, average || 0, email, team_id || null, assignedTeamOrder, division || null, singles_entrant);
       if (team_id) resequenceTeamMembers(team_id);
-      res.json({ id: info.lastInsertRowid });
+      res.json({ id: info.lastInsertRowid, family_name_filled: familyNameFilled, last_name });
     } catch (err: any) {
       console.error('Error adding participant:', err);
       res.status(500).json({ error: err.message });
@@ -2864,11 +2930,11 @@ async function startServer() {
     const row = participantTournamentStmt.get(req.params.id) as any;
     return row ? String(row.tournament_id) : null;
   }), (req, res) => {
-    const existing = db.prepare("SELECT tournament_id, team_id FROM participants WHERE id = ?").get(req.params.id) as any;
+    const existing = db.prepare("SELECT * FROM participants WHERE id = ?").get(req.params.id) as any;
     if (!existing) {
       return res.status(404).json({ error: 'Participant not found' });
     }
-    const { first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant } = normalizeParticipant(req.body);
+    const { first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant } = normalizeParticipant({ ...existing, ...req.body });
     const assignedTeamOrder = team_id ? (team_order || getNextTeamOrder(existing.tournament_id.toString(), team_id)) : 0;
     db.prepare(`
       UPDATE participants SET 
@@ -3083,7 +3149,7 @@ async function startServer() {
 
   app.post("/api/tournaments/:id/participants/bulk", requirePermission('participants:manage', (req) => req.params.id), (req, res) => {
     try {
-      const participants = Array.isArray(req.body?.participants) ? req.body.participants : [];
+      const participants: Array<Record<string, any>> = Array.isArray(req.body?.participants) ? req.body.participants : [];
       const replaceExisting = req.body?.replace_existing === true;
       const allowDestructiveReplace = req.body?.allow_destructive_replace === true;
       const tournamentId = Number(req.params.id);
@@ -3102,96 +3168,115 @@ async function startServer() {
 
       // requirePermission already snapshotted this tournament before this handler ran.
 
-      const normalizedPlayers = participants.map((p) => normalizeParticipant(p));
+      const resolvedParticipants: Array<Record<string, any>> = participants.map((participant) => inferParticipantFamilyName(tournamentId, participant));
+      const familyNamesFilled = resolvedParticipants.filter((participant, index) => participant !== participants[index]).length;
+      const existingParticipantRows = db.prepare("SELECT * FROM participants WHERE tournament_id = ?").all(tournamentId) as any[];
+      const existingParticipantIds = new Set(existingParticipantRows.map((participant) => Number(participant.id)));
+      const hasScores = Number((db.prepare("SELECT COUNT(*) AS count FROM scores WHERE tournament_id = ?").get(tournamentId) as any)?.count) > 0;
+      const hasBrackets = Number((db.prepare("SELECT COUNT(*) AS count FROM brackets WHERE tournament_id = ?").get(tournamentId) as any)?.count) > 0;
+      const hasTeamAssignments = existingParticipantRows.some((participant) => participant.team_id != null);
+      const hasLaneAssignments = Number((db.prepare("SELECT COUNT(*) AS count FROM lane_assignments WHERE tournament_id = ? AND participant_id IS NOT NULL").get(tournamentId) as any)?.count) > 0;
+      const hasWarmupAssignments = Number((db.prepare("SELECT COUNT(*) AS count FROM warmup_slots WHERE tournament_id = ? AND participant_id IS NOT NULL").get(tournamentId) as any)?.count) > 0;
+      const hasLinkedData = hasScores || hasBrackets || hasTeamAssignments || hasLaneAssignments || hasWarmupAssignments;
+      const importedIds = resolvedParticipants.map((participant) => {
+        const rawId = participant?.id;
+        if (rawId == null || String(rawId).trim() === '') return null;
+        const parsedId = Number(rawId);
+        return Number.isSafeInteger(parsedId) && parsedId > 0 ? parsedId : NaN;
+      });
+      if (importedIds.some((id) => Number.isNaN(id))) {
+        return res.status(400).json({ error: 'Participant IDs must be positive integers. Export the current roster and keep its Participant ID column when correcting names.' });
+      }
+      const importedExistingIds = importedIds.filter((id): id is number => id !== null);
+      if (new Set(importedExistingIds).size !== importedExistingIds.length) {
+        return res.status(400).json({ error: 'The import contains duplicate Participant IDs.' });
+      }
+      if (importedExistingIds.some((id) => !existingParticipantIds.has(id))) {
+        return res.status(400).json({ error: 'A Participant ID does not belong to this tournament. Use the exported roster IDs; participant IDs cannot be changed.' });
+      }
+      if (replaceExisting && hasLinkedData) {
+        if (existingParticipantRows.some((participant) => !importedExistingIds.includes(Number(participant.id)))) {
+          return res.status(400).json({ error: 'This tournament has linked scores, brackets, team, lane, or warmup data. To preserve those links, the import must include every existing Participant ID. Export the current roster, edit it, and import it without removing the ID column.' });
+        }
+      }
 
-      const clearExisting = db.prepare("DELETE FROM participants WHERE tournament_id = ?");
       const insert = db.prepare(`
-        INSERT INTO participants (tournament_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order, division) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO participants (tournament_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-      const restoreLaneStmt = db.prepare(`
-        INSERT INTO lane_assignments (tournament_id, participant_id, lane_number, shift_number)
-        VALUES (?, ?, ?, ?)
+      const update = db.prepare(`
+        UPDATE participants SET
+          first_name = ?, last_name = ?, gender = ?, hands = ?, club = ?, average = ?, email = ?,
+          team_id = ?, team_order = ?, division = ?, singles_entrant = ?
+        WHERE id = ? AND tournament_id = ?
       `);
 
-      const transaction = db.transaction((players: ReturnType<typeof normalizeParticipant>[]) => {
+      const transaction = db.transaction(() => {
         const affectedTeams = new Set<number>();
-        if (replaceExisting) {
-          // Save existing lane assignments keyed by participant name before clearing,
-          // so they can be restored to the re-inserted participants.
-          const existingLanes = db.prepare(`
-            SELECT la.lane_number, la.shift_number, p.first_name, p.last_name
-            FROM lane_assignments la
-            JOIN participants p ON la.participant_id = p.id
-            WHERE la.tournament_id = ?
-          `).all(tournamentId) as Array<{ lane_number: number; shift_number: number; first_name: string; last_name: string }>;
-          const savedLanes = new Map<string, { lane_number: number; shift_number: number }[]>();
-          for (const lane of existingLanes) {
-            const key = `${(lane.first_name || '').trim().toLowerCase()}::${(lane.last_name || '').trim().toLowerCase()}`;
-            if (!savedLanes.has(key)) savedLanes.set(key, []);
-            savedLanes.get(key)!.push({ lane_number: lane.lane_number, shift_number: lane.shift_number });
-          }
+        const importedIdsToKeep = new Set<number>();
+        resolvedParticipants.forEach((rawParticipant, index) => {
+          const importedId = importedIds[index];
+          const current = importedId
+            ? existingParticipantRows.find((participant) => Number(participant.id) === importedId)
+            : null;
+          const normalized = normalizeParticipant(current ? { ...current, ...rawParticipant } : rawParticipant);
+          const assignedTeamOrder = normalized.team_id
+            ? (normalized.team_order || getNextTeamOrder(String(tournamentId), normalized.team_id))
+            : 0;
 
-          clearExisting.run(tournamentId);
-
-          for (const p of players) {
-            const assignedTeamOrder = p.team_id
-              ? (p.team_order || getNextTeamOrder(String(tournamentId), p.team_id))
-              : 0;
+          if (current && importedId) {
+            update.run(
+              normalized.first_name,
+              normalized.last_name,
+              normalized.gender,
+              normalized.hands,
+              normalized.club,
+              normalized.average,
+              normalized.email,
+              normalized.team_id,
+              assignedTeamOrder,
+              normalized.division,
+              normalized.singles_entrant,
+              importedId,
+              tournamentId,
+            );
+            importedIdsToKeep.add(importedId);
+            if (current.team_id) affectedTeams.add(Number(current.team_id));
+          } else {
             const result = insert.run(
               tournamentId,
-              p.first_name,
-              p.last_name,
-              p.gender,
-              p.hands,
-              p.club,
-              p.average,
-              p.email,
-              p.team_id,
+              normalized.first_name,
+              normalized.last_name,
+              normalized.gender,
+              normalized.hands,
+              normalized.club,
+              normalized.average,
+              normalized.email,
+              normalized.team_id,
               assignedTeamOrder,
-              p.division || null
+              normalized.division,
+              normalized.singles_entrant,
             );
-            if (p.team_id) affectedTeams.add(p.team_id);
+            importedIdsToKeep.add(Number(result.lastInsertRowid));
+          }
+          if (normalized.team_id) affectedTeams.add(normalized.team_id);
+        });
 
-            // Restore lane assignments for this participant if they existed before
-            const key = `${(p.first_name || '').trim().toLowerCase()}::${(p.last_name || '').trim().toLowerCase()}`;
-            const lanes = savedLanes.get(key);
-            if (lanes && lanes.length > 0) {
-              const newId = result.lastInsertRowid;
-              for (const lane of lanes) {
-                restoreLaneStmt.run(tournamentId, newId, lane.lane_number, lane.shift_number);
-              }
-              savedLanes.delete(key); // prevent duplicate restoration for same-name participants
-            }
-          }
-        } else {
-          for (const p of players) {
-            const assignedTeamOrder = p.team_id
-              ? (p.team_order || getNextTeamOrder(String(tournamentId), p.team_id))
-              : 0;
-            insert.run(
-              tournamentId,
-              p.first_name,
-              p.last_name,
-              p.gender,
-              p.hands,
-              p.club,
-              p.average,
-              p.email,
-              p.team_id,
-              assignedTeamOrder,
-              p.division || null
-            );
-            if (p.team_id) affectedTeams.add(p.team_id);
-          }
+        if (replaceExisting && !hasLinkedData) {
+          const omittedIds = existingParticipantRows
+            .map((participant) => Number(participant.id))
+            .filter((id) => !importedIdsToKeep.has(id));
+          const deleteOmitted = db.prepare('DELETE FROM participants WHERE id = ? AND tournament_id = ?');
+          omittedIds.forEach((id) => deleteOmitted.run(id, tournamentId));
         }
+
         for (const teamId of affectedTeams) {
           resequenceTeamMembers(teamId);
         }
       });
 
-      transaction(normalizedPlayers);
-      res.json({ success: true });
+      transaction();
+      res.json({ success: true, family_names_filled: familyNamesFilled });
     } catch (err: any) {
       console.error('Error bulk importing participants:', err);
       res.status(500).json({ error: err.message || 'Failed to bulk import participants' });

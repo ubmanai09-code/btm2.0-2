@@ -1063,20 +1063,16 @@ export default function App() {
     setView('edit');
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDeleteTournament = async (id: number) => {
     const tournamentItem = tournaments.find((item) => item.id === id);
     if (!tournamentItem) return false;
 
-    const destructivePrompt = 'This will archive the tournament instead of deleting it. Type ARCHIVE to continue.';
+    const destructivePrompt = `Permanently delete "${tournamentItem.name}"? This cannot be undone. Type DELETE to continue.`;
     const typed = window.prompt(destructivePrompt);
-    if (typed !== 'ARCHIVE') return false;
+    if (typed !== 'DELETE') return false;
 
     try {
-      await api.updateTournament(id, {
-        ...tournamentItem,
-        status: 'archived',
-      });
-      await api.createTournamentSnapshot(id, 'pre-archive');
+      await api.deleteTournament(id, { force: true });
       await loadTournaments();
       if (selectedTournament?.id === id) {
         setSelectedTournament(null);
@@ -1085,7 +1081,7 @@ export default function App() {
       return true;
     } catch (err) {
       console.error(err);
-      alert('Failed to archive tournament. Please check permissions and try again.');
+      alert('Failed to delete tournament. Please check permissions and try again.');
       return false;
     }
   };
@@ -2296,11 +2292,12 @@ export default function App() {
                               </button>
                               {isAdmin && (
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); handleDelete(tournamentItem.id); }}
-                                  className="p-1 rounded hover:bg-amber-50 text-black/35 hover:text-amber-600 transition-all"
-                                  title={t('tournament.archive', 'Archive Tournament')}
+                                  onClick={(e) => { e.stopPropagation(); void handleDeleteTournament(tournamentItem.id); }}
+                                  className="p-1 rounded hover:bg-red-50 text-black/35 hover:text-red-600 transition-all"
+                                  title={t('tournament.delete', 'Delete Tournament')}
+                                  aria-label={t('tournament.delete', 'Delete Tournament')}
                                 >
-                                  <Archive size={13} />
+                                  <Trash2 size={13} />
                                 </button>
                               )}
                             </div>
@@ -2348,13 +2345,24 @@ export default function App() {
                                   <Eye size={14} />
                                 </button>
                                 {isAdmin && (
-                                  <button
-                                    onClick={() => handleArchiveToggle(tournamentItem.id, false)}
-                                    className="p-1.5 rounded-md border border-black/10 bg-white text-black/60 hover:text-emerald-700"
-                                    title={t('tournament.restore_from_archive', 'Restore from archive')}
-                                  >
-                                    <ArchiveRestore size={14} />
-                                  </button>
+                                  <>
+                                    <button
+                                      onClick={() => handleArchiveToggle(tournamentItem.id, false)}
+                                      className="p-1.5 rounded-md border border-black/10 bg-white text-black/60 hover:text-emerald-700"
+                                      title={t('tournament.restore_from_archive', 'Restore from archive')}
+                                      aria-label={t('tournament.restore_from_archive', 'Restore from archive')}
+                                    >
+                                      <ArchiveRestore size={14} />
+                                    </button>
+                                    <button
+                                      onClick={() => void handleDeleteTournament(tournamentItem.id)}
+                                      className="p-1.5 rounded-md border border-black/10 bg-white text-black/60 hover:text-red-600 hover:border-red-200"
+                                      title={t('tournament.delete', 'Delete Tournament')}
+                                      aria-label={t('tournament.delete', 'Delete Tournament')}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             </div>
@@ -4616,7 +4624,10 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       club: formData.get('club') as string,
       average: parsedAverage,
       email: formData.get('email') as string,
-      team_id: formData.get('team_id') ? parseInt(formData.get('team_id') as string) : null,
+      team_id: editingPlayer
+        ? editingPlayer.team_id
+        : (formData.get('team_id') ? parseInt(formData.get('team_id') as string) : null),
+      team_order: editingPlayer?.team_order,
       division: (formData.get('division') as string || '').trim() || null,
       singles_entrant: formData.get('singles_entrant') === 'on' ? 1 : 0,
     };
@@ -4631,6 +4642,9 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       } else {
         result = await api.addParticipant(tournament.id, data);
         console.log('Add result:', result);
+        if (result.family_name_filled && result.last_name) {
+          alert(`Family name completed from a full name or past tournament record: ${result.last_name}`);
+        }
       }
       
       setShowAddPlayer(false);
@@ -4651,8 +4665,9 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
   const handleExportCSV = () => {
     const hasDivisionData = participants.some(p => p.division && p.division.trim());
-    const headers = ['First Name', 'Last Name', 'Gender', 'Hands', 'Club', 'Average', 'Contact Details', ...(hasDivisionData ? ['Division'] : [])];
+    const headers = ['Participant ID', 'First Name', 'Last Name', 'Gender', 'Hands', 'Club', 'Average', 'Contact Details', ...(hasDivisionData ? ['Division'] : [])];
     const rows = participants.map(p => [
+      p.id,
       p.first_name,
       p.last_name,
       p.gender,
@@ -4704,6 +4719,9 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       const lines = text.split('\n');
       const parsedHeaders = (lines[0] || '').split(',').map((s) => s.trim().toLowerCase());
       const hasHeader = parsedHeaders.includes('first name') || parsedHeaders.includes('last name');
+      const participantIdIndex = hasHeader
+        ? (parsedHeaders.indexOf('participant id') >= 0 ? parsedHeaders.indexOf('participant id') : parsedHeaders.indexOf('id'))
+        : -1;
       const firstNameIndex = hasHeader ? parsedHeaders.indexOf('first name') : 0;
       const lastNameIndex = hasHeader ? parsedHeaders.indexOf('last name') : 1;
       const genderIndex = hasHeader ? parsedHeaders.indexOf('gender') : 2;
@@ -4721,6 +4739,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       
       const newParticipants = dataLines.filter(line => line.trim()).map(line => {
         const columns = line.split(',').map(s => s.trim());
+        const parsedParticipantId = participantIdIndex >= 0 ? Number.parseInt(columns[participantIdIndex], 10) : NaN;
         let first_name = (firstNameIndex >= 0 ? columns[firstNameIndex] : columns[0]) || '';
         let last_name = (lastNameIndex >= 0 ? columns[lastNameIndex] : columns[1]) || '';
         const gender = (genderIndex >= 0 ? columns[genderIndex] : columns[2]) || '';
@@ -4749,6 +4768,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         }
 
         return {
+          ...(Number.isFinite(parsedParticipantId) && parsedParticipantId > 0 ? { id: parsedParticipantId } : {}),
           first_name,
           last_name,
           gender,
@@ -4759,6 +4779,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
           division: division || undefined,
         };
       }).filter((participant): participant is {
+        id?: number;
         first_name: string;
         last_name: string;
         gender: string;
@@ -4769,17 +4790,25 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         division?: string;
       } => participant !== null);
 
-      const hasTournamentData = participants.length > 0 || scores.length > 0 || brackets.length > 0;
-      if (hasTournamentData) {
-        await api.createTournamentSnapshot(tournament.id, 'pre-participant-import-replace');
-      }
+      try {
+        const hasTournamentData = participants.length > 0 || scores.length > 0 || brackets.length > 0;
+        if (hasTournamentData) {
+          await api.createTournamentSnapshot(tournament.id, 'pre-participant-import-replace');
+        }
 
-      await api.bulkAddParticipants(tournament.id, newParticipants, {
-        replaceExisting: true,
-        allowDestructiveReplace: hasTournamentData,
-      });
-      loadData();
-      inputEl.value = '';
+        const importResult = await api.bulkAddParticipants(tournament.id, newParticipants, {
+          replaceExisting: true,
+          allowDestructiveReplace: hasTournamentData,
+        });
+        if (importResult.family_names_filled) {
+          alert(`Family names completed for ${importResult.family_names_filled} imported player(s) using full names or past tournament records.`);
+        }
+        await loadData();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : 'Failed to import participants. Existing scores and teams were not changed.');
+      } finally {
+        inputEl.value = '';
+      }
     };
     reader.readAsText(file);
   };
@@ -4802,6 +4831,9 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       const lines = text.split('\n');
       const parsedHeaders = (lines[0] || '').split(',').map((s) => s.trim().toLowerCase());
       const hasHeader = parsedHeaders.includes('first name') || parsedHeaders.includes('last name');
+      const participantIdIndex = hasHeader
+        ? (parsedHeaders.indexOf('participant id') >= 0 ? parsedHeaders.indexOf('participant id') : parsedHeaders.indexOf('id'))
+        : -1;
       const firstNameIndex = hasHeader ? parsedHeaders.indexOf('first name') : 0;
       const lastNameIndex = hasHeader ? parsedHeaders.indexOf('last name') : 1;
       const genderIndex = hasHeader ? parsedHeaders.indexOf('gender') : 2;
@@ -4819,6 +4851,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
       const newParticipants = dataLines.filter(line => line.trim()).map(line => {
         const columns = line.split(',').map(s => s.trim());
+        const parsedParticipantId = participantIdIndex >= 0 ? Number.parseInt(columns[participantIdIndex], 10) : NaN;
         let first_name = (firstNameIndex >= 0 ? columns[firstNameIndex] : columns[0]) || '';
         let last_name = (lastNameIndex >= 0 ? columns[lastNameIndex] : columns[1]) || '';
         const gender = (genderIndex >= 0 ? columns[genderIndex] : columns[2]) || '';
@@ -4847,6 +4880,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         }
 
         return {
+          ...(Number.isFinite(parsedParticipantId) && parsedParticipantId > 0 ? { id: parsedParticipantId } : {}),
           first_name,
           last_name,
           gender,
@@ -4857,6 +4891,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
           division: division || undefined,
         };
       }).filter((participant): participant is {
+        id?: number;
         first_name: string;
         last_name: string;
         gender: string;
@@ -4867,12 +4902,25 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         division?: string;
       } => participant !== null);
 
-      await api.bulkAddParticipants(tournament.id, newParticipants, {
-        replaceExisting: true,
-        allowDestructiveReplace: true,
-      });
-      loadData();
-      if (inputEl) inputEl.value = '';
+      try {
+        const hasTournamentData = participants.length > 0 || scores.length > 0 || brackets.length > 0;
+        if (hasTournamentData) {
+          await api.createTournamentSnapshot(tournament.id, 'pre-participant-import-replace');
+        }
+
+        const importResult = await api.bulkAddParticipants(tournament.id, newParticipants, {
+          replaceExisting: true,
+          allowDestructiveReplace: true,
+        });
+        if (importResult.family_names_filled) {
+          alert(`Family names completed for ${importResult.family_names_filled} imported player(s) using full names or past tournament records.`);
+        }
+        await loadData();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : 'Failed to import participants. Existing scores and teams were not changed.');
+      } finally {
+        if (inputEl) inputEl.value = '';
+      }
     };
     reader.readAsText(file);
   };
@@ -5574,11 +5622,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
             </div>
 
             <div className="space-y-4 text-sm text-black/75">
-              <p className="font-semibold text-black">This import will overwrite participant data in this tournament.</p>
+              <p className="font-semibold text-black">This import will update the participant roster. Keep Participant ID values from the exported CSV to preserve existing records.</p>
               <ul className="list-disc space-y-1 pl-5 text-black/65">
-                <li>Existing participants will be replaced.</li>
-                <li>Scores, standings, and bracket data can be affected by the roster change.</li>
-                <li>A snapshot is created before the replace so you can restore the tournament state later.</li>
+                <li>Rows with matching IDs are updated in place, preserving scores, team membership, lanes, and brackets.</li>
+                <li>When scores or brackets exist, the import is rejected if it omits any existing Participant ID.</li>
+                <li>A snapshot is created before importing.</li>
               </ul>
 
               <label className="block text-xs font-bold uppercase tracking-wide text-black/55">
