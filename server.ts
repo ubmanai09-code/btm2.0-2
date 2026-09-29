@@ -2712,18 +2712,13 @@ async function startServer() {
   });
 
   app.get("/api/tournaments", (req, res) => {
-    // Keep historical tournaments with real competition data visible by default.
+    // Keep date-based default statuses current for tournaments that were created as drafts.
     db.prepare(`
       UPDATE tournaments
-      SET status = 'archived'
-      WHERE status = 'finished'
+      SET status = 'finished'
+      WHERE status = 'draft'
         AND date IS NOT NULL
-        AND date(date) <= date('now', '-30 day')
-        AND NOT EXISTS (
-          SELECT 1
-          FROM participants p
-          WHERE p.tournament_id = tournaments.id
-        )
+        AND date(date) < date('now')
     `).run();
 
     const rows = db.prepare("SELECT * FROM tournaments ORDER BY created_at DESC").all();
@@ -2740,16 +2735,22 @@ async function startServer() {
     const hasAdditional = toBinaryFlag(has_additional_scores, 0);
     const hasBonus = toBinaryFlag(has_bonus, 0);
     const showPlayerStyle = show_player_style === undefined ? 1 : toBinaryFlag(show_player_style, 1);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tournamentDate = date ? new Date(`${date}T00:00:00`) : null;
+    const defaultStatus = tournamentDate && !Number.isNaN(tournamentDate.getTime())
+      ? (tournamentDate.getTime() > today.getTime() ? 'draft' : tournamentDate.getTime() === today.getTime() ? 'active' : 'finished')
+      : 'draft';
     
     const info = db.prepare(`
       INSERT INTO tournaments (
         name, date, location, format, organizer, logo, match_play_type, qualified_count, playoff_winners_count, type, 
-        games_count, genders_rule, lanes_count, 
+        games_count, genders_rule, lanes_count, status,
         players_per_lane, singles_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus, show_player_style, divisions, enable_singles_division
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       name, date, location, format, organizer, logo, match_play_type || 'single_elimination', Number.isFinite(Number.parseInt(qualified_count, 10)) ? Number.parseInt(qualified_count, 10) : 0, Number.isFinite(Number.parseInt(playoff_winners_count, 10)) ? Number.parseInt(playoff_winners_count, 10) : 1, type, 
-      games_count || 3, genders_rule, lanes_count || 10, 
+      games_count || 3, genders_rule, lanes_count || 10, defaultStatus,
       players_per_lane || 2, singles_per_lane || 2, players_per_team || 1, shifts_count || 1, oil_pattern, hasAdditional, hasBonus, showPlayerStyle, divisions || null, toBinaryFlag(enable_singles_division, 0)
     );
     res.json({ id: info.lastInsertRowid });

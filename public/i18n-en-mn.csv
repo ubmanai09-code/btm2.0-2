@@ -166,8 +166,9 @@ genders.mixed,Mixed,Холимог
 genders.men_only,Men Only,Зөвхөн эрэгтэй
 genders.women_only,Women Only,Зөвхөн эмэгтэй
 status.draft,Draft,Ноорог
-status.active,Active,Идэвхтэй
-status.finished,Finished,Дууссан
+status.upcoming,Upcoming,Удахгүй
+status.ongoing,Ongoing,Явагдаж буй
+status.completed,Completed,Дууссан
 sponsors.title,Sponsors & Partners,Спонсор ба хамтрагчид
 sponsors.name,Name,Нэр
 sponsors.type,Type,Төрөл

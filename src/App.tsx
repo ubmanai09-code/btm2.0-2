@@ -1866,6 +1866,16 @@ export default function App() {
     });
   };
 
+  const formatTournamentDateBadge = (value: string) => {
+    if (!value) return { month: 'TBD', day: '--' };
+    const parsed = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return { month: 'DATE', day: '--' };
+    return {
+      month: parsed.toLocaleDateString(undefined, { month: 'short' }).toUpperCase(),
+      day: parsed.toLocaleDateString(undefined, { day: '2-digit' }),
+    };
+  };
+
   const formatTournamentLabel = (value: string) => {
     if (!value) return t('format.standard', 'Standard');
     return value === 'Pre-Qualification'
@@ -1901,24 +1911,23 @@ export default function App() {
     return 'incoming';
   };
 
-  const getStatusPillClass = (status: 'active' | 'incoming' | 'finished' | 'archived') => {
-    if (status === 'active') return 'bg-emerald-100 text-emerald-700';
-    if (status === 'incoming') return 'bg-orange-100 text-orange-600';
-    if (status === 'finished') return 'bg-[color:var(--text)]/5 text-[color:var(--text-muted)]';
-    return 'bg-slate-200 text-slate-700';
+  const getDateBadgeClass = (status: 'active' | 'incoming' | 'finished' | 'archived') => {
+    if (status === 'incoming') return 'bg-[color:var(--info)]';
+    if (status === 'active') return 'bg-[color:var(--success)]';
+    return 'bg-[color:var(--text-secondary)]';
   };
 
   const getStatusLabel = (status: 'active' | 'incoming' | 'finished' | 'archived') => {
-    if (status === 'incoming') return t('status.incoming', 'Incoming');
-    if (status === 'active') return t('status.active', 'Active');
-    if (status === 'finished') return t('status.finished', 'Finished');
+    if (status === 'incoming') return t('status.upcoming', 'Upcoming');
+    if (status === 'active') return t('status.ongoing', 'Ongoing');
+    if (status === 'finished') return t('status.completed', 'Completed');
     return t('status.archived', 'Archived');
   };
 
   const getTournamentSortRank = (tournamentItem: Tournament) => {
     const displayStatus = resolveTournamentDisplayStatus(tournamentItem);
-    if (displayStatus === 'active') return 0;
-    if (displayStatus === 'incoming') return 1;
+    if (displayStatus === 'incoming') return 0;
+    if (displayStatus === 'active') return 1;
     if (displayStatus === 'finished') return 2;
     return 3;
   };
@@ -1929,12 +1938,9 @@ export default function App() {
 
     const aDate = new Date(`${a.date}T00:00:00`).getTime();
     const bDate = new Date(`${b.date}T00:00:00`).getTime();
-
-    if (getTournamentSortRank(a) <= 1) {
-      return (Number.isNaN(aDate) ? Number.MAX_SAFE_INTEGER : aDate) - (Number.isNaN(bDate) ? Number.MAX_SAFE_INTEGER : bDate);
-    }
-
-    return (Number.isNaN(bDate) ? 0 : bDate) - (Number.isNaN(aDate) ? 0 : aDate);
+    const aValue = Number.isNaN(aDate) ? Number.MAX_SAFE_INTEGER : aDate;
+    const bValue = Number.isNaN(bDate) ? Number.MAX_SAFE_INTEGER : bDate;
+    return rankDiff < 2 ? aValue - bValue : bValue - aValue;
   });
 
   const visibleTournaments = sortedTournaments.filter((tournamentItem) => resolveTournamentDisplayStatus(tournamentItem) !== 'archived');
@@ -2261,47 +2267,48 @@ export default function App() {
                 ) : (
                   visibleTournaments.map((tournamentItem) => {
                     const displayStatus = resolveTournamentDisplayStatus(tournamentItem);
+                    const dateBadge = formatTournamentDateBadge(tournamentItem.date);
 
                     return (
-                      <Card key={tournamentItem.id} className="group cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 border border-black/8" onClick={() => openTournament(tournamentItem)}>
+                      <Card key={tournamentItem.id} className="group cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 border border-[color:var(--border)]" onClick={() => openTournament(tournamentItem)}>
                         <div className="px-3 py-2 flex items-center gap-3">
-                          <div className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest shrink-0 ${getStatusPillClass(displayStatus)}`}>
-                            {getStatusLabel(displayStatus)}
+                          <div className="w-10 shrink-0 overflow-hidden rounded-md border border-[color:var(--border)] bg-[color:var(--card)] text-center shadow-sm" aria-label={formatTournamentDate(tournamentItem.date)}>
+                            <div className={`${getDateBadgeClass(displayStatus)} px-1 py-0.5 text-[9px] font-bold leading-none tracking-wider text-white`}>{dateBadge.month}</div>
+                            <div className="py-1 text-base font-bold leading-none text-[color:var(--text)]">{dateBadge.day}</div>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold leading-tight group-hover:text-emerald-600 transition-colors truncate">{tournamentItem.name}</p>
-                            <p className="text-[11px] text-black/50 mt-0.5 truncate">
-                              {formatTournamentDate(tournamentItem.date)}{tournamentItem.location ? ` · ${tournamentItem.location}` : ''}
-                            </p>
+                            <p className="text-sm font-bold leading-tight text-[color:var(--text)] group-hover:text-[color:var(--accent-dark)] transition-colors truncate">{tournamentItem.name}</p>
+                            <p className="text-[11px] text-[color:var(--text-tertiary)] mt-0.5 truncate">{tournamentItem.location || t('tournament.no_venue', 'No venue')}</p>
                           </div>
                           {canManageTournaments && (
                             <div className="flex gap-1 shrink-0">
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleEdit(tournamentItem); }}
-                                className="p-1 rounded hover:bg-emerald-50 text-black/35 hover:text-emerald-600 transition-all"
+                                className="p-1 rounded hover:bg-[color:var(--accent-lighter)] text-[color:var(--icon-secondary)] hover:text-[color:var(--accent-dark)] transition-all"
                                 title={t('tournament.edit', 'Edit Tournament')}
                               >
-                                <Edit size={13} />
+                                <Edit size={14} />
                               </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleArchiveToggle(tournamentItem.id, true); }}
-                                className="p-1 rounded hover:bg-slate-100 text-black/35 hover:text-slate-600 transition-all"
+                                className="p-1 rounded hover:bg-[color:var(--bg-tertiary)] text-[color:var(--icon-secondary)] hover:text-[color:var(--text-secondary)] transition-all"
                                 title={t('tournament.archive', 'Archive Tournament')}
                               >
-                                <Archive size={13} />
+                                <Archive size={14} />
                               </button>
                               {isAdmin && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); void handleDeleteTournament(tournamentItem.id); }}
-                                  className="p-1 rounded hover:bg-red-50 text-black/35 hover:text-red-600 transition-all"
+                                  className="p-1 rounded hover:bg-[color:var(--danger-lighter)] text-[color:var(--icon-secondary)] hover:text-[color:var(--danger)] transition-all"
                                   title={t('tournament.delete', 'Delete Tournament')}
                                   aria-label={t('tournament.delete', 'Delete Tournament')}
                                 >
-                                  <Trash2 size={13} />
+                                  <Trash2 size={14} />
                                 </button>
                               )}
                             </div>
                           )}
+                          <ChevronRight size={22} className="shrink-0 text-[color:var(--icon-secondary)] group-hover:text-[color:var(--accent)] transition-colors" aria-hidden="true" />
                         </div>
                       </Card>
                     );
@@ -2575,9 +2582,9 @@ export default function App() {
                       name="status" 
                       defaultValue={editingTournament?.status}
                       options={[
-                        { value: 'draft', label: t('status.incoming', 'Incoming') },
-                        { value: 'active', label: t('status.active', 'Active') },
-                        { value: 'finished', label: t('status.finished', 'Finished') },
+                        { value: 'draft', label: t('status.upcoming', 'Upcoming') },
+                        { value: 'active', label: t('status.ongoing', 'Ongoing') },
+                        { value: 'finished', label: t('status.completed', 'Completed') },
                         { value: 'archived', label: t('status.archived', 'Archived') }
                       ]} 
                     />
