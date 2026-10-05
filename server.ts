@@ -386,6 +386,14 @@ function initDb() {
       FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL
     );
 
+    CREATE TABLE IF NOT EXISTS lane_out_of_operation (
+      tournament_id INTEGER NOT NULL,
+      shift_number INTEGER NOT NULL,
+      lane_number INTEGER NOT NULL,
+      PRIMARY KEY (tournament_id, shift_number, lane_number),
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS lane_assignments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tournament_id INTEGER NOT NULL,
@@ -2712,15 +2720,6 @@ async function startServer() {
   });
 
   app.get("/api/tournaments", (req, res) => {
-    // Keep date-based default statuses current for tournaments that were created as drafts.
-    db.prepare(`
-      UPDATE tournaments
-      SET status = 'finished'
-      WHERE status = 'draft'
-        AND date IS NOT NULL
-        AND date(date) < date('now')
-    `).run();
-
     const rows = db.prepare("SELECT * FROM tournaments ORDER BY created_at DESC").all();
     res.json(rows);
   });
@@ -2735,12 +2734,7 @@ async function startServer() {
     const hasAdditional = toBinaryFlag(has_additional_scores, 0);
     const hasBonus = toBinaryFlag(has_bonus, 0);
     const showPlayerStyle = show_player_style === undefined ? 1 : toBinaryFlag(show_player_style, 1);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tournamentDate = date ? new Date(`${date}T00:00:00`) : null;
-    const defaultStatus = tournamentDate && !Number.isNaN(tournamentDate.getTime())
-      ? (tournamentDate.getTime() > today.getTime() ? 'draft' : tournamentDate.getTime() === today.getTime() ? 'active' : 'finished')
-      : 'draft';
+    const defaultStatus = 'draft';
     
     const info = db.prepare(`
       INSERT INTO tournaments (
@@ -3192,15 +3186,10 @@ async function startServer() {
       if (new Set(importedExistingIds).size !== importedExistingIds.length) {
         return res.status(400).json({ error: 'The import contains duplicate Participant IDs.' });
       }
-      if (importedExistingIds.some((id) => !existingParticipantIds.has(id))) {
-        return res.status(400).json({ error: 'A Participant ID does not belong to this tournament. Use the exported roster IDs; participant IDs cannot be changed.' });
-      }
-      if (replaceExisting && hasLinkedData) {
-        if (existingParticipantRows.some((participant) => !importedExistingIds.includes(Number(participant.id)))) {
-          return res.status(400).json({ error: 'This tournament has linked scores, brackets, team, lane, or warmup data. To preserve those links, the import must include every existing Participant ID. Export the current roster, edit it, and import it without removing the ID column.' });
-        }
-      }
-
+      // IDs from another tournament are treated as new participants.
+      importedIds.forEach((id, index) => {
+        if (id !== null && !existingParticipantIds.has(id)) importedIds[index] = null;
+      });
       const insert = db.prepare(`
         INSERT INTO participants (tournament_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -3277,7 +3266,10 @@ async function startServer() {
       });
 
       transaction();
-      res.json({ success: true, family_names_filled: familyNamesFilled });
+      const preservedExisting = replaceExisting && hasLinkedData
+        ? existingParticipantRows.filter((participant) => !importedIds.includes(Number(participant.id))).length
+        : 0;
+      res.json({ success: true, family_names_filled: familyNamesFilled, preserved_existing: preservedExisting });
     } catch (err: any) {
       console.error('Error bulk importing participants:', err);
       res.status(500).json({ error: err.message || 'Failed to bulk import participants' });
@@ -3442,6 +3434,30 @@ async function startServer() {
       WHERE la.tournament_id = ?
     `).all(req.params.id);
     res.json(rows);
+  });
+
+  app.get("/api/tournaments/:id/lanes/out-of-operation", (req, res) => {
+    const rows = db.prepare("SELECT shift_number, lane_number FROM lane_out_of_operation WHERE tournament_id = ?").all(req.params.id) as { shift_number: number; lane_number: number }[];
+    const byShift: Record<number, number[]> = {};
+    for (const row of rows) (byShift[row.shift_number] ||= []).push(row.lane_number);
+    res.json(byShift);
+  });
+
+  app.put("/api/tournaments/:id/lanes/out-of-operation", requirePermission('lanes:manage'), (req, res) => {
+    const body = (req.body && typeof req.body === 'object') ? req.body as Record<string, unknown> : {};
+    const insert = db.prepare("INSERT OR IGNORE INTO lane_out_of_operation (tournament_id, shift_number, lane_number) VALUES (?, ?, ?)");
+    db.transaction(() => {
+      db.prepare("DELETE FROM lane_out_of_operation WHERE tournament_id = ?").run(req.params.id);
+      for (const [shift, lanes] of Object.entries(body)) {
+        if (!Array.isArray(lanes)) continue;
+        for (const lane of lanes) {
+          const shiftNo = Number(shift);
+          const laneNo = Number(lane);
+          if (Number.isInteger(shiftNo) && Number.isInteger(laneNo)) insert.run(req.params.id, shiftNo, laneNo);
+        }
+      }
+    })();
+    res.json({ success: true });
   });
 
   app.post("/api/tournaments/:id/lanes", requirePermission('lanes:manage'), (req, res) => {

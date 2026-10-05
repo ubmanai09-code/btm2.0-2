@@ -57,6 +57,7 @@ import {
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import api, { Tournament, Participant, Team, LaneAssignment, WarmupSlot, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry, LeagueRankingResponse, StandingAdditionalScore, StandingBonus } from './services/api';
+import { parseCsvRows, parseParticipantCsv } from './utils/participantCsv';
 import { buildKnownBracketTemplateDefaults } from './utils/bracketTemplates';
 import {
   buildTournamentEngine,
@@ -265,13 +266,32 @@ const escapePrintHtml = (value: unknown) => String(value ?? '')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
+type TournamentEntryType = 'singles' | 'doubles' | 'trios' | 'teams' | 'mixed';
+
+const getTournamentEntryType = (tournament: Tournament): TournamentEntryType => {
+  if (tournament.type === 'individual') return 'singles';
+  if (Boolean(tournament.enable_singles_division)) return 'mixed';
+  if (tournament.players_per_team === 2) return 'doubles';
+  if (tournament.players_per_team === 3) return 'trios';
+  return 'teams';
+};
+
+const getTournamentEntryTypeLabel = (tournament: Tournament) => {
+  switch (getTournamentEntryType(tournament)) {
+    case 'singles': return t('tournament.entry_type.singles', 'Singles');
+    case 'doubles': return t('tournament.entry_type.doubles', 'Doubles');
+    case 'trios': return t('tournament.entry_type.trios', 'Trios');
+    case 'mixed': return t('tournament.entry_type.mixed', 'Mixed');
+    default: return t('tournament.entry_type.teams', 'Teams');
+  }
+};
+
 const getTournamentShortInfo = (tournament: Tournament) => {
-  const isBoth = tournament.type === 'team' && Boolean(tournament.enable_singles_division);
-  const typeLabel = isBoth ? t('tournament.type.both', 'Team + Singles') : tournament.type === 'team' ? t('tournament.type.team', 'Team') : t('tournament.type.individual', 'Individual');
-  const laneCounts = isBoth
+  const entryType = getTournamentEntryType(tournament);
+  const laneCounts = entryType === 'mixed'
     ? `${tournament.players_per_lane} ${t('tournament.teams_per_lane', 'Teams/Lane')} + ${tournament.singles_per_lane || 2} ${t('tournament.players_per_lane', 'Singles/Lane')}`
     : `${tournament.players_per_lane} ${tournament.type === 'team' ? t('tournament.teams_per_lane', 'Teams/Lane') : t('tournament.players_per_lane', 'Players/Lane')}`;
-  return `${typeLabel} • ${tournament.lanes_count} ${t('tournament.lanes', 'Lanes')} • ${tournament.shifts_count} ${t('tournament.shifts', 'Shifts')} • ${laneCounts} • ${tournament.games_count} ${t('tournament.games', 'Games')}`;
+  return `${getTournamentEntryTypeLabel(tournament)} • ${tournament.lanes_count} ${t('tournament.lanes', 'Lanes')} • ${tournament.shifts_count} ${t('tournament.shifts', 'Shifts')} • ${laneCounts} • ${tournament.games_count} ${t('tournament.games', 'Games')}`;
 };
 
 const getTournamentFormatLabel = (value: string) => {
@@ -663,7 +683,7 @@ export default function App() {
     return (localStorage.getItem('btm_tab') as any) || 'participants';
   });
   const [loading, setLoading] = useState(true);
-  const [formType, setFormType] = useState<'individual' | 'team' | 'both'>('individual');
+  const [formType, setFormType] = useState<TournamentEntryType>('singles');
   const [formUseCustomSponsors, setFormUseCustomSponsors] = useState(false);
   const [formSponsors, setFormSponsors] = useState<SponsorInfo[]>([]);
   const [showFormSponsorsModal, setShowFormSponsorsModal] = useState(false);
@@ -987,24 +1007,24 @@ export default function App() {
       date: formData.get('date') as string,
       location: formData.get('location') as string,
       format: formData.get('format') as string,
-      match_play_type: (formData.get('match_play_type') as string) || 'single_elimination',
+      match_play_type: editingTournament?.match_play_type || 'single_elimination',
       organizer: formData.get('organizer') as string,
       logo: formData.get('logo') as string,
-      type: formType === 'both' ? 'team' : formType,
+      type: formType === 'singles' ? 'individual' : 'team',
       games_count: parseNum(formData.get('games_count'), 3),
       genders_rule: formData.get('genders_rule') as string,
       lanes_count: parseNum(formData.get('lanes_count'), 12),
       players_per_lane: parseNum(formData.get('players_per_lane'), 2),
       singles_per_lane: parseNum(formData.get('singles_per_lane'), 2),
-      players_per_team: parseNum(formData.get('players_per_team'), 1),
+      players_per_team: formType === 'doubles' ? 2 : formType === 'trios' ? 3 : parseNum(formData.get('players_per_team'), 1),
       shifts_count: parseNum(formData.get('shifts_count'), 1),
       oil_pattern: formData.get('oil_pattern') as string,
       has_additional_scores: formData.get('has_additional_scores') ? 1 : 0,
       has_bonus: formData.get('has_bonus') ? 1 : 0,
       show_player_style: formData.get('show_player_style') ? 1 : 0,
-      divisions: (formData.get('divisions') as string || '').trim() || null,
+      divisions: formData.getAll('division_options').map((value) => String(value).trim()).filter(Boolean).join(', ') || null,
       offday_penalty: parseNum(formData.get('offday_penalty'), 25),
-      enable_singles_division: formType === 'both' ? 1 : 0,
+      enable_singles_division: formType === 'mixed' ? 1 : 0,
     };
 
     if (view === 'edit') {
@@ -1059,7 +1079,7 @@ export default function App() {
 
   const handleEdit = (t: Tournament) => {
     setEditingTournament(t);
-    setFormType(t.type === 'team' && Boolean(t.enable_singles_division) ? 'both' : t.type);
+    setFormType(getTournamentEntryType(t));
     setView('edit');
   };
 
@@ -1180,7 +1200,7 @@ export default function App() {
           qualified_count: Number(raw?.qualified_count) || 0,
           playoff_winners_count: Number(raw?.playoff_winners_count) || 0,
           known_bracket_format_id: raw?.known_bracket_format_id ?? null,
-          status: raw?.status === 'active' || raw?.status === 'finished' || raw?.status === 'archived'
+          status: raw?.status === 'active' || raw?.status === 'upcoming' || raw?.status === 'finished' || raw?.status === 'archived'
             ? raw.status
             : 'draft',
         };
@@ -1905,16 +1925,24 @@ export default function App() {
   };
 
   const resolveTournamentDisplayStatus = (tournamentItem: Tournament): 'active' | 'incoming' | 'finished' | 'archived' => {
+    // 'draft' means automatic: the status follows the tournament date unless set manually.
     if (tournamentItem.status === 'archived') return 'archived';
-    if (tournamentItem.status === 'active') return 'active';
     if (tournamentItem.status === 'finished') return 'finished';
+    if (tournamentItem.status === 'active') return 'active';
+    if (tournamentItem.status === 'upcoming') return 'incoming';
+    const tournamentDay = new Date(`${String(tournamentItem.date || '').slice(0, 10)}T00:00:00`);
+    if (Number.isNaN(tournamentDay.getTime())) return 'incoming';
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (tournamentDay.getTime() < today.getTime()) return 'finished';
+    if (tournamentDay.getTime() === today.getTime()) return 'active';
     return 'incoming';
   };
 
   const getDateBadgeClass = (status: 'active' | 'incoming' | 'finished' | 'archived') => {
-    if (status === 'incoming') return 'bg-[color:var(--info)]';
-    if (status === 'active') return 'bg-[color:var(--success)]';
-    return 'bg-[color:var(--text-secondary)]';
+    if (status === 'incoming') return 'bg-[color:var(--accent)]';
+    if (status === 'active') return 'bg-[color:var(--success-dark)]';
+    return 'bg-[#4B5563]';
   };
 
   const getStatusLabel = (status: 'active' | 'incoming' | 'finished' | 'archived') => {
@@ -1924,23 +1952,13 @@ export default function App() {
     return t('status.archived', 'Archived');
   };
 
-  const getTournamentSortRank = (tournamentItem: Tournament) => {
-    const displayStatus = resolveTournamentDisplayStatus(tournamentItem);
-    if (displayStatus === 'incoming') return 0;
-    if (displayStatus === 'active') return 1;
-    if (displayStatus === 'finished') return 2;
-    return 3;
-  };
-
   const sortedTournaments = [...tournaments].sort((a, b) => {
-    const rankDiff = getTournamentSortRank(a) - getTournamentSortRank(b);
-    if (rankDiff !== 0) return rankDiff;
-
-    const aDate = new Date(`${a.date}T00:00:00`).getTime();
-    const bDate = new Date(`${b.date}T00:00:00`).getTime();
-    const aValue = Number.isNaN(aDate) ? Number.MAX_SAFE_INTEGER : aDate;
-    const bValue = Number.isNaN(bDate) ? Number.MAX_SAFE_INTEGER : bDate;
-    return rankDiff < 2 ? aValue - bValue : bValue - aValue;
+    const aDate = new Date(`${String(a.date || '').slice(0, 10)}T00:00:00`).getTime();
+    const bDate = new Date(`${String(b.date || '').slice(0, 10)}T00:00:00`).getTime();
+    const aValue = Number.isNaN(aDate) ? Number.NEGATIVE_INFINITY : aDate;
+    const bValue = Number.isNaN(bDate) ? Number.NEGATIVE_INFINITY : bDate;
+    if (aValue !== bValue) return bValue > aValue ? 1 : -1;
+    return b.id - a.id;
   });
 
   const visibleTournaments = sortedTournaments.filter((tournamentItem) => resolveTournamentDisplayStatus(tournamentItem) !== 'archived');
@@ -2206,7 +2224,7 @@ export default function App() {
                 {/* Center: New Tournament */}
                 <div className="flex-1 flex justify-center">
                   {canManageTournaments && (
-                    <Button size="sm" variant="create" className="px-3" onClick={() => { setFormType('individual'); setView('create'); }} title={t('app.new_tournament', 'New Tournament')} ariaLabel={t('app.new_tournament', 'New Tournament')}>
+                      <Button size="sm" variant="create" className="px-3" onClick={() => { setFormType('singles'); setView('create'); }} title={t('app.new_tournament', 'New Tournament')} ariaLabel={t('app.new_tournament', 'New Tournament')}>
                       <Plus size={16} />
                     </Button>
                   )}
@@ -2404,44 +2422,31 @@ export default function App() {
                     <Input label={t('tournament.logo_url', 'Tournament Logo URL')} name="logo" placeholder={t('tournament.logo_placeholder', 'e.g. /logo.png')} defaultValue={editingTournament?.logo} />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Select 
                       label={t('tournament.format', 'Format')} 
                       name="format" 
-                      defaultValue={editingTournament?.format === 'Pre-Qualification' ? 'Total Pinfall' : editingTournament?.format}
+                      defaultValue={editingTournament?.format || 'Single Elimination'}
                       options={[
                         { value: 'Single Elimination', label: t('format.single_elimination', 'Single Elimination') },
                         { value: 'Double Elimination', label: t('format.double_elimination', 'Double Elimination') },
                         { value: 'Round Robin', label: t('format.round_robin', 'Round Robin') },
-                        { value: 'Baker System', label: t('format.baker_system', 'Baker System') },
-                        { value: 'Total Pinfall', label: t('format.total_pinfall', 'Total Pinfall') },
-                        { value: 'Pre-Qualification & Bracket', label: t('format.pre_qualification_bracket', 'Pre-Qualification & Bracket') },
-                        { value: 'Standard', label: t('format.standard', 'Standard') }
+                        ...(editingTournament?.format && !['Single Elimination', 'Double Elimination', 'Round Robin'].includes(editingTournament.format)
+                          ? [{ value: editingTournament.format, label: getTournamentFormatLabel(editingTournament.format) }]
+                          : [])
                       ]} 
                     />
                     <Select 
-                      label={t('tournament.bracket_type', 'Bracket Type')}
-                      name="match_play_type"
-                      defaultValue={editingTournament?.match_play_type || 'single_elimination'}
-                      options={[
-                        { value: 'single_elimination', label: t('bracket.single_elimination', 'Single Elimination') },
-                        { value: 'double_elimination', label: t('bracket.double_elimination', 'Double Elimination') },
-                        { value: 'ladder', label: t('bracket.ladder', 'Ladder') },
-                        { value: 'stepladder', label: t('bracket.stepladder', 'Stepladder') },
-                        { value: 'playoff', label: t('bracket.playoff', 'Playoff') },
-                        { value: 'team_selection_playoff', label: t('bracket.team_selection_playoff', 'Team Selection Playoff') },
-                        { value: 'survivor_elimination', label: t('bracket.survivor_elimination', 'Survivor Elimination') }
-                      ]}
-                    />
-                    <Select 
-                      label={t('tournament.type', 'Type')} 
-                      name="type" 
+                      label={t('tournament.entry_type', 'Entry Type')}
+                      name="entry_type"
                       value={formType}
                       onChange={(e: any) => setFormType(e.target.value)}
                       options={[
-                        { value: 'individual', label: t('tournament.type.individual', 'Individual') },
-                        { value: 'team', label: t('tournament.type.team', 'Team') },
-                        { value: 'both', label: t('tournament.type.both', 'Team + Singles') }
+                        { value: 'singles', label: t('tournament.entry_type.singles', 'Singles') },
+                        { value: 'doubles', label: t('tournament.entry_type.doubles', 'Doubles') },
+                        { value: 'trios', label: t('tournament.entry_type.trios', 'Trios') },
+                        { value: 'teams', label: t('tournament.entry_type.teams', 'Teams') },
+                        { value: 'mixed', label: t('tournament.entry_type.mixed', 'Mixed') }
                       ]} 
                     />
                   </div>
@@ -2449,13 +2454,13 @@ export default function App() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Input label={t('tournament.games_count', 'Games #')} name="games_count" type="number" defaultValue={editingTournament?.games_count || "3"} min="1" />
                     <Select 
-                      label={t('tournament.genders_rule', 'Genders Rule')} 
+                      label={t('tournament.gender_eligibility', 'Gender Eligibility')}
                       name="genders_rule" 
-                      defaultValue={editingTournament?.genders_rule}
+                      defaultValue={editingTournament?.genders_rule || 'Mixed'}
                       options={[
-                        { value: 'Mixed', label: t('genders.mixed', 'Mixed') },
-                        { value: 'Men Only', label: t('genders.men_only', 'Men Only') },
-                        { value: 'Women Only', label: t('genders.women_only', 'Women Only') }
+                        { value: 'Mixed', label: t('division.open', 'Open') },
+                        { value: 'Men Only', label: t('division.men', 'Men') },
+                        { value: 'Women Only', label: t('division.women', 'Women') }
                       ]} 
                     />
                     <Input label={t('tournament.lanes_count', 'Lane #')} name="lanes_count" type="number" defaultValue={editingTournament?.lanes_count || "12"} min="1" max="60" />
@@ -2463,22 +2468,23 @@ export default function App() {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Input 
-                      label={formType !== 'individual' ? t('tournament.teams_per_lane', 'Teams per Lane') : t('tournament.players_per_lane', 'Players per Lane')} 
+                      label={formType !== 'singles' ? t('tournament.teams_per_lane', 'Teams per Lane') : t('tournament.players_per_lane', 'Players per Lane')}
                       name="players_per_lane" 
                       type="number" 
                       defaultValue={editingTournament?.players_per_lane || "2"} 
                       min="1" 
                     />
-                    {formType !== 'individual' && (
+                    {(formType === 'teams' || formType === 'mixed') && (
                       <Input 
                         label={t('tournament.players_per_team', 'Players per Team')} 
                         name="players_per_team" 
                         type="number" 
+                        key={formType}
                         defaultValue={editingTournament?.players_per_team || "1"} 
                         min="1" 
                       />
                     )}
-                    {formType === 'both' && (
+                    {formType === 'mixed' && (
                       <Input
                         label={t('tournament.singles_per_lane', 'Singles Players per Lane')}
                         name="singles_per_lane"
@@ -2488,7 +2494,7 @@ export default function App() {
                       />
                     )}
                     <Input label={t('tournament.shifts_count', 'Shift #')} name="shifts_count" type="number" defaultValue={editingTournament?.shifts_count || "1"} min="1" />
-                    {formType === 'individual' && (
+                    {formType === 'singles' && (
                       <Input label={t('tournament.oil_pattern', 'Oil Pattern Info')} name="oil_pattern" placeholder={t('tournament.oil_pattern_placeholder', 'e.g. House Shot')} defaultValue={editingTournament?.oil_pattern} />
                     )}
                   </div>
@@ -2523,21 +2529,39 @@ export default function App() {
                     </label>
                   </div>
 
-                  {formType === 'both' && (
+                  {formType === 'mixed' && (
                     <div className="px-3 py-2 rounded-md border border-indigo-200 bg-indigo-50/50 text-xs text-black/70">
-                      {t('tournament.both_hint', 'Players registered on a team roster count toward the Team bracket. Players not assigned to any team automatically count toward the Singles division (Male/Female); team members can also be flagged as Singles Entrant on their profile to count in both.')}
+                      {t('tournament.mixed_hint', 'Participants can compete in both the team event and Singles. Team members can also be flagged as Singles Entrants on their profile.')}
                     </div>
                   )}
 
                   <div className="grid grid-cols-1 gap-4">
                     <div>
-                      <Input
-                        label="Divisions (optional)"
-                        name="divisions"
-                        placeholder="e.g. A, B, C"
-                        defaultValue={editingTournament?.divisions || ''}
-                      />
-                      <p className="mt-1 text-[11px] text-black/40 px-1">Comma-separated division names. Participants can be assigned to a division, and standings can be filtered by division.</p>
+                      {(() => {
+                        const standardDivisions = ['Open', 'Men', 'Women', 'Mixed', 'Senior', 'Junior'];
+                        const existingDivisions = (editingTournament?.divisions || '').split(',').map((value) => value.trim()).filter(Boolean);
+                        const divisionOptions = [...standardDivisions, ...existingDivisions.filter((value) => !standardDivisions.includes(value))];
+                        return (
+                          <fieldset className="rounded-md border border-black/15 bg-white p-3">
+                            <legend className="px-1 text-sm font-semibold text-black/80">{t('tournament.division', 'Division')}</legend>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              {divisionOptions.map((division) => (
+                                <label key={division} className="flex items-center gap-2 text-sm text-black/75">
+                                  <input
+                                    type="checkbox"
+                                    name="division_options"
+                                    value={division}
+                                    defaultChecked={existingDivisions.includes(division)}
+                                    className="h-4 w-4 rounded border-black/30 text-orange-500 focus:ring-orange-200"
+                                  />
+                                  {division}
+                                </label>
+                              ))}
+                            </div>
+                            <p className="mt-2 text-[11px] text-black/40">{t('tournament.division_hint', 'Select divisions available for participant assignment and standings filters.')}</p>
+                          </fieldset>
+                        );
+                      })()}
                     </div>
                     <div>
                       <Input
@@ -2570,7 +2594,7 @@ export default function App() {
                     </button>
                   </div>
 
-                  {formType !== 'individual' && (
+                  {formType !== 'singles' && (
                     <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
                       <Input label={t('tournament.oil_pattern', 'Oil Pattern Info')} name="oil_pattern" placeholder={t('tournament.oil_pattern_placeholder', 'e.g. House Shot')} defaultValue={editingTournament?.oil_pattern} />
                     </div>
@@ -2582,7 +2606,8 @@ export default function App() {
                       name="status" 
                       defaultValue={editingTournament?.status}
                       options={[
-                        { value: 'draft', label: t('status.upcoming', 'Upcoming') },
+                        { value: 'draft', label: t('status.auto', 'Automatic (by date)') },
+                        { value: 'upcoming', label: t('status.upcoming', 'Upcoming') },
                         { value: 'active', label: t('status.ongoing', 'Ongoing') },
                         { value: 'finished', label: t('status.completed', 'Completed') },
                         { value: 'archived', label: t('status.archived', 'Archived') }
@@ -4542,6 +4567,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const logoClickTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<number[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [scores, setScores] = useState<Score[]>([]);
+  const [brackets, setBrackets] = useState<any[]>([]);
   const [mobileRosterTab, setMobileRosterTab] = useState<'players' | 'teams'>('players');
   const [loading, setLoading] = useState(true);
   // ...existing code...
@@ -4558,6 +4585,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const [isPlayerSelectionMode, setIsPlayerSelectionMode] = useState(false);
   const [showDestructiveImportModal, setShowDestructiveImportModal] = useState(false);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  const [importRequiresDestructiveConfirmation, setImportRequiresDestructiveConfirmation] = useState(false);
   const [destructiveImportConfirmation, setDestructiveImportConfirmation] = useState('');
   const [playerSort, setPlayerSort] = useState<{ key: 'none' | 'club' | 'average' | 'first_name' | 'last_name' | 'gender' | 'hand'; direction: 'asc' | 'desc' }>({
     key: 'none',
@@ -4600,14 +4628,18 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const loadData = async () => {
     setLoading(true);
     try {
-      const [pData, tData, logosData] = await Promise.all([
+      const [pData, tData, logosData, scoresData, bracketsData] = await Promise.all([
         api.getParticipants(tournament.id),
         api.getTeams(tournament.id),
-        fetch('/api/club-logos').then(r => r.ok ? r.json() : {})
+        fetch('/api/club-logos').then(r => r.ok ? r.json() : {}),
+        api.getScores(tournament.id).catch(() => [] as Score[]),
+        api.getBrackets(tournament.id).catch(() => [] as any[]),
       ]);
       setParticipants(pData);
       setTeams(tData);
       setClubLogos(logosData);
+      setScores(Array.isArray(scoresData) ? scoresData : []);
+      setBrackets(Array.isArray(bracketsData) ? bracketsData : []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -4685,10 +4717,13 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       ...(hasDivisionData ? [p.division || ''] : []),
     ]);
     
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(r => r.join(','))
-    ].join('\n');
+    const escapeCsvValue = (value: unknown) => {
+      const text = String(value ?? '');
+      return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map(escapeCsvValue).join(','))
+      .join('\r\n');
     
     const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -4707,122 +4742,16 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     if (!file) return;
 
     const hasTournamentData = participants.length > 0 || scores.length > 0 || brackets.length > 0;
-    if (hasTournamentData) {
-      setPendingImportFile(file);
-      setDestructiveImportConfirmation('');
-      setShowDestructiveImportModal(true);
-      inputEl.value = '';
-      return;
-    }
-
-    if (!confirm('Importing players will replace all existing player data for this tournament. Continue?')) {
-      inputEl.value = '';
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const text = (event.target?.result as string).replace(/^\uFEFF/, '');
-      const lines = text.split('\n');
-      const parsedHeaders = (lines[0] || '').split(',').map((s) => s.trim().toLowerCase());
-      const hasHeader = parsedHeaders.includes('first name') || parsedHeaders.includes('last name');
-      const participantIdIndex = hasHeader
-        ? (parsedHeaders.indexOf('participant id') >= 0 ? parsedHeaders.indexOf('participant id') : parsedHeaders.indexOf('id'))
-        : -1;
-      const firstNameIndex = hasHeader ? parsedHeaders.indexOf('first name') : 0;
-      const lastNameIndex = hasHeader ? parsedHeaders.indexOf('last name') : 1;
-      const genderIndex = hasHeader ? parsedHeaders.indexOf('gender') : 2;
-      const handsIndex = hasHeader ? parsedHeaders.indexOf('hands') : -1;
-      const clubIndex = hasHeader ? parsedHeaders.indexOf('club') : 3;
-      const averageIndex = hasHeader ? parsedHeaders.indexOf('average') : 4;
-      const emailIndex = hasHeader
-        ? (() => {
-          const contactIndex = parsedHeaders.indexOf('contact details');
-          return contactIndex >= 0 ? contactIndex : parsedHeaders.indexOf('email');
-        })()
-        : 5;
-      const divisionIndex = hasHeader ? parsedHeaders.indexOf('division') : -1;
-      const dataLines = hasHeader ? lines.slice(1) : lines;
-      
-      const newParticipants = dataLines.filter(line => line.trim()).map(line => {
-        const columns = line.split(',').map(s => s.trim());
-        const parsedParticipantId = participantIdIndex >= 0 ? Number.parseInt(columns[participantIdIndex], 10) : NaN;
-        let first_name = (firstNameIndex >= 0 ? columns[firstNameIndex] : columns[0]) || '';
-        let last_name = (lastNameIndex >= 0 ? columns[lastNameIndex] : columns[1]) || '';
-        const gender = (genderIndex >= 0 ? columns[genderIndex] : columns[2]) || '';
-        const hands = handsIndex >= 0 ? (columns[handsIndex] || '') : '';
-        const club = (clubIndex >= 0 ? columns[clubIndex] : columns[3]) || '';
-        const average = (averageIndex >= 0 ? columns[averageIndex] : columns[4]) || '';
-        const email = (emailIndex >= 0 ? columns[emailIndex] : columns[5]) || '';
-        const division = divisionIndex >= 0 ? (columns[divisionIndex] || '') : '';
-
-        if (first_name && !last_name) {
-          const parts = first_name.split(/\s+/).filter(Boolean);
-          if (parts.length > 1) {
-            first_name = parts[0];
-            last_name = parts.slice(1).join(' ');
-          } else {
-            last_name = 'Player';
-          }
-        }
-
-        if (!first_name && last_name) {
-          first_name = 'Unknown';
-        }
-
-        if (!first_name && !last_name) {
-          return null;
-        }
-
-        return {
-          ...(Number.isFinite(parsedParticipantId) && parsedParticipantId > 0 ? { id: parsedParticipantId } : {}),
-          first_name,
-          last_name,
-          gender,
-          hands: normalizeHandsStyle(hands),
-          club,
-          average: parseInt(average) || 0,
-          email,
-          division: division || undefined,
-        };
-      }).filter((participant): participant is {
-        id?: number;
-        first_name: string;
-        last_name: string;
-        gender: string;
-        hands: string;
-        club: string;
-        average: number;
-        email: string;
-        division?: string;
-      } => participant !== null);
-
-      try {
-        const hasTournamentData = participants.length > 0 || scores.length > 0 || brackets.length > 0;
-        if (hasTournamentData) {
-          await api.createTournamentSnapshot(tournament.id, 'pre-participant-import-replace');
-        }
-
-        const importResult = await api.bulkAddParticipants(tournament.id, newParticipants, {
-          replaceExisting: true,
-          allowDestructiveReplace: hasTournamentData,
-        });
-        if (importResult.family_names_filled) {
-          alert(`Family names completed for ${importResult.family_names_filled} imported player(s) using full names or past tournament records.`);
-        }
-        await loadData();
-      } catch (err) {
-        alert(err instanceof Error ? err.message : 'Failed to import participants. Existing scores and teams were not changed.');
-      } finally {
-        inputEl.value = '';
-      }
-    };
-    reader.readAsText(file);
+    setPendingImportFile(file);
+    setImportRequiresDestructiveConfirmation(hasTournamentData);
+    setDestructiveImportConfirmation('');
+    setShowDestructiveImportModal(true);
+    inputEl.value = '';
   };
 
   const handleProceedWithDestructiveImport = async () => {
     if (!pendingImportFile) return;
-    if (destructiveImportConfirmation.trim() !== 'REPLACE IMPORT') {
+    if (importRequiresDestructiveConfirmation && destructiveImportConfirmation.trim() !== 'REPLACE IMPORT') {
       alert('Please type REPLACE IMPORT to confirm the destructive import.');
       return;
     }
@@ -4830,106 +4759,37 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     const inputEl = importCSVInputRef.current;
     const file = pendingImportFile;
     setPendingImportFile(null);
+    setImportRequiresDestructiveConfirmation(false);
     setDestructiveImportConfirmation('');
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const text = (event.target?.result as string).replace(/^\uFEFF/, '');
-      const lines = text.split('\n');
-      const parsedHeaders = (lines[0] || '').split(',').map((s) => s.trim().toLowerCase());
-      const hasHeader = parsedHeaders.includes('first name') || parsedHeaders.includes('last name');
-      const participantIdIndex = hasHeader
-        ? (parsedHeaders.indexOf('participant id') >= 0 ? parsedHeaders.indexOf('participant id') : parsedHeaders.indexOf('id'))
-        : -1;
-      const firstNameIndex = hasHeader ? parsedHeaders.indexOf('first name') : 0;
-      const lastNameIndex = hasHeader ? parsedHeaders.indexOf('last name') : 1;
-      const genderIndex = hasHeader ? parsedHeaders.indexOf('gender') : 2;
-      const handsIndex = hasHeader ? parsedHeaders.indexOf('hands') : -1;
-      const clubIndex = hasHeader ? parsedHeaders.indexOf('club') : 3;
-      const averageIndex = hasHeader ? parsedHeaders.indexOf('average') : 4;
-      const emailIndex = hasHeader
-        ? (() => {
-          const contactIndex = parsedHeaders.indexOf('contact details');
-          return contactIndex >= 0 ? contactIndex : parsedHeaders.indexOf('email');
-        })()
-        : 5;
-      const divisionIndex = hasHeader ? parsedHeaders.indexOf('division') : -1;
-      const dataLines = hasHeader ? lines.slice(1) : lines;
-
-      const newParticipants = dataLines.filter(line => line.trim()).map(line => {
-        const columns = line.split(',').map(s => s.trim());
-        const parsedParticipantId = participantIdIndex >= 0 ? Number.parseInt(columns[participantIdIndex], 10) : NaN;
-        let first_name = (firstNameIndex >= 0 ? columns[firstNameIndex] : columns[0]) || '';
-        let last_name = (lastNameIndex >= 0 ? columns[lastNameIndex] : columns[1]) || '';
-        const gender = (genderIndex >= 0 ? columns[genderIndex] : columns[2]) || '';
-        const hands = handsIndex >= 0 ? (columns[handsIndex] || '') : '';
-        const club = (clubIndex >= 0 ? columns[clubIndex] : columns[3]) || '';
-        const average = (averageIndex >= 0 ? columns[averageIndex] : columns[4]) || '';
-        const email = (emailIndex >= 0 ? columns[emailIndex] : columns[5]) || '';
-        const division = divisionIndex >= 0 ? (columns[divisionIndex] || '') : '';
-
-        if (first_name && !last_name) {
-          const parts = first_name.split(/\s+/).filter(Boolean);
-          if (parts.length > 1) {
-            first_name = parts[0];
-            last_name = parts.slice(1).join(' ');
-          } else {
-            last_name = 'Player';
-          }
-        }
-
-        if (!first_name && last_name) {
-          first_name = 'Unknown';
-        }
-
-        if (!first_name && !last_name) {
-          return null;
-        }
-
-        return {
-          ...(Number.isFinite(parsedParticipantId) && parsedParticipantId > 0 ? { id: parsedParticipantId } : {}),
-          first_name,
-          last_name,
-          gender,
-          hands: normalizeHandsStyle(hands),
-          club,
-          average: parseInt(average) || 0,
-          email,
-          division: division || undefined,
-        };
-      }).filter((participant): participant is {
-        id?: number;
-        first_name: string;
-        last_name: string;
-        gender: string;
-        hands: string;
-        club: string;
-        average: number;
-        email: string;
-        division?: string;
-      } => participant !== null);
-
-      try {
-        const hasTournamentData = participants.length > 0 || scores.length > 0 || brackets.length > 0;
-        if (hasTournamentData) {
-          await api.createTournamentSnapshot(tournament.id, 'pre-participant-import-replace');
-        }
-
-        const importResult = await api.bulkAddParticipants(tournament.id, newParticipants, {
-          replaceExisting: true,
-          allowDestructiveReplace: true,
-        });
-        if (importResult.family_names_filled) {
-          alert(`Family names completed for ${importResult.family_names_filled} imported player(s) using full names or past tournament records.`);
-        }
-        await loadData();
-      } catch (err) {
-        alert(err instanceof Error ? err.message : 'Failed to import participants. Existing scores and teams were not changed.');
-      } finally {
-        if (inputEl) inputEl.value = '';
+    try {
+      const text = await file.text();
+      const newParticipants = parseParticipantCsv(text);
+      if (newParticipants.length === 0) {
+        throw new Error('No participants were found in this CSV. Check that it contains participant rows and First Name / Last Name columns.');
       }
-    };
-    reader.readAsText(file);
+      const hasTournamentData = participants.length > 0 || scores.length > 0 || brackets.length > 0;
+      if (hasTournamentData) {
+        await api.createTournamentSnapshot(tournament.id, 'pre-participant-import-replace');
+      }
+
+      const importResult = await api.bulkAddParticipants(tournament.id, newParticipants, {
+        replaceExisting: true,
+        allowDestructiveReplace: hasTournamentData,
+      });
+      await loadData();
+      const familyNameNote = importResult.family_names_filled
+        ? ` Family names were completed for ${importResult.family_names_filled} participant(s).`
+        : '';
+      const preservedNote = importResult.preserved_existing
+        ? ` Kept ${importResult.preserved_existing} existing participant(s) because they have linked tournament data.`
+        : '';
+      alert(`Imported ${newParticipants.length} participant(s).${familyNameNote}${preservedNote}`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to import participants. Existing scores and teams were not changed.');
+    } finally {
+      if (inputEl) inputEl.value = '';
+    }
   };
 
   const handleSaveParticipants = async () => {
@@ -5608,17 +5468,21 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => {
           setShowDestructiveImportModal(false);
           setPendingImportFile(null);
+          setImportRequiresDestructiveConfirmation(false);
           setDestructiveImportConfirmation('');
         }}>
           <Card className="w-full max-w-lg p-5" onClick={(e: any) => e.stopPropagation()}>
             <div className="flex items-center justify-between gap-3 mb-3">
-              <h3 className="text-lg font-bold text-rose-700">Destructive import warning</h3>
+              <h3 className={`text-lg font-bold ${importRequiresDestructiveConfirmation ? 'text-rose-700' : 'text-emerald-800'}`}>
+                {importRequiresDestructiveConfirmation ? 'Confirm participant import' : 'Import participants'}
+              </h3>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => {
                   setShowDestructiveImportModal(false);
                   setPendingImportFile(null);
+                  setImportRequiresDestructiveConfirmation(false);
                   setDestructiveImportConfirmation('');
                 }}
                 title="Close"
@@ -5629,24 +5493,31 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
             </div>
 
             <div className="space-y-4 text-sm text-black/75">
-              <p className="font-semibold text-black">This import will update the participant roster. Keep Participant ID values from the exported CSV to preserve existing records.</p>
-              <ul className="list-disc space-y-1 pl-5 text-black/65">
-                <li>Rows with matching IDs are updated in place, preserving scores, team membership, lanes, and brackets.</li>
-                <li>When scores or brackets exist, the import is rejected if it omits any existing Participant ID.</li>
-                <li>A snapshot is created before importing.</li>
-              </ul>
-
-              <label className="block text-xs font-bold uppercase tracking-wide text-black/55">
-                Type <span className="font-mono">REPLACE IMPORT</span> to continue
-              </label>
-              <input
-                type="text"
-                value={destructiveImportConfirmation}
-                onChange={(e) => setDestructiveImportConfirmation(e.target.value)}
-                className="h-10 w-full rounded-md border border-rose-200 bg-white px-3 text-sm text-black focus:outline-none focus:ring-2 focus:ring-rose-200"
-                placeholder="REPLACE IMPORT"
-                aria-label="Confirm destructive import"
-              />
+              <p className="font-semibold text-black">
+                Selected file: <span className="font-normal">{pendingImportFile?.name}</span>
+              </p>
+              {importRequiresDestructiveConfirmation ? (
+                <>
+                  <p className="font-semibold text-black">This will update or replace participant roster data. A snapshot is created before importing.</p>
+                  <ul className="list-disc space-y-1 pl-5 text-black/65">
+                    <li>Rows with matching Participant IDs are updated in place, preserving linked records.</li>
+                    <li>Existing participants with linked tournament data are kept if omitted from the CSV.</li>
+                  </ul>
+                  <label className="block text-xs font-bold uppercase tracking-wide text-black/55">
+                    Type <span className="font-mono">REPLACE IMPORT</span> to continue
+                  </label>
+                  <input
+                    type="text"
+                    value={destructiveImportConfirmation}
+                    onChange={(e) => setDestructiveImportConfirmation(e.target.value)}
+                    className="h-10 w-full rounded-md border border-rose-200 bg-white px-3 text-sm text-black focus:outline-none focus:ring-2 focus:ring-rose-200"
+                    placeholder="REPLACE IMPORT"
+                    aria-label="Confirm destructive import"
+                  />
+                </>
+              ) : (
+                <p className="text-black/65">The participant rows in this CSV will be added to this tournament.</p>
+              )}
 
               <div className="flex justify-end gap-2 pt-2">
                 <Button
@@ -5655,6 +5526,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   onClick={() => {
                     setShowDestructiveImportModal(false);
                     setPendingImportFile(null);
+                    setImportRequiresDestructiveConfirmation(false);
                     setDestructiveImportConfirmation('');
                   }}
                   title="Cancel"
@@ -5666,10 +5538,10 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   size="sm"
                   variant="remove"
                   onClick={() => void handleProceedWithDestructiveImport()}
-                  title="Confirm replacement"
-                  ariaLabel="Confirm destructive import"
+                  title="Confirm participant import"
+                  ariaLabel="Confirm participant import"
                 >
-                  Replace existing data
+                  Confirm import
                 </Button>
               </div>
             </div>
@@ -6617,6 +6489,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
   useEffect(() => {
     setOutOfOperationLanesByShift({});
+    api.getOutOfOperationLanes(tournament.id).then(setOutOfOperationLanesByShift).catch(console.error);
     loadData();
   }, [tournament.id]);
 
@@ -6684,7 +6557,9 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       const next = current.includes(laneNumber)
         ? current.filter((value) => value !== laneNumber)
         : [...current, laneNumber];
-      return { ...prev, [shiftNumber]: next };
+      const updated = { ...prev, [shiftNumber]: next };
+      api.saveOutOfOperationLanes(tournament.id, updated).catch(console.error);
+      return updated;
     });
   };
 
@@ -14728,7 +14603,8 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           s.grand_total,
           s.average.toFixed(1),
         ]);
-    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const escapeCell = (v: unknown) => { const t = String(v ?? ''); return /[",\r\n;]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+    const csvContent = [headers, ...rows].map(r => r.map(escapeCell).join(',')).join('\r\n');
     const blob = new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -14747,10 +14623,48 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     reader.onload = async (event) => {
       try {
         const text = (event.target?.result as string).replace(/^\uFEFF/, '');
-        const lines = text.split('\n').filter(line => line.trim());
-        if (lines.length < 2) return;
+        const csvRows = parseCsvRows(text);
+        if (csvRows.length < 2) {
+          alert(tx('Invalid import file. Expected columns: participant, game_1, game_2... (or legacy: participant_id, game_number, score)'));
+          return;
+        }
 
-        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+        const headerAliases: Record<string, string> = { player: 'participant', name: 'participant', 'participant name': 'participant', 'player name': 'participant', pos: 'rank', position: 'rank', 'game 1': 'game_1' };
+        const headers = csvRows[0].map(h => {
+          const key = h.trim().toLowerCase().replace(/\s+/g, ' ');
+          const gameMatch = key.match(/^(?:game|g)[ _-]?(\d+)$/);
+          if (gameMatch) return `game_${gameMatch[1]}`;
+          return headerAliases[key] || key.replace(/ /g, '_');
+        });
+        if (headers.includes('team') && !headers.includes('participant') && !headers.includes('participant_id')) {
+          const teamColIdx = headers.indexOf('team');
+          const additionalIdx = headers.indexOf('additional_score');
+          const bonusIdx = headers.indexOf('bonus');
+          const teamIdByName = new Map<string, number>();
+          for (const row of teamStandingsRowsAll) {
+            if (row.team_id) teamIdByName.set(String(row.team_name).trim().toLowerCase(), Number(row.team_id));
+          }
+          let matched = 0;
+          const jobs: Promise<unknown>[] = [];
+          for (const cols of csvRows.slice(1)) {
+            const teamId = teamIdByName.get((cols[teamColIdx] || '').trim().toLowerCase());
+            if (!teamId) continue;
+            const add = additionalIdx !== -1 ? Number.parseInt(cols[additionalIdx], 10) : NaN;
+            const bon = bonusIdx !== -1 ? Number.parseInt(cols[bonusIdx], 10) : NaN;
+            if (Number.isFinite(add)) jobs.push(api.setStandingAdditionalScore(tournament.id, { target_kind: 'team', target_id: teamId, additional_score: add }));
+            if (Number.isFinite(bon)) jobs.push(api.setStandingBonus(tournament.id, { target_kind: 'team', target_id: teamId, bonus: bon }));
+            if (Number.isFinite(add) || Number.isFinite(bon)) matched++;
+          }
+          if (jobs.length === 0) {
+            alert(tx('No team additional score or bonus values matched. Check that team names match and the file has additional_score or bonus columns.'));
+            return;
+          }
+          await Promise.all(jobs);
+          await loadStandings();
+          alert(tx(`Imported additional score/bonus for ${matched} team(s). Team game totals are calculated from player scores, so import Player standings for those.`));
+          return;
+        }
+        const lines = csvRows.slice(1).map((r) => r);
 
         // --- New wide export format: rank, participant, [club], [team], [zone], game_1..., total, [additional_score], [bonus], grand_total, [avg] ---
         const isWideFormat = headers.includes('rank') && headers.includes('participant');
@@ -14780,8 +14694,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           const bonusPayloads: Array<{ target_id: number; bonus: number }> = [];
           const additionalPayloads: Array<{ target_id: number; additional_score: number }> = [];
 
-          for (const line of lines.slice(1)) {
-            const cols = line.split(',').map(c => c.trim());
+          for (const cols of lines) {
             const nameRaw = (cols[participantColIdx] || '').trim().toLowerCase();
             const participant = participantsByShortName.get(nameRaw) || participantsByFullName.get(nameRaw);
             if (!participant) continue;
@@ -14836,8 +14749,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           }
 
           const tasks: Promise<any>[] = [];
-          for (const line of lines.slice(1)) {
-            const cols = line.split(',').map(c => c.trim());
+          for (const cols of lines) {
             const participantId = Number.parseInt(cols[participantIdIndex], 10);
             const gameNumber = Number.parseInt(cols[gameNumberIndex], 10);
             const score = Number.parseInt(cols[scoreIndex], 10);

@@ -19,7 +19,7 @@ export interface Tournament {
   players_per_team: number;
   shifts_count: number;
   oil_pattern: string;
-  status: 'draft' | 'active' | 'finished' | 'archived';
+  status: 'draft' | 'upcoming' | 'active' | 'finished' | 'archived';
   has_additional_scores?: number;
   has_bonus?: number;
   show_player_style?: number;
@@ -519,6 +519,10 @@ const api = {
     const res = await fetch(`/api/participants/${id}`, {
       method: 'DELETE',
     });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to delete participant');
+    }
     return res.json();
   },
   async clearParticipants(tournamentId: number, options?: { force?: boolean }): Promise<{ success: boolean; deleted: number }> {
@@ -536,7 +540,7 @@ const api = {
     tournamentId: number,
     participants: Partial<Participant>[],
     options?: { replaceExisting?: boolean; allowDestructiveReplace?: boolean }
-  ): Promise<{ success: boolean; family_names_filled?: number }> {
+  ): Promise<{ success: boolean; family_names_filled?: number; preserved_existing?: number }> {
     const res = await fetch(`/api/tournaments/${tournamentId}/participants/bulk`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -610,6 +614,18 @@ const api = {
   },
   async getLanes(tournamentId: number): Promise<LaneAssignment[]> {
     const res = await fetch(`/api/tournaments/${tournamentId}/lanes`);
+    return res.json();
+  },
+  async getOutOfOperationLanes(tournamentId: number): Promise<Record<number, number[]>> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/lanes/out-of-operation`);
+    return res.json();
+  },
+  async saveOutOfOperationLanes(tournamentId: number, data: Record<number, number[]>): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/lanes/out-of-operation`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
     return res.json();
   },
   async addLaneAssignment(tournamentId: number, data: Partial<LaneAssignment>): Promise<{ id: number }> {
