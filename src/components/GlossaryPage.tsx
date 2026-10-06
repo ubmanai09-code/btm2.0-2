@@ -158,7 +158,7 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
           <div className="flex items-center gap-2 mb-1">
             <BookOpen size={22} className="text-orange-500" />
             <h1 className="text-3xl font-bold tracking-tight">
-              {lang === 'mn' ? 'Боулингийн Нэр Томьёоны Тайлбар Толь' : 'Bowling Glossary'}
+              {lang === 'mn' ? 'Боулингийн нэр томьёоны тайлбар толь' : 'Bowling Glossary'}
             </h1>
           </div>
           <p className="text-sm text-black/40 dark:text-white/40">
