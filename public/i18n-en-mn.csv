@@ -23,7 +23,7 @@ common.active,Active,Идэвхтэй
 common.inactive,Inactive,Идэвхгүй
 common.no_data,No data,Өгөгдөл алга
 common.no_results,No results yet,Одоогоор үр дүн алга
-public.tab.lane_assignments,Lanes,Зам хуваарилалт
+public.tab.lane_assignments,Lanes,Замууд
 public.tab.scoring,Score,Оноо
 public.tab.brackets,Brackets,Бракетууд
 public.tab.tournament_result,Standing,Тэмцээний дүн
@@ -137,7 +137,7 @@ tournament.type.team,Team,Баг
 tournament.entry_type,Entry Type,Оролцооны төрөл
 tournament.entry_type.singles,Singles,Ганцаарчилсан
 tournament.entry_type.doubles,Doubles,Хос
-tournament.entry_type.trios,Trios,Гурвал
+tournament.entry_type.trios,Trios,Гурвалсан 
 tournament.entry_type.teams,Teams,Баг
 tournament.entry_type.mixed,Mixed,Холимог
 tournament.gender_eligibility,Gender Eligibility,Хүйсийн хамрах хүрээ
@@ -254,7 +254,7 @@ teams.export,Export Teams,Багууд экспортлох
 players.last_name,Family Name,Овог
 common.female,Female,Эмэгтэй
 players.first_name,First Name,Нэр
-players.gender_short,Gender (F/M),Хүйс (Э/Эр)
+players.gender_short,Gender (F/M),Хүйс (Эм/Эр)
 players.hands,Hands,Барилт
 brackets.generate,Generate Bracket,Бракет үүсгэх
 brackets.generate_now,Generate Now,Одоо үүсгэх
