@@ -131,10 +131,25 @@ tournament.organizer_placeholder,e.g. City Bowling Club,ж.нь. City Bowling Cl
 tournament.logo_url,Tournament Logo URL,Тэмцээний лого URL
 tournament.logo_placeholder,e.g. /logo.png,ж.нь. /logo.png
 tournament.format,Format,Формат
-tournament.bracket_type,Bracket Type,Бракетын төрөл
 tournament.type,Type,Төрөл
 tournament.type.individual,Individual,Ганцаарчилсан
 tournament.type.team,Team,Баг
+tournament.entry_type,Entry Type,Оролцооны төрөл
+tournament.entry_type.singles,Singles,Ганцаарчилсан
+tournament.entry_type.doubles,Doubles,Хос
+tournament.entry_type.trios,Trios,Гурвал
+tournament.entry_type.teams,Teams,Баг
+tournament.entry_type.mixed,Mixed,Холимог
+tournament.gender_eligibility,Gender Eligibility,Хүйсийн хамрах хүрээ
+tournament.division,Division,Ангилал
+tournament.division_hint,Select divisions available for participant assignment and standings filters.,Тамирчинд оноож хүснэгтээр шүүх ангиллуудаа сонгоно уу.
+tournament.mixed_hint,Participants can compete in both the team event and Singles. Team members can also be flagged as Singles Entrants on their profile.,Тамирчид багийн болон ганцаарчилсан төрөлд оролцож болно. Багийн тамирчдыг ганцаарчилсан оролцогчоор мөн бүртгэж болно.
+division.open,Open,Нээлттэй
+division.men,Men,Эрэгтэй
+division.women,Women,Эмэгтэй
+division.mixed,Mixed,Холимог
+division.senior,Senior,Ахмад
+division.junior,Junior,Залуучууд
 tournament.games_count,Games #,Тоглолтын тоо
 tournament.genders_rule,Genders Rule,Хүйсийн дүрэм
 tournament.lanes_count,Lane #,Замын тоо

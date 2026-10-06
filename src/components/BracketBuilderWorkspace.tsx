@@ -2262,7 +2262,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
               <div>
                 <div className="text-[13px] font-black uppercase tracking-[0.08em] text-[#33408a]">Generated Bracket</div>
                 <div className="text-sm text-[#5b6795]">One bracket surface for scoring, moderation, and public viewing.</div>
-                <div className={`mt-1 inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] ${bracketComplete ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                <div className={`mt-1 inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] ${bracketComplete ? 'border-blue-500 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
                   {bracketComplete ? 'Bracket Complete' : 'Bracket In Progress'}
                 </div>
               </div>
@@ -2500,7 +2500,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                                       Saving...
                                     </div>
                                   ) : recentlySavedMatchId === row.id ? (
-                                    <div className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-emerald-700">
+                                    <div className="inline-flex items-center rounded-full border border-blue-500 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-emerald-700">
                                       Saved
                                     </div>
                                   ) : null}
@@ -2569,7 +2569,7 @@ export function BracketBuilderWorkspace({ tournament, role }: BuilderProps) {
                                   return (
                                     <div key={pickerKey} className="relative">
                                       <div
-                                        className={`rounded-lg border px-2.5 py-1.5 text-xs ${isLiveSlotWinner(row, slot) ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : slot.sourceType === 'participant' ? 'border-sky-200 bg-sky-50 text-sky-800' : slot.sourceType === 'advance' ? 'border-orange-200 bg-orange-50 text-gray-400' : 'border-black/10 bg-black/[0.03] text-black/45'} ${isEditableSlot ? 'cursor-pointer select-none' : ''}`}
+                                        className={`rounded-lg border px-2.5 py-1.5 text-xs ${isLiveSlotWinner(row, slot) ? 'border-blue-500 bg-emerald-50 text-emerald-700' : slot.sourceType === 'participant' ? 'border-sky-200 bg-sky-50 text-sky-800' : slot.sourceType === 'advance' ? 'border-orange-200 bg-orange-50 text-gray-400' : 'border-black/10 bg-black/[0.03] text-black/45'} ${isEditableSlot ? 'cursor-pointer select-none' : ''}`}
                                         onDoubleClick={() => {
                                           if (!isEditableSlot) return;
                                           setSlotPickerKey(isPickerOpen ? null : pickerKey);

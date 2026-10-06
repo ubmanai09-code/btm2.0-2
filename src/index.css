@@ -184,9 +184,21 @@
   --info-surface: #0C4A6E;
   --primary-surface: #064E3B;
 
-  /* Legacy variable for compatibility */
-  --color-emerald-800: oklch(0.76 0.11 169.94);
   --ui-icon-opacity: 0.7;
+}
+
+/* Dark mode: emerald-800 is too dim on dark surfaces, so text/borders use light green. Solid fills stay emerald-800. */
+[data-theme="dark"] .text-emerald-800,
+[data-theme="dark"] .hover\:text-emerald-800:hover {
+  color: #6ee7b7;
+}
+[data-theme="dark"] .border-emerald-800:not(.bg-emerald-800) {
+  border-color: #6ee7b7;
+}
+/* Small status dots would vanish at emerald-800 on dark surfaces */
+[data-theme="dark"] .bg-emerald-800.rounded-full.h-2\.5 {
+  background-color: #6ee7b7;
+  border-color: #6ee7b7;
 }
 
 @layer utilities {
@@ -212,7 +224,7 @@ body {
 
 .ui-card {
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 1px solid #9ca3af; /* gray-400: default container border */
   border-radius: var(--ui-radius);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
@@ -302,6 +314,16 @@ body {
 }
 
 /* Dark mode: override hardcoded Tailwind text colors inside scoring table */
+[data-theme="dark"] td.scoring-table-surface.text-gray-800,
+[data-theme="dark"] td.scoring-table-surface.text-gray-700,
+[data-theme="dark"] tr.scoring-table-surface td.text-gray-800 {
+  color: var(--text) !important;
+}
+[data-theme="dark"] td.scoring-table-surface.text-gray-500,
+[data-theme="dark"] tr.scoring-table-surface td.text-gray-500,
+[data-theme="dark"] th.scoring-table-surface.text-gray-500 {
+  color: var(--text-tertiary) !important;
+}
 [data-theme="dark"] .scoring-table-surface td .text-gray-700,
 [data-theme="dark"] .scoring-table-surface td .text-gray-800,
 [data-theme="dark"] .scoring-table-surface .text-gray-700,
@@ -934,15 +956,18 @@ th {
 }
 
 /* ── Emerald/orange card borders ── */
-[data-theme="dark"] .border-emerald-200 { border-color: color-mix(in srgb, #16a34a 30%, var(--border)) !important; }
 [data-theme="dark"] .border-orange-200 { border-color: color-mix(in srgb, #f97316 30%, var(--border)) !important; }
 
 /* ── Scoring team-total circle cell ── */
 /* Remove the standout green cell background — match card */
 [data-theme="dark"] .bg-emerald-50\/60 { background-color: transparent !important; }
 [data-theme="dark"] .bg-emerald-50\/70 { background-color: transparent !important; }
+/* Softer gray-400 borders in dark mode */
+[data-theme="dark"] .ui-card { border-color: #4b5668; }
+[data-theme="dark"] .border-gray-400,
+[data-theme="dark"] .hover\:border-gray-400:hover { border-color: #4b5668 !important; }
 /* Circle border → white; circle bg → card color */
-[data-theme="dark"] .rounded-full.border-emerald-200 {
+[data-theme="dark"] .rounded-full.border-gray-400 {
   border-color: rgba(255, 255, 255, 0.65) !important;
   background-color: var(--card) !important;
 }
@@ -1037,6 +1062,16 @@ th {
   background-color: color-mix(in srgb, var(--text) 4%, var(--card)) !important;
 }
 
+/* ── Participants zebra (same as Standings) ── */
+.participants-zebra tbody td.scoring-table-surface { background: transparent; }
+.participants-zebra tbody tr.scoring-table-surface:not([class*="bg-red"]) { background: #fff; }
+.participants-zebra tbody tr.scoring-table-surface:not([class*="bg-red"]):nth-child(even) { background: #FAFAFA; }
+[data-theme="dark"] .participants-zebra tbody td.scoring-table-surface { background: transparent; }
+[data-theme="dark"] .participants-zebra tbody tr.scoring-table-surface:not([class*="bg-red"]) { background: var(--card); }
+[data-theme="dark"] .participants-zebra tbody tr.scoring-table-surface:not([class*="bg-red"]):nth-child(even) {
+  background-color: color-mix(in srgb, var(--text) 4%, var(--card)) !important;
+}
+
 /* ── Form elements ── */
 [data-theme="dark"] select,
 [data-theme="dark"] textarea {
@@ -1112,4 +1147,37 @@ th {
     overflow: visible !important;
     color: black !important;
   }
+}
+
+/* Dashboard hero (no live event): portrait image + light text on small screens, wide image + dark text on desktop */
+.hero-nolive {
+  --hero-fg: #ffffff; --hero-muted: #e2e8f0; --hero-chip-bg: rgba(15, 23, 42, .55); --hero-chip-bd: rgba(255, 255, 255, .4);
+  background-image: linear-gradient(rgba(8, 12, 24, .5), rgba(8, 12, 24, .5)), url('/bowling-bg-mobile.jpg') !important;
+  background-size: cover !important; background-position: center !important;
+}
+@media (min-width: 640px) {
+  .hero-nolive {
+    --hero-fg: #111827; --hero-muted: #334155; --hero-chip-bg: rgba(255, 255, 255, .85); --hero-chip-bd: #9ca3af;
+    background-image: url('/bowling-bg.jpg') !important; background-position: right center !important;
+  }
+}
+
+/* Mobile bottom navigation */
+.mnav {
+  position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 40; height: 64px;
+  display: flex; align-items: center; justify-content: space-around; padding: 0 8px;
+  border-radius: 9999px; background: #ffffff; border: 2px solid #111827;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.mnav-btn {
+  display: flex; align-items: center; justify-content: center; width: 40px; height: 40px;
+  border-radius: 9999px; border: 2px solid #111827; color: #111827; background: transparent;
+  transition: background-color .15s, border-color .15s, color .15s;
+}
+.mnav-btn.active { background: #f97316; border-color: #f97316; color: #ffffff; }
+[data-theme="dark"] .mnav { background: #000000; border-color: #e5e7eb; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7); }
+[data-theme="dark"] .mnav-btn { border-color: #e5e7eb; color: #f8fafc; }
+[data-theme="dark"] .mnav-btn.active { background: #f97316; border-color: #f97316; color: #000000; }
+@media (min-width: 640px) {
+  .mnav { display: none; }
 }

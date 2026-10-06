@@ -1,7 +1,7 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
-import { randomUUID } from "crypto";
+import { randomUUID, createHash } from "crypto";
 import { compare, hash } from "bcryptjs";
 import net from "net";
 import fs from "fs";
@@ -602,7 +602,12 @@ function initDb() {
     { name: 'has_additional_scores', type: 'INTEGER NOT NULL DEFAULT 0' },
     { name: 'has_bonus', type: 'INTEGER NOT NULL DEFAULT 0' },
     { name: 'show_player_style', type: 'INTEGER NOT NULL DEFAULT 1' },
-    { name: 'divisions', type: 'TEXT' }
+    { name: 'divisions', type: 'TEXT' },
+    { name: 'end_date', type: 'TEXT' },
+    { name: 'competition_style', type: 'TEXT' },
+    { name: 'lane_length', type: 'TEXT' },
+    { name: 'scoring_type', type: "TEXT DEFAULT 'scratch'" },
+    { name: 'finals_format', type: 'TEXT' }
   ];
 
   migrations.forEach(m => {
@@ -973,6 +978,8 @@ async function startServer() {
   fs.mkdirSync(persistentRootAssetsDir, { recursive: true });
   fs.mkdirSync(participantPhotosDir, { recursive: true });
   fs.mkdirSync(clubLogosDir, { recursive: true });
+  const tournamentLogosDir = path.join(persistentDataDir, "tournament-logos");
+  fs.mkdirSync(tournamentLogosDir, { recursive: true });
   // Keep user-uploaded files in persistent storage and only copy missing packaged assets.
   copyDirMissingFiles(publicSponsorsDir, persistentSponsorsDir);
   copyDirMissingFiles(distSponsorsDir, persistentSponsorsDir);
@@ -1004,6 +1011,7 @@ async function startServer() {
   // Serve participant photos from persistent storage.
   app.use('/participant-photos', express.static(participantPhotosDir));
   app.use('/club-logos', express.static(clubLogosDir));
+  app.use('/tournament-logos', express.static(tournamentLogosDir));
   // Serve root-level logos (e.g., /logo.png, /MBA_logo.png) from persistent storage.
   app.use('/', express.static(persistentRootAssetsDir));
 
@@ -2729,7 +2737,8 @@ async function startServer() {
       name, date, location, format, organizer, logo, match_play_type, qualified_count, playoff_winners_count, type, 
       games_count, genders_rule, lanes_count,
       players_per_lane, singles_per_lane, players_per_team, shifts_count, oil_pattern,
-      has_additional_scores, has_bonus, show_player_style, divisions, enable_singles_division
+      has_additional_scores, has_bonus, show_player_style, divisions, enable_singles_division,
+      end_date, competition_style, lane_length, scoring_type, finals_format
     } = req.body;
     const hasAdditional = toBinaryFlag(has_additional_scores, 0);
     const hasBonus = toBinaryFlag(has_bonus, 0);
@@ -2740,12 +2749,14 @@ async function startServer() {
       INSERT INTO tournaments (
         name, date, location, format, organizer, logo, match_play_type, qualified_count, playoff_winners_count, type, 
         games_count, genders_rule, lanes_count, status,
-        players_per_lane, singles_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus, show_player_style, divisions, enable_singles_division
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        players_per_lane, singles_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus, show_player_style, divisions, enable_singles_division,
+        end_date, competition_style, lane_length, scoring_type, finals_format
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       name, date, location, format, organizer, logo, match_play_type || 'single_elimination', Number.isFinite(Number.parseInt(qualified_count, 10)) ? Number.parseInt(qualified_count, 10) : 0, Number.isFinite(Number.parseInt(playoff_winners_count, 10)) ? Number.parseInt(playoff_winners_count, 10) : 1, type, 
       games_count || 3, genders_rule, lanes_count || 10, defaultStatus,
-      players_per_lane || 2, singles_per_lane || 2, players_per_team || 1, shifts_count || 1, oil_pattern, hasAdditional, hasBonus, showPlayerStyle, divisions || null, toBinaryFlag(enable_singles_division, 0)
+      players_per_lane || 2, singles_per_lane || 2, players_per_team || 1, shifts_count || 1, oil_pattern, hasAdditional, hasBonus, showPlayerStyle, divisions || null, toBinaryFlag(enable_singles_division, 0),
+      end_date || null, competition_style || null, lane_length || null, scoring_type === 'handicap' ? 'handicap' : 'scratch', finals_format || null
     );
     res.json({ id: info.lastInsertRowid });
   });
@@ -2761,7 +2772,8 @@ async function startServer() {
       const { 
         name, date, location, format, organizer, logo, match_play_type, qualified_count, playoff_winners_count, type, 
         games_count, genders_rule, lanes_count, 
-        players_per_lane, singles_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus, show_player_style, status, divisions, offday_penalty, enable_singles_division
+        players_per_lane, singles_per_lane, players_per_team, shifts_count, oil_pattern, has_additional_scores, has_bonus, show_player_style, status, divisions, offday_penalty, enable_singles_division,
+        end_date, competition_style, lane_length, scoring_type, finals_format
       } = req.body;
       const existing = db.prepare("SELECT * FROM tournaments WHERE id = ?").get(req.params.id) as any;
       if (!existing) {
@@ -2787,7 +2799,8 @@ async function startServer() {
         UPDATE tournaments SET 
           name = ?, date = ?, location = ?, format = ?, organizer = ?, logo = ?, match_play_type = ?, qualified_count = ?, playoff_winners_count = ?, type = ?, 
           games_count = ?, genders_rule = ?, lanes_count = ?, 
-          players_per_lane = ?, singles_per_lane = ?, players_per_team = ?, shifts_count = ?, oil_pattern = ?, has_additional_scores = ?, has_bonus = ?, show_player_style = ?, status = ?, divisions = ?, offday_penalty = ?, enable_singles_division = ?
+          players_per_lane = ?, singles_per_lane = ?, players_per_team = ?, shifts_count = ?, oil_pattern = ?, has_additional_scores = ?, has_bonus = ?, show_player_style = ?, status = ?, divisions = ?, offday_penalty = ?, enable_singles_division = ?,
+          end_date = ?, competition_style = ?, lane_length = ?, scoring_type = ?, finals_format = ?
         WHERE id = ?
       `).run(
         name ?? existing.name,
@@ -2815,6 +2828,11 @@ async function startServer() {
         divisions !== undefined ? (divisions || null) : (existing.divisions ?? null),
         offday_penalty !== undefined ? parseIntOrFallback(offday_penalty, 25) : (Number(existing.offday_penalty) || 25),
         enable_singles_division !== undefined ? toBinaryFlag(enable_singles_division, Number(existing.enable_singles_division) || 0) : (Number(existing.enable_singles_division) || 0),
+        end_date !== undefined ? (end_date || null) : (existing.end_date ?? null),
+        competition_style !== undefined ? (competition_style || null) : (existing.competition_style ?? null),
+        lane_length !== undefined ? (lane_length || null) : (existing.lane_length ?? null),
+        scoring_type !== undefined ? (scoring_type === 'handicap' ? 'handicap' : 'scratch') : (existing.scoring_type ?? 'scratch'),
+        finals_format !== undefined ? (finals_format || null) : (existing.finals_format ?? null),
         req.params.id
       );
       
@@ -3071,6 +3089,17 @@ async function startServer() {
     try {
       await (sharp as any)(req.file.buffer).resize(200, 200, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } }).jpeg({ quality: 90 }).toFile(dest);
       res.json({ slug, url: `/club-logos/${slug}.jpg` });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/tournament-logos", requirePermission('tournaments:manage'), photoUpload.single('logo'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No image file provided' });
+    try {
+      const filename = `${createHash('sha1').update(req.file.buffer).digest('hex').slice(0, 16)}.png`;
+      await (sharp as any)(req.file.buffer).resize(400, 400, { fit: 'inside', withoutEnlargement: true }).png().toFile(path.join(tournamentLogosDir, filename));
+      res.json({ url: `/tournament-logos/${filename}` });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -4063,6 +4092,46 @@ async function startServer() {
   });
 
   // Standings
+  // Public dashboard highlights: top players/teams and highest single games by gender.
+  app.get("/api/tournaments/:id/highlights", (req, res) => {
+    const tournament = db.prepare("SELECT id, name, games_count FROM tournaments WHERE id = ?").get(req.params.id) as any;
+    if (!tournament) return res.status(404).json({ error: "Tournament not found" });
+    const id = tournament.id;
+    const players = db.prepare(`
+      SELECT p.id, (p.first_name || ' ' || p.last_name) AS name, LOWER(SUBSTR(COALESCE(p.gender, ''), 1, 1)) AS gender,
+             COUNT(s.id) AS games, COALESCE(SUM(s.score), 0) AS total, COALESCE(AVG(s.score), 0) AS avg
+      FROM participants p
+      JOIN scores s ON s.participant_id = p.id
+      WHERE p.tournament_id = ?
+      GROUP BY p.id
+      ORDER BY total DESC, avg DESC, p.id ASC
+      LIMIT 20
+    `).all(id);
+    const teams = db.prepare(`
+      SELECT t.id, t.name, COUNT(s.id) AS games, COALESCE(SUM(s.score), 0) AS total,
+             CASE WHEN COUNT(DISTINCT s.game_number) > 0 THEN 1.0 * SUM(s.score) / COUNT(DISTINCT s.game_number) ELSE 0 END AS avg
+      FROM teams t
+      JOIN participants p ON p.team_id = t.id
+      JOIN scores s ON s.participant_id = p.id
+      WHERE t.tournament_id = ?
+      GROUP BY t.id
+      ORDER BY total DESC, t.id ASC
+      LIMIT 20
+    `).all(id);
+    const highest = (letter: string) => db.prepare(`
+      SELECT s.score, s.game_number, (p.first_name || ' ' || p.last_name) AS name
+      FROM scores s JOIN participants p ON p.id = s.participant_id
+      WHERE s.tournament_id = ? AND LOWER(SUBSTR(COALESCE(p.gender, ''), 1, 1)) = ?
+      ORDER BY s.score DESC, s.game_number ASC LIMIT 1
+    `).get(id, letter) || null;
+    const counts = db.prepare(`
+      SELECT (SELECT COUNT(*) FROM participants WHERE tournament_id = ?) AS players,
+             (SELECT COUNT(*) FROM teams WHERE tournament_id = ?) AS teams,
+             (SELECT COALESCE(MAX(game_number), 0) FROM scores WHERE tournament_id = ?) AS rounds
+    `).get(id, id, id);
+    res.json({ tournament, players, teams, highest_men: highest('m'), highest_women: highest('f'), counts });
+  });
+
   app.get("/api/tournaments/:id/standings", (req, res) => {
     const tournament = db.prepare("SELECT type FROM tournaments WHERE id = ?").get(req.params.id) as any;
     if (!tournament) return res.status(404).json({ error: "Tournament not found" });

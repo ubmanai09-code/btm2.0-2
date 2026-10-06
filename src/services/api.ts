@@ -25,6 +25,11 @@ export interface Tournament {
   show_player_style?: number;
   divisions?: string;
   offday_penalty?: number;
+  end_date?: string | null;
+  competition_style?: string | null;
+  lane_length?: string | null;
+  scoring_type?: 'scratch' | 'handicap';
+  finals_format?: string | null;
   // Lets a Team tournament also register standalone Singles entrants and run a
   // separate Male/Female Singles division/bracket from the same recorded games.
   enable_singles_division?: number | boolean;
