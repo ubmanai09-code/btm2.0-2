@@ -5449,7 +5449,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       </div>
 
       {tournament.type === 'team' && (
-        <div className="lg:hidden sticky top-[7.25rem] z-30 flex items-center justify-between gap-2">
+        <div className="lg:hidden -mt-4 sticky top-16 sm:top-[7.25rem] z-30 bg-[color:var(--bg)] flex items-center justify-between gap-2">
         <div className={`${segmentedTabContainerClass} w-fit`}>
           <button
             type="button"
@@ -5477,7 +5477,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
         <div className={`${tournament.type === 'team' && mobileRosterTab !== 'players' ? 'hidden lg:block' : ''} lg:col-span-3`}>
           <Card className="border-gray-400 overflow-visible">
-            <div className="p-3 border-b border-gray-400 scoring-table-surface sticky top-[7.25rem] z-20">
+            <div className={`p-3 border-b border-gray-400 scoring-table-surface sticky ${tournament.type === 'team' ? 'top-[6.125rem] sm:top-[9.375rem] lg:top-[7.25rem]' : 'top-16 sm:top-[7.25rem]'} z-20`}>
               <div className="grid grid-cols-[1fr_auto] items-center md:flex md:flex-row md:items-center md:justify-between gap-3">
                 <div className={`${tournament.type === 'team' ? 'max-md:hidden' : 'max-md:flex max-md:justify-end'} max-md:col-start-2 max-md:row-start-1`}>
                   <h4 className="font-bold text-black/80 flex items-center gap-1.5 text-xs sm:text-sm"><User size={14} className="text-emerald-700" /><span className="max-md:hidden">{tx('Players')}</span><span>({participants.length}) M({maleCount}) F({femaleCount})</span></h4>
@@ -5871,7 +5871,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         <div className={`${tournament.type === 'team' && mobileRosterTab !== 'teams' ? 'hidden lg:block' : ''} lg:col-span-2 space-y-6`}>
         {tournament.type === 'team' && (
             <Card className="border-gray-400 overflow-visible">
-              <div className="p-3 border-b border-gray-400 scoring-table-surface sticky top-[7.25rem] z-20">
+              <div className={`p-3 border-b border-gray-400 scoring-table-surface sticky top-[6.125rem] sm:top-[9.375rem] lg:top-[7.25rem] z-20`}>
                 <div className="grid grid-cols-[1fr_auto] items-center md:flex md:flex-row md:items-center md:justify-between gap-2">
                   <div className={`${tournament.type === 'team' ? 'max-md:hidden' : 'max-md:flex max-md:justify-end'} max-md:col-start-2 max-md:row-start-1`}>
                     <h4 className="font-bold text-black/80 flex items-center gap-1.5 text-xs sm:text-sm"><Users size={14} className="text-emerald-700" /><span className="max-md:hidden">{tx('Teams')}</span><span>({teams.length})</span></h4>
@@ -7210,7 +7210,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
       {/* Lanes Grid */}
       <div>
-        <div className="section-sticky-toolbar sticky top-[7.25rem] z-20 backdrop-blur-sm border rounded-md px-2 py-1.5 flex items-center justify-between gap-2 mb-2 overflow-x-auto">
+        <div className="scoring-table-surface sticky top-16 sm:top-[7.25rem] z-20 border border-gray-400 rounded-md px-2 py-1.5 flex items-center justify-between gap-2 mb-2 overflow-x-auto">
             <div className="flex items-center gap-1.5 shrink-0">
               <Button size="sm" variant="outline" onClick={loadData} title="Refresh" ariaLabel="Refresh" className="px-2">
                 <RotateCw size={14} />
@@ -8686,7 +8686,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
       </div>
 
       {!isScoreScreenMode && (
-      <div className="section-sticky-toolbar sticky top-[7.25rem] z-30 flex items-center justify-between gap-2 backdrop-blur-sm py-1 border-b overflow-x-auto">
+      <div className="scoring-table-surface sticky top-16 sm:top-[7.25rem] z-30 flex items-center justify-between gap-2 py-1 border-b border-gray-400 overflow-x-auto">
         <div className="flex items-center gap-2 shrink-0">
           {tournament.shifts_count > 1 && (
           <div className="inline-flex items-center gap-0.5">
@@ -8790,13 +8790,12 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                     <React.Fragment key={group.key}>
                       {tournament.type === 'team' && (
                         <div className="mobile-score-team-header px-3 py-1.5 bg-gray-100 border-t-2 border-gray-400">
-                          <span className="mobile-score-team-name block text-[10px] font-bold uppercase tracking-wider text-gray-500 truncate">{group.label}</span>
+                          <span className="mobile-score-team-name block text-[11px] font-bold uppercase tracking-wider text-gray-500 truncate">{group.label}</span>
                         </div>
                       )}
                       <div className={`mobile-score-team-group ${group.teamId !== null ? 'has-team-total' : ''}`}>
                         {group.teamId !== null && (
                           <div className="mobile-score-team-total" aria-hidden="true">
-                            <span className="mobile-score-team-total-label text-[9px] text-gray-400 leading-none">Total</span>
                             <span className="text-2xl font-extrabold tabular-nums text-emerald-800">{teamTotalScore}</span>
                           </div>
                         )}
@@ -15171,7 +15170,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
         <Card className="overflow-visible relative">
           {!isStandingsScreenMode && (
-          <div className="border-b border-black/5 bg-white/95">
+          <div className="border-b border-black/5 bg-white/95 max-sm:sticky max-sm:top-16 max-sm:z-20 max-sm:bg-[color:var(--bg-secondary)]">
             {/* Title row — visible on small screens above toolbar */}
             <div className="flex items-center gap-2 px-4 pt-2 pb-1 sm:hidden">
               <h4 className="font-bold text-sm">{tx('Ranking')}</h4>
@@ -15359,7 +15358,12 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-emerald-50 active:bg-emerald-50 transition-colors"
                   >
                     <span className="w-6 shrink-0 text-xs font-bold text-black/40 text-center">{idx + 1}</span>
-                    <span className="flex-1 text-xs font-bold leading-tight truncate">{s.team_name}</span>
+                    <span className="flex-1 min-w-0 leading-tight">
+                      <span className="block text-xs font-bold text-black truncate">{s.team_name}</span>
+                      <span className="block mt-0.5 text-[10px] lowercase text-black/60">
+                        {s.members.length > 0 ? s.members.join(', ') : tx('No members')}
+                      </span>
+                    </span>
                     <span className="shrink-0 flex flex-col items-end">
                       <span className="text-[9px] font-semibold uppercase tracking-wider text-emerald-600 leading-none">{totalColumnLabel}</span>
                       <span className="text-sm font-extrabold tabular-nums leading-tight text-emerald-700">{s.grand_total}</span>

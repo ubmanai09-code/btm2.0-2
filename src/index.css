@@ -277,8 +277,11 @@ body {
 
 /* Mobile scores: team header — same look in both light and dark mode */
 .mobile-score-team-header {
-  background: rgba(100, 116, 139, 0.5) !important; /* slate-500/50 */
+  background: #475569 !important; /* slate-600: white team name stays readable on light pages */
   border-color: rgba(148, 163, 184, 0.4) !important;
+}
+[data-theme="dark"] .mobile-score-team-header {
+  background: rgba(100, 116, 139, 0.5) !important; /* slate-500/50 */
 }
 .mobile-score-team-name {
   color: #ffffff !important;
@@ -299,9 +302,6 @@ body {
   transform: translateX(-50%);
   pointer-events: none;
   white-space: nowrap;
-}
-.mobile-score-team-total-label {
-  color: rgba(203, 213, 225, 0.8) !important; /* slate-300 */
 }
 .mobile-score-team-total {
   color: #86efac !important; /* green-300 */
