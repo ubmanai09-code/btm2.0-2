@@ -1164,7 +1164,7 @@ th {
 
 /* Mobile bottom navigation */
 .mnav {
-  position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 40; height: 64px;
+  position: fixed; left: 12px; right: 12px; bottom: calc(40px + env(safe-area-inset-bottom)); z-index: 40; height: 64px;
   display: flex; align-items: center; justify-content: space-around; padding: 0 8px;
   border-radius: 9999px; background: #ffffff; border: 2px solid #111827;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
@@ -1178,6 +1178,13 @@ th {
 [data-theme="dark"] .mnav { background: #000000; border-color: #e5e7eb; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7); }
 [data-theme="dark"] .mnav-btn { border-color: #e5e7eb; color: #f8fafc; }
 [data-theme="dark"] .mnav-btn.active { background: #f97316; border-color: #f97316; color: #000000; }
+.mfooter {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 39;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 0 12px calc(env(safe-area-inset-bottom)); height: calc(32px + env(safe-area-inset-bottom));
+  background: #000000; border-top: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.92); font-size: 11px; font-weight: 600; white-space: nowrap;
+}
 @media (min-width: 640px) {
-  .mnav { display: none; }
+  .mnav, .mfooter { display: none; }
 }

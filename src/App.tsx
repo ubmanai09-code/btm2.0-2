@@ -580,6 +580,7 @@ const MobileNav = ({ items, activeId, homeActive, onHome, homeLabel, onSelect }:
   homeLabel: string,
   onSelect: (id: string) => void,
 }) => (
+  <>
   <nav className="mnav sm:hidden" aria-label="Main menu">
     <button onClick={onHome} className={`mnav-btn ${homeActive ? 'active' : ''}`} title={homeLabel} aria-label={homeLabel}>
       <Home size={18} />
@@ -593,6 +594,12 @@ const MobileNav = ({ items, activeId, homeActive, onHome, homeLabel, onSelect }:
       );
     })}
   </nav>
+  <div className="mfooter sm:hidden">
+    <span>BTM <span className="text-orange-500">v2.2</span></span>
+    <span className="text-white/60">|</span>
+    <span>© Murat D. 2026</span>
+  </div>
+  </>
 );
 
 const BracketsV2TabIcon = ({ size = 16, className }: { size?: number; className?: string }) => (
@@ -2175,7 +2182,7 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="pt-24 pb-12 max-sm:pb-24 px-6 max-w-7xl mx-auto">
+      <main className="pt-24 pb-12 max-sm:pb-32 px-6 max-w-7xl mx-auto">
         {view === 'glossary' && (
           <GlossaryPage lang={publicLanguage === 'mn' ? 'mn' : 'en'} role={currentRole} authToken={authToken} />
         )}
@@ -3323,8 +3330,8 @@ export default function App() {
           }}
         />
       )}
-      <footer className="border-t border-white/10 bg-black">
-        <div className="max-w-7xl mx-auto px-6 pt-5 pb-5 max-sm:pb-28 text-xs text-white/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <footer className="hidden sm:block border-t border-white/10 bg-black">
+        <div className="max-w-7xl mx-auto px-6 py-5 text-xs text-white/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2 font-medium flex-wrap">
             <span className="font-semibold uppercase tracking-wide text-orange-500">{t('app.footer_tagline', 'Total tournament control. From first frame to final payout.')}</span>
             <span className="text-white/60">|</span>
@@ -3873,7 +3880,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       )}
 
 
-      <div className="min-h-[400px] relative pb-20 sm:pb-0">
+      <div className="min-h-[400px] relative pb-32 sm:pb-0">
         {!isPresentScreenMode && (effectiveRole === 'admin' || effectiveRole === 'moderator') && (
           <div className="absolute right-0 top-0 z-10">
             <Button
