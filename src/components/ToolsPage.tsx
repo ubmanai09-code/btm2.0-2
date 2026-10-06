@@ -97,7 +97,7 @@ export default function ToolsPage({ lang, role, authToken }: ToolsPageProps) {
   ];
   return (
     <div className="space-y-4">
-      <h3 className="text-xl font-bold text-emerald-800">{mn ? 'Тэмцээний хэрэгсэл ба материал' : 'Tournament Utilities & Resources'}</h3>
+      <h3 className="text-xl font-bold text-emerald-800">{mn ? 'Тамирчны туслах' : 'Tournament Utilities & Resources'}</h3>
       <div className="flex flex-wrap gap-2">
         {items.map(({ id, label, icon: Icon }) => (
           <button
