@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BookOpen, Search, X, Award, Plus, Pencil, Trash2, Image as ImageIcon, ArrowDownAZ, LayoutGrid } from 'lucide-react';
+import { BookOpen, Search, X, Plus, Pencil, Trash2, Image as ImageIcon, ArrowDownAZ, LayoutGrid } from 'lucide-react';
 import { GLOSSARY_AUTHOR, GLOSSARY_CATEGORIES } from '../data/glossary';
 
 interface GlossaryPageProps {
@@ -176,20 +176,6 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
               {lang === 'mn' ? 'Нэмэх' : 'Add Term'}
             </button>
           )}
-          <div className="flex items-center gap-2 shrink-0 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700/40 rounded-lg px-4 py-2.5">
-            <Award size={15} className="text-orange-500 shrink-0" />
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-orange-600 dark:text-orange-400">
-                {lang === 'mn' ? 'Зохиогч' : 'Author'}
-              </p>
-              <p className="text-sm font-semibold text-orange-800 dark:text-orange-200 leading-tight">
-                {GLOSSARY_AUTHOR.name}
-              </p>
-              <p className="text-[10px] text-orange-600/70 dark:text-orange-400/70">
-                {GLOSSARY_AUTHOR.year} &middot; Mongolia
-              </p>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -392,11 +378,6 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
             )}
 
             <p className="text-[color:var(--text)] leading-relaxed">{selectedTerm.mn}</p>
-
-            <div className="pt-2 border-t border-black/10 dark:border-white/10 flex items-center gap-2 text-[10px] text-black/35 dark:text-white/35 font-semibold uppercase tracking-widest">
-              <Award size={11} className="text-orange-400" />
-              {lang === 'mn' ? 'Зохиогч' : 'Author'}: {GLOSSARY_AUTHOR.name} &middot; {GLOSSARY_AUTHOR.year}
-            </div>
           </div>
         </div>
       )}
@@ -559,15 +540,6 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
           </div>
         </div>
       )}
-
-      {/* ── Footer ─────────────────────────────────────────────────── */}
-      <div className="mt-10 pt-6 border-t border-black/10 dark:border-white/10 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-black/30 dark:text-white/30">
-        <span className="flex items-center gap-1.5">
-          <Award size={12} className="text-orange-400" />
-          &copy; {GLOSSARY_AUTHOR.year} {GLOSSARY_AUTHOR.name}. {lang === 'mn' ? 'Бүх эрх хуулиар хамгаалагдсан.' : 'All rights reserved.'}
-        </span>
-        <span>{lang === 'mn' ? GLOSSARY_AUTHOR.note : GLOSSARY_AUTHOR.noteEn}</span>
-      </div>
     </div>
   );
 };

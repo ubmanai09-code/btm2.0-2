@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { BookOpen, Calculator, Shuffle, Percent } from 'lucide-react';
+import React, { useState } from 'react';
+import { BookOpen, Shuffle, Percent } from 'lucide-react';
 import GlossaryPage from './GlossaryPage';
 
 interface ToolsPageProps {
@@ -8,7 +8,7 @@ interface ToolsPageProps {
   authToken?: string;
 }
 
-type ToolId = 'glossary' | 'handicap' | 'average' | 'draw';
+type ToolId = 'glossary' | 'handicap' | 'draw';
 
 const num = (v: string) => {
   const n = parseFloat(v);
@@ -41,32 +41,6 @@ function HandicapTool({ mn }: { mn: boolean }) {
         <div className="ui-card p-4 text-center"><div className="text-xs text-gray-500">{mn ? 'Нийт гандикап' : 'Total handicap'}</div><div className="text-3xl font-bold text-orange-500">{perGame * Math.max(0, Math.floor(num(games)))}</div></div>
       </div>
       <p className="text-xs text-gray-500">{mn ? 'Томьёо: (Суурь оноо − Дундаж) × Хувь' : 'Formula: (Basis − Average) × Percent'}</p>
-    </div>
-  );
-}
-
-function AverageTool({ mn }: { mn: boolean }) {
-  const [text, setText] = useState('');
-  const scores = useMemo(() => text.split(/[\s,;]+/).map(Number).filter((n) => Number.isFinite(n) && n >= 0 && n <= 300 && text.trim() !== ''), [text]);
-  const total = scores.reduce((a, b) => a + b, 0);
-  const stats = [
-    [mn ? 'Тоглолт' : 'Games', scores.length],
-    [mn ? 'Нийт' : 'Total', total],
-    [mn ? 'Дундаж' : 'Average', scores.length ? (total / scores.length).toFixed(1) : '–'],
-    [mn ? 'Дээд' : 'High', scores.length ? Math.max(...scores) : '–'],
-    [mn ? 'Доод' : 'Low', scores.length ? Math.min(...scores) : '–'],
-  ];
-  return (
-    <div className="space-y-4">
-      <label className="text-xs font-semibold text-black block">
-        {mn ? 'Оноонууд (таслал эсвэл зайгаар тусгаарла)' : 'Scores (separated by commas or spaces)'}
-        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="180 205 167 223" className="ui-input mt-1 w-full px-3 py-2 rounded-md text-sm" />
-      </label>
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        {stats.map(([l, v]) => (
-          <div key={String(l)} className="ui-card p-3 text-center"><div className="text-xs text-gray-500">{l}</div><div className="text-xl font-bold text-emerald-800">{v}</div></div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -119,11 +93,11 @@ export default function ToolsPage({ lang, role, authToken }: ToolsPageProps) {
   const items: { id: ToolId; label: string; icon: any }[] = [
     { id: 'glossary', label: mn ? 'Толь' : 'Glossary', icon: BookOpen },
     { id: 'handicap', label: mn ? 'Гандикап' : 'Handicap', icon: Percent },
-    { id: 'average', label: mn ? 'Дундаж' : 'Average', icon: Calculator },
     { id: 'draw', label: mn ? 'Сугалаа' : 'Random draw', icon: Shuffle },
   ];
   return (
     <div className="space-y-4">
+      <h3 className="text-xl font-bold text-emerald-800">{mn ? 'Тэмцээний хэрэгсэл ба материал' : 'Tournament Utilities & Resources'}</h3>
       <div className="flex flex-wrap gap-2">
         {items.map(({ id, label, icon: Icon }) => (
           <button
@@ -139,7 +113,6 @@ export default function ToolsPage({ lang, role, authToken }: ToolsPageProps) {
       {tool !== 'glossary' && (
         <div className="ui-card p-5 max-w-3xl">
           {tool === 'handicap' && <HandicapTool mn={mn} />}
-          {tool === 'average' && <AverageTool mn={mn} />}
           {tool === 'draw' && <DrawTool mn={mn} />}
         </div>
       )}
