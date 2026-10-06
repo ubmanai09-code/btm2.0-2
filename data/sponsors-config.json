@@ -21,6 +21,15 @@
     {
       "id": "global-1779247002181-2",
       "kind": "sponsor",
+      "name": "Powered by BTM",
+      "logo": "/logo.png",
+      "description": "",
+      "contacts": "",
+      "url": ""
+    },
+    {
+      "id": "global-1791271728564-3",
+      "kind": "sponsor",
       "name": "Unnamed Sponsor",
       "logo": "/logo.png",
       "description": "",
@@ -53,13 +62,21 @@
     ]
   },
   "globalSponsorEnabled": false,
-  "globalSponsor": null,
+  "globalSponsor": {
+    "id": "global-app-1791206639169-0",
+    "kind": "sponsor",
+    "name": "Unnamed Sponsor",
+    "logo": "/logo.png",
+    "description": "",
+    "contacts": "",
+    "url": ""
+  },
   "dashboardPromo": {
     "enabled": true,
     "title": "Advertise Here",
     "subtitle": "Promote your brand with a dashboard promo image.",
-    "image": "https://i.imgur.com/QS3ZYiu.png",
-    "video": "https://res.cloudinary.com/dbioo5rja/video/upload/v1780386299/BTM-Promo.mp4",
+    "image": "",
+    "video": "",
     "link": ""
   },
   "presentModeAds": {
