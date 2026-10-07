@@ -14561,7 +14561,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           }
           await Promise.all(jobs);
           await loadStandings();
-          alert(tx(`Imported additional score/bonus for ${matched} team(s). Team game totals are calculated from player scores, so import Player standings for those.`));
+          alert(t('standings.import_additional_team_values', 'Imported additional score/bonus for {count} team(s). Team game totals are calculated from player scores, so import Player standings for those.').replace('{count}', String(matched)));
           return;
         }
         const lines = csvRows.slice(1).map((r) => r);

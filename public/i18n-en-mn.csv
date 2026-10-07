@@ -3,7 +3,10 @@ tab.participants,Participants,Тамирчид
 tab.lane_assignments,Lanes,Зам хуваарилалт
 tab.scoring,Score,Оноо
 tab.brackets,Brackets,Бракетууд
+tab.brackets_v2,Brackets,Бракетууд
 tab.tournament_result,Standing,Тэмцээний дүн
+tab.tools,Tools,Хэрэгслүүд
+tab.league,League,Лиг
 key,english,mongolian
 note,Edit the mongolian column manually. Keep key unchanged.,Монгол орчуулгын баганыг гараар засна. Түлхүүрийг өөрчлөхгүй.
 common.back_to_dashboard,Back to Dashboard,Удирдлагын самбар руу буцах
@@ -26,7 +29,9 @@ common.no_results,No results yet,Одоогоор үр дүн алга
 public.tab.lane_assignments,Lanes,Замууд
 public.tab.scoring,Score,Оноо
 public.tab.brackets,Brackets,Бракетууд
+public.tab.brackets_v2,Brackets,Бракетууд
 public.tab.tournament_result,Standing,Тэмцээний дүн
+public.tab.tools,Tools,Хэрэгслүүд
 public.status.draft,draft,Ноорог
 public.status.active,active,Идэвхтэй
 public.status.finished,finished,Дууссан
@@ -294,7 +299,7 @@ common.cleared,Cleared,Цэвэрлэгдсэн
 teams.rename_hint,Create a team or rename an existing one.,Баг шинээр үүсгэх эсвэл байгаа багийн нэрийг өөрчилнө.
 teams.create_new,Create New Team,Шинэ баг үүсгэх
 scoring.entry_hint,Enter game results for each participant,Оролцогч бүрийн тоглолтын дүнг оруулна
-players.entry_hint,Enter participant details and assign a team if needed.,Оролцогчийн мэдээллийг оруулах, өөрчлөх, засварлах боломжтой.
+players.entry_hint,Enter participant details and assign a team if needed.,"Оролцогчийн мэдээллийг оруулах, өөрчлөх, засварлах боломжтой."
 scoring.import_failed,Failed to import scores:,Оноо импортолж чадсангүй:
 standings.import_failed,Failed to import standings data. Please check file format.,Чансааны мэдээллийг импортолж чадсангүй. Файлын форматыг шалгана уу.
 teams.import_failed,Failed to import teams:,Багуудыг импортолж чадсангүй:
@@ -355,7 +360,7 @@ data.synchronized,Data synchronized.,Өгөгдөл синхрончлогдло
 sponsor.general,General Sponsor,Ерөнхий спонсор
 sponsor.general_desc,Primary supporter for tournament operations and event logistics.,Тэмцээний үйл ажиллагаа болон зохион байгуулалтыг дэмжигч гол спонсор.
 sponsor.official_partner,Official Partner,Албан ёсны хамтрагч
-sponsor.official_partner_desc,Technology and media partner supporting tournament coverage.,Тэмцээний мэдээлэл болон хамрах хүрээг дэмжих технологи, медиа хамтрагч.
+sponsor.official_partner_desc,Technology and media partner supporting tournament coverage.,"Тэмцээний мэдээлэл болон хамрах хүрээг дэмжих технологи, медиа хамтрагч."
 sponsor.unnamed,Unnamed Sponsor,Нэргүй спонсор
 status.archived,Archived,Архивласан
 status.incoming,Incoming,Хүлээгдэж буй
@@ -373,6 +378,7 @@ standings.ui.rank_lower,rank,байр
 standings.ui.tournament_result_lower,Tournament result,Тэмцээний дүн
 standings.ui.bonus_label,Bonus,Бонус
 standings.ui.grand_total_label,Grand Total,Нийт дүн
+standings.import_additional_team_values,"Imported additional score/bonus for {count} team(s). Team game totals are calculated from player scores, so import Player standings for those.","Нэмэлт оноо/бонусыг {count} багт импортоллоо. Багийн тоглолтын нийт оноог тамирчдын онооноос тооцдог тул тухайн тамирчдын чансааг импортлоно уу."
 league.ui.export_csv,Export CSV,CSV экспортлох
 league.ui.league,League,Лиг
 league.ui.selected_tournaments,Selected Tournaments,Сонгосон тэмцээнүүд
@@ -423,6 +429,150 @@ brackets.ui.select_specific_participants,Select specific participants,Тодор
 brackets.ui.create_list,Create List,Жагсаалт үүсгэх
 brackets.ui.type_participant_names,Type participant names,Оролцогчийн нэр бичих
 brackets.ui.seeds_to_import,Seeds to Import,Импортлох оноолтын тоо
+app.nav.account,Account,Бүртгэл
+app.nav.go_home,Go to Home Page,Нүүр хуудас руу очих
+app.no_dashboard_sponsors,No dashboard sponsors configured.,Хяналтын самбарт ивээн тэтгэгч тохируулаагүй байна.
+auth.moderator_access,Moderator Access,Зохицуулагчийн эрх
+common.cancel,Cancel,Цуцлах
+common.edit,Edit,Засах
+common.next,Next,Дараах
+common.previous,Previous,Өмнөх
+dashboard.all_events,All tournaments,Бүх тэмцээн
+dashboard.archive,Archive,Архив
+dashboard.archived,Archived,Архивласан
+dashboard.avg,Avg,Дундаж
+dashboard.best_men,Highest game · Men,Эрэгтэйчүүдийн хамгийн өндөр тоглолтын оноо
+dashboard.best_women,Highest game · Women,Эмэгтэйчүүдийн хамгийн өндөр тоглолтын оноо
+dashboard.game,Game,Тоглолт
+dashboard.games,Games,Тоглолт
+dashboard.games_played,Games,Тоглосон тоглолт
+dashboard.individual,Individual,Ганцаарчилсан
+dashboard.lane,Lane,Зам
+dashboard.latest_results,Latest results,Сүүлийн үр дүн
+dashboard.manage,Manage,Удирдах
+dashboard.manage_archive,Archive,Архивлах
+dashboard.manage_delete,Delete,Устгах
+dashboard.manage_export,Export,Экспортлох
+dashboard.manage_import,Import,Импортлох
+dashboard.manage_unarchive,Unarchive,Архиваас гаргах
+dashboard.next_event,Next event,Дараагийн тэмцээн
+dashboard.no_featured,No tournaments yet.,Одоогоор тэмцээн алга.
+dashboard.no_scores,No scores recorded yet.,Одоогоор оноо бүртгээгүй байна.
+dashboard.nothing_here,Nothing to show here.,Энд харуулах зүйл алга.
+dashboard.now_live,Happening now,Яг одоо болж байна
+dashboard.players,Players,Тамирчид
+dashboard.scratch_note,Scores shown are scratch (without handicap).,Handicap тооцоогүй үндсэн оноог харуулж байна.
+dashboard.select_to,Select a tournament to,Үйлдэл хийх тэмцээнээ сонгоно уу:
+dashboard.show_less,Top 5,Шилдэг 5
+dashboard.show_more,Top 10,Шилдэг 10
+dashboard.sponsors,Sponsors & partners,Ивээн тэтгэгчид ба хамтрагчид
+dashboard.team,Team,Баг
+dashboard.team_short,team,баг
+dashboard.teams,Teams,Багууд
+dashboard.top_players,Top players,Шилдэг тамирчид
+dashboard.top_teams,Top teams,Шилдэг багууд
+dashboard.tournaments,Tournaments,Тэмцээнүүд
+dashboard.updated,Updated,Шинэчилсэн
+dashboard.view_event,View event,Тэмцээнийг харах
+public.tournament.singles,Singles,Ганцаарчилсан төрөл
+public.tournament.type.both,Team + Singles,Баг + ганцаарчилсан төрөл
+sponsors.manage_ad_block,Manage Ad Block,Зар сурталчилгааны блок удирдах
+sponsors.manage_sponsors,Manage Sponsors,Ивээн тэтгэгчдийг удирдах
+status.auto,Automatic (by date),Автомат (огноогоор)
+status.live,Live,Шууд
+tournament.bracket_format,Bracket Format,Бракетын формат
+tournament.competition_style,Competition Style,Тэмцээний төрөл
+tournament.custom_divisions,Custom Divisions,Тусгай ангиллууд
+tournament.enable_additional_short,+ Score,Нэмэлт оноо
+tournament.enable_bonus_short,+ Bonus,Нэмэлт бонус
+tournament.end_date,Tournament End Date,Тэмцээн дуусах огноо
+tournament.finals_format,Finals Format,Шигшээ тоглолтын формат
+tournament.host_center,Host Center,Зохион байгуулагч төв
+tournament.host_center_placeholder,Type or select a center,Төвийн нэр бичих эсвэл сонгох
+tournament.lane_length,Pattern Length,Тосолгооны хээний урт
+tournament.logo,Tournament Logo,Тэмцээний лого
+tournament.mixed_players_per_lane,Players per Lane,Нэг замд тоглох тамирчид
+tournament.oil_pattern_label,Oil Pattern,Тосолгооны хээ
+tournament.qualifying_games,Number of Qualifying Games,Сонгон шалгаруулалтын тоглолтын тоо
+tournament.scoring_type,Scoring,Оноолт
+tournament.start_date,Tournament Start Date,Тэмцээн эхлэх огноо
+ui.text.half_labels,1H/2H,1-р үе/2-р үе
+ui.text.ad_space,Ad Space,Зар сурталчилгааны хэсэг
+ui.text.add,Add,Нэмэх
+ui.text.add_manual_candidate,Add Manual Candidate,Нэр дэвшигчийг гараар нэмэх
+ui.text.add_registered,Add Registered,Бүртгэгдсэнийг нэмэх
+ui.text.additional_score_unavailable,Additional score editing is currently unavailable on this server build.,Энэ серверийн хувилбарт нэмэлт оноог засах боломжгүй байна.
+ui.text.all_shifts,All Shifts,Бүх ээлж
+ui.text.also_singles,Also entered in Singles division,Ганцаарчилсан төрөлд мөн бүртгэгдсэн
+ui.text.also_singles_team_members,"Also entered in Singles division (team members only — ranks by their team-game scores)",Ганцаарчилсан төрөлд мөн бүртгэгдсэн (зөвхөн багийн гишүүд — багийн тоглолтын оноогоор эрэмбэлнэ)
+ui.text.animated_image_here,Animated image can be placed here,Энд хөдөлгөөнт зураг байрлуулж болно
+ui.text.back,Back,Буцах
+ui.text.bonus_api_unavailable,"Bonus API is not available on the running server. Restart server with latest code, then try again.",Ажиллаж буй серверт бонусын API боломжгүй байна. Серверийг хамгийн сүүлийн кодоор дахин эхлүүлээд оролдоно уу.
+ui.text.bonus_editing_unavailable,Bonus editing is currently unavailable on this server build.,Энэ серверийн хувилбарт бонусыг засах боломжгүй байна.
+ui.text.candidates,Candidates,Нэр дэвшигчид
+ui.text.clear_all,Clear All,Бүгдийг арилгах
+ui.text.clear_selected,Clear Selected,Сонгосныг арилгах
+ui.text.click_to_edit_replace,Click to edit or replace,Засах эсвэл солихын тулд товшино уу
+ui.text.clubs,Clubs,Клубууд
+ui.text.compact_manual_winners,"Compact manual winners grid. Double-click a medal to add, or click a winner name to edit or replace it.","Ялагчдыг гараар удирдах авсаархан хүснэгт. Медаль дээр хоёр товшиж нэмэх, эсвэл ялагчийн нэр дээр товшиж засах буюу солих боломжтой."
+ui.text.double_click_place,Double-click to edit this place,Энэ байрыг засахын тулд хоёр товшино уу
+ui.text.duplicate_participant_names,Duplicate participant names in,Оролцогчийн давхардсан нэр:
+ui.text.duplicate_team_names,Duplicate team names in,Багийн давхардсан нэр:
+ui.text.duplicated_members,Duplicated members:,Давхардсан гишүүд:
+ui.text.edit_winner,Edit Winner,Ялагчийг засах
+ui.text.exit_present_mode,Exit Present Mode,Танилцуулгын горимоос гарах
+ui.text.failed_save_additional_score,Failed to save additional score:,Нэмэлт оноог хадгалж чадсангүй:
+ui.text.failed_save_bonus,Failed to save bonus:,Бонусыг хадгалж чадсангүй:
+ui.text.invalid_import_file,"Invalid import file. Expected columns: participant, game_1, game_2... (or legacy: participant_id, game_number, score)","Импортын файл буруу байна. Шаардлагатай багана: participant, game_1, game_2... (эсвэл хуучин загвар: participant_id, game_number, score)"
+ui.text.issues_click_read,Issues found - click to read,Асуудал илэрсэн — уншихын тулд товшино уу
+ui.text.lane_assignments,Lane Assignments,Замын хуваарилалт
+ui.text.missing_members,Missing members:,Дутуу гишүүд:
+ui.text.no_bracket,No bracket available yet,Одоогоор бракет байхгүй
+ui.text.no_candidates,No candidates added yet.,Одоогоор нэр дэвшигч нэмээгүй байна.
+ui.text.no_eligible_singles,No eligible singles players available for auto assignment.,Автоматаар хуваарилах боломжтой ганцаарчилсан тамирчин алга.
+ui.text.no_female_result,No female result yet.,Эмэгтэйчүүдийн үр дүн одоогоор алга.
+ui.text.no_male_result,No male result yet.,Эрэгтэйчүүдийн үр дүн одоогоор алга.
+ui.text.no_matching_participants,No matching participants found in import file. Check that names match exactly.,Импортын файлаас тохирох оролцогч олдсонгүй. Нэрс яг таарч байгааг шалгана уу.
+ui.text.no_matching_team_scores,No team additional score or bonus values matched. Check that team names match and the file has additional_score or bonus columns.,Багийн нэмэлт оноо эсвэл бонусын утга таарсангүй. Багийн нэрс таарч байгаа эсэх болон файлд additional_score эсвэл bonus багана байгаа эсэхийг шалгана уу.
+ui.text.not_on_team_singles,Not on a team — automatically in Singles division,Багт ороогүй — ганцаарчилсан төрөлд автоматаар бүртгэнэ
+ui.text.not_on_team_singles_legacy,Not on a team — automatically counted in the Singles division.,Багт ороогүй — ганцаарчилсан төрөлд автоматаар тооцно.
+ui.text.one_candidate_per_line,One candidate per line,Мөр бүрд нэг нэр дэвшигч
+ui.text.only,Only,Зөвхөн
+ui.text.playoff_round,Playoff Round,Хасагдах шатны тоглолт
+ui.text.present_mode,Present Mode,Танилцуулгын горим
+ui.text.present_standings,Present Standings Screen,Чансааны дэлгэцийг танилцуулах
+ui.text.remove,Remove,Хасах
+ui.text.rotate_phone,Rotate phone for full table,Хүснэгтийг бүтнээр харахын тулд утсаа хөндлөн эргүүлнэ үү
+ui.text.search_players_teams,Search players or teams,Тамирчин эсвэл баг хайх
+ui.text.search_detailed,"Search players, teams, club, contact details","Тамирчин, баг, клуб, холбоо барих мэдээллээр хайх"
+ui.text.select,Select,Сонгох
+ui.text.singles_f,Singles F,Ганцаарчилсан эмэгтэй
+ui.text.singles_m,Singles M,Ганцаарчилсан эрэгтэй
+ui.text.singles_female,Singles — Female,Ганцаарчилсан — эмэгтэй
+ui.text.singles_male,Singles — Male,Ганцаарчилсан — эрэгтэй
+ui.text.singles_brackets,"Singles brackets rank players flagged “Singles Entrant” by their recorded game scores.",Ганцаарчилсан бракетад “Ганцаарчилсан оролцогч” гэж тэмдэглэсэн тамирчдыг бүртгэсэн тоглолтын оноогоор эрэмбэлнэ.
+ui.text.singles_players,singles players,ганцаарчилсан тамирчид
+ui.text.singles_players_title,Singles players,Ганцаарчилсан тамирчид
+ui.text.bracket_not_ready,The bracket will appear here once it's ready.,Бракет бэлэн болмогц энд харагдана.
+ui.text.standings_left_ad,Standings left ad,Чансааны зүүн талын зар
+ui.text.standings_right_ad,Standings right ad,Чансааны баруун талын зар
+ui.text.tap_name_details,Tap a name for compact details,Дэлгэрэнгүйг товч харахын тулд нэр дээр товшино уу
+ui.text.team_mismatch,Team mismatch - review Participants page.,Багийн мэдээлэл зөрүүтэй байна — Оролцогчид хуудсыг шалгана уу.
+ui.text.top_score_female,Top Score Female (Top 3),Эмэгтэйчүүдийн шилдэг оноо (эхний 3)
+ui.text.top_score_male,Top Score Male (Top 3),Эрэгтэйчүүдийн шилдэг оноо (эхний 3)
+ui.text.tournament_bracket,Tournament Bracket,Тэмцээний бракет
+ui.text.standings_saved,Tournament standings refreshed and saved.,Тэмцээний чансааг шинэчилж хадгаллаа.
+ui.text.type_three_letters,Type at least 3 letters to search,Хайхын тулд дор хаяж 3 үсэг бичнэ үү
+ui.text.type_winner_name,Type winner name,Ялагчийн нэрийг бичнэ үү
+ui.text.print_window_failed,Unable to open print window. Please allow popups and try again.,Хэвлэх цонхыг нээж чадсангүй. Попап цонхыг зөвшөөрөөд дахин оролдоно уу.
+ui.text.view,View,Харах
+ui.text.zone,Zone,Бүс
+ui.text.division,division,ангилал
+ui.text.entries_available,"entries are available; all available entries will be imported.",бичлэг боломжтой байна; боломжтой бүх бичлэгийг импортлоно.
+ui.text.expected,expected,шаардлагатай
+ui.text.place,place,байр
+ui.text.player_team,player(s)/team(s),тамирчин(чид)/баг(ууд)
+ui.text.teams,teams,багууд
 brackets.ui.no_standings_available,No standings available for this tournament.,Энэ тэмцээнд чансааны өгөгдөл алга.
 brackets.ui.filter_by_name,Filter by name…,Нэрээр шүүх…
 brackets.ui.no_standings_for_tournament,No standings for this tournament.,Энэ тэмцээнд чансаа алга.
@@ -462,7 +612,7 @@ brackets.ui.export_bracket_json,Export bracket config as JSON,Бракет то�
 brackets.ui.export_json,Export JSON,JSON экспортлох
 brackets.ui.import_bracket_json,Import bracket config from JSON file,JSON файлаас бракет тохиргоо импортлох
 brackets.ui.import_json,Import JSON,JSON импортлох
-brackets.ui.invalid_bracket_file,"Invalid bracket file: missing required fields (name, rounds).",Бракет файл буруу байна: шаардлагатай талбарууд (name, rounds) дутуу.
+brackets.ui.invalid_bracket_file,"Invalid bracket file: missing required fields (name, rounds).","Бракет файл буруу байна: шаардлагатай талбарууд (name, rounds) дутуу."
 brackets.ui.failed_import_bracket,Failed to import bracket:,Бракет импортлож чадсангүй:
 brackets.ui.visual_view_disabled_small,Visual view is disabled on small portrait screens,Жижиг босоо дэлгэц дээр дүрслэл харагдац идэвхгүй.
 brackets.ui.visual_view,Visual view,Дүрслэл харагдац
