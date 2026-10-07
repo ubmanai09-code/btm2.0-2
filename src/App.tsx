@@ -270,6 +270,8 @@ const escapePrintHtml = (value: unknown) => String(value ?? '')
   .replace(/'/g, '&#39;');
 
 type TournamentEntryType = 'singles' | 'doubles' | 'trios' | 'teams' | 'mixed';
+type ManualWinnerDivision = 'all' | 'team' | 'female' | 'male';
+type ManualWinnerPlace = 'first' | 'second' | 'third';
 
 const getTournamentEntryType = (tournament: Tournament): TournamentEntryType => {
   if (tournament.type === 'individual') return 'singles';
@@ -13433,14 +13435,14 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const autoScrollSpeedRef = useRef<'slow' | 'medium' | 'fast'>('slow');
   const [manualWinnersByKey, setManualWinnersByKey] = useState<Record<string, ManualWinnerEntry>>({});
   const [savingManualWinnerKey, setSavingManualWinnerKey] = useState<string | null>(null);
-  const [winnerEditorTarget, setWinnerEditorTarget] = useState<{ division: 'all' | 'female' | 'male'; place: 'first' | 'second' | 'third' } | null>(null);
+  const [winnerEditorTarget, setWinnerEditorTarget] = useState<{ division: ManualWinnerDivision; place: ManualWinnerPlace } | null>(null);
   const [highlightsExpanded, setHighlightsExpanded] = useState(false);
   const [winnerEditorSelectValue, setWinnerEditorSelectValue] = useState('');
   const [winnerEditorManualInput, setWinnerEditorManualInput] = useState('');
   const [winnerEditorCandidatesText, setWinnerEditorCandidatesText] = useState('');
   const [standingsDebugSummary, setStandingsDebugSummary] = useState('');
 
-  const toManualWinnerKey = (division: 'all' | 'female' | 'male', place: 'first' | 'second' | 'third') => `${division}:${place}`;
+  const toManualWinnerKey = (division: ManualWinnerDivision, place: ManualWinnerPlace) => `${division === 'team' ? 'all' : division}:${place}`;
   const parseWinnerNames = (raw: string) => {
     const text = String(raw || '').trim();
     if (!text) return [] as string[];
@@ -14257,15 +14259,18 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
   const tournamentFormat = String(tournament.format || '').trim();
   const usesBracketWinnersGrid = tournamentFormat === 'Pre-Qualification & Bracket';
+  const hasMixedTeamSingles = isTeamTournament && Boolean(tournament.enable_singles_division);
 
   const bracketMatchesByDivision = {
     all: bracketMatches.filter((m: any) => String(m.division || 'all') === 'all'),
     female: bracketMatches.filter((m: any) => String(m.division || 'all') === 'female'),
     male: bracketMatches.filter((m: any) => String(m.division || 'all') === 'male'),
   };
-  const hasGenderManualWinnersGrid = !isTeamTournament || (usesBracketWinnersGrid && (bracketMatchesByDivision.female.length > 0 || bracketMatchesByDivision.male.length > 0));
-  const winnerDivisions: Array<'all' | 'female' | 'male'> = hasGenderManualWinnersGrid ? ['female', 'male'] : ['all'];
-  const winnerPlaces: Array<'first' | 'second' | 'third'> = ['first', 'second', 'third'];
+  const hasGenderManualWinnersGrid = hasMixedTeamSingles || !isTeamTournament || (usesBracketWinnersGrid && (bracketMatchesByDivision.female.length > 0 || bracketMatchesByDivision.male.length > 0));
+  const winnerDivisions: ManualWinnerDivision[] = hasMixedTeamSingles
+    ? ['team', 'female', 'male']
+    : hasGenderManualWinnersGrid ? ['female', 'male'] : ['all'];
+  const winnerPlaces: ManualWinnerPlace[] = ['first', 'second', 'third'];
 
   const teamWinnerOptions = teams
     .map((team) => ({
@@ -14281,6 +14286,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         value: `participant:${participant.id}`,
         label,
         gender: normalizeGender(participant.gender),
+        singlesEligible: Boolean(participant.singles_entrant) || participant.team_id === null,
       };
     })
     .sort((a, b) => a.label.localeCompare(b.label));
@@ -14298,7 +14304,16 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
-  const getWinnerOptionsForDivision = (division: 'all' | 'female' | 'male') => {
+  const getWinnerOptionsForDivision = (division: ManualWinnerDivision) => {
+    if (hasMixedTeamSingles && division === 'team') {
+      const combinedOptions = [...teamWinnerOptions, ...participantTeamWinnerOptions];
+      return combinedOptions.filter((option, index) => (
+        combinedOptions.findIndex((entry) => entry.label.toLowerCase() === option.label.toLowerCase()) === index
+      ));
+    }
+    if (hasMixedTeamSingles && (division === 'female' || division === 'male')) {
+      return participantWinnerOptions.filter((option) => option.singlesEligible && option.gender === division);
+    }
     if (isTeamTournament) {
       const combinedOptions = [...teamWinnerOptions, ...participantTeamWinnerOptions];
       return combinedOptions.filter((option, index) => (
@@ -14309,17 +14324,17 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     return participantWinnerOptions.filter((option) => option.gender === division);
   };
 
-  const getManualWinnerEntry = (division: 'all' | 'female' | 'male', place: 'first' | 'second' | 'third') => {
+  const getManualWinnerEntry = (division: ManualWinnerDivision, place: ManualWinnerPlace) => {
     return manualWinnersByKey[toManualWinnerKey(division, place)] || null;
   };
 
-  const getManualWinnerDisplay = (division: 'all' | 'female' | 'male', place: 'first' | 'second' | 'third') => {
+  const getManualWinnerDisplay = (division: ManualWinnerDivision, place: ManualWinnerPlace) => {
     const entry = getManualWinnerEntry(division, place);
     const names = parseWinnerNames(String(entry?.display_name || ''));
     return names.length > 0 ? names.join(', ') : 'TBD';
   };
 
-  const openWinnerEditor = (division: 'all' | 'female' | 'male', place: 'first' | 'second' | 'third') => {
+  const openWinnerEditor = (division: ManualWinnerDivision, place: ManualWinnerPlace) => {
     const existing = getManualWinnerEntry(division, place);
     setWinnerEditorTarget({ division, place });
     setWinnerEditorSelectValue('');
@@ -14353,15 +14368,15 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   };
 
   const persistManualWinner = async (
-    division: 'all' | 'female' | 'male',
-    place: 'first' | 'second' | 'third',
+    division: ManualWinnerDivision,
+    place: ManualWinnerPlace,
     payload: { target_kind: 'participant' | 'team' | 'manual'; target_id?: number | null; display_name?: string }
   ) => {
     const key = toManualWinnerKey(division, place);
     setSavingManualWinnerKey(key);
     try {
       const response = await api.setManualWinner(tournament.id, {
-        division,
+        division: division === 'team' ? 'all' : division,
         place,
         target_kind: payload.target_kind,
         target_id: payload.target_id,
@@ -14449,6 +14464,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       : [
           'rank',
           'participant',
+          'gender',
           ...(hasClubData ? ['club'] : []),
           'team',
           ...(hasDivisions ? ['zone'] : []),
@@ -14470,6 +14486,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       : playerStandingsRows.map((s, idx) => [
           idx + 1,
           s.participant_name,
+          participantGenderMap.get(s.participant_id) || '',
           ...(hasClubData ? [s.club] : []),
           s.team_name,
           ...(hasDivisions ? [s.division || ''] : []),
@@ -14859,11 +14876,17 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     </div>
                   </div>
                   <div className="overflow-x-auto mt-2">
-                    <div className={`grid ${hasGenderManualWinnersGrid ? 'grid-cols-3' : ''} border border-black/10 rounded-xl overflow-hidden`} style={!hasGenderManualWinnersGrid ? { gridTemplateColumns: '30% 70%' } : undefined}>
-                      <div className="bg-black/5 px-2.5 py-1.5 font-bold text-[10px] uppercase tracking-widest border-b border-black/10"></div>
+                    <div className="grid border border-black/10 rounded-xl overflow-hidden" style={{ gridTemplateColumns: hasGenderManualWinnersGrid ? `repeat(${winnerDivisions.length + 1}, minmax(0, 1fr))` : '30% 70%' }}>
+                      <div className="bg-black/5 px-2.5 py-1.5 font-bold text-[10px] uppercase tracking-widest border-b border-black/10 text-left">{tx('Place')}</div>
                       {winnerDivisions.map((division) => (
-                        <div key={`winner-head-${division}`} className="bg-black/5 px-2.5 py-1.5 font-bold text-[10px] uppercase tracking-widest border-b border-black/10 text-center">
-                          {division === 'female' ? 'F' : division === 'male' ? 'M' : (isTeamTournament ? '' : 'Open')}
+                        <div key={`winner-head-${division}`} className="bg-black/5 px-2.5 py-1.5 font-bold text-[10px] uppercase tracking-widest border-b border-black/10 text-left">
+                          {division === 'team'
+                            ? tx('Team Event')
+                            : division === 'female'
+                              ? (hasMixedTeamSingles ? tx("Women's Singles") : 'F')
+                              : division === 'male'
+                                ? (hasMixedTeamSingles ? tx("Men's Singles") : 'M')
+                                : (isTeamTournament ? tx('Team') : tx('Open'))}
                         </div>
                       ))}
 
