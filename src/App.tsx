@@ -302,26 +302,7 @@ const getTournamentFormatLabel = (value: string) => {
   return value === 'Pre-Qualification' ? t('format.total_pinfall', 'Total Pinfall') : value;
 };
 
-const getMatchPlayTypeLabel = (value: Tournament['match_play_type'] | string | undefined) => {
-  switch (value) {
-    case 'single_elimination':
-      return t('bracket.single_elimination', 'Single Elimination');
-    case 'double_elimination':
-      return t('bracket.double_elimination', 'Double Elimination');
-    case 'ladder':
-      return t('bracket.ladder', 'Ladder');
-    case 'stepladder':
-      return t('bracket.stepladder', 'Stepladder');
-    case 'playoff':
-      return t('bracket.playoff', 'Playoff');
-    case 'team_selection_playoff':
-      return t('bracket.team_selection_playoff', 'Team Selection Playoff');
-    case 'survivor_elimination':
-      return t('bracket.survivor_elimination', 'Survivor Elimination');
-    default:
-      return t('bracket.single_elimination', 'Single Elimination');
-  }
-};
+const isShootoutCompetition = (value?: string | null) => value?.trim().toLowerCase() === 'shootout';
 
 type PublicLanguage = 'en' | 'mn';
 type BilingualTerm = { en: string; mn: string };
@@ -717,6 +698,8 @@ export default function App() {
   });
   const [loading, setLoading] = useState(true);
   const [formType, setFormType] = useState<TournamentEntryType>('singles');
+  const [formCompetitionStyle, setFormCompetitionStyle] = useState('Qualifying + Final');
+  const [formFinalsFormat, setFormFinalsFormat] = useState('Stepladder');
   const [formLogo, setFormLogo] = useState('');
   const [formLogoTouched, setFormLogoTouched] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
@@ -1077,7 +1060,7 @@ export default function App() {
       name: formData.get('name') as string,
       date: formData.get('date') as string,
       location: formData.get('location') as string,
-      format: formData.get('format') as string,
+      format: editingTournament?.format || 'Single Elimination',
       match_play_type: editingTournament?.match_play_type || 'single_elimination',
       organizer: formData.get('organizer') as string,
       logo: formData.get('logo') as string,
@@ -1098,10 +1081,10 @@ export default function App() {
         ...String(formData.get('custom_divisions') || '').split(',').map((value) => value.trim()),
       ].filter(Boolean))).join(', ') || null,
       end_date: (formData.get('end_date') as string) || null,
-      competition_style: formData.get('competition_style') as string,
+      competition_style: formCompetitionStyle,
       lane_length: (formData.get('lane_length') as string) || null,
       scoring_type: formData.get('scoring_type') as string,
-      finals_format: formData.get('finals_format') as string,
+      finals_format: isShootoutCompetition(formCompetitionStyle) ? null : formFinalsFormat,
       offday_penalty: parseNum(formData.get('offday_penalty'), 25),
       enable_singles_division: formType === 'mixed' ? 1 : 0,
     };
@@ -1161,6 +1144,8 @@ export default function App() {
     setFormLogo(t.logo || '');
     setFormLogoTouched(true);
     setFormType(getTournamentEntryType(t));
+    setFormCompetitionStyle(isShootoutCompetition(t.competition_style) ? 'Shootout' : 'Qualifying + Final');
+    setFormFinalsFormat(t.finals_format || 'Stepladder');
     setView('edit');
   };
 
@@ -2049,7 +2034,7 @@ export default function App() {
     { id: 'participants', label: t('tab.participants', 'Participants'), icon: Users },
     { id: 'lanes', label: t('tab.lane_assignments', 'Lanes'), icon: Columns4 },
     { id: 'scoring', label: t('tab.scoring', 'Score'), icon: ClipboardList },
-    ...(currentRole === 'admin' || currentRole === 'moderator' ? [{ id: 'brackets-v2', label: t('tab.brackets_v2', 'Brackets'), icon: BracketsV2TabIcon }] : []),
+    ...(!isShootoutCompetition(selectedTournament?.competition_style) && (currentRole === 'admin' || currentRole === 'moderator') ? [{ id: 'brackets-v2', label: t('tab.brackets_v2', 'Brackets'), icon: BracketsV2TabIcon }] : []),
     { id: 'standings', label: t('tab.tournament_result', 'Standing'), icon: Trophy },
     { id: 'tools', label: t('tab.tools', 'Tools'), icon: Wrench },
   ];
@@ -2211,7 +2196,7 @@ export default function App() {
               onEdit={handleEdit}
               onArchiveToggle={handleArchiveToggle}
               onDelete={(id) => { void handleDeleteTournament(id); }}
-              onCreate={() => { setFormType('singles'); setFormLogo(''); setFormLogoTouched(false); setView('create'); }}
+              onCreate={() => { setFormType('singles'); setFormCompetitionStyle('Qualifying + Final'); setFormFinalsFormat('Stepladder'); setFormLogo(''); setFormLogoTouched(false); setView('create'); }}
               onSave={handleSaveData}
               onExportOne={handleExportSingle}
               onImportClick={() => tournamentsImportInputRef.current?.click()}
@@ -2291,25 +2276,24 @@ export default function App() {
                       <Select
                         label={t('tournament.competition_style', 'Competition Style')}
                         name="competition_style"
-                        defaultValue={editingTournament?.competition_style || 'Qualifying + Finals'}
-                        options={['Qualifying + Finals', 'Round Robin', 'Match Play', 'Elimination', 'Ladder Finals', 'Swiss Format'].map((value) => ({ value, label: value }))}
+                        value={formCompetitionStyle}
+                        onChange={(e: any) => setFormCompetitionStyle(e.target.value)}
+                        options={['Shootout', 'Qualifying + Final'].map((value) => ({ value, label: value }))}
                       />
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Select 
-                        label={t('tournament.bracket_format', 'Bracket Format')} 
-                        name="format" 
-                        defaultValue={editingTournament?.format || 'Single Elimination'}
-                        options={[
-                          { value: 'Single Elimination', label: t('format.single_elimination', 'Single Elimination') },
-                          { value: 'Double Elimination', label: t('format.double_elimination', 'Double Elimination') },
-                          { value: 'Round Robin', label: t('format.round_robin', 'Round Robin') },
-                          ...(editingTournament?.format && !['Single Elimination', 'Double Elimination', 'Round Robin'].includes(editingTournament.format)
-                            ? [{ value: editingTournament.format, label: getTournamentFormatLabel(editingTournament.format) }]
-                            : [])
-                        ]} 
-                      />
-                    </div>
+                    {isShootoutCompetition(formCompetitionStyle) ? (
+                      <p className="text-xs text-black/60">Highest pinfall wins. No finals or brackets.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Select
+                          label={t('tournament.finals_format', 'Final Format')}
+                          name="finals_format"
+                          value={formFinalsFormat}
+                          onChange={(e: any) => setFormFinalsFormat(e.target.value)}
+                          options={['Single Elimination', 'Double Elimination', 'Round Robin', 'Stepladder', 'Match Play'].map((value) => ({ value, label: value }))}
+                        />
+                      </div>
+                    )}
                   {formType === 'mixed' && (
                     <div className="px-3 py-2 rounded-md border border-indigo-200 bg-indigo-50/50 text-xs text-black/70">
                       {t('tournament.mixed_hint', 'Participants can compete in both the team event and Singles. Team members can also be flagged as Singles Entrants on their profile.')}
@@ -2457,15 +2441,6 @@ export default function App() {
                     </button>
                   </div>
 
-                  </div>
-                  <div className="space-y-4 pt-2">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-800 border-b border-gray-400 pb-1">6. Finals Settings</h3>
-                    <Select
-                      label={t('tournament.finals_format', 'Finals Format')}
-                      name="finals_format"
-                      defaultValue={editingTournament?.finals_format || 'Stepladder'}
-                      options={['Stepladder', 'Match Play', 'Round Robin', 'Elimination'].map((value) => ({ value, label: value }))}
-                    />
                   </div>
                   {view === 'edit' && (
                     <Select 
@@ -3609,7 +3584,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       { id: 'participants', label: tPublic('public.tab.participants', 'Participants'), icon: Users },
       { id: 'lanes', label: tPublic('public.tab.lane_assignments', 'Lanes'), icon: Columns4 },
       { id: 'scoring', label: tPublic('public.tab.scoring', 'Score'), icon: ClipboardList },
-      { id: 'brackets-v2', label: tPublic('public.tab.brackets_v2', 'Brackets'), icon: BracketsV2TabIcon },
+      ...(!isShootoutCompetition(tournament.competition_style) ? [{ id: 'brackets-v2', label: tPublic('public.tab.brackets_v2', 'Brackets'), icon: BracketsV2TabIcon }] : []),
       { id: 'standings', label: tPublic('public.tab.tournament_result', 'Standing'), icon: Trophy },
       { id: 'tools', label: tPublic('public.tab.tools', 'Tools'), icon: Wrench },
     ]
@@ -3617,7 +3592,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       { id: 'participants', label: t('tab.participants', 'Participants'), icon: Users },
       { id: 'lanes', label: t('tab.lane_assignments', 'Lanes'), icon: Columns4 },
       { id: 'scoring', label: t('tab.scoring', 'Score'), icon: ClipboardList },
-      ...(effectiveRole === 'admin' || effectiveRole === 'moderator' ? [{ id: 'brackets-v2', label: t('tab.brackets_v2', 'Brackets'), icon: BracketsV2TabIcon }] : []),
+      ...(!isShootoutCompetition(tournament.competition_style) && (effectiveRole === 'admin' || effectiveRole === 'moderator') ? [{ id: 'brackets-v2', label: t('tab.brackets_v2', 'Brackets'), icon: BracketsV2TabIcon }] : []),
       { id: 'standings', label: t('tab.tournament_result', 'Standing'), icon: Trophy },
       { id: 'tools', label: t('tab.tools', 'Tools'), icon: Wrench },
       { id: 'league', label: t('tab.league', 'League'), icon: BarChart3 },
@@ -3802,13 +3777,15 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                           : tPublic('public.tournament.type.individual', 'individual')).replace(/^([a-z])/, (m) => m.toUpperCase())}</span>
                       {tournament.type === 'team' && !Boolean(tournament.enable_singles_division) && <span>({tournament.players_per_team}/team)</span>}
                     </span>
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
-                      <ClipboardList size={12} />
-                      {getTournamentFormatLabel(tournament.format)}
-                    </span>
+                    {!isShootoutCompetition(tournament.competition_style) && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
+                        <ClipboardList size={12} />
+                        Final: {tournament.finals_format || 'Stepladder'}
+                      </span>
+                    )}
                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
                       <GitBranch size={12} />
-                      {getMatchPlayTypeLabel(tournament.match_play_type)}
+                      Style: {tournament.competition_style || 'Qualifying + Final'}
                     </span>
                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
                       <Target size={12} />
@@ -3902,7 +3879,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
         {activeTab === 'participants' && <ParticipantView tournament={tournament} role={effectiveRole} />}
         {activeTab === 'lanes' && <LaneView tournament={tournament} role={effectiveRole} />}
         {activeTab === 'scoring' && <ScoringView tournament={tournament} role={effectiveRole} sponsorsConfig={sponsorsConfig} onPresentScoreScreen={blockPublicPresentModeOnSmallScreen ? undefined : openScoreScreenMode} scoreScreenMode={isScoreScreenMode} />}
-        {activeTab === 'brackets-v2' && <BracketsViewV2 tournament={tournament} role={effectiveRole} onTournamentUpdated={onTournamentUpdated} />}
+        {activeTab === 'brackets-v2' && !isShootoutCompetition(tournament.competition_style) && <BracketsViewV2 tournament={tournament} role={effectiveRole} onTournamentUpdated={onTournamentUpdated} />}
         {activeTab === 'standings' && <StandingsView tournament={tournament} role={effectiveRole} sponsorsConfig={sponsorsConfig} onPresentStandingsScreen={blockPublicPresentModeOnSmallScreen ? undefined : openStandingsScreenMode} standingsScreenMode={isStandingsScreenMode} />}
         {activeTab === 'tools' && <ToolsPage lang={lang} role={effectiveRole} authToken={authToken} />}
         {activeTab === 'league' && <LeagueView tournament={tournament} role={effectiveRole} />}
