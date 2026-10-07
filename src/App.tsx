@@ -14279,6 +14279,25 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
+  const teamMemberNamesByName = new Map<string, string[]>();
+  for (const participant of participants) {
+    const teamName = String(participant.team_name || '').trim();
+    const firstName = String(participant.first_name || '').trim();
+    const lastName = String(participant.last_name || '').trim();
+    const lastInitial = Array.from(lastName)[0]?.toLocaleUpperCase() || '';
+    const participantName = firstName ? `${firstName}${lastInitial ? ` ${lastInitial}.` : ''}` : '';
+    if (!teamName || !participantName) continue;
+    const key = teamName.toLowerCase();
+    const names = teamMemberNamesByName.get(key) || [];
+    if (!names.includes(participantName)) names.push(participantName);
+    teamMemberNamesByName.set(key, names);
+  }
+
+  const getTeamWinnerMemberNames = (winnerNames: string) => parseWinnerNames(winnerNames)
+    .map((teamName) => (teamMemberNamesByName.get(teamName.trim().toLowerCase()) || []).join(', '))
+    .filter(Boolean)
+    .join(' · ');
+
   const participantWinnerOptions = participants
     .map((participant) => {
       const label = `${String(participant.first_name || '').trim()} ${String(participant.last_name || '').trim()}`.trim() || `Participant #${participant.id}`;
@@ -14918,6 +14937,9 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                               const cellDisabled = savingManualWinnerKey === key || !canManageStandings;
                               const displayName = getManualWinnerDisplay(division, place);
                               const isEmpty = displayName === 'TBD';
+                              const teamMemberNames = isTeamTournament && !hasMixedTeamSingles
+                                ? getTeamWinnerMemberNames(displayName)
+                                : '';
 
                               return (
                                 <button
@@ -14928,7 +14950,10 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                                   className={`px-2.5 py-2 border-b border-black/10 ${rowBg} text-left min-h-[56px] ${!isPublicView ? 'hover:bg-white/50 transition-colors' : ''} disabled:cursor-default`}
                                   title={isPublicView ? displayName : tx('Click to edit or replace')}
                                 >
-                                  <div className={`text-sm font-semibold leading-tight ${isEmpty ? 'text-black/35 italic' : 'text-black/80'}`}>{displayName}</div>
+                                  <div className={`text-sm font-semibold leading-tight ${isEmpty ? 'text-black/35 italic' : 'text-black/80'}`}>
+                                    {displayName}
+                                    {teamMemberNames && <span className="hidden sm:inline text-xs font-normal text-black/55"> ({teamMemberNames})</span>}
+                                  </div>
                                 </button>
                               );
                             })}
