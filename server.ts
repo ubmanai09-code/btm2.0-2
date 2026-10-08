@@ -2981,7 +2981,10 @@ async function startServer() {
       LEFT JOIN teams t ON p.team_id = t.id 
       WHERE p.tournament_id = ?
       ORDER BY p.id ASC
-    `).all(req.params.id);
+    `).all(req.params.id) as any[];
+    if (getRequestRole(req) === 'public') {
+      return res.json(rows.map((row) => ({ ...row, email: '' })));
+    }
     res.json(rows);
   });
 
@@ -3153,6 +3156,21 @@ async function startServer() {
     const dest = path.join(clubLogosDir, `${slug}.jpg`);
     try {
       await (sharp as any)(req.file.buffer).resize(200, 200, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } }).jpeg({ quality: 90 }).toFile(dest);
+      res.json({ slug, url: `/club-logos/${slug}.jpg` });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/club-logos/assign", requirePermission('participants:manage', () => null), (req, res) => {
+    const club = String(req.body?.club || '').trim();
+    const source = String(req.body?.source || '').replace(/[^a-z0-9-]/g, '');
+    const slug = clubSlug(club);
+    if (!slug) return res.status(400).json({ error: 'Invalid club name' });
+    const from = path.join(clubLogosDir, `${source}.jpg`);
+    if (!source || !fs.existsSync(from)) return res.status(404).json({ error: 'Logo not found' });
+    try {
+      if (source !== slug) fs.copyFileSync(from, path.join(clubLogosDir, `${slug}.jpg`));
       res.json({ slug, url: `/club-logos/${slug}.jpg` });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

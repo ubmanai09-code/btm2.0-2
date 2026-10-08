@@ -4489,6 +4489,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const [viewingPlayer, setViewingPlayer] = useState<Participant | null>(null);
   const [photoCtx, setPhotoCtx] = useState(false);
   const [logoCtx, setLogoCtx] = useState(false);
+  const [clubDraft, setClubDraft] = useState('');
+  const [showLogoPicker, setShowLogoPicker] = useState(false);
   const photoClickTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const logoClickTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<number[]>([]);
@@ -4511,6 +4513,10 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const [showAddTeam, setShowAddTeam] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [editingPlayer, setEditingPlayer] = useState<Participant | null>(null);
+  useEffect(() => {
+    setClubDraft(editingPlayer?.club || '');
+    setShowLogoPicker(false);
+  }, [editingPlayer, showAddPlayer]);
   const [selectedTeamMemberIds, setSelectedTeamMemberIds] = useState<number[]>([]);
   const [teamMemberSearchQuery, setTeamMemberSearchQuery] = useState('');
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
@@ -5256,7 +5262,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     const teamName = (participant.team_name || '').trim().toLowerCase();
     return fullName.includes(activePlayerSearch)
       || club.includes(activePlayerSearch)
-      || email.includes(activePlayerSearch)
+      || (canManageParticipants && email.includes(activePlayerSearch))
       || teamName.includes(activePlayerSearch);
   });
 
@@ -5639,7 +5645,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         <UserRoundPlus size={17} />
                       </button>
                     )}
-                    <Button
+                    {canManageParticipants && <Button
                       size="sm"
                       variant="outline"
                       onClick={() => setShowMobileRosterActions(true)}
@@ -5648,7 +5654,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       className="px-2 md:hidden"
                     >
                       <MoreHorizontal size={16} />
-                    </Button>
+                    </Button>}
                     {showPlayersSearch && (
                       <>
                         <div className="relative">
@@ -5678,7 +5684,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       </>
                     )}
                   </div>
-                  <div className="hidden md:flex flex-wrap items-center justify-end max-md:col-start-3 gap-1.5 md:ml-auto">
+                  <div className={`${canManageParticipants ? 'hidden md:flex' : 'flex'} flex-wrap items-center justify-end max-md:col-start-3 gap-1.5 md:ml-auto`}>
                     {canManageParticipants && (
                       <Button
                         size="sm"
@@ -5812,7 +5818,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     <div className="grid grid-cols-2 gap-2 items-center">
                       {/* Left: #id top, NAME FAMILYNAME below in caps */}
                       <div className="flex flex-col items-start min-w-0">
-                        <span className={`text-[10px] font-mono ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/50'}`}>#{p.id}</span>
+                        <span className={`text-[10px] font-mono ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/50'}`}>#{index + 1}</span>
                         <span className={`mt-0.5 text-xs font-bold tracking-wide uppercase leading-tight ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>
                           {(p.first_name || '')} {(p.last_name || '')}
                         </span>
@@ -6051,7 +6057,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                           </span>
                         </button>
                       )}
-                        <Button
+                        {canManageParticipants && <Button
                           size="sm"
                           variant="outline"
                           onClick={() => setShowMobileRosterActions(true)}
@@ -6060,7 +6066,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                           className="px-2 md:hidden"
                         >
                           <MoreHorizontal size={16} />
-                        </Button>
+                        </Button>}
                         {showTeamsSearch && (
                           <>
                             <div className="relative">
@@ -6090,7 +6096,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                           </>
                         )}
                     </div>
-                    <div className="hidden md:flex flex-wrap items-center justify-end max-md:col-start-3 gap-1.5 md:ml-auto pr-1">
+                    <div className={`${canManageParticipants ? 'hidden md:flex' : 'flex'} flex-wrap items-center justify-end max-md:col-start-3 gap-1.5 md:ml-auto pr-1`}>
                       {canManageParticipants && (
                         <Button
                           size="sm"
@@ -6473,37 +6479,54 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       )}
 
       {/* Modals */}
-      {viewingPlayer && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6" onClick={() => setViewingPlayer(null)}>
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative w-full max-w-sm" onClick={e => e.stopPropagation()}>
-            <Card className="p-6 border-gray-400 shadow-xl">
-              <div className="flex items-start gap-4 mb-4">
-                {viewingPlayer.photo_url
-                  ? <img src={viewingPlayer.photo_url} alt="Player" className="w-16 h-16 rounded-full object-cover border-2 border-black/10 shrink-0" />
-                  : <div className="w-16 h-16 rounded-full bg-black/8 border-2 border-black/10 flex items-center justify-center text-black/20 shrink-0"><UserRound size={28} /></div>
-                }
-                <div className="min-w-0">
-                  <p className="text-lg font-bold text-black uppercase tracking-wide leading-tight">{viewingPlayer.first_name} {viewingPlayer.last_name}</p>
-                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    {viewingPlayer.gender && <span className="text-[11px] font-bold text-black/50 uppercase">{(viewingPlayer.gender || '').toLowerCase().startsWith('f') ? 'F' : 'M'}</span>}
-                    {viewingPlayer.hands && showPlayerStyle && <span className="text-[11px] text-black/40">{normalizeHandsStyle(viewingPlayer.hands)}</span>}
-                    {viewingPlayer.average > 0 && <span className="text-[11px] text-black/50">Avg {viewingPlayer.average}</span>}
-                    {viewingPlayer.division && <span className="text-[11px] font-semibold text-emerald-700">{viewingPlayer.division}</span>}
+      {viewingPlayer && (() => {
+        const clubName = (viewingPlayer.club || '').trim();
+        const clubLogo = clubName ? clubLogos[clubSlug(clubName)] : null;
+        const isFemale = (viewingPlayer.gender || '').toLowerCase().startsWith('f');
+        const stats: Array<{ label: string; value: string }> = [
+          ...(viewingPlayer.gender ? [{ label: 'Gender', value: isFemale ? 'F' : 'M' }] : []),
+          ...(viewingPlayer.average > 0 ? [{ label: 'Avg', value: String(viewingPlayer.average) }] : []),
+          ...(viewingPlayer.hands && showPlayerStyle ? [{ label: 'Style', value: normalizeHandsStyle(viewingPlayer.hands) }] : []),
+          ...(viewingPlayer.division ? [{ label: 'Division', value: viewingPlayer.division }] : []),
+        ];
+        return (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={() => setViewingPlayer(null)}>
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+            <div className="relative w-full max-w-md" onClick={e => e.stopPropagation()}>
+              <Card className="overflow-hidden border-gray-400 shadow-xl">
+                <div className="flex items-stretch gap-4 p-4">
+                  {viewingPlayer.photo_url
+                    ? <img src={viewingPlayer.photo_url} alt="Player" className="h-28 w-28 shrink-0 rounded-xl object-cover border border-black/10" />
+                    : <div className="h-28 w-28 shrink-0 rounded-xl bg-black/8 border border-black/10 flex items-center justify-center text-black/20"><UserRound size={44} /></div>}
+                  <div className="min-w-0 flex-1 flex flex-col justify-center gap-2 pr-5">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-black/50 truncate">{viewingPlayer.first_name}</p>
+                      <p className="text-xl font-extrabold uppercase leading-tight tracking-wide text-black break-words">{viewingPlayer.last_name}</p>
+                    </div>
+                    {clubName && (
+                      <div className="flex items-center gap-2 min-w-0">
+                        {clubLogo && <img src={clubLogo} alt="Club" className="h-9 w-9 shrink-0 rounded border border-black/10 object-contain bg-white" />}
+                        <span className="min-w-0 text-sm font-semibold text-black/80 break-words">{clubName}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-              {viewingPlayer.club && (
-                <div className="flex items-center gap-2 border-t border-black/8 pt-3">
-                  {(() => { const s = clubSlug(viewingPlayer.club); const u = s ? clubLogos[s] : null; return u ? <img src={u} alt="Club" className="w-8 h-8 rounded border border-black/10 object-contain bg-white" /> : null; })()}
-                  <span className="text-sm font-semibold text-black/70">{viewingPlayer.club}</span>
-                </div>
-              )}
-              <button type="button" onClick={() => setViewingPlayer(null)} className="absolute top-3 right-3 text-black/30 hover:text-black/60 transition-colors"><X size={16} /></button>
-            </Card>
+                {stats.length > 0 && (
+                  <div className={`grid border-t border-black/10 divide-x divide-black/10 ${stats.length === 1 ? 'grid-cols-1' : stats.length === 2 ? 'grid-cols-2' : stats.length === 3 ? 'grid-cols-3' : 'grid-cols-4'}`}>
+                    {stats.map(stat => (
+                      <div key={stat.label} className="px-2 py-2 text-center min-w-0">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-black/40">{stat.label}</p>
+                        <p className="text-sm font-bold text-black truncate">{stat.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button type="button" onClick={() => setViewingPlayer(null)} className="absolute top-2 right-2 text-black/30 hover:text-black/60 transition-colors" aria-label="Close"><X size={16} /></button>
+              </Card>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {imagePreviewUrl && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm" onClick={() => setImagePreviewUrl(null)}>
@@ -6579,10 +6602,10 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
                   <div className="flex items-end gap-2">
                     <div className="flex-1">
-                      <Input label="Team/Club" name="club" defaultValue={editingPlayer?.club} placeholder="e.g. City Bowlers" />
+                      <Input label="Team/Club" name="club" defaultValue={editingPlayer?.club} onChange={(e: any) => setClubDraft(e.target.value)} placeholder="e.g. City Bowlers" />
                     </div>
                     {(() => {
-                      const clubVal = (editingPlayer?.club || '').trim();
+                      const clubVal = clubDraft.trim();
                       const slug = clubVal ? clubSlug(clubVal) : '';
                       const logoUrl = slug ? clubLogos[slug] : null;
                       if (!clubVal) return null;
@@ -6608,6 +6631,44 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         </div>
                       );
                     })()}
+                    {clubDraft.trim() && Object.keys(clubLogos).length > 0 && (
+                      <div className="relative pb-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setShowLogoPicker((v) => !v)}
+                          title="Choose from available logos"
+                          aria-label="Choose from available logos"
+                          className="h-16 w-16 rounded border border-black/15 flex flex-col items-center justify-center gap-0.5 text-[9px] font-bold uppercase text-black/50 hover:border-gray-400"
+                        >
+                          <Building2 size={18} />
+                          Choose
+                        </button>
+                        {showLogoPicker && (
+                          <div className="absolute right-0 bottom-full mb-2 z-50 w-64 max-h-56 overflow-y-auto rounded-lg border border-black/15 bg-[var(--card)] p-2 shadow-xl grid grid-cols-3 gap-2">
+                            {Object.entries(clubLogos).map(([logoSlug, url]) => (
+                              <button
+                                key={logoSlug}
+                                type="button"
+                                title={logoSlug}
+                                onClick={async () => {
+                                  const res = await fetch('/api/club-logos/assign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ club: clubDraft.trim(), source: logoSlug }) });
+                                  if (res.ok) {
+                                    const data = await res.json();
+                                    setClubLogos((prev) => ({ ...prev, [data.slug]: `${data.url}?t=${Date.now()}` }));
+                                    setShowLogoPicker(false);
+                                  } else {
+                                    alert('Could not apply this logo to the club name.');
+                                  }
+                                }}
+                                className="rounded border border-black/10 bg-white p-1 hover:border-orange-600"
+                              >
+                                <img src={url} alt={logoSlug} className="h-14 w-full object-contain" />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <Input label="Contact Details" name="email" type="text" defaultValue={editingPlayer?.email} placeholder="Phone or email" />
