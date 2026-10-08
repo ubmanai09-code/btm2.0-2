@@ -164,16 +164,21 @@ export default function DashboardPage(props: DashboardPageProps) {
     return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-none ${entry.cls}`}>{entry.label}</span>;
   };
 
+  const shortName = (full: string) => {
+    const parts = full.trim().split(/\s+/);
+    return parts.length < 2 ? full : `${Array.from(parts[0])[0]}. ${parts.slice(1).join(' ')}`;
+  };
+
   const bestCard = (label: string, entry: Highlights['highest_men']) => (
-    <div className="rounded-lg border border-gray-400 bg-white px-4 py-3">
-      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-500">{label}</p>
+    <div className="min-w-0 rounded-lg border border-gray-400 bg-white px-2.5 py-2">
+      <p className="text-[9px] font-bold uppercase tracking-wider text-gray-500 truncate">{label}</p>
       {entry ? (
-        <div className="mt-1 flex items-baseline gap-3">
-          <span className="text-4xl font-bold leading-none text-emerald-800">{entry.score}</span>
-          <span className="min-w-0 text-sm font-semibold text-black truncate">{entry.name}<span className="font-normal text-gray-500"> · {t('dashboard.game', 'Game')} {entry.game_number}</span></span>
+        <div className="mt-0.5 flex items-baseline gap-2">
+          <span className="text-2xl font-bold leading-none text-emerald-800">{entry.score}</span>
+          <span className="min-w-0 text-xs font-semibold text-black truncate" title={entry.name}>{shortName(entry.name)}</span>
         </div>
       ) : (
-        <p className="mt-2 text-sm text-gray-500">—</p>
+        <p className="mt-1 text-sm text-gray-500">—</p>
       )}
     </div>
   );
@@ -269,10 +274,10 @@ export default function DashboardPage(props: DashboardPageProps) {
                       </table>
                     )}
                   </div>
-                  <div className="grid grid-cols-1 gap-3 content-start">
+                  <div className="grid grid-cols-2 gap-2 content-start">
                     {bestCard(t('dashboard.best_men', 'Highest game · Men'), highlights?.highest_men ?? null)}
                     {bestCard(t('dashboard.best_women', 'Highest game · Women'), highlights?.highest_women ?? null)}
-                    {featured.scoring_type === 'handicap' && <p className="text-[11px] text-gray-500">{t('dashboard.scratch_note', 'Scores shown are scratch (without handicap).')}</p>}
+                    {featured.scoring_type === 'handicap' && <p className="col-span-2 text-[11px] text-gray-500">{t('dashboard.scratch_note', 'Scores shown are scratch (without handicap).')}</p>}
                   </div>
                 </div>
               ) : (

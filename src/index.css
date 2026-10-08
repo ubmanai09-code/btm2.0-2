@@ -1177,15 +1177,16 @@ th {
   border-radius: 0; border: 0; color: #111827; background: transparent;
   transition: background-color .15s, border-color .15s, color .15s;
 }
-.mnav-btn svg { transition: transform .15s; }
+.mnav-btn svg { transition: transform .15s; opacity: 1 !important; }
 .mnav-label { font-size: 9px; font-weight: 600; line-height: 1; max-width: 52px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mnav-btn.active .mnav-label { font-weight: 800; }
 .mnav-btn.active { background: transparent; color: #ea580c; }
-.mnav-btn.active svg { transform: scale(1.25) translateY(-1px); stroke-width: 2.8; filter: drop-shadow(0 0 3px rgba(234, 88, 12, .45)); }
+.mnav-btn.active svg { width: 22px; height: 22px; }
+.mnav-btn.active svg { transform: none; stroke-width: 2.5; filter: none; }
 [data-theme="dark"] .mnav { background: #000000; box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.7); }
 [data-theme="dark"] .mnav-btn { color: #f8fafc; }
 [data-theme="dark"] .mnav-btn.active { background: transparent; color: #ea580c; }
-[data-theme="dark"] .mnav-btn.active svg { filter: drop-shadow(0 0 5px rgba(234, 88, 12, .8)); }
+.mnav-btn.active svg { width: 22px; height: 22px; }
 .mfooter {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 39;
   display: flex; align-items: center; justify-content: center; gap: 8px;
