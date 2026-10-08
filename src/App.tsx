@@ -56,6 +56,7 @@ import {
   BookOpen,
   Wrench,
   Check,
+  MoreHorizontal,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import api, { Tournament, Participant, Team, LaneAssignment, WarmupSlot, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry, LeagueRankingResponse, StandingAdditionalScore, StandingBonus } from './services/api';
@@ -2034,7 +2035,7 @@ export default function App() {
   const visibleTournaments = sortedTournaments.filter((tournamentItem) => resolveTournamentDisplayStatus(tournamentItem) !== 'archived');
   const archivedTournaments = sortedTournaments.filter((tournamentItem) => resolveTournamentDisplayStatus(tournamentItem) === 'archived');
   const mobileNavItems = [
-    { id: 'participants', label: t('tab.participants', 'Participants'), icon: Users },
+    { id: 'participants', label: t('tab.players', 'Players'), icon: Users },
     { id: 'lanes', label: t('tab.lane_assignments', 'Lanes'), icon: Columns4 },
     { id: 'scoring', label: t('tab.scoring', 'Score'), icon: ClipboardList },
     ...(!isShootoutCompetition(selectedTournament?.competition_style) && (currentRole === 'admin' || currentRole === 'moderator') ? [{ id: 'brackets-v2', label: t('tab.brackets_v2', 'Brackets'), icon: BracketsV2TabIcon }] : []),
@@ -3584,7 +3585,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
 
   const visibleTabs = effectiveRole === 'public'
     ? [
-      { id: 'participants', label: tPublic('public.tab.participants', 'Participants'), icon: Users },
+      { id: 'participants', label: tPublic('public.tab.players', 'Players'), icon: Users },
       { id: 'lanes', label: tPublic('public.tab.lane_assignments', 'Lanes'), icon: Columns4 },
       { id: 'scoring', label: tPublic('public.tab.scoring', 'Score'), icon: ClipboardList },
       ...(!isShootoutCompetition(tournament.competition_style) ? [{ id: 'brackets-v2', label: tPublic('public.tab.brackets_v2', 'Brackets'), icon: BracketsV2TabIcon }] : []),
@@ -3592,7 +3593,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       { id: 'tools', label: tPublic('public.tab.tools', 'Tools'), icon: Wrench },
     ]
     : [
-      { id: 'participants', label: t('tab.participants', 'Participants'), icon: Users },
+      { id: 'participants', label: t('tab.players', 'Players'), icon: Users },
       { id: 'lanes', label: t('tab.lane_assignments', 'Lanes'), icon: Columns4 },
       { id: 'scoring', label: t('tab.scoring', 'Score'), icon: ClipboardList },
       ...(!isShootoutCompetition(tournament.competition_style) && (effectiveRole === 'admin' || effectiveRole === 'moderator') ? [{ id: 'brackets-v2', label: t('tab.brackets_v2', 'Brackets'), icon: BracketsV2TabIcon }] : []),
@@ -4445,6 +4446,15 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const photoClickTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const logoClickTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<number[]>([]);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<number[]>([]);
+  const [isTeamSelectionMode, setIsTeamSelectionMode] = useState(false);
+  const [showMobileRosterActions, setShowMobileRosterActions] = useState(false);
+  const [showBulkTeamAssignment, setShowBulkTeamAssignment] = useState(false);
+  const [bulkAssignmentTeamId, setBulkAssignmentTeamId] = useState('');
+  const playerLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const teamLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const playerLongPressTriggered = useRef(false);
+  const teamLongPressTriggered = useRef(false);
   const [teams, setTeams] = useState<Team[]>([]);
   const [scores, setScores] = useState<Score[]>([]);
   const [brackets, setBrackets] = useState<any[]>([]);
@@ -4501,8 +4511,17 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     setShowPlayersClearMenu(false);
     setIsPlayerSelectionMode(false);
     setSelectedParticipantIds([]);
+    setIsTeamSelectionMode(false);
+    setSelectedTeamIds([]);
+    setShowMobileRosterActions(false);
+    setShowBulkTeamAssignment(false);
     setPlayerSearchQuery('');
   }, [tournament.id, tournament.type]);
+
+  useEffect(() => () => {
+    if (playerLongPressTimer.current) clearTimeout(playerLongPressTimer.current);
+    if (teamLongPressTimer.current) clearTimeout(teamLongPressTimer.current);
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -5205,6 +5224,37 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const toggleSelectOne = (id: number) => {
     setSelectedParticipantIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
   };
+  const toggleSelectTeam = (id: number) => {
+    setSelectedTeamIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
+  };
+  const startPlayerLongPress = (id: number) => {
+    if (!canManageParticipants || isPlayerSelectionMode) return;
+    playerLongPressTriggered.current = false;
+    if (playerLongPressTimer.current) clearTimeout(playerLongPressTimer.current);
+    playerLongPressTimer.current = setTimeout(() => {
+      playerLongPressTriggered.current = true;
+      setIsPlayerSelectionMode(true);
+      setSelectedParticipantIds(ids => ids.includes(id) ? ids : [...ids, id]);
+    }, 500);
+  };
+  const cancelPlayerLongPress = () => {
+    if (playerLongPressTimer.current) clearTimeout(playerLongPressTimer.current);
+    playerLongPressTimer.current = null;
+  };
+  const startTeamLongPress = (id: number) => {
+    if (!canManageParticipants || isTeamSelectionMode) return;
+    teamLongPressTriggered.current = false;
+    if (teamLongPressTimer.current) clearTimeout(teamLongPressTimer.current);
+    teamLongPressTimer.current = setTimeout(() => {
+      teamLongPressTriggered.current = true;
+      setIsTeamSelectionMode(true);
+      setSelectedTeamIds(ids => ids.includes(id) ? ids : [...ids, id]);
+    }, 500);
+  };
+  const cancelTeamLongPress = () => {
+    if (teamLongPressTimer.current) clearTimeout(teamLongPressTimer.current);
+    teamLongPressTimer.current = null;
+  };
   const handleDeleteSelected = async () => {
     if (selectedParticipantIds.length === 0) return;
     if (!confirm(`Are you sure you want to clear ${selectedParticipantIds.length} participant(s)?`)) return;
@@ -5214,6 +5264,37 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     setSelectedParticipantIds([]);
     setIsPlayerSelectionMode(false);
     loadData();
+  };
+  const handleAssignSelectedPlayers = async () => {
+    const teamId = Number(bulkAssignmentTeamId);
+    if (!Number.isInteger(teamId) || teamId <= 0 || selectedParticipantIds.length === 0) return;
+    try {
+      await api.bulkAssignParticipantsToTeams(
+        tournament.id,
+        selectedParticipantIds.map(participant_id => ({ participant_id, team_id: teamId }))
+      );
+      setSelectedParticipantIds([]);
+      setIsPlayerSelectionMode(false);
+      setShowBulkTeamAssignment(false);
+      setBulkAssignmentTeamId('');
+      await loadData();
+    } catch (error) {
+      console.error('Failed to assign selected players to a team:', error);
+      say('Failed to assign selected players to the team.');
+    }
+  };
+  const handleDeleteSelectedTeams = async () => {
+    if (selectedTeamIds.length === 0) return;
+    if (!confirm(`Are you sure you want to delete ${selectedTeamIds.length} team(s)? Players will be unassigned.`)) return;
+    try {
+      await Promise.all(selectedTeamIds.map(id => api.deleteTeam(id)));
+      setSelectedTeamIds([]);
+      setIsTeamSelectionMode(false);
+      await loadData();
+    } catch (error) {
+      console.error('Failed to delete selected teams:', error);
+      say('Failed to delete selected teams. Please check server logs.');
+    }
   };
 
   const filteredTeams = (() => {
@@ -5430,8 +5511,16 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div>
-          <h3 className="text-xl font-bold text-emerald-800">{canManageParticipants ? tx('Manage Participants') : tx('Participants')}</h3>
-          <p className="text-xs text-black/50 mt-0.5">{canManageParticipants ? tx('Roster and participant import/export') : tx('Roster view')}</p>
+          <h3 className="text-xl font-bold text-emerald-800">
+            {tournament.type === 'team' && mobileRosterTab === 'teams'
+              ? canManageParticipants ? tx('Manage Teams') : tx('Teams')
+              : canManageParticipants ? tx('Manage Players') : tx('Players')}
+          </h3>
+          <p className="text-xs text-black/50 mt-0.5">
+            {tournament.type === 'team' && mobileRosterTab === 'teams'
+              ? tx('Team roster and import/export')
+              : canManageParticipants ? tx('Roster and player import/export') : tx('Roster view')}
+          </p>
         </div>
       </div>
 
@@ -5440,14 +5529,26 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         <div className={`${segmentedTabContainerClass} w-fit`}>
           <button
             type="button"
-            onClick={() => setMobileRosterTab('players')}
+            onClick={() => {
+              setMobileRosterTab('players');
+              setIsPlayerSelectionMode(false);
+              setSelectedParticipantIds([]);
+              setIsTeamSelectionMode(false);
+              setSelectedTeamIds([]);
+            }}
             className={getSegmentedTabButtonClass(mobileRosterTab === 'players')}
           >
             {tx('Players')}
           </button>
           <button
             type="button"
-            onClick={() => setMobileRosterTab('teams')}
+            onClick={() => {
+              setMobileRosterTab('teams');
+              setIsPlayerSelectionMode(false);
+              setSelectedParticipantIds([]);
+              setIsTeamSelectionMode(false);
+              setSelectedTeamIds([]);
+            }}
             className={getSegmentedTabButtonClass(mobileRosterTab === 'teams')}
           >
             {tx('Teams')}
@@ -5481,6 +5582,16 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     >
                       <Search size={14} />
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowMobileRosterActions(true)}
+                      title="More player actions"
+                      ariaLabel="More player actions"
+                      className="px-2 md:hidden"
+                    >
+                      <MoreHorizontal size={16} />
+                    </Button>
                     {showPlayersSearch && (
                       <>
                         <div className="relative">
@@ -5510,7 +5621,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       </>
                     )}
                     {canManageParticipants && (
-                      <div className="relative">
+                      <div className="relative max-md:hidden">
                         <Button
                           size="sm"
                           variant="remove"
@@ -5548,12 +5659,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       </div>
                     )}
                     {canManageParticipants && (
-                      <Button size="sm" variant="create" onClick={() => { setEditingPlayer(null); setShowAddPlayer(true); }} title="Add Player" ariaLabel="Add Player" className="px-2">
+                      <Button size="sm" variant="create" onClick={() => { setEditingPlayer(null); setShowAddPlayer(true); }} title="Add Player" ariaLabel="Add Player" className="px-2 max-md:hidden">
                         <UserRoundPlus size={12} />
                       </Button>
                     )}
                   </div>
-                  <div className="flex flex-wrap items-center justify-end max-md:col-start-3 gap-1.5 md:ml-auto">
+                  <div className="hidden md:flex flex-wrap items-center justify-end max-md:col-start-3 gap-1.5 md:ml-auto">
                     {canManageParticipants && (
                       <Button size="sm" variant="outline" onClick={handleSaveParticipants} title="Save Players" ariaLabel="Save Players" className="px-2">
                         <Save size={14} />
@@ -5588,7 +5699,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
             </div>
             <div className="space-y-2">
             {canManageParticipants && isPlayerSelectionMode && (
-              <div className="mb-2 flex gap-2 items-center">
+              <div className="mb-2 flex flex-wrap gap-2 items-center">
                 <Button
                   size="sm"
                   variant="remove"
@@ -5598,14 +5709,54 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   ariaLabel="Clear Selected"
                   className="px-2 disabled:opacity-50"
                 >
-                  <Minus size={14} className="mr-1" /> Clear Selected ({selectedParticipantIds.length})
+                  <Trash2 size={14} className="mr-1" /> Delete ({selectedParticipantIds.length})
                 </Button>
+                {tournament.type === 'team' && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowBulkTeamAssignment(value => !value)}
+                      disabled={selectedParticipantIds.length === 0}
+                      title="Assign selected players to a team"
+                      ariaLabel="Assign selected players to a team"
+                      className="px-2 disabled:opacity-50"
+                    >
+                      <Users size={14} className="mr-1" /> Assign Team
+                    </Button>
+                    {showBulkTeamAssignment && (
+                      <div className="flex gap-1">
+                        <select
+                          value={bulkAssignmentTeamId}
+                          onChange={event => setBulkAssignmentTeamId(event.target.value)}
+                          className="h-8 rounded-md border border-black/15 bg-white px-2 text-xs"
+                          aria-label="Choose a team for selected players"
+                        >
+                          <option value="">Choose team</option>
+                          {teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
+                        </select>
+                        <Button
+                          size="sm"
+                          variant="create"
+                          onClick={() => void handleAssignSelectedPlayers()}
+                          disabled={!bulkAssignmentTeamId}
+                          title="Assign Team"
+                          ariaLabel="Assign Team"
+                          className="px-2 disabled:opacity-50"
+                        >
+                          Assign
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => {
                     setIsPlayerSelectionMode(false);
                     setSelectedParticipantIds([]);
+                    setShowBulkTeamAssignment(false);
                   }}
                   title="Cancel"
                   ariaLabel="Cancel"
@@ -5628,23 +5779,43 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 filteredParticipants.map((p, index) => (
                   <div
                     key={p.id}
-                    className={`rounded-lg border p-2 ${participantIssues.has(p.id) ? 'border-red-200 bg-red-50/40' : 'border-gray-400 bg-white'}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={isPlayerSelectionMode ? selectedParticipantIds.includes(p.id) : undefined}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        event.currentTarget.click();
+                      }
+                    }}
+                    onTouchStart={() => startPlayerLongPress(p.id)}
+                    onTouchMove={cancelPlayerLongPress}
+                    onTouchEnd={cancelPlayerLongPress}
+                    onTouchCancel={cancelPlayerLongPress}
+                    onContextMenu={(event) => { if (canManageParticipants) event.preventDefault(); }}
+                    onClick={() => {
+                      if (playerLongPressTriggered.current) {
+                        playerLongPressTriggered.current = false;
+                        return;
+                      }
+                      if (isPlayerSelectionMode) {
+                        toggleSelectOne(p.id);
+                      } else if (canManageParticipants) {
+                        setEditingPlayer(p);
+                        setShowAddPlayer(true);
+                      } else {
+                        setViewingPlayer(p);
+                      }
+                    }}
+                    className={`rounded-xl border p-3 text-left transition-colors select-none touch-pan-y cursor-pointer active:bg-orange-50 ${selectedParticipantIds.includes(p.id) && isPlayerSelectionMode ? 'border-orange-400 bg-orange-50 ring-1 ring-orange-200' : participantIssues.has(p.id) ? 'border-red-200 bg-red-50/40' : 'border-gray-300 bg-white'}`}
                   >
                     <div className="grid grid-cols-2 gap-2 items-center">
                       {/* Left: #id top, NAME FAMILYNAME below in caps */}
                       <div className="flex flex-col items-start min-w-0">
                         <span className={`text-[10px] font-mono ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/50'}`}>#{p.id}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (canManageParticipants) { setEditingPlayer(p); setShowAddPlayer(true); }
-                            else { setViewingPlayer(p); }
-                          }}
-                          className={`mt-0.5 text-left text-xs font-bold tracking-wide uppercase leading-tight cursor-pointer hover:text-emerald-700 ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}
-                          title={canManageParticipants ? 'Tap to edit participant' : 'Tap to view details'}
-                        >
+                        <span className={`mt-0.5 text-xs font-bold tracking-wide uppercase leading-tight ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>
                           {(p.first_name || '')} {(p.last_name || '')}
-                        </button>
+                        </span>
                       </div>
                       {/* Right: F 1H Avg 170, below that CLUB / TEAM */}
                       <div className="flex flex-col items-start min-w-0">
@@ -5670,6 +5841,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                               type="checkbox"
                               checked={selectedParticipantIds.includes(p.id)}
                               onChange={() => toggleSelectOne(p.id)}
+                              onClick={(event) => event.stopPropagation()}
                               className="ml-1"
                               style={{ transform: 'scale(0.8)', width: 14, height: 14 }}
                             />
@@ -5875,6 +6047,16 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         >
                           <Search size={14} />
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setShowMobileRosterActions(true)}
+                          title="More team actions"
+                          ariaLabel="More team actions"
+                          className="px-2 md:hidden"
+                        >
+                          <MoreHorizontal size={16} />
+                        </Button>
                         {showTeamsSearch && (
                           <>
                             <div className="relative">
@@ -5904,17 +6086,17 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                           </>
                         )}
                       {canManageParticipants && (
-                        <Button size="sm" variant="remove" onClick={handleClearTeams} title="Clear Teams" ariaLabel="Clear Teams" className="px-2">
+                        <Button size="sm" variant="remove" onClick={handleClearTeams} title="Clear Teams" ariaLabel="Clear Teams" className="px-2 max-md:hidden">
                           <UserRoundMinus size={12} />
                         </Button>
                       )}
                       {canManageParticipants && (
-                        <Button size="sm" variant="create" onClick={openCreateTeamModal} title="Add Team" ariaLabel="Add Team" className="px-2">
+                        <Button size="sm" variant="create" onClick={openCreateTeamModal} title="Add Team" ariaLabel="Add Team" className="px-2 max-md:hidden">
                           <UserRoundPlus size={12} />
                         </Button>
                       )}
                     </div>
-                    <div className="flex flex-wrap items-center justify-end max-md:col-start-3 gap-1.5 md:ml-auto pr-1">
+                    <div className="hidden md:flex flex-wrap items-center justify-end max-md:col-start-3 gap-1.5 md:ml-auto pr-1">
                       {canManageParticipants && (
                         <Button size="sm" variant="outline" onClick={handleSaveTeams} title="Save Teams" ariaLabel="Save Teams" className="px-2">
                           <Save size={14} />
@@ -5948,7 +6130,110 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
+              {canManageParticipants && isTeamSelectionMode && (
+                <div className="flex items-center gap-2 border-b border-gray-200 p-3">
+                  <Button
+                    size="sm"
+                    variant="remove"
+                    onClick={() => void handleDeleteSelectedTeams()}
+                    disabled={selectedTeamIds.length === 0}
+                    title="Delete selected teams"
+                    ariaLabel="Delete selected teams"
+                    className="px-2 disabled:opacity-50"
+                  >
+                    <Trash2 size={14} className="mr-1" /> Delete ({selectedTeamIds.length})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setIsTeamSelectionMode(false);
+                      setSelectedTeamIds([]);
+                    }}
+                    title="Cancel team selection"
+                    ariaLabel="Cancel team selection"
+                    className="px-2"
+                  >
+                    <X size={14} className="mr-1" /> Cancel
+                  </Button>
+                </div>
+              )}
+              <div className="md:hidden space-y-2 p-3">
+                {teams.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-black/40 italic text-sm">{tx('No teams created.')}</div>
+                ) : filteredTeams.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-black/40 italic text-sm">{tx('No teams match your search.')}</div>
+                ) : filteredTeams.map((team, index) => {
+                  const teamMembers = participants.filter(player => player.team_id === team.id);
+                  const integrityIssue = teamIntegrityIssues.get(team.id);
+                  const selected = selectedTeamIds.includes(team.id);
+                  return (
+                    <div
+                      key={team.id}
+                      role={canManageParticipants ? 'button' : undefined}
+                      tabIndex={canManageParticipants ? 0 : undefined}
+                      aria-pressed={isTeamSelectionMode ? selected : undefined}
+                      onKeyDown={event => {
+                        if (canManageParticipants && (event.key === 'Enter' || event.key === ' ')) {
+                          event.preventDefault();
+                          event.currentTarget.click();
+                        }
+                      }}
+                      onTouchStart={() => startTeamLongPress(team.id)}
+                      onTouchMove={cancelTeamLongPress}
+                      onTouchEnd={cancelTeamLongPress}
+                      onTouchCancel={cancelTeamLongPress}
+                      onContextMenu={(event) => { if (canManageParticipants) event.preventDefault(); }}
+                      onClick={() => {
+                        if (teamLongPressTriggered.current) {
+                          teamLongPressTriggered.current = false;
+                          return;
+                        }
+                        if (isTeamSelectionMode) toggleSelectTeam(team.id);
+                        else if (canManageParticipants) openEditTeamModal(team);
+                      }}
+                      className={`rounded-xl border p-3 select-none touch-pan-y transition-colors ${selected && isTeamSelectionMode ? 'border-orange-400 bg-orange-50 ring-1 ring-orange-200' : 'border-gray-300 bg-white'} ${canManageParticipants ? 'cursor-pointer active:bg-orange-50' : ''}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono text-black/45">#{index + 1}</span>
+                            <h5 className="truncate text-sm font-bold uppercase tracking-wide text-gray-900">{team.name}</h5>
+                            {integrityIssue && <AlertCircle size={14} className="shrink-0 text-red-500" aria-label="Team has roster issues" />}
+                          </div>
+                          <p className="mt-1 text-xs text-black/55">{teamMembers.length} {tx('Team Members').toLowerCase()}</p>
+                        </div>
+                        {canManageParticipants && isTeamSelectionMode && (
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() => toggleSelectTeam(team.id)}
+                            onClick={(event) => event.stopPropagation()}
+                            aria-label={`Select ${team.name}`}
+                            className="mt-1 h-4 w-4 accent-orange-500"
+                          />
+                        )}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {teamMembers.length > 0
+                          ? teamMembers.map(member => (
+                            <span key={member.id} className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-medium uppercase text-black/70">
+                              {`${member.first_name || ''} ${member.last_name || ''}`.trim()}
+                            </span>
+                          ))
+                          : <span className="text-xs italic text-black/40">{tx('No members')}</span>}
+                      </div>
+                      {integrityIssue && (
+                        <div className="mt-2 text-[11px] font-medium text-red-600">
+                          {integrityIssue.missingCount > 0 && <p>{tx('Missing members:')} {integrityIssue.missingCount} ({tx('expected')} {expectedPlayersPerTeam})</p>}
+                          {integrityIssue.duplicateNames.length > 0 && <p>{tx('Duplicated members:')} {integrityIssue.duplicateNames.join(', ')}</p>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="hidden md:block overflow-x-auto">
               <table ref={teamsTableRef} className="participants-zebra w-full text-left border-collapse">
                 <thead className="border-b border-gray-400">
                   <tr>
@@ -6072,6 +6357,135 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         
         </div>
       </div>
+
+      {canManageParticipants && !isPlayerSelectionMode && !isTeamSelectionMode && (
+        <button
+          type="button"
+          onClick={() => {
+            if (tournament.type === 'team' && mobileRosterTab === 'teams') openCreateTeamModal();
+            else {
+              setEditingPlayer(null);
+              setShowAddPlayer(true);
+            }
+          }}
+          className="fixed right-5 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-40 inline-flex h-14 items-center gap-2 rounded-full bg-orange-500 px-5 text-sm font-bold text-white shadow-lg shadow-orange-900/25 transition-transform active:scale-95 md:hidden"
+          aria-label={tournament.type === 'team' && mobileRosterTab === 'teams' ? 'Add Team' : 'Add Player'}
+        >
+          <Plus size={21} />
+          {tournament.type === 'team' && mobileRosterTab === 'teams' ? tx('Add Team') : tx('Add Player')}
+        </button>
+      )}
+
+      {showMobileRosterActions && (
+        <div
+          className="fixed inset-0 z-[100] flex items-end bg-black/45 md:hidden"
+          onClick={() => setShowMobileRosterActions(false)}
+        >
+          <div
+            className="w-full rounded-t-2xl border border-black/10 bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-black/20" />
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="font-bold text-black">
+                {tournament.type === 'team' && mobileRosterTab === 'teams' ? tx('Team actions') : tx('Player actions')}
+              </h4>
+              <button
+                type="button"
+                onClick={() => setShowMobileRosterActions(false)}
+                className="rounded-full p-2 text-black/55 hover:bg-black/5"
+                aria-label="Close actions"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {canManageParticipants && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMobileRosterActions(false);
+                      if (tournament.type === 'team' && mobileRosterTab === 'teams') handleSaveTeams();
+                      else handleSaveParticipants();
+                    }}
+                    className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80"
+                  >
+                    <Save size={17} /> {tx('Save')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMobileRosterActions(false);
+                      if (tournament.type === 'team' && mobileRosterTab === 'teams') handleExportTeams();
+                      else handleExportCSV();
+                    }}
+                    className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80"
+                  >
+                    <Upload size={17} /> {tx('Export')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMobileRosterActions(false);
+                      if (tournament.type === 'team' && mobileRosterTab === 'teams') {
+                        if (importTeamsInputRef.current) {
+                          importTeamsInputRef.current.value = '';
+                          importTeamsInputRef.current.click();
+                        }
+                      } else if (importCSVInputRef.current) {
+                        importCSVInputRef.current.value = '';
+                        importCSVInputRef.current.click();
+                      }
+                    }}
+                    className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80"
+                  >
+                    <Download size={17} /> {tx('Import')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMobileRosterActions(false);
+                      if (tournament.type === 'team' && mobileRosterTab === 'teams') handleClearTeams();
+                      else handleClearParticipants();
+                    }}
+                    className="flex min-h-12 items-center gap-2 rounded-xl bg-red-50 px-3 text-sm font-semibold text-red-700"
+                  >
+                    <UserRoundMinus size={17} /> {tx('Clear All')}
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMobileRosterActions(false);
+                  if (tournament.type === 'team' && mobileRosterTab === 'teams') handlePrintTeams();
+                  else handlePrintParticipants();
+                }}
+                className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80"
+              >
+                <Printer size={17} /> {tx('Print')}
+              </button>
+              {canManageParticipants && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMobileRosterActions(false);
+                    if (tournament.type === 'team' && mobileRosterTab === 'teams') {
+                      setIsTeamSelectionMode(true);
+                    } else {
+                      setIsPlayerSelectionMode(true);
+                    }
+                  }}
+                  className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80"
+                >
+                  <Check size={17} /> {tx('Select')}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       {viewingPlayer && (
