@@ -21,6 +21,11 @@ export type TournamentRoundConfig = {
   customPairings?: Array<{ slot1?: string | null; slot2?: string | null }>;
   reseed: boolean;
   injectParticipantSeeds?: number[] | null;
+  feedSources?: Array<{ roundId: string; outcome: 'winner' | 'loser' }>;
+  seedFromStartingEntrants?: boolean;
+  roundRobinSchedule?: boolean;
+  conditionalOnRoundId?: string;
+  conditionalWinnerSourceRoundId?: string;
 };
 
 export type TournamentEngineConfig = {
@@ -62,6 +67,8 @@ export type MatchNode = {
   scoringType: EngineScoringType;
   playersPerMatch: number;
   advancementCount: number;
+  conditionalOnRoundId?: string;
+  conditionalWinnerSourceRoundId?: string;
   slots: MatchSlotNode[];
   previousMatchIds: string[];
   nextLinks: MatchLinkNode[];
@@ -347,28 +354,38 @@ export const buildTournamentEngine = (config: TournamentEngineConfig): Tournamen
       ? 'winner'
       : (round.sourceOutcome === 'loser' || round.sourceOutcome === 'both' ? round.sourceOutcome : 'winner');
 
+    const explicitFeedSources = Array.isArray(round.feedSources) ? round.feedSources : [];
     const requestedFeed = roundIndex > 0 && typeof round.feedFromRoundId === 'string'
       ? outputsByRoundId.get(round.feedFromRoundId)
       : null;
 
-    const sourceWinnerPool = requestedFeed ? requestedFeed.winners : currentWinnerSources;
-    const sourceLoserPool = requestedFeed ? requestedFeed.losers : currentLoserSources;
+    const sourceWinnerPool = explicitFeedSources.length > 0
+      ? explicitFeedSources.filter((feed) => feed.outcome === 'winner').flatMap((feed) => outputsByRoundId.get(feed.roundId)?.winners || [])
+      : requestedFeed ? requestedFeed.winners : currentWinnerSources;
+    const sourceLoserPool = explicitFeedSources.length > 0
+      ? explicitFeedSources.filter((feed) => feed.outcome === 'loser').flatMap((feed) => outputsByRoundId.get(feed.roundId)?.losers || [])
+      : requestedFeed ? requestedFeed.losers : currentLoserSources;
 
-    let roundInputSources = sourceMode === 'loser'
-      ? sourceLoserPool
-      : sourceMode === 'both'
-        ? [...sourceWinnerPool, ...sourceLoserPool]
-        : sourceWinnerPool;
+    let roundInputSources = explicitFeedSources.length > 0
+      ? explicitFeedSources.flatMap((feed) => {
+          const output = outputsByRoundId.get(feed.roundId);
+          return feed.outcome === 'loser' ? (output?.losers || []) : (output?.winners || []);
+        })
+      : sourceMode === 'loser'
+        ? sourceLoserPool
+        : sourceMode === 'both'
+          ? [...sourceWinnerPool, ...sourceLoserPool]
+          : sourceWinnerPool;
 
     const injectedSeeds = Array.isArray(round.injectParticipantSeeds) && round.injectParticipantSeeds.length > 0
       ? round.injectParticipantSeeds
       : null;
     if (injectedSeeds !== null) {
-      const advancingWinners = roundInputSources.filter((s) => s.kind === 'advance');
       const injectedTokens = injectedSeeds
         .map((s) => participantTokensBySeed.get(s))
         .filter((t): t is SourceToken => Boolean(t));
-      roundInputSources = [...advancingWinners, ...injectedTokens];
+      const advancingWinners = roundInputSources.filter((s) => s.kind === 'advance');
+      roundInputSources = round.seedFromStartingEntrants ? injectedTokens : [...advancingWinners, ...injectedTokens];
     }
 
     if (roundInputSources.length === 0) {
@@ -408,6 +425,8 @@ export const buildTournamentEngine = (config: TournamentEngineConfig): Tournamen
         scoringType: round.scoringType,
         playersPerMatch,
         advancementCount,
+        conditionalOnRoundId: round.conditionalOnRoundId,
+        conditionalWinnerSourceRoundId: round.conditionalWinnerSourceRoundId,
         slots: Array.from({ length: playersPerMatch }, (_, slotIndex) => ({
           slotIndex,
           sourceType: 'empty',
@@ -439,7 +458,7 @@ export const buildTournamentEngine = (config: TournamentEngineConfig): Tournamen
             return [...winnerAssignments, ...loserAssignments];
           }
         }
-        if (isFirstRoundDirectSeeding && hasExplicitCustomPairings) {
+        if (hasExplicitCustomPairings && (isFirstRoundDirectSeeding || round.seedFromStartingEntrants)) {
           const customAssignments = buildCustomHeadToHeadAssignments({
             sources: orderedSources,
             pairings: customPairings,
@@ -514,6 +533,14 @@ export const buildTournamentEngine = (config: TournamentEngineConfig): Tournamen
       };
     });
 
+    roundMatches.forEach((match) => {
+      const assignedSlots = match.slots.filter((slot) => slot.sourceType !== 'empty');
+      if (assignedSlots.length !== 1) return;
+      match.slots.forEach((slot) => {
+        if (slot.sourceType === 'empty') slot.sourceLabel = 'BYE';
+      });
+    });
+
     const nextWinnerSources: SourceToken[] = [];
     const nextLoserSources: SourceToken[] = [];
     let winnerSeedCounter = 1;
@@ -580,7 +607,7 @@ export const buildTournamentEngine = (config: TournamentEngineConfig): Tournamen
   const expectedFinalAdvancers = lastRoundAdvancement === 0
     ? 0
     : (hasExplicitBronzeMatch ? (lastRoundManualMatchCount * lastRoundAdvancement) : 1);
-  if (rounds.length > 0 && currentWinnerSources.length !== expectedFinalAdvancers) {
+  if (rounds.length > 0 && !rounds.some((round) => round.roundRobinSchedule) && currentWinnerSources.length !== expectedFinalAdvancers) {
     issues.push({
       level: 'warning',
       message: expectedFinalAdvancers === 0

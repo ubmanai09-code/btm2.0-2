@@ -200,7 +200,7 @@ export interface BuilderRulePreset {
   description?: string;
   seeding_method: 'registration' | 'manual' | 'random';
   rounds: any[];
-  bracketCategory?: 'single-elim' | 'stepladder' | 'playoff' | 'ladder' | 'custom' | 'mixed';
+  bracketCategory?: 'single-elim' | 'stepladder' | 'playoff' | 'ladder' | 'custom' | 'mixed' | 'double-elim' | 'round-robin' | 'match-play';
 }
 
 
@@ -1058,6 +1058,9 @@ const api = {
         scoringType: string;
         playersPerMatch: number;
         advancementCount: number;
+        roundRobinSchedule?: boolean;
+        conditionalOnRoundId?: string;
+        conditionalWinnerSourceRoundId?: string;
         slots: Array<{
           slotIndex: number;
           sourceType: string;
@@ -1210,7 +1213,7 @@ const api = {
       };
     });
     const cat = builderState?.bracketCategory;
-    const normalizedCategory = (cat === 'single-elim' || cat === 'stepladder' || cat === 'playoff' || cat === 'ladder' || cat === 'custom' || cat === 'mixed')
+    const normalizedCategory = (cat === 'single-elim' || cat === 'stepladder' || cat === 'playoff' || cat === 'ladder' || cat === 'custom' || cat === 'mixed' || cat === 'double-elim' || cat === 'round-robin' || cat === 'match-play')
       ? cat
       : undefined;
     const inferredCategoryFromMatchPlayType: BuilderRulePreset['bracketCategory'] | undefined =
@@ -1220,7 +1223,9 @@ const api = {
           ? 'ladder'
           : (format.match_play_type === 'single_elimination'
             ? 'single-elim'
-            : undefined));
+            : (format.match_play_type === 'double_elimination'
+              ? 'double-elim'
+              : undefined)));
     return {
       id: String(format.id),
       name: String(format.name || 'Preset'),
@@ -1238,7 +1243,7 @@ const api = {
     description?: string;
     seeding_method: 'registration' | 'manual' | 'random';
     rounds: any[];
-    bracketCategory?: 'single-elim' | 'stepladder' | 'playoff' | 'ladder' | 'custom' | 'mixed';
+    bracketCategory?: 'single-elim' | 'stepladder' | 'playoff' | 'ladder' | 'custom' | 'mixed' | 'double-elim' | 'round-robin' | 'match-play';
   }): KnownBracketFormatInput {
     const rounds = Array.isArray(payload.rounds) ? payload.rounds : [];
     const round_match_counts = rounds.map((round: any) => {
@@ -1259,6 +1264,9 @@ const api = {
       'ladder': 'ladder',
       'custom': 'playoff',
       'mixed': 'playoff',
+      'double-elim': 'double_elimination',
+      'round-robin': 'playoff',
+      'match-play': 'playoff',
     };
     const match_play_type = matchPlayTypeMap[payload.bracketCategory || 'custom'] || 'playoff';
     return {
@@ -1297,7 +1305,7 @@ const api = {
     description?: string;
     seeding_method: 'registration' | 'manual' | 'random';
     rounds: any[];
-    bracketCategory?: 'single-elim' | 'stepladder' | 'playoff' | 'ladder' | 'custom' | 'mixed';
+    bracketCategory?: 'single-elim' | 'stepladder' | 'playoff' | 'ladder' | 'custom' | 'mixed' | 'double-elim' | 'round-robin' | 'match-play';
   }): Promise<{ success: boolean; preset?: BuilderRulePreset }> {
     const id = this.createBuilderPresetId(payload.name);
     const formatPayload = this.toBuilderFormatPayload({
