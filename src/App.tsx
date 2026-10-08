@@ -557,20 +557,45 @@ const getSegmentedTabButtonClass = (
   } ${extraClassName}`.trim();
 };
 
-const MobileNav = ({ items, activeId, homeActive, onHome, homeLabel, onSelect }: {
+const MobileNav = ({ items, activeId, homeActive, onHome, homeLabel, onSelect, moreIds = [] }: {
   items: { id: string; label: string; icon: any }[],
   activeId?: string,
   homeActive?: boolean,
   onHome: () => void,
   homeLabel: string,
   onSelect: (id: string) => void,
-}) => (
+  moreIds?: string[],
+}) => {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const mainItems = items.filter((tab) => !moreIds.includes(tab.id));
+  const moreItems = items.filter((tab) => moreIds.includes(tab.id));
+  const moreActive = !homeActive && moreItems.some((tab) => tab.id === activeId);
+  return (
   <>
+  {moreOpen && moreItems.length > 0 && (
+    <div className="fixed inset-0 z-40 sm:hidden" onClick={() => setMoreOpen(false)}>
+      <div
+        className="absolute right-3 bottom-[calc(100px+env(safe-area-inset-bottom))] min-w-[160px] rounded-2xl border border-black/10 bg-white p-1.5 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {moreItems.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => { setMoreOpen(false); onSelect(tab.id); }}
+            className={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold ${activeId === tab.id && !homeActive ? 'bg-orange-500 text-white' : 'text-black'}`}
+          >
+            <tab.icon size={16} />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )}
   <nav className="mnav sm:hidden" aria-label="Main menu">
     <button onClick={onHome} className={`mnav-btn ${homeActive ? 'active' : ''}`} title={homeLabel} aria-label={homeLabel}>
       <Home size={18} />
     </button>
-    {items.map((tab) => {
+    {mainItems.map((tab) => {
       const active = !homeActive && activeId === tab.id;
       return (
         <button key={tab.id} onClick={() => onSelect(tab.id)} className={`mnav-btn ${active ? 'active' : ''}`} title={tab.label} aria-label={tab.label} aria-current={active ? 'page' : undefined}>
@@ -578,6 +603,11 @@ const MobileNav = ({ items, activeId, homeActive, onHome, homeLabel, onSelect }:
         </button>
       );
     })}
+    {moreItems.length > 0 && (
+      <button onClick={() => setMoreOpen((open) => !open)} className={`mnav-btn ${moreActive ? 'active' : ''}`} title="More" aria-label="More" aria-expanded={moreOpen}>
+        <MoreHorizontal size={18} />
+      </button>
+    )}
   </nav>
   <div className="mfooter sm:hidden">
     <span>BTM <span className="text-orange-500">v2.2</span></span>
@@ -585,7 +615,8 @@ const MobileNav = ({ items, activeId, homeActive, onHome, homeLabel, onSelect }:
     <span>© Murat D. 2026</span>
   </div>
   </>
-);
+  );
+};
 
 const BracketsV2TabIcon = ({ size = 16, className }: { size?: number; className?: string }) => (
   <svg
@@ -3853,6 +3884,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       {!isPresentScreenMode && (
         <MobileNav
           items={visibleTabs}
+          moreIds={['tools', 'league']}
           activeId={activeTab}
           onHome={onBack}
           homeLabel={tPublic('common.back_to_dashboard', 'Back to Dashboard')}
@@ -5582,6 +5614,17 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     >
                       <Search size={14} />
                     </Button>
+                    {canManageParticipants && (
+                      <button
+                        type="button"
+                        onClick={() => { setEditingPlayer(null); setShowAddPlayer(true); }}
+                        title="Add Player"
+                        aria-label="Add Player"
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-500 text-white shadow-sm transition-colors hover:bg-orange-600 active:scale-95"
+                      >
+                        <UserRoundPlus size={17} />
+                      </button>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"
@@ -5620,54 +5663,21 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         </Button>
                       </>
                     )}
-                    {canManageParticipants && (
-                      <div className="relative max-md:hidden">
-                        <Button
-                          size="sm"
-                          variant="remove"
-                          onClick={() => setShowPlayersClearMenu((prev) => !prev)}
-                          title="Clear Players"
-                          ariaLabel="Clear Players"
-                          className="px-2"
-                        >
-                          <UserRoundMinus size={12} />
-                        </Button>
-                        {showPlayersClearMenu && (
-                          <div className="absolute left-0 mt-1 min-w-[150px] rounded-md border border-black/10 bg-white shadow-lg z-40 p-1">
-                            <button
-                              type="button"
-                              className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-emerald-50"
-                              onClick={() => {
-                                setIsPlayerSelectionMode(true);
-                                setShowPlayersClearMenu(false);
-                              }}
-                            >
-                              {tx('Clear Selected')}
-                            </button>
-                            <button
-                              type="button"
-                              className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-red-50 text-red-700"
-                              onClick={() => {
-                                setShowPlayersClearMenu(false);
-                                handleClearParticipants();
-                              }}
-                            >
-                              {tx('Clear All')}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {canManageParticipants && (
-                      <Button size="sm" variant="create" onClick={() => { setEditingPlayer(null); setShowAddPlayer(true); }} title="Add Player" ariaLabel="Add Player" className="px-2 max-md:hidden">
-                        <UserRoundPlus size={12} />
-                      </Button>
-                    )}
                   </div>
                   <div className="hidden md:flex flex-wrap items-center justify-end max-md:col-start-3 gap-1.5 md:ml-auto">
                     {canManageParticipants && (
-                      <Button size="sm" variant="outline" onClick={handleSaveParticipants} title="Save Players" ariaLabel="Save Players" className="px-2">
-                        <Save size={14} />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          if (isPlayerSelectionMode) setSelectedParticipantIds([]);
+                          setIsPlayerSelectionMode((prev) => !prev);
+                        }}
+                        title="Select Players"
+                        ariaLabel="Select Players"
+                        className={`px-2 ${isPlayerSelectionMode ? 'border-orange-400 text-orange-600' : ''}`}
+                      >
+                        <Check size={14} />
                       </Button>
                     )}
                     {canManageParticipants && (
@@ -5690,6 +5700,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         </Button>
                       </div>
                     )}
+                    {canManageParticipants && (
+                      <Button size="sm" variant="outline" onClick={handleSaveParticipants} title="Save Players" ariaLabel="Save Players" className="px-2">
+                        <Save size={14} />
+                      </Button>
+                    )}
                     <Button size="sm" variant="outline" onClick={handlePrintParticipants} title="Print Players" ariaLabel="Print Players" className="px-2">
                       <Printer size={14} />
                     </Button>
@@ -5711,45 +5726,16 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 >
                   <Trash2 size={14} className="mr-1" /> Delete ({selectedParticipantIds.length})
                 </Button>
-                {tournament.type === 'team' && (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setShowBulkTeamAssignment(value => !value)}
-                      disabled={selectedParticipantIds.length === 0}
-                      title="Assign selected players to a team"
-                      ariaLabel="Assign selected players to a team"
-                      className="px-2 disabled:opacity-50"
-                    >
-                      <Users size={14} className="mr-1" /> Assign Team
-                    </Button>
-                    {showBulkTeamAssignment && (
-                      <div className="flex gap-1">
-                        <select
-                          value={bulkAssignmentTeamId}
-                          onChange={event => setBulkAssignmentTeamId(event.target.value)}
-                          className="h-8 rounded-md border border-black/15 bg-white px-2 text-xs"
-                          aria-label="Choose a team for selected players"
-                        >
-                          <option value="">Choose team</option>
-                          {teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
-                        </select>
-                        <Button
-                          size="sm"
-                          variant="create"
-                          onClick={() => void handleAssignSelectedPlayers()}
-                          disabled={!bulkAssignmentTeamId}
-                          title="Assign Team"
-                          ariaLabel="Assign Team"
-                          className="px-2 disabled:opacity-50"
-                        >
-                          Assign
-                        </Button>
-                      </div>
-                    )}
-                  </>
-                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleClearParticipants}
+                  title="Clear All Players"
+                  ariaLabel="Clear All Players"
+                  className="px-2 max-md:hidden text-red-600"
+                >
+                  <UserRoundMinus size={14} className="mr-1" /> Clear All
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
@@ -5923,11 +5909,6 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                       <span>{playerSort.key === 'club' ? (playerSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
                     </button>
                   </th>
-                  {(() => {
-                    const divList = (tournament.divisions || '').split(',').map((s: string) => s.trim()).filter(Boolean);
-                    if (divList.length === 0) return null;
-                    return <th className="pl-2 pr-0.5 py-2 text-[10px] font-semibold uppercase tracking-widest text-gray-500 scoring-table-surface">Zone</th>;
-                  })()}
                   {canManageParticipants && isPlayerSelectionMode && (
                     <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-widest text-gray-500 scoring-table-surface w-8 sticky right-0 z-[4]">
                       <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} style={{ transform: 'scale(0.6)', width: 16, height: 16 }} />
@@ -6002,11 +5983,6 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         <td className={`pl-2 pr-1 py-2 text-[10px] uppercase text-center ${participantIssues.has(p.id) ? 'text-red-700' : 'text-gray-500'}`}>{normalizeHandsStyle(p.hands)}</td>
                       )}
                       <td className={`pl-2 pr-0.5 py-2 text-xs ${participantIssues.has(p.id) ? 'text-red-700' : 'text-gray-500'}`} title={p.club || ''}>{p.club || '-'}</td>
-                      {(() => {
-                        const divList = (tournament.divisions || '').split(',').map((s: string) => s.trim()).filter(Boolean);
-                        if (divList.length === 0) return null;
-                        return <td className={`pl-2 pr-0.5 py-2 text-[11px] font-bold ${participantIssues.has(p.id) ? 'text-red-700' : 'text-gray-500'}`}>{p.division || '—'}</td>;
-                      })()}
                       {canManageParticipants && isPlayerSelectionMode && (
                         <td className={`px-2 py-2 sticky right-0 z-[3] scoring-table-surface text-center`}>
                           <input
@@ -6047,6 +6023,20 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         >
                           <Search size={14} />
                         </Button>
+                      {canManageParticipants && (
+                        <button
+                          type="button"
+                          onClick={openCreateTeamModal}
+                          title="Add Team"
+                          aria-label="Add Team"
+                          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-500 text-white shadow-sm transition-colors hover:bg-orange-600 active:scale-95"
+                        >
+                          <span className="relative inline-flex">
+                            <Users size={17} />
+                            <Plus size={9} strokeWidth={3.5} className="absolute -right-1.5 -top-1.5 rounded-full bg-orange-500" />
+                          </span>
+                        </button>
+                      )}
                         <Button
                           size="sm"
                           variant="outline"
@@ -6085,21 +6075,21 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                             </Button>
                           </>
                         )}
-                      {canManageParticipants && (
-                        <Button size="sm" variant="remove" onClick={handleClearTeams} title="Clear Teams" ariaLabel="Clear Teams" className="px-2 max-md:hidden">
-                          <UserRoundMinus size={12} />
-                        </Button>
-                      )}
-                      {canManageParticipants && (
-                        <Button size="sm" variant="create" onClick={openCreateTeamModal} title="Add Team" ariaLabel="Add Team" className="px-2 max-md:hidden">
-                          <UserRoundPlus size={12} />
-                        </Button>
-                      )}
                     </div>
                     <div className="hidden md:flex flex-wrap items-center justify-end max-md:col-start-3 gap-1.5 md:ml-auto pr-1">
                       {canManageParticipants && (
-                        <Button size="sm" variant="outline" onClick={handleSaveTeams} title="Save Teams" ariaLabel="Save Teams" className="px-2">
-                          <Save size={14} />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            if (isTeamSelectionMode) setSelectedTeamIds([]);
+                            setIsTeamSelectionMode((prev) => !prev);
+                          }}
+                          title="Select Teams"
+                          ariaLabel="Select Teams"
+                          className={`px-2 ${isTeamSelectionMode ? 'border-orange-400 text-orange-600' : ''}`}
+                        >
+                          <Check size={14} />
                         </Button>
                       )}
                       {canManageParticipants && (
@@ -6122,6 +6112,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                           </Button>
                         </div>
                       )}
+                      {canManageParticipants && (
+                        <Button size="sm" variant="outline" onClick={handleSaveTeams} title="Save Teams" ariaLabel="Save Teams" className="px-2">
+                          <Save size={14} />
+                        </Button>
+                      )}
                       <Button size="sm" variant="outline" onClick={handlePrintTeams} title="Print Teams" ariaLabel="Print Teams" className="px-2">
                         <Printer size={14} />
                       </Button>
@@ -6142,6 +6137,16 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     className="px-2 disabled:opacity-50"
                   >
                     <Trash2 size={14} className="mr-1" /> Delete ({selectedTeamIds.length})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleClearTeams}
+                    title="Clear All Teams"
+                    ariaLabel="Clear All Teams"
+                    className="px-2 max-md:hidden text-red-600"
+                  >
+                    <UserRoundMinus size={14} className="mr-1" /> Clear All
                   </Button>
                   <Button
                     size="sm"
@@ -6198,7 +6203,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] font-mono text-black/45">#{index + 1}</span>
-                            <h5 className="truncate text-sm font-bold uppercase tracking-wide text-gray-900">{team.name}</h5>
+                            <h5 className="truncate text-sm font-bold uppercase tracking-wide text-black">{team.name}</h5>
                             {integrityIssue && <AlertCircle size={14} className="shrink-0 text-red-500" aria-label="Team has roster issues" />}
                           </div>
                           <p className="mt-1 text-xs text-black/55">{teamMembers.length} {tx('Team Members').toLowerCase()}</p>
@@ -6248,29 +6253,33 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         {tx('Team Members')}<span>{teamSort.key === 'members' ? (teamSort.direction === 'asc' ? '↑' : '↓') : '↕'}</span>
                       </button>
                     </th>
-                    {canManageParticipants && (
-                      <th className="px-3 py-2 text-[10px] font-semibold uppercase tracking-widest text-gray-500 scoring-table-surface text-right whitespace-nowrap w-16 sticky right-0 z-[3]">
-                        <span className="text-[9px] font-bold uppercase tracking-widest">Actions</span>
-                      </th>
-                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-black/10">
                   {teams.length === 0 ? (
                     <tr>
-                      <td colSpan={canManageParticipants ? 4 : 3} className="px-4 py-8 text-center text-black/40 italic text-sm">{tx('No teams created.')}</td>
+                      <td colSpan={3} className="px-4 py-8 text-center text-black/40 italic text-sm">{tx('No teams created.')}</td>
                     </tr>
                   ) : filteredTeams.length === 0 ? (
                     <tr>
-                      <td colSpan={canManageParticipants ? 4 : 3} className="px-4 py-8 text-center text-black/40 italic text-sm">{tx('No teams match your search.')}</td>
+                      <td colSpan={3} className="px-4 py-8 text-center text-black/40 italic text-sm">{tx('No teams match your search.')}</td>
                     </tr>
                   ) : (
                     filteredTeams.map((team, index) => {
                       const teamMembers = participants.filter(p => p.team_id === team.id);
                       const integrityIssue = teamIntegrityIssues.get(team.id);
                       return (
-                        <tr key={team.id} className="scoring-table-surface border-b border-gray-400 hover:bg-gray-50/60 transition-colors align-top">
-                          <td className="px-3 py-2 text-[10px] text-gray-500 sticky left-0 z-[2] scoring-table-surface">{index + 1}</td>
+                        <tr key={team.id} onDoubleClick={() => { if (canManageParticipants) openEditTeamModal(team); }} className={`scoring-table-surface border-b border-gray-400 hover:bg-gray-50/60 transition-colors align-top ${canManageParticipants ? 'cursor-pointer' : ''}`}>
+                          <td className="px-3 py-2 text-[10px] text-gray-500 sticky left-0 z-[2] scoring-table-surface">
+                            {canManageParticipants && isTeamSelectionMode ? (
+                              <input
+                                type="checkbox"
+                                checked={selectedTeamIds.includes(team.id)}
+                                onChange={() => toggleSelectTeam(team.id)}
+                                aria-label={`Select ${team.name}`}
+                              />
+                            ) : index + 1}
+                          </td>
                           <td className="px-3 py-2 uppercase text-xs font-semibold text-gray-800 sticky left-12 z-[2] scoring-table-surface">
                             <span className="inline-flex items-center gap-1">
                               {team.name}
@@ -6325,26 +6334,6 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                               )}
                             </div>
                           </td>
-                          {canManageParticipants && (
-                            <td className="px-3 py-2 text-right whitespace-nowrap w-16 sticky right-0 z-[2] scoring-table-surface">
-                              <div className="flex justify-end gap-1">
-                                <button 
-                                  onClick={() => openEditTeamModal(team)}
-                                  className="p-1 rounded hover:bg-emerald-50 text-black/40 hover:text-emerald-700 transition-all"
-                                  title="Edit Team"
-                                >
-                                  <Edit size={12} />
-                                </button>
-                                <button 
-                                  onClick={() => handleDeleteTeam(team.id)}
-                                  className="p-1 rounded hover:bg-red-50 text-black/40 hover:text-red-500 transition-all"
-                                  title="Delete Team"
-                                >
-                                  <Trash2 size={12} />
-                                </button>
-                              </div>
-                            </td>
-                          )}
                         </tr>
                       );
                     })
@@ -6357,24 +6346,6 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         
         </div>
       </div>
-
-      {canManageParticipants && !isPlayerSelectionMode && !isTeamSelectionMode && (
-        <button
-          type="button"
-          onClick={() => {
-            if (tournament.type === 'team' && mobileRosterTab === 'teams') openCreateTeamModal();
-            else {
-              setEditingPlayer(null);
-              setShowAddPlayer(true);
-            }
-          }}
-          className="fixed right-5 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-40 inline-flex h-14 items-center gap-2 rounded-full bg-orange-500 px-5 text-sm font-bold text-white shadow-lg shadow-orange-900/25 transition-transform active:scale-95 md:hidden"
-          aria-label={tournament.type === 'team' && mobileRosterTab === 'teams' ? 'Add Team' : 'Add Player'}
-        >
-          <Plus size={21} />
-          {tournament.type === 'team' && mobileRosterTab === 'teams' ? tx('Add Team') : tx('Add Player')}
-        </button>
-      )}
 
       {showMobileRosterActions && (
         <div
@@ -6696,7 +6667,10 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-black/50 px-1">{tx('Team Members (from players)')}</label>
-                    <div className="max-h-48 overflow-auto rounded-md border border-black/10 bg-white p-2 space-y-1">
+                    <div
+                      className="max-h-48 overflow-auto rounded-md border p-2 space-y-1"
+                      style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', colorScheme: 'inherit' }}
+                    >
                       {participants.length === 0 ? (
                         <p className="text-xs text-black/40 italic px-1 py-1">{tx('No players available.')}</p>
                       ) : filteredTeamMemberCandidates.length === 0 ? (
@@ -6708,13 +6682,19 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                           return (
                             <label
                               key={player.id}
-                              className={`flex items-center justify-between gap-2 px-1 py-1 text-xs rounded ${
-                                checked
-                                  ? 'bg-emerald-50 border border-gray-400'
+                              style={{
+                                color: 'var(--text)',
+                                backgroundColor: checked
+                                  ? 'color-mix(in srgb, #f97316 16%, var(--card))'
                                   : assignedToOtherTeam
-                                    ? 'bg-amber-50/60 border border-amber-200/70'
-                                    : 'hover:bg-black/[0.02]'
-                              }`}
+                                    ? 'color-mix(in srgb, var(--text) 5%, var(--card))'
+                                    : undefined,
+                                borderColor: checked
+                                  ? 'color-mix(in srgb, #f97316 55%, var(--border))'
+                                  : 'var(--border)',
+                                opacity: assignedToOtherTeam && !checked ? 0.75 : 1,
+                              }}
+                              className="flex items-center justify-between gap-2 px-2 py-1.5 text-xs rounded border"
                             >
                               <div className="flex items-center gap-2">
                                 <input
@@ -6732,7 +6712,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                                   {renderNameWithFemaleSpotAfter(player, { includeLastName: true, uppercase: true })}
                                 </span>
                               </div>
-                              <span className={`text-[10px] ${assignedToOtherTeam ? 'text-amber-700 font-semibold' : 'text-black/40'}`}>
+                              <span className={`text-[10px] ${assignedToOtherTeam ? 'text-orange-500 font-semibold' : 'text-black/40'}`}>
                                 {assignedToOtherTeam ? `${tx('Assigned:')} ${player.team_name || `${tx('Team')} ${player.team_id}`}` : (player.team_name || tx('Unassigned'))}
                               </span>
                             </label>
