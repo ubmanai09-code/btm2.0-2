@@ -12758,11 +12758,13 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               >{tab === 'setup' ? tx('Setup') : tx('Bracket')}</button>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => setUseClassicSetup(true)}
-            className="shrink-0 text-xs font-semibold text-orange-600 underline"
-          >{tx('Classic setup')}</button>
+          {role === 'admin' && (
+            <button
+              type="button"
+              onClick={() => setUseClassicSetup(true)}
+              className="shrink-0 text-xs font-semibold text-orange-600 underline"
+            >{tx('Classic setup')}</button>
+          )}
         </div>
       )}
       {canManageBracketV2 && useClassicSetup && (
