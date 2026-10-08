@@ -56,6 +56,7 @@ import {
   BookOpen,
   Wrench,
   Check,
+  Lock,
   MoreHorizontal,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
@@ -6824,7 +6825,22 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   const [currentShift, setCurrentShift] = useState(1);
   const [selectedItem, setSelectedItem] = useState<{ id: number, type: 'assignment' | 'waiting', kind?: 'participant' | 'team' } | null>(null);
   const [selectedLaneKeys, setSelectedLaneKeys] = useState<Set<string>>(new Set());
-  const [showClearLanesMenu, setShowClearLanesMenu] = useState(false);
+  const [isLaneSelectionMode, setIsLaneSelectionMode] = useState(false);
+  const frozenStorageKey = `btm_frozen_lanes_${tournament.id}`;
+  const [frozenLaneKeys, setFrozenLaneKeys] = useState<Set<string>>(() => {
+    try { return new Set<string>(JSON.parse(localStorage.getItem(`btm_frozen_lanes_${tournament.id}`) || '[]')); } catch { return new Set<string>(); }
+  });
+  const [assignModePrompt, setAssignModePrompt] = useState<{ placed: number; resolve: (mode: 'new' | 'fill' | null) => void } | null>(null);
+  useEffect(() => {
+    try { setFrozenLaneKeys(new Set<string>(JSON.parse(localStorage.getItem(frozenStorageKey) || '[]'))); } catch { setFrozenLaneKeys(new Set<string>()); }
+    setIsLaneSelectionMode(false);
+    setSelectedLaneKeys(new Set());
+  }, [tournament.id]);
+  const persistFrozenLanes = (next: Set<string>) => {
+    setFrozenLaneKeys(next);
+    localStorage.setItem(frozenStorageKey, JSON.stringify(Array.from(next)));
+  };
+  const askAssignMode = (placed: number) => new Promise<'new' | 'fill' | null>((resolve) => setAssignModePrompt({ placed, resolve }));
   const [outOfOperationLanesByShift, setOutOfOperationLanesByShift] = useState<Record<number, number[]>>({});
   const [draggingAssignment, setDraggingAssignment] = useState<{ assignmentId: number; laneNumber: number; shiftNumber: number } | null>(null);
   const [isDesktopViewport, setIsDesktopViewport] = useState(false);
@@ -6881,6 +6897,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
   const eligibleParticipants = participants.filter(isParticipantAllowedByRule);
   // Mixed events lane-assign teams and singles entrants as separate entities.
+  const [assignWhoOpen, setAssignWhoOpen] = useState(false);
   const isMixedLanes = tournament.type === 'team' && Boolean(tournament.enable_singles_division);
   const standaloneSinglesParticipants = eligibleParticipants.filter(p => p.team_id === null);
   const isParticipantItem = (item: Participant | Team): item is Participant => 'first_name' in item;
@@ -6931,9 +6948,22 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
     const shiftNumbers = Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1);
 
-    // Collect already-assigned IDs so we skip them and preserve their lanes
-    const assignedParticipantIds = new Set<number>(lanes.filter(l => l.participant_id != null).map(l => l.participant_id!));
-    const assignedTeamIds = new Set<number>(lanes.filter(l => l.team_id != null).map(l => l.team_id!));
+    const kindMatches = (l: LaneAssignment) => assignmentKind === 'team' ? l.team_id != null : l.participant_id != null;
+    const hasSomePlaced = lanes.some(kindMatches);
+    let mode: 'new' | 'fill' = 'fill';
+    if (hasSomePlaced) {
+      const choice = await askAssignMode(lanes.filter(kindMatches).length);
+      if (!choice) return;
+      mode = choice;
+    }
+
+    // "new" clears existing placements of this kind (except frozen lanes) before placing everyone again
+    const removable = mode === 'new' ? lanes.filter(l => kindMatches(l) && !frozenLaneKeys.has(`${l.lane_number}-${l.shift_number}`)) : [];
+    const removableIds = new Set(removable.map(l => l.id));
+    const baseLanes = lanes.filter(l => !removableIds.has(l.id));
+
+    const assignedParticipantIds = new Set<number>(baseLanes.filter(l => l.participant_id != null).map(l => l.participant_id!));
+    const assignedTeamIds = new Set<number>(baseLanes.filter(l => l.team_id != null).map(l => l.team_id!));
     // Also exclude players already in UT/NT slots — they play on a different day
     const warmupParticipantIds = new Set<number>(warmupSlots.filter(s => s.participant_id != null).map(s => s.participant_id!));
     const warmupTeamIds = new Set<number>(warmupSlots.filter(s => s.team_id != null).map(s => s.team_id!));
@@ -6946,11 +6976,12 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       return;
     }
 
-    // Build separate Team and Singles slots for each lane in a mixed event.
+    // Build separate Team and Singles slots for each lane in a mixed event. Frozen lanes are skipped.
     const availableSlots: Array<{ laneNumber: number; shiftNumber: number; kind: 'participant' | 'team' }> = [];
     for (const shiftNumber of shiftNumbers) {
       for (const laneNumber of getOperationalLaneNumbers(shiftNumber)) {
-        const laneAssignments = lanes.filter(l => l.lane_number === laneNumber && l.shift_number === shiftNumber);
+        if (frozenLaneKeys.has(`${laneNumber}-${shiftNumber}`)) continue;
+        const laneAssignments = baseLanes.filter(l => l.lane_number === laneNumber && l.shift_number === shiftNumber);
         const kind = assignmentKind;
         if (isMixedLanes && laneAssignments.some(l => kind === 'participant' ? l.team_id != null : l.participant_id != null)) continue;
         const capacity = isMixedLanes && kind === 'participant'
@@ -6964,16 +6995,8 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     }
 
     if (availableSlots.length === 0) {
-      say('All lanes are set to out of operation or are full. No slots available for auto-assignment.');
+      say('All lanes are frozen, out of operation or full. No slots available for auto-assignment.');
       return;
-    }
-
-    const hasSomePlaced = assignedParticipantIds.size > 0 || assignedTeamIds.size > 0;
-    if (hasSomePlaced) {
-      if (!ask(`Auto-Assign will place ${unassignedItems.length} unassigned ${categoryLabel} into their remaining lane capacity. Existing assignments will be preserved. Continue?`)) return;
-    } else if (lanes.length > 0) {
-      // Lanes exist but no participants identified — treat as a fresh full assign
-      if (!ask(`Auto-Assign will place ${unassignedItems.length} ${categoryLabel} into lanes. Continue?`)) return;
     }
 
     const shuffled = [...unassignedItems];
@@ -6995,6 +7018,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
     }
 
     try {
+      await Promise.all(removable.map(l => api.deleteLaneAssignment(l.id)));
       // Add assignments individually to preserve any existing lane placements
       await Promise.all(assignments.map(a => api.addLaneAssignment(tournament.id, a)));
       setSelectedItem(null);
@@ -7664,65 +7688,88 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         )}
       </div>
 
+      {assignModePrompt && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50" onClick={() => { assignModePrompt.resolve(null); setAssignModePrompt(null); }}>
+          <div className="w-full max-w-sm rounded-xl border border-gray-400 bg-[var(--card)] p-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-black">{tx('Some lanes already have assignments')}</h3>
+            <p className="mt-1 text-xs text-black/60">{assignModePrompt.placed} {tx('already placed. How should the remaining players be assigned?')}</p>
+            <div className="mt-3 space-y-2">
+              <button
+                type="button"
+                className="w-full rounded-lg border border-orange-600 bg-orange-600 px-3 py-2 text-left text-white"
+                onClick={() => { assignModePrompt.resolve('fill'); setAssignModePrompt(null); }}
+              >
+                <span className="block text-sm font-bold">{tx('Skip assigned lanes')}</span>
+                <span className="block text-[11px] opacity-90">{tx('Keep current placements and fill only the open spots.')}</span>
+              </button>
+              <button
+                type="button"
+                className="w-full rounded-lg border border-gray-400 px-3 py-2 text-left text-black hover:border-orange-600"
+                onClick={() => { assignModePrompt.resolve('new'); setAssignModePrompt(null); }}
+              >
+                <span className="block text-sm font-bold">{tx('Assign everyone anew')}</span>
+                <span className="block text-[11px] text-black/60">{tx('Clear current placements (frozen lanes stay) and shuffle all again.')}</span>
+              </button>
+            </div>
+            <button
+              type="button"
+              className="mt-3 w-full text-center text-xs font-semibold text-black/50 hover:text-black"
+              onClick={() => { assignModePrompt.resolve(null); setAssignModePrompt(null); }}
+            >
+              {tx('Cancel')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {assignWhoOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50" onClick={() => setAssignWhoOpen(false)}>
+          <div className="w-full max-w-xs rounded-xl border border-gray-400 bg-[var(--card)] p-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-black">{tx('Who do you want to assign?')}</h3>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button type="button" className="flex flex-col items-center gap-1 rounded-lg border border-gray-400 px-3 py-3 text-sm font-bold text-black hover:border-orange-600" onClick={() => { setAssignWhoOpen(false); void handleAutoAssign('team'); }}>
+                <Users size={18} /> {tx('Teams')}
+              </button>
+              <button type="button" className="flex flex-col items-center gap-1 rounded-lg border border-gray-400 px-3 py-3 text-sm font-bold text-black hover:border-orange-600" onClick={() => { setAssignWhoOpen(false); void handleAutoAssign('participant'); }}>
+                <User size={18} /> {tx('Singles')}
+              </button>
+            </div>
+            <button type="button" className="mt-3 w-full text-center text-xs font-semibold text-black/50 hover:text-black" onClick={() => setAssignWhoOpen(false)}>{tx('Cancel')}</button>
+          </div>
+        </div>
+      )}
+
       {/* Lanes Grid */}
       <div>
         <div className="scoring-table-surface sticky top-16 sm:top-[7.25rem] z-20 border border-gray-400 rounded-md px-2 py-1.5 flex items-center justify-between gap-2 mb-2 overflow-x-auto">
-            <div className="flex items-center gap-1.5 shrink-0">
-              <Button size="sm" variant="outline" onClick={loadData} title="Refresh" ariaLabel="Refresh" className="px-2">
-                <RotateCw size={14} />
-              </Button>
+            <div className="flex-1 min-w-0" />
+            <div className="flex items-center justify-center shrink-0">
               {canManageLanes && (
-                <div className="relative">
-                  <Button size="sm" variant="remove"
-                    onClick={() => setShowClearLanesMenu(v => !v)}
-                    title="Clear Assignments" ariaLabel="Clear Assignments" className="px-2 flex items-center gap-1">
-                    <Eraser size={12} />
-                    {selectedLaneKeys.size > 0 && <span className="text-[10px] font-bold">({selectedLaneKeys.size})</span>}
-                    <ChevronDown size={10} />
-                  </Button>
-                  {showClearLanesMenu && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setShowClearLanesMenu(false)} />
-                      <div className="absolute left-0 top-9 z-50 bg-white border border-black/15 rounded-lg shadow-xl py-1 min-w-[200px]">
-                        <button
-                          disabled={selectedLaneKeys.size === 0}
-                          onClick={() => { setShowClearLanesMenu(false); void handleClearSelectedLanes(); }}
-                          className="w-full text-left px-3 py-2 text-xs font-medium text-black/70 hover:bg-red-50 hover:text-red-700 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
-                          <Eraser size={12} />
-                          {selectedLaneKeys.size > 0 ? `Clear Selected (${selectedLaneKeys.size} lane${selectedLaneKeys.size > 1 ? 's' : ''})` : 'Clear Selected (none selected)'}
-                        </button>
-                        <div className="my-1 border-t border-black/10" />
-                        <button
-                          onClick={() => { setShowClearLanesMenu(false); void handleClearLanes(); }}
-                          className="w-full text-left px-3 py-2 text-xs font-medium text-black/70 hover:bg-red-50 hover:text-red-700 flex items-center gap-2">
-                          <Trash2 size={12} /> Clear All
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-              {canManageLanes && (
-                isMixedLanes ? (
-                  <>
-                    <Button size="sm" onClick={() => { void handleAutoAssign('team'); }} variant="outline" title="Auto-assign teams first" ariaLabel="Auto-assign teams first" className="px-2 font-bold border border-gray-400 bg-emerald-50 text-emerald-950 hover:bg-emerald-100">
-                      <Users size={13} /> Teams
-                    </Button>
-                    <Button size="sm" onClick={() => { void handleAutoAssign('participant'); }} variant="outline" title="Auto-assign singles into remaining lanes" ariaLabel="Auto-assign singles" className="px-2 font-bold border border-sky-200 bg-sky-50 text-sky-950 hover:bg-sky-100">
-                      <User size={13} /> Singles
-                    </Button>
-                  </>
-                ) : (
-                  <Button size="sm" onClick={() => { void handleAutoAssign(); }} variant="outline" title="Auto-Assign" ariaLabel="Auto-Assign" className="px-3 font-bold text-emerald-600">
-                    Auto Assign
-                  </Button>
-                )
+                <button
+                  type="button"
+                  title="Auto-Assign"
+                  aria-label="Auto-Assign"
+                  onClick={() => { if (isMixedLanes) setAssignWhoOpen(true); else void handleAutoAssign(); }}
+                  className="h-12 w-12 rounded-full bg-orange-600 hover:bg-orange-700 text-white text-[10px] font-bold uppercase tracking-wide shadow flex items-center justify-center"
+                >
+                  {tx('Assign')}
+                </button>
               )}
             </div>
-            <div className="flex items-center gap-1.5 ml-auto shrink-0">
+            <div className="flex items-center justify-end gap-1.5 flex-1 min-w-0">
               {canManageLanes && (
-                <Button size="sm" variant="outline" onClick={handleSaveLanes} title="Save" ariaLabel="Save" className="px-2">
-                  <Save size={14} />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (isLaneSelectionMode) setSelectedLaneKeys(new Set());
+                    setIsLaneSelectionMode(v => !v);
+                  }}
+                  title="Select lanes"
+                  ariaLabel="Select lanes"
+                  className={`px-2 ${isLaneSelectionMode ? 'border-orange-400 text-orange-600' : ''}`}
+                >
+                  <Check size={14} />
                 </Button>
               )}
               {canManageLanes && (
@@ -7745,11 +7792,49 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                   </Button>
                 </div>
               )}
+              {canManageLanes && (
+                <Button size="sm" variant="outline" onClick={handleSaveLanes} title="Save" ariaLabel="Save" className="px-2">
+                  <Save size={14} />
+                </Button>
+              )}
               <Button size="sm" variant="outline" onClick={handlePrintLanes} title="Print" ariaLabel="Print" className="px-2">
                 <Printer size={14} />
               </Button>
             </div>
           </div>
+        {canManageLanes && isLaneSelectionMode && (
+          <div className="scoring-table-surface border border-gray-400 rounded-md px-2 py-1.5 mb-2 flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-bold text-black/60 mr-1">{selectedLaneKeys.size} selected</span>
+            <Button size="sm" variant="remove" disabled={selectedLaneKeys.size === 0} onClick={() => void handleClearSelectedLanes()} title="Clear selected lanes" ariaLabel="Clear selected lanes" className="px-2 disabled:opacity-50">
+              <Eraser size={14} className="mr-1" /> Clear Selected
+            </Button>
+            <Button size="sm" variant="remove" onClick={() => void handleClearLanes()} title="Clear all lanes" ariaLabel="Clear all lanes" className="px-2">
+              <Trash2 size={14} className="mr-1" /> Clear All
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={selectedLaneKeys.size === 0}
+              onClick={() => {
+                const keys = Array.from(selectedLaneKeys);
+                const allFrozen = keys.every(k => frozenLaneKeys.has(k));
+                const next = new Set(frozenLaneKeys);
+                keys.forEach(k => { if (allFrozen) next.delete(k); else next.add(k); });
+                persistFrozenLanes(next);
+                setSelectedLaneKeys(new Set());
+              }}
+              title="Freeze selected lanes so auto-assign skips them"
+              ariaLabel="Freeze selected lanes"
+              className="px-2 disabled:opacity-50"
+            >
+              <Lock size={14} className="mr-1" />
+              {selectedLaneKeys.size > 0 && Array.from(selectedLaneKeys).every(k => frozenLaneKeys.has(k)) ? 'Unfreeze' : 'Freeze'}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => { setIsLaneSelectionMode(false); setSelectedLaneKeys(new Set()); }} title="Cancel" ariaLabel="Cancel" className="px-2 ml-auto">
+              <X size={14} className="mr-1" /> Cancel
+            </Button>
+          </div>
+        )}
         <div className="space-y-3">
             {shifts.map((shift) => {
               const groupedLanes = groupedLanesByShift[shift] || {};
@@ -7791,7 +7876,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
               >
                 <div className="bg-slate-100/80 text-slate-800 px-2 py-1 flex justify-between items-center group/header border-b border-slate-200/90">
                   <div className="flex items-center gap-1.5">
-                    {canManageLanes && (
+                    {canManageLanes && isLaneSelectionMode && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -7806,7 +7891,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                         title="Select lane for bulk clear"
                         className={`w-3 h-3 shrink-0 rounded-sm border transition-all cursor-pointer flex items-center justify-center ${
                           selectedLaneKeys.has(`${laneNumber}-${shift}`)
-                            ? 'bg-red-500 border-red-600'
+                            ? 'bg-orange-600 border-orange-600'
                             : 'border-slate-300 bg-slate-100/50 hover:border-slate-400'
                         }`}
                       >
@@ -7818,11 +7903,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                       </button>
                     )}
                     <span className="font-bold text-[9px] uppercase tracking-widest">Lane {laneNum}</span>
-                    {isMixedLanes && (
-                      <span className="text-[8px] font-semibold text-black/50 whitespace-nowrap">
-                        T {assignments.filter(a => a.team_id != null).length}/{laneKindCapacity('team')} · S {assignments.filter(a => a.participant_id != null).length}/{laneKindCapacity('participant')}
-                      </span>
-                    )}
+                    {frozenLaneKeys.has(`${laneNumber}-${shift}`) && <Lock size={9} className="text-orange-600" aria-label="Frozen lane" />}
                     <button
                       type="button"
                       onClick={(e) => e.stopPropagation()}
