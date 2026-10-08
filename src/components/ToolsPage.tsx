@@ -38,7 +38,7 @@ function HandicapTool({ mn }: { mn: boolean }) {
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="ui-card p-4 text-center"><div className="text-xs text-gray-500">{mn ? 'Нэг тоглолтын гандикап' : 'Handicap per game'}</div><div className="text-3xl font-bold text-emerald-800">{perGame}</div></div>
-        <div className="ui-card p-4 text-center"><div className="text-xs text-gray-500">{mn ? 'Нийт гандикап' : 'Total handicap'}</div><div className="text-3xl font-bold text-orange-500">{perGame * Math.max(0, Math.floor(num(games)))}</div></div>
+        <div className="ui-card p-4 text-center"><div className="text-xs text-gray-500">{mn ? 'Нийт гандикап' : 'Total handicap'}</div><div className="text-3xl font-bold text-orange-600">{perGame * Math.max(0, Math.floor(num(games)))}</div></div>
       </div>
       <p className="text-xs text-gray-500">{mn ? 'Томьёо: (Суурь оноо − Дундаж) × Хувь' : 'Formula: (Basis − Average) × Percent'}</p>
     </div>
@@ -77,7 +77,7 @@ function DrawTool({ mn }: { mn: boolean }) {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {groups.map((g, i) => (
             <div key={i} className="ui-card p-3">
-              <div className="text-xs font-bold text-orange-500 mb-1">#{i + 1}</div>
+              <div className="text-xs font-bold text-orange-600 mb-1">#{i + 1}</div>
               {g.map((n) => <div key={n} className="text-sm text-black">{n}</div>)}
             </div>
           ))}
@@ -103,7 +103,7 @@ export default function ToolsPage({ lang, role, authToken }: ToolsPageProps) {
           <button
             key={id}
             onClick={() => setTool(id)}
-            className={`flex items-center gap-1.5 h-9 px-3 rounded-md border text-sm font-semibold transition-colors ${tool === id ? 'bg-emerald-800 border-emerald-800 text-white' : 'ui-card text-black hover:border-orange-500'}`}
+            className={`flex items-center gap-1.5 h-9 px-3 rounded-md border text-sm font-semibold transition-colors ${tool === id ? 'bg-emerald-800 border-emerald-800 text-white' : 'ui-card text-black hover:border-orange-600'}`}
           >
             <Icon size={14} />{label}
           </button>

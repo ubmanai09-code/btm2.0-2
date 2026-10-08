@@ -22,14 +22,14 @@ type SortMode = 'default' | 'alpha' | 'category';
 const CATEGORY_ORDER = ['scoring', 'lane', 'equipment', 'technique'] as const;
 
 const CATEGORY_TEXT_COLOR: Record<string, string> = {
-  scoring:   'text-orange-500 dark:text-orange-400',
+  scoring:   'text-orange-600 dark:text-orange-400',
   lane:      'text-blue-500 dark:text-blue-400',
   equipment: 'text-green-600 dark:text-green-400',
   technique: 'text-purple-500 dark:text-purple-400',
 };
 
 const CATEGORY_BG: Record<string, string> = {
-  scoring:   'bg-orange-500',
+  scoring:   'bg-orange-600',
   lane:      'bg-blue-500',
   equipment: 'bg-green-600',
   technique: 'bg-purple-500',
@@ -156,7 +156,7 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <BookOpen size={22} className="text-orange-500" />
+            <BookOpen size={22} className="text-orange-600" />
             <h1 className="text-3xl font-bold tracking-tight">
               {lang === 'mn' ? 'Боулингийн нэр томьёоны тайлбар толь' : 'Bowling Glossary'}
             </h1>
@@ -170,7 +170,7 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
           {isAdmin && (
             <button
               onClick={openAdd}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold transition-colors shadow-sm"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold transition-colors shadow-sm"
             >
               <Plus size={15} />
               {lang === 'mn' ? 'Нэмэх' : 'Add Term'}
@@ -210,7 +210,7 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
           title={lang === 'mn' ? 'Цагаан толгойн дараалал' : 'Alphabetical'}
           className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
             sortMode === 'alpha'
-              ? 'bg-orange-500 text-white'
+              ? 'bg-orange-600 text-white'
               : 'bg-black/8 dark:bg-white/8 text-black/50 dark:text-white/50 hover:bg-black/15'
           }`}
         >
@@ -222,7 +222,7 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
           title={lang === 'mn' ? 'Ангиллаар' : 'By category'}
           className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
             sortMode === 'category'
-              ? 'bg-orange-500 text-white'
+              ? 'bg-orange-600 text-white'
               : 'bg-black/8 dark:bg-white/8 text-black/50 dark:text-white/50 hover:bg-black/15'
           }`}
         >
@@ -259,7 +259,7 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
           {filtered.map((term) => (
             <div
               key={term.id}
-              className="relative text-left ui-card rounded-xl overflow-hidden border border-black/10 dark:border-white/10 hover:border-orange-300 dark:hover:border-orange-600/50 hover:shadow-md transition-all group cursor-pointer"
+              className="relative text-left ui-card rounded-xl overflow-hidden border border-black/10 dark:border-white/10 hover:border-orange-300 dark:hover:border-orange-700/50 hover:shadow-md transition-all group cursor-pointer"
               onClick={() => setSelectedTerm(term)}
               onDoubleClick={isAdmin ? (e) => openEdit(term, e) : undefined}
               title={isAdmin ? (lang === 'mn' ? 'Давхар дарж засах' : 'Double-click to edit') : undefined}
@@ -279,7 +279,7 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
                 <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                   <button
                     onClick={(e) => openEdit(term, e)}
-                    className="p-1 rounded-md bg-black/10 dark:bg-white/10 hover:bg-orange-500 hover:text-white text-black/50 dark:text-white/50 transition-colors"
+                    className="p-1 rounded-md bg-black/10 dark:bg-white/10 hover:bg-orange-600 hover:text-white text-black/50 dark:text-white/50 transition-colors"
                     title={lang === 'mn' ? 'Засах' : 'Edit'}
                   >
                     <Pencil size={12} />
@@ -297,7 +297,7 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
               <div className="flex items-start gap-3">
                 {/* Text content */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold uppercase tracking-widest text-orange-500 group-hover:text-orange-600 mb-1 transition-colors">
+                  <p className="text-xs font-bold uppercase tracking-widest text-orange-600 group-hover:text-orange-600 mb-1 transition-colors">
                     {term.en}
                   </p>
                   <p className="text-sm text-[color:var(--text)] opacity-80 leading-snug line-clamp-3">
@@ -332,7 +332,7 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-orange-500 mb-1">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-orange-600 mb-1">
                   {lang === 'mn' ? 'Боулингийн нэр томьёо' : 'Bowling Term'}
                 </p>
                 {selectedTerm.category && (
@@ -347,7 +347,7 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
                   <>
                     <button
                       onClick={(e) => { setSelectedTerm(null); openEdit(selectedTerm, e); }}
-                      className="rounded-full p-1.5 hover:bg-orange-100 dark:hover:bg-orange-900/30 text-orange-500 transition-colors"
+                      className="rounded-full p-1.5 hover:bg-orange-100 dark:hover:bg-orange-900/30 text-orange-600 transition-colors"
                       title={lang === 'mn' ? 'Засах' : 'Edit'}
                     >
                       <Pencil size={15} />
@@ -490,7 +490,7 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex-1 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
+                className="flex-1 py-2 rounded-lg bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
               >
                 {saving ? (lang === 'mn' ? 'Хадгалж байна…' : 'Saving…') : (lang === 'mn' ? 'Хадгалах' : 'Save')}
               </button>
@@ -519,7 +519,7 @@ const GlossaryPage: React.FC<GlossaryPageProps> = ({ lang = 'mn', role = 'public
               {lang === 'mn' ? 'Устгах уу?' : 'Delete term?'}
             </h2>
             <p className="text-sm text-black/60 dark:text-white/60">
-              <span className="font-semibold text-orange-500">{confirmDelete.en}</span>
+              <span className="font-semibold text-orange-600">{confirmDelete.en}</span>
               {' '}{lang === 'mn' ? '— энэ үйлдлийг буцааж болохгүй.' : '— this cannot be undone.'}
             </p>
             <div className="flex gap-2">

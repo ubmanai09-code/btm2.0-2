@@ -199,7 +199,7 @@ export default function DashboardPage(props: DashboardPageProps) {
             </>
           )}
           {canManage && (
-            <button onClick={onCreate} className="h-9 px-4 inline-flex items-center gap-2 rounded-md bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold uppercase tracking-wide">
+            <button onClick={onCreate} className="h-9 px-4 inline-flex items-center gap-2 rounded-md bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold uppercase tracking-wide">
               <Plus size={16} />{t('app.new_tournament', 'New Tournament')}
             </button>
           )}
@@ -236,7 +236,7 @@ export default function DashboardPage(props: DashboardPageProps) {
                     </div>
                   </div>
                 </div>
-                <button onClick={() => onOpen(featured)} className="h-9 px-4 inline-flex items-center gap-2 rounded-md bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold uppercase tracking-wide">
+                <button onClick={() => onOpen(featured)} className="h-9 px-4 inline-flex items-center gap-2 rounded-md bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold uppercase tracking-wide">
                   {t('dashboard.view_event', 'View event')}<ArrowRight size={14} />
                 </button>
               </div>
@@ -298,7 +298,7 @@ export default function DashboardPage(props: DashboardPageProps) {
                     <button
                       type="button"
                       onClick={() => { if (manageAction) setManageAction(null); else setManageOpen((v) => !v); }}
-                      className={`px-4 h-9 text-xs font-bold uppercase tracking-wider rounded-md border inline-flex items-center gap-2 transition-colors ${manageAction ? 'bg-orange-500 border-orange-500 text-white' : 'bg-white border-gray-400 text-gray-500 hover:text-black'}`}
+                      className={`px-4 h-9 text-xs font-bold uppercase tracking-wider rounded-md border inline-flex items-center gap-2 transition-colors ${manageAction ? 'bg-orange-600 border-orange-600 text-white' : 'bg-white border-gray-400 text-gray-500 hover:text-black'}`}
                     >
                       {manageAction ? <X size={14} /> : <Settings2 size={14} />}{manageAction ? t('common.cancel', 'Cancel') : t('dashboard.manage', 'Manage')}
                     </button>
@@ -323,7 +323,7 @@ export default function DashboardPage(props: DashboardPageProps) {
             </div>
 
             {manageAction && (
-              <p className="rounded-md border border-orange-500 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-600">
+              <p className="rounded-md border border-orange-600 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-600">
                 {t('dashboard.select_to', 'Select a tournament to')} {manageLabels[manageAction].toLowerCase()}
               </p>
             )}
@@ -335,9 +335,9 @@ export default function DashboardPage(props: DashboardPageProps) {
                 {visibleRows.map(({ item, status }) => {
                   const badge = dateBadge(item.date);
                   return (
-                    <div key={item.id} className={`ui-card group flex items-center gap-2.5 px-2.5 py-2 cursor-pointer ${manageAction ? (manageAction === 'delete' ? 'hover:border-red-600 ring-1 ring-orange-500/40' : 'hover:border-orange-500 ring-1 ring-orange-500/40') : 'hover:border-emerald-800'}`} onClick={() => pickTournament(item, status)}>
+                    <div key={item.id} className={`ui-card group flex items-center gap-2.5 px-2.5 py-2 cursor-pointer ${manageAction ? (manageAction === 'delete' ? 'hover:border-red-600 ring-1 ring-orange-600/40' : 'hover:border-orange-600 ring-1 ring-orange-600/40') : 'hover:border-emerald-800'}`} onClick={() => pickTournament(item, status)}>
                       <div className="w-12 shrink-0 overflow-hidden rounded-md border border-gray-400 text-center">
-                        <div className={`text-[9px] font-bold uppercase leading-4 text-white ${status === 'incoming' ? 'bg-orange-500' : status === 'active' ? 'bg-emerald-800' : 'bg-gray-600'}`}>{badge.month}</div>
+                        <div className={`text-[9px] font-bold uppercase leading-4 text-white ${status === 'incoming' ? 'bg-orange-600' : status === 'active' ? 'bg-emerald-800' : 'bg-gray-600'}`}>{badge.month}</div>
                         <div className="py-1 text-base font-bold leading-none text-black">{badge.day}</div>
                       </div>
                       <div className="min-w-0 flex-1">
@@ -372,7 +372,7 @@ export default function DashboardPage(props: DashboardPageProps) {
             {isAdmin && (
               <span className="flex items-center gap-1">
                 <button onClick={onManageSponsors} title={t('sponsors.manage_sponsors', 'Manage Sponsors')} className="p-1 text-gray-500 hover:text-emerald-800"><Edit size={14} /></button>
-                <button onClick={onManagePromo} title={t('sponsors.manage_ad_block', 'Manage Ad Block')} className="p-1 text-orange-500"><Trophy size={14} /></button>
+                <button onClick={onManagePromo} title={t('sponsors.manage_ad_block', 'Manage Ad Block')} className="p-1 text-orange-600"><Trophy size={14} /></button>
               </span>
             )}
           </div>

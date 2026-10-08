@@ -474,7 +474,7 @@ const Button = ({
     ghost: 'text-[color:var(--text)] hover:bg-[color:var(--text)]/[0.05]',
     manage: 'ui-accent',
     create: 'bg-emerald-800 text-white hover:bg-emerald-900 border border-emerald-700',
-    remove: 'bg-orange-500 text-white hover:bg-orange-600 border border-orange-600'
+    remove: 'bg-orange-600 text-white hover:bg-orange-700 border border-orange-600'
   };
 
   const sizes = {
@@ -570,7 +570,7 @@ const MobileNav = ({ items, activeId, homeActive, onHome, homeLabel, onSelect, m
   const mainItems = items.filter((tab) => !moreIds.includes(tab.id));
   const moreItems = items.filter((tab) => moreIds.includes(tab.id));
   const moreActive = !homeActive && moreItems.some((tab) => tab.id === activeId);
-  return (
+  return ReactDOM.createPortal(
   <>
   {moreOpen && moreItems.length > 0 && (
     <div className="fixed inset-0 z-40 sm:hidden" onClick={() => setMoreOpen(false)}>
@@ -582,7 +582,7 @@ const MobileNav = ({ items, activeId, homeActive, onHome, homeLabel, onSelect, m
           <button
             key={tab.id}
             onClick={() => { setMoreOpen(false); onSelect(tab.id); }}
-            className={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold ${activeId === tab.id && !homeActive ? 'bg-orange-500 text-white' : 'text-black'}`}
+            className={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold ${activeId === tab.id && !homeActive ? 'bg-orange-600 text-white' : 'text-black'}`}
           >
             <tab.icon size={16} />
             {tab.label}
@@ -592,29 +592,41 @@ const MobileNav = ({ items, activeId, homeActive, onHome, homeLabel, onSelect, m
     </div>
   )}
   <nav className="mnav sm:hidden" aria-label="Main menu">
-    <button onClick={onHome} className={`mnav-btn ${homeActive ? 'active' : ''}`} title={homeLabel} aria-label={homeLabel}>
-      <Home size={18} />
-    </button>
-    {mainItems.map((tab) => {
-      const active = !homeActive && activeId === tab.id;
-      return (
-        <button key={tab.id} onClick={() => onSelect(tab.id)} className={`mnav-btn ${active ? 'active' : ''}`} title={tab.label} aria-label={tab.label} aria-current={active ? 'page' : undefined}>
-          <tab.icon size={18} />
-        </button>
-      );
-    })}
-    {moreItems.length > 0 && (
-      <button onClick={() => setMoreOpen((open) => !open)} className={`mnav-btn ${moreActive ? 'active' : ''}`} title="More" aria-label="More" aria-expanded={moreOpen}>
-        <MoreHorizontal size={18} />
-      </button>
-    )}
+    {(() => {
+      const renderItem = (tab: { id: string; label: string; icon: any }) => {
+        const active = !homeActive && activeId === tab.id;
+        return (
+          <button key={tab.id} onClick={() => onSelect(tab.id)} className={`mnav-btn ${active ? 'active' : ''}`} title={tab.label} aria-label={tab.label} aria-current={active ? 'page' : undefined}>
+            <tab.icon size={18} />
+            <span className="mnav-label">{tab.label}</span>
+          </button>
+        );
+      };
+      const standing = mainItems.find((tab) => tab.id === 'standings');
+      const buttons = [
+        <button key="home" onClick={onHome} className={`mnav-btn ${homeActive ? 'active' : ''}`} title={homeLabel} aria-label={homeLabel}>
+          <Home size={18} />
+          <span className="mnav-label">Home</span>
+        </button>,
+        ...mainItems.filter((tab) => tab.id !== 'standings').map(renderItem),
+        ...(moreItems.length > 0 ? [(
+          <button key="more" onClick={() => setMoreOpen((open) => !open)} className={`mnav-btn ${moreActive ? 'active' : ''}`} title="More" aria-label="More" aria-expanded={moreOpen}>
+            <MoreHorizontal size={18} />
+            <span className="mnav-label">More</span>
+          </button>
+        )] : []),
+      ];
+      if (standing) buttons.splice(Math.floor((buttons.length + 1) / 2), 0, renderItem(standing));
+      return buttons;
+    })()}
   </nav>
   <div className="mfooter sm:hidden">
-    <span>BTM <span className="text-orange-500">v2.2</span></span>
+    <span>BTM <span className="text-orange-600">v2.2</span></span>
     <span className="text-white/60">|</span>
     <span>© Murat D. 2026</span>
   </div>
-  </>
+  </>,
+  document.body
   );
 };
 
@@ -1333,7 +1345,7 @@ export default function App() {
     downloadAnchorNode.remove();
   };
 
-  const openTournament = async (t: Tournament, tab?: 'participants' | 'standings' | 'scoring' | 'lanes' | 'brackets-v2' | 'tools') => {
+  const openTournament = async (t: Tournament, tab?: 'participants' | 'standings' | 'scoring' | 'lanes' | 'brackets-v2' | 'tools' | 'league') => {
     if (tab) setActiveTab(tab);
     setSelectedTournament(t);
     setView('detail');
@@ -2072,6 +2084,7 @@ export default function App() {
     ...(!isShootoutCompetition(selectedTournament?.competition_style) && (currentRole === 'admin' || currentRole === 'moderator') ? [{ id: 'brackets-v2', label: t('tab.brackets_v2', 'Brackets'), icon: BracketsV2TabIcon }] : []),
     { id: 'standings', label: t('tab.tournament_result', 'Standing'), icon: Trophy },
     { id: 'tools', label: t('tab.tools', 'Tools'), icon: Wrench },
+    ...(currentRole !== 'public' ? [{ id: 'league', label: t('tab.league', 'League'), icon: BarChart3 }] : []),
   ];
 
   return (
@@ -2096,8 +2109,8 @@ export default function App() {
             />
           </div>
           <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2">
-            <span className="hidden sm:inline text-sm text-white font-semibold">BOWLING TOURNAMENT MANAGER | <span className="text-orange-500">All In One</span></span>
-            <span className="sm:hidden text-[11px] text-white font-semibold leading-tight">BOWLING TOURNAMENT MANAGER | <span className="text-orange-500">All In One</span></span>
+            <span className="hidden sm:inline text-sm text-white font-semibold">BOWLING TOURNAMENT MANAGER | <span className="text-orange-600">All In One</span></span>
+            <span className="sm:hidden text-[11px] text-white font-semibold leading-tight">BOWLING TOURNAMENT MANAGER | <span className="text-orange-600">All In One</span></span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -2284,7 +2297,7 @@ export default function App() {
                         <div className="flex flex-wrap items-center gap-2 px-1">
                           <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Recent</span>
                           {recentLogos.map((url) => (
-                            <button key={url} type="button" onClick={() => { setFormLogo(url); setFormLogoTouched(true); }} className={`h-10 w-10 rounded-md border bg-white p-1 flex items-center justify-center ${formLogo === url ? 'border-orange-500 ring-1 ring-orange-500' : 'border-gray-400'}`} title={url}>
+                            <button key={url} type="button" onClick={() => { setFormLogo(url); setFormLogoTouched(true); }} className={`h-10 w-10 rounded-md border bg-white p-1 flex items-center justify-center ${formLogo === url ? 'border-orange-600 ring-1 ring-orange-600' : 'border-gray-400'}`} title={url}>
                               <img src={url} alt="" className="max-h-full max-w-full object-contain" onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none'; }} />
                             </button>
                           ))}
@@ -2352,7 +2365,7 @@ export default function App() {
                                     name="division_options"
                                     value={division}
                                     defaultChecked={existingDivisions.includes(division)}
-                                    className="h-4 w-4 rounded border-black/30 text-orange-500 focus:ring-orange-200"
+                                    className="h-4 w-4 rounded border-black/30 text-orange-600 focus:ring-orange-200"
                                   />
                                   {division}
                                 </label>
@@ -2519,7 +2532,7 @@ export default function App() {
                           type="checkbox"
                           checked={formUseCustomSponsors}
                           onChange={(e) => setFormUseCustomSponsors(e.target.checked)}
-                          className="h-4 w-4 rounded border-black/30 text-orange-500 focus:ring-orange-200"
+                          className="h-4 w-4 rounded border-black/30 text-orange-600 focus:ring-orange-200"
                         />
                         Use custom sponsors for this tournament
                       </label>
@@ -3331,6 +3344,7 @@ export default function App() {
       {view !== 'detail' && (
         <MobileNav
           items={mobileNavItems}
+          moreIds={['tools', 'league']}
           homeActive={view === 'list'}
           homeLabel={t('common.back_to_dashboard', 'Dashboard')}
           onHome={() => { setView('list'); setEditingTournament(null); }}
@@ -3343,9 +3357,9 @@ export default function App() {
       <footer className="hidden sm:block border-t border-white/10 bg-black">
         <div className="max-w-7xl mx-auto px-6 py-5 text-xs text-white/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2 font-medium flex-wrap">
-            <span className="font-semibold uppercase tracking-wide text-orange-500">{t('app.footer_tagline', 'Total tournament control. From first frame to final payout.')}</span>
+            <span className="font-semibold uppercase tracking-wide text-orange-600">{t('app.footer_tagline', 'Total tournament control. From first frame to final payout.')}</span>
             <span className="text-white/60">|</span>
-            <span>BTM <span className="text-orange-500">v2.2</span></span>
+            <span>BTM <span className="text-orange-600">v2.2</span></span>
             <span className="text-white/60">|</span>
             <span>{t('app.footer_copyright', '© Murat D. 2026')}</span>
           </div>
@@ -5620,7 +5634,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         onClick={() => { setEditingPlayer(null); setShowAddPlayer(true); }}
                         title="Add Player"
                         aria-label="Add Player"
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-500 text-white shadow-sm transition-colors hover:bg-orange-600 active:scale-95"
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-600 text-white shadow-sm transition-colors hover:bg-orange-700 active:scale-95"
                       >
                         <UserRoundPlus size={17} />
                       </button>
@@ -6029,11 +6043,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                           onClick={openCreateTeamModal}
                           title="Add Team"
                           aria-label="Add Team"
-                          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-500 text-white shadow-sm transition-colors hover:bg-orange-600 active:scale-95"
+                          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-600 text-white shadow-sm transition-colors hover:bg-orange-700 active:scale-95"
                         >
                           <span className="relative inline-flex">
                             <Users size={17} />
-                            <Plus size={9} strokeWidth={3.5} className="absolute -right-1.5 -top-1.5 rounded-full bg-orange-500" />
+                            <Plus size={9} strokeWidth={3.5} className="absolute -right-1.5 -top-1.5 rounded-full bg-orange-600" />
                           </span>
                         </button>
                       )}
@@ -6215,7 +6229,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                             onChange={() => toggleSelectTeam(team.id)}
                             onClick={(event) => event.stopPropagation()}
                             aria-label={`Select ${team.name}`}
-                            className="mt-1 h-4 w-4 accent-orange-500"
+                            className="mt-1 h-4 w-4 accent-orange-600"
                           />
                         )}
                       </div>
@@ -6685,12 +6699,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                               style={{
                                 color: 'var(--text)',
                                 backgroundColor: checked
-                                  ? 'color-mix(in srgb, #f97316 16%, var(--card))'
+                                  ? 'color-mix(in srgb, #ea580c 16%, var(--card))'
                                   : assignedToOtherTeam
                                     ? 'color-mix(in srgb, var(--text) 5%, var(--card))'
                                     : undefined,
                                 borderColor: checked
-                                  ? 'color-mix(in srgb, #f97316 55%, var(--border))'
+                                  ? 'color-mix(in srgb, #ea580c 55%, var(--border))'
                                   : 'var(--border)',
                                 opacity: assignedToOtherTeam && !checked ? 0.75 : 1,
                               }}
@@ -6712,7 +6726,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                                   {renderNameWithFemaleSpotAfter(player, { includeLastName: true, uppercase: true })}
                                 </span>
                               </div>
-                              <span className={`text-[10px] ${assignedToOtherTeam ? 'text-orange-500 font-semibold' : 'text-black/40'}`}>
+                              <span className={`text-[10px] ${assignedToOtherTeam ? 'text-orange-600 font-semibold' : 'text-black/40'}`}>
                                 {assignedToOtherTeam ? `${tx('Assigned:')} ${player.team_name || `${tx('Team')} ${player.team_id}`}` : (player.team_name || tx('Unassigned'))}
                               </span>
                             </label>
@@ -7921,7 +7935,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
           {warmupSectionOpen && <div className="mb-3 flex items-center gap-1 justify-end">
               {(['UT', 'NT'] as const).map(s => (
                 <button key={s} type="button" onClick={() => setWarmupSession(s)}
-                  className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-all ${warmupSession === s ? (s === 'UT' ? 'bg-orange-500 border-orange-500 text-white' : 'bg-violet-500 border-violet-500 text-white') : 'bg-white border-black/15 text-black/50 hover:border-black/30'}`}>
+                  className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-all ${warmupSession === s ? (s === 'UT' ? 'bg-orange-600 border-orange-600 text-white' : 'bg-violet-500 border-violet-500 text-white') : 'bg-white border-black/15 text-black/50 hover:border-black/30'}`}>
                   {s === 'UT' ? tx('Pre') : tx('Post')}
                 </button>
               ))}
@@ -12757,7 +12771,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         <span className="block text-sm font-semibold text-black/80">{tx(label)}</span>
         <span className="block text-xs text-black/45">{tx(desc)}</span>
       </span>
-      <span className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${checked ? 'bg-orange-500' : 'bg-gray-300'}`}>
+      <span className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${checked ? 'bg-orange-600' : 'bg-gray-300'}`}>
         <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${checked ? 'left-[22px]' : 'left-0.5'}`} />
       </span>
     </button>
@@ -12775,7 +12789,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               value={draftValue}
               onChange={e => setDraftValue(e.target.value)}
               placeholder={`${tournament.name} - ${division === 'male' ? tx('Male Singles') : division === 'female' ? tx('Female Singles') : tournament.type === 'team' ? tx('Team') : tx('All Participants')} - ${tournament.finals_format || tx('Finals')}`}
-              className="h-11 w-full rounded-lg border border-black/15 bg-white px-3 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-100"
+              className="h-11 w-full rounded-lg border border-black/15 bg-white px-3 text-sm focus:border-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-100"
             />
             <p className="mt-1 text-[11px] text-black/40">{tx('Leave empty to use the suggested name.')}</p>
           </div>
@@ -12785,7 +12799,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               <select
                 value={division}
                 onChange={e => setDivision(e.target.value === 'male' ? 'male' : e.target.value === 'female' ? 'female' : 'all')}
-                className="h-11 w-full rounded-lg border border-black/15 bg-white px-3 text-sm focus:border-orange-500 focus:outline-none"
+                className="h-11 w-full rounded-lg border border-black/15 bg-white px-3 text-sm focus:border-orange-600 focus:outline-none"
               >
                 <option value="all">{tx('Team')}</option>
                 <option value="female">{tx('Singles \u2014 Female')}</option>
@@ -12875,7 +12889,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               <select
                 value={normalizedTopSeedsCount}
                 onChange={e => setTopSeedsCount(Math.max(1, parseInt(e.target.value) || 1))}
-                className="h-11 w-full rounded-lg border border-black/15 bg-white px-3 text-sm focus:border-orange-500 focus:outline-none"
+                className="h-11 w-full rounded-lg border border-black/15 bg-white px-3 text-sm focus:border-orange-600 focus:outline-none"
               >
                 {seedOptions.map(n => <option key={n} value={n}>{n}</option>)}
               </select>
@@ -12897,7 +12911,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                       value={standingsFilter}
                       onChange={e => setStandingsFilter(e.target.value)}
                       placeholder={tx('Filter by name…')}
-                      className="h-10 flex-1 rounded-lg border border-black/15 bg-white px-3 text-sm focus:border-orange-500 focus:outline-none"
+                      className="h-10 flex-1 rounded-lg border border-black/15 bg-white px-3 text-sm focus:border-orange-600 focus:outline-none"
                     />
                     {manualPickedIds.length > 0 && (
                       <button type="button" onClick={() => setManualPickedIds([])} className="shrink-0 text-xs font-semibold text-red-500">{tx('Clear')} ({manualPickedIds.length})</button>
@@ -12916,7 +12930,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                             onClick={() => setManualPickedIds(prev => picked ? prev.filter(id => id !== s.participant_id) : [...prev, s.participant_id])}
                             className={`flex w-full items-center gap-2 px-3 py-2.5 text-left ${picked ? 'bg-orange-50' : 'bg-white'}`}
                           >
-                            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${picked ? 'border-orange-500 bg-orange-500 text-white' : 'border-black/20'}`}>{picked && <Check size={12} strokeWidth={3} />}</span>
+                            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${picked ? 'border-orange-600 bg-orange-600 text-white' : 'border-black/20'}`}>{picked && <Check size={12} strokeWidth={3} />}</span>
                             <span className="min-w-0 flex-1 truncate text-sm text-black/80">{s.participant_name}</span>
                             <span className="shrink-0 text-xs font-semibold tabular-nums text-orange-600">{s.total_score}</span>
                           </button>
@@ -12936,7 +12950,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   onChange={e => setCustomSeedInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && customSeedInput.trim()) { setCustomSeedList(p => [...p, customSeedInput.trim()]); setCustomSeedInput(''); } }}
                   placeholder={tx('Name, press Enter to add')}
-                  className="h-10 flex-1 rounded-lg border border-black/15 bg-white px-3 text-sm focus:border-orange-500 focus:outline-none"
+                  className="h-10 flex-1 rounded-lg border border-black/15 bg-white px-3 text-sm focus:border-orange-600 focus:outline-none"
                 />
                 <button
                   type="button"
@@ -13126,7 +13140,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                 setMobileTab('bracket');
               }
             }}
-            className="h-9 min-w-0 flex-1 rounded-lg border border-black/15 bg-white px-2 text-xs font-semibold text-black/75 focus:border-orange-500 focus:outline-none md:max-w-xs"
+            className="h-9 min-w-0 flex-1 rounded-lg border border-black/15 bg-white px-2 text-xs font-semibold text-black/75 focus:border-orange-600 focus:outline-none md:max-w-xs"
             title={tx('Switch bracket')}
           >
             {!activeBracketName && <option value="__new">{tx('New bracket')}…</option>}
@@ -14407,7 +14421,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                 type="button"
                 onClick={() => { void handleSaveBracket(); }}
                 disabled={savingBracketConfig}
-                className="h-7 px-2.5 rounded-md border border-orange-600 bg-orange-500 text-white hover:bg-orange-600 transition-colors flex items-center gap-1 text-[11px] font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                className="h-7 px-2.5 rounded-md border border-orange-600 bg-orange-600 text-white hover:bg-orange-700 transition-colors flex items-center gap-1 text-[11px] font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                 title={tx('Save bracket to server')}>
                 <Save size={12} /> <span>{savingBracketConfig ? tx('Saving...') : tx('Save')}</span>
               </button>
@@ -14520,7 +14534,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                           <div className="flex flex-col gap-1">
                             <span className="text-[11px] font-semibold text-black/70 truncate" title={getListMatchLabel(match) || override.name || match.label}>{getListMatchLabel(match) || override.name || match.label}</span>
                             {override.notes && <span className="text-[9px] text-black/35 italic truncate">{override.notes}</span>}
-                            {Object.keys(override).length > 0 && <span className="text-[9px] text-orange-500 font-semibold">overridden</span>}
+                            {Object.keys(override).length > 0 && <span className="text-[9px] text-orange-600 font-semibold">overridden</span>}
                           </div>
                           <div className="flex flex-col gap-1 mt-1">
                             {match.slots.map(slot => {
@@ -14668,7 +14682,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                           const isTbd = label === 'TBD' || label === '';
                           const canSwap = canManageBracketV2 && slot.sourceType !== 'advance';
                           const isEditingSwap = editingSlotKey === key;
-                          const scoreCellClass = isWinner ? 'bg-orange-500 text-white font-semibold' : 'bg-[#ececec] text-[#222]';
+                          const scoreCellClass = isWinner ? 'bg-orange-600 text-white font-semibold' : 'bg-[#ececec] text-[#222]';
                           return (
                             <div key={slot.slotIndex} className={`flex items-center gap-0 border-b border-[#e5e5e5] last:border-b-0 ${isWinner ? 'bg-[#f6f6f6]' : 'bg-[#f2f2f2]'}`}>
                               {slotSeed != null && <span className="w-7 h-7 shrink-0 flex items-center justify-center text-[12px] font-semibold text-[#2d2d2d] bg-[#d9dde2] border-r border-[#cfd4d9]">{slotSeed}</span>}
@@ -16761,7 +16775,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       onClick={() => setStandingsMode('teams')}
                       title={tx('Teams')}
                       className={`h-7 w-7 flex items-center justify-center rounded-md transition-colors ${
-                        standingsMode === 'teams' ? 'bg-orange-500 text-white' : 'text-black/50 hover:text-black/80'
+                        standingsMode === 'teams' ? 'bg-orange-600 text-white' : 'text-black/50 hover:text-black/80'
                       }`}
                     >
                       <Users size={15} />
@@ -16775,7 +16789,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       }}
                       title={tx('Players')}
                       className={`h-7 w-7 flex items-center justify-center rounded-md transition-colors ${
-                        standingsMode === 'players' ? 'bg-orange-500 text-white' : 'text-black/50 hover:text-black/80'
+                        standingsMode === 'players' ? 'bg-orange-600 text-white' : 'text-black/50 hover:text-black/80'
                       }`}
                     >
                       <User size={14} />
