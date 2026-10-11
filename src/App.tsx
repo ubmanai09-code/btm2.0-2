@@ -742,7 +742,8 @@ export default function App() {
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
   const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
   const [activeTab, setActiveTab] = useState<'participants' | 'lanes' | 'scoring' | 'brackets-v2' | 'brc' | 'standings' | 'tools' | 'league'>(() => {
-    return (localStorage.getItem('btm_tab') as any) || 'participants';
+    const storedTab = localStorage.getItem('btm_tab');
+    return storedTab === 'brc' ? 'brackets-v2' : (storedTab as any) || 'participants';
   });
   const [loading, setLoading] = useState(true);
   const [formType, setFormType] = useState<TournamentEntryType>('singles');
@@ -775,8 +776,10 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const tournamentIdRaw = Number.parseInt(String(params.get('tournament') || ''), 10);
     const tabRaw = String(params.get('tab') || '').trim().toLowerCase();
-    const tab = tabRaw === 'participants' || tabRaw === 'lanes' || tabRaw === 'scoring' || tabRaw === 'brackets-v2' || tabRaw === 'brc' || tabRaw === 'standings' || tabRaw === 'tools' || tabRaw === 'league'
-      ? tabRaw
+    const tab = tabRaw === 'brc'
+      ? 'brackets-v2'
+      : tabRaw === 'participants' || tabRaw === 'lanes' || tabRaw === 'scoring' || tabRaw === 'brackets-v2' || tabRaw === 'standings' || tabRaw === 'tools' || tabRaw === 'league'
+        ? tabRaw
       : null;
     const forcePublic = params.get('public') === '1';
     const scoreScreen = params.get('screen') === 'score';
@@ -3930,7 +3933,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
         {activeTab === 'participants' && <ParticipantView tournament={tournament} role={effectiveRole} />}
         {activeTab === 'lanes' && <LaneView tournament={tournament} role={effectiveRole} />}
         {activeTab === 'scoring' && <ScoringView tournament={tournament} role={effectiveRole} sponsorsConfig={sponsorsConfig} onPresentScoreScreen={blockPublicPresentModeOnSmallScreen ? undefined : openScoreScreenMode} scoreScreenMode={isScoreScreenMode} />}
-        {activeTab === 'brackets-v2' && !isShootoutCompetition(tournament.competition_style) && <BracketsViewV2 tournament={tournament} role={effectiveRole} onTournamentUpdated={onTournamentUpdated} />}
+        {(activeTab === 'brackets-v2' || activeTab === 'brc') && !isShootoutCompetition(tournament.competition_style) && <BracketsViewV2 tournament={tournament} role={effectiveRole} onTournamentUpdated={onTournamentUpdated} />}
         {activeTab === 'standings' && <StandingsView tournament={tournament} role={effectiveRole} sponsorsConfig={sponsorsConfig} onPresentStandingsScreen={blockPublicPresentModeOnSmallScreen ? undefined : openStandingsScreenMode} standingsScreenMode={isStandingsScreenMode} />}
         {activeTab === 'tools' && <ToolsPage lang={lang} role={effectiveRole} authToken={authToken} />}
         {activeTab === 'league' && <LeagueView tournament={tournament} role={effectiveRole} />}
@@ -13405,7 +13408,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                     className="flex-1 h-8 px-2 rounded-md border border-black/15 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-gray-400 bg-white"
                   />
                   <button
-                    onClick={handleNewBracket}
+                    type="button"
+                    onClick={() => handleNewBracket()}
                     className="h-8 w-8 rounded-md border border-black/15 bg-white hover:bg-emerald-50 hover:border-gray-400 disabled:opacity-40 transition-colors flex items-center justify-center"
                     title={tx('New')}>
                     <Plus size={13} />
