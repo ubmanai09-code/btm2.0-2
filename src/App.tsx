@@ -776,11 +776,11 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const tournamentIdRaw = Number.parseInt(String(params.get('tournament') || ''), 10);
     const tabRaw = String(params.get('tab') || '').trim().toLowerCase();
-    const tab = tabRaw === 'brc'
+    const tab = (tabRaw === 'brc'
       ? 'brackets-v2'
       : tabRaw === 'participants' || tabRaw === 'lanes' || tabRaw === 'scoring' || tabRaw === 'brackets-v2' || tabRaw === 'standings' || tabRaw === 'tools' || tabRaw === 'league'
         ? tabRaw
-      : null;
+      : null) as 'participants' | 'lanes' | 'scoring' | 'brackets-v2' | 'standings' | 'tools' | 'league' | null;
     const forcePublic = params.get('public') === '1';
     const scoreScreen = params.get('screen') === 'score';
     const standingsScreen = params.get('screen') === 'standings';
@@ -1921,6 +1921,8 @@ export default function App() {
   };
 
   const persistTournamentSponsors = async (tournamentId: number) => {
+    // The sponsors config endpoint is admin-only; moderators must still be able to save tournaments.
+    if (currentRole !== 'admin') return;
     const normalized = normalizeSponsorsConfig(sponsorsConfig);
     const nextTournaments = { ...normalized.tournaments };
 
@@ -14892,7 +14894,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
           <div
             ref={exportAreaRef}
             id="btm-print-area"
-            style={{ position: 'absolute', left: '-9999px', top: 0, width: `${exportAreaWidth}px`, background: '#fff', fontFamily: 'ui-sans-serif, system-ui, sans-serif' }}
+            style={{ position: 'absolute', left: `-${exportAreaWidth + 1000}px`, top: 0, width: `${exportAreaWidth}px`, background: '#fff', fontFamily: 'ui-sans-serif, system-ui, sans-serif' }}
           >
             {/* App header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 20px 12px', borderBottom: '2px solid #d1fae5' }}>
