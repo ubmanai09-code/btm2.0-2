@@ -10711,6 +10711,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   const [useClassicSetup, setUseClassicSetup] = React.useState(false);
   const [mobileSheet, setMobileSheet] = React.useState<null | 'info' | 'seeds' | 'type' | 'options'>(null);
   const [mobileInfoDraft, setMobileInfoDraft] = React.useState('');
+  const [persistBracketTick, setPersistBracketTick] = React.useState(0);
   const [mobileShowAllSeeds, setMobileShowAllSeeds] = React.useState(false);
 
   // ── View ──────────────────────────────────────────────────────────────────
@@ -11546,6 +11547,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     setSectionOpenBracketType(true);
     setSectionOpenGenerate(true);
     setBracketName('');
+    setPersistBracketTick(t => t + 1);
   };
 
   const handleSaveBracket = async () => {
@@ -11752,6 +11754,15 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       // Best effort — still remove from local state
     }
     setSavedBrackets(prev => prev.filter(b => b.id !== id));
+    if (id === activeBracketId) {
+      suppressAutoLoadRef.current = true;
+      autosavePendingRef.current = false;
+      setActiveBracketName(null);
+      setActiveBracketId(null);
+      setBracketName('');
+      setScoreDrafts({});
+      setSlotOverrides({});
+    }
   };
 
   // ── Generate actual bracket in DB ─────────────────────────────────────────
@@ -12480,6 +12491,11 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     }, 1000);
     return () => window.clearTimeout(timer);
   }, [scoreDrafts, slotOverrides, canManageBracketV2, activeBracketName, activeBracketId, savedBrackets, savedBracketsLoading]);
+  // Persist new/renamed brackets right away so they are never lost when switching.
+  React.useEffect(() => {
+    if (persistBracketTick === 0 || !canManageBracketV2 || !activeBracketName) return;
+    void saveBracketRef.current();
+  }, [persistBracketTick]);
   React.useEffect(() => () => {
     if (autosavePendingRef.current) {
       autosavePendingRef.current = false;
@@ -12958,11 +12974,28 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
             <label className="mb-1 block text-xs font-semibold text-black/60">{tx('Tournament')}</label>
             <div className="flex h-11 items-center rounded-lg border border-black/10 bg-gray-50 px-3 text-sm text-black/70">{tournament.name}</div>
           </div>
+          {activeBracketName && (
+            <button
+              type="button"
+              onClick={async () => {
+                if (activeBracketId) {
+                  await handleDeleteBracket(activeBracketId);
+                } else {
+                  if (!confirm(`Delete bracket "${activeBracketName}"?`)) return;
+                  suppressAutoLoadRef.current = true;
+                  setActiveBracketName(null);
+                  setBracketName('');
+                }
+                closeMobileSheet();
+              }}
+              className="h-11 w-full rounded-lg border border-red-200 bg-red-50 text-sm font-semibold text-red-600"
+            >{tx('Delete bracket')}</button>
+          )}
         </div>
       ), () => {
         if (activeBracketName) {
           const next = mobileInfoDraft.trim();
-          if (next) setActiveBracketName(next);
+          if (next) { setActiveBracketName(next); setPersistBracketTick(t => t + 1); }
         } else {
           handleNewBracket();
         }
@@ -12971,7 +13004,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     }
 
     if (mobileSheet === 'seeds') {
-      const seedOptions = Array.from(new Set([2, 4, 6, 8, 12, 16, 24, 32, normalizedTopSeedsCount])).sort((a, b) => a - b);
+      const seedMax = Math.max(32, normalizedTopSeedsCount, standings.length, participantNodes.length);
+      const seedOptions = Array.from({ length: seedMax - 1 }, (_, i) => i + 2);
       const previewNodes = mobileShowAllSeeds ? participantNodes : participantNodes.slice(0, 5);
       return mobileSheetShell('Seeds', (
         <div className="flex flex-col gap-4">
