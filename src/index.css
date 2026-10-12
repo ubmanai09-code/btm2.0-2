@@ -874,6 +874,10 @@ th {
 [data-theme="dark"] .bg-\[\#f6f6f6\],
 [data-theme="dark"] .bg-\[\#d9dde2\] { color: var(--text) !important; }
 
+/* Final / bronze match cards use cream backgrounds; tint them for dark surfaces so light text stays readable. */
+[data-theme="dark"] .bg-\[\#f3eddf\] { background-color: color-mix(in srgb, #d8ae5f 14%, var(--card)) !important; color: var(--text) !important; }
+[data-theme="dark"] .bg-\[\#f2e6da\] { background-color: color-mix(in srgb, #c89a6a 14%, var(--card)) !important; color: var(--text) !important; }
+
 /* Some bracket elements still use hardcoded dark hex text utilities. */
 [data-theme="dark"] .text-\[\#2f2f2f\],
 [data-theme="dark"] .text-\[\#2d2d2d\],
