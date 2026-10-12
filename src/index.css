@@ -1177,12 +1177,12 @@ th {
   box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.25);
 }
 .mnav-btn {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 44px; height: 52px; padding: 0 2px;
+  display: flex; flex: 1 1 0; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; height: 52px; padding: 0 2px;
   border-radius: 0; border: 0; color: #111827; background: transparent;
   transition: background-color .15s, border-color .15s, color .15s;
 }
 .mnav-btn svg { transition: transform .15s; opacity: 1 !important; }
-.mnav-label { font-size: 9px; font-weight: 600; line-height: 1; max-width: 52px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mnav-label { font-size: 9px; font-weight: 600; line-height: 1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mnav-btn.active .mnav-label { font-weight: 800; }
 .mnav-btn.active { background: transparent; color: #ea580c; }
 .mnav-btn.active svg { width: 22px; height: 22px; }
@@ -1198,6 +1198,6 @@ th {
   background: #000000; border-top: 1px solid rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.92); font-size: 11px; font-weight: 600; white-space: nowrap;
 }
-@media (min-width: 640px) {
+@media (min-width: 1024px) {
   .mnav, .mfooter { display: none; }
 }

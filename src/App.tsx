@@ -575,7 +575,7 @@ const MobileNav = ({ items, activeId, homeActive, onHome, homeLabel, onSelect, m
   return ReactDOM.createPortal(
   <>
   {moreOpen && moreItems.length > 0 && (
-    <div className="fixed inset-0 z-40 sm:hidden" onClick={() => setMoreOpen(false)}>
+    <div className="fixed inset-0 z-40 lg:hidden" onClick={() => setMoreOpen(false)}>
       <div
         className="absolute right-3 bottom-[calc(100px+env(safe-area-inset-bottom))] min-w-[160px] rounded-2xl border border-black/10 bg-white p-1.5 shadow-2xl"
         onClick={(event) => event.stopPropagation()}
@@ -593,7 +593,7 @@ const MobileNav = ({ items, activeId, homeActive, onHome, homeLabel, onSelect, m
       </div>
     </div>
   )}
-  <nav className="mnav sm:hidden" aria-label="Main menu">
+  <nav className="mnav lg:hidden" aria-label="Main menu">
     {(() => {
       const renderItem = (tab: { id: string; label: string; icon: any }) => {
         const active = !homeActive && activeId === tab.id;
@@ -622,7 +622,7 @@ const MobileNav = ({ items, activeId, homeActive, onHome, homeLabel, onSelect, m
       return buttons;
     })()}
   </nav>
-  <div className="mfooter sm:hidden">
+  <div className="mfooter lg:hidden">
     <span>BTM <span className="text-orange-600">v2.2</span></span>
     <span className="text-white/60">|</span>
     <span>© Murat D. 2026</span>
@@ -2222,7 +2222,7 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="pt-24 pb-12 max-sm:pt-[4.5rem] max-sm:pb-32 px-6 max-sm:px-2 max-w-7xl mx-auto">
+      <main className="pt-24 pb-12 max-sm:pt-[4.5rem] max-lg:pb-32 px-6 max-sm:px-2 max-w-7xl mx-auto">
         {view === 'glossary' && (
           <GlossaryPage lang={publicLanguage === 'mn' ? 'mn' : 'en'} role={currentRole} authToken={authToken} />
         )}
@@ -3361,7 +3361,7 @@ export default function App() {
           }}
         />
       )}
-      <footer className="hidden sm:block border-t border-white/10 bg-black">
+      <footer className="hidden lg:block border-t border-white/10 bg-black">
         <div className="max-w-7xl mx-auto px-6 py-5 text-xs text-white/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2 font-medium flex-wrap">
             <span className="font-semibold uppercase tracking-wide text-orange-600">{t('app.footer_tagline', 'Total tournament control. From first frame to final payout.')}</span>
@@ -3898,7 +3898,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       )}
 
       {!isPresentScreenMode && (
-      <div className="hidden sm:block sticky top-16 z-40 bg-white/95 backdrop-blur-sm border-b border-orange-100 shadow-sm px-0 py-2">
+      <div className="hidden lg:block sticky top-16 z-40 bg-white/95 backdrop-blur-sm border-b border-orange-100 shadow-sm px-0 py-2">
         <div className={`${segmentedTabContainerOrangeClass} w-full grid grid-cols-3 gap-1 justify-items-center sm:w-auto sm:inline-flex sm:min-w-max`}>
           <button
             onClick={onBack}
@@ -3907,7 +3907,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
             aria-label={tPublic('common.back_to_dashboard', 'Back to Dashboard')}
           >
             <Home size={16} />
-            <span className="absolute -top-8 left-1/2 -translate-x-1/2 rounded bg-black px-2 py-1 text-[10px] font-semibold text-white opacity-0 transition-opacity pointer-events-none group-hover:opacity-100 group-focus-visible:opacity-100 sm:hidden">
+            <span className="absolute -top-8 left-1/2 -translate-x-1/2 rounded bg-black px-2 py-1 text-[10px] font-semibold text-white opacity-0 transition-opacity pointer-events-none group-hover:opacity-100 group-focus-visible:opacity-100 lg:hidden">
               {tPublic('common.back_to_dashboard', 'Back to Dashboard')}
             </span>
           </button>
@@ -3942,7 +3942,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       )}
 
 
-      <div className="min-h-[400px] relative pb-32 sm:pb-0">
+      <div className="min-h-[400px] relative pb-32 lg:pb-0">
         {!isPresentScreenMode && (effectiveRole === 'admin' || effectiveRole === 'moderator') && (
           <div className="absolute right-0 top-0 z-10">
             <Button
@@ -5613,7 +5613,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       </div>
 
       {tournament.type === 'team' && (
-        <div className="lg:hidden -mt-4 max-sm:mt-0 sticky top-16 sm:top-[7.25rem] z-30 bg-[color:var(--bg)] flex items-center justify-between gap-2">
+        <div className="lg:hidden -mt-4 max-sm:mt-0 sticky top-16 lg:top-[7.25rem] z-30 bg-[color:var(--bg)] flex items-center justify-between gap-2">
         <div className={`${segmentedTabContainerClass} w-fit`}>
           <button
             type="button"
@@ -5648,7 +5648,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 max-sm:gap-0">
         <div className={`${tournament.type === 'team' && mobileRosterTab !== 'players' ? 'hidden lg:block' : ''} lg:col-span-3`}>
           <Card className="border-gray-400 overflow-visible max-md:!border-0 max-md:!shadow-none max-md:!bg-[var(--bg)]">
-            <div className={`p-3 max-md:px-2 max-md:py-1.5 max-md:min-h-[52px] border-b max-md:border-b-0 border-gray-400 scoring-table-surface max-md:!bg-[var(--bg)] sticky ${tournament.type === 'team' ? 'top-[6.125rem] sm:top-[9.375rem] lg:top-[7.25rem]' : 'top-16 sm:top-[7.25rem]'} z-20`}>
+            <div className={`p-3 max-md:px-2 max-md:py-1.5 max-md:min-h-[52px] border-b max-md:border-b-0 border-gray-400 scoring-table-surface max-md:!bg-[var(--bg)] sticky ${tournament.type === 'team' ? 'top-[6.125rem] lg:top-[7.25rem]' : 'top-16 lg:top-[7.25rem]'} z-20`}>
               <div className="grid grid-cols-[1fr_auto] items-center md:flex md:flex-row md:items-center md:justify-between gap-3 max-md:gap-x-2 max-md:gap-y-1">
                 <div className={`max-md:flex max-md:justify-start max-md:col-start-1 max-md:row-start-1`}>
                   <h4 className="font-bold text-black/80 flex items-center gap-1.5 text-xs sm:text-sm"><User size={14} className="text-emerald-700" /><span className="max-md:hidden">{tx('Players')}</span><span>({participants.length}) M({maleCount}) F({femaleCount})</span></h4>
@@ -5799,7 +5799,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
             </div>
             <div className="space-y-2">
             {canManageParticipants && isPlayerSelectionMode && (
-              <div className="mb-2 flex flex-wrap gap-2 items-center">
+              <div className={`sticky ${tournament.type === 'team' ? 'top-[9.375rem]' : 'top-[7.25rem]'} lg:top-[11rem] z-20 mb-2 flex flex-wrap gap-2 items-center py-2 bg-[color:var(--bg)] border-b border-gray-300`}>
                 <Button
                   size="sm"
                   variant="remove"
@@ -6077,10 +6077,10 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
           </Card>
         </div>
 
-        <div className={`${tournament.type === 'team' && mobileRosterTab !== 'teams' ? 'hidden lg:block' : ''} lg:col-span-2 space-y-6`}>
+        <div className={`${tournament.type === 'team' && mobileRosterTab !== 'teams' ? 'hidden lg:flex' : 'lg:flex'} lg:flex-col lg:col-span-2 space-y-6 lg:space-y-0`}>
         {tournament.type === 'team' && (
-            <Card className="border-gray-400 overflow-visible max-md:!border-0 max-md:!shadow-none max-md:!bg-[var(--bg)]">
-              <div className={`p-3 max-md:px-2 max-md:py-1.5 max-md:min-h-[52px] border-b max-md:border-b-0 border-gray-400 scoring-table-surface max-md:!bg-[var(--bg)] sticky top-[6.125rem] sm:top-[9.375rem] lg:top-[7.25rem] z-20`}>
+            <Card className="lg:flex-1 border-gray-400 overflow-visible max-md:!border-0 max-md:!shadow-none max-md:!bg-[var(--bg)]">
+              <div className={`p-3 max-md:px-2 max-md:py-1.5 max-md:min-h-[52px] border-b max-md:border-b-0 border-gray-400 scoring-table-surface max-md:!bg-[var(--bg)] sticky top-[6.125rem] lg:top-[7.25rem] z-20`}>
                 <div className="grid grid-cols-[1fr_auto] items-center md:flex md:flex-row md:items-center md:justify-between gap-3 max-md:gap-x-2 max-md:gap-y-1">
                   <div className={`max-md:flex max-md:justify-start max-md:col-start-1 max-md:row-start-1`}>
                     <h4 className="font-bold text-black/80 flex items-center gap-1.5 text-xs sm:text-sm"><Users size={14} className="text-emerald-700" /><span className="max-md:hidden">{tx('Teams')}</span><span>({teams.length})</span></h4>
@@ -6200,7 +6200,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
               </div>
 
               {canManageParticipants && isTeamSelectionMode && (
-                <div className="flex items-center gap-2 border-b border-gray-200 p-3">
+                <div className="sticky top-[9.375rem] lg:top-[11rem] z-20 flex items-center gap-2 border-b border-gray-200 p-3 bg-[color:var(--bg)]">
                   <Button
                     size="sm"
                     variant="remove"
@@ -7829,7 +7829,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       )}
       {/* Lanes Grid */}
       <div>
-        <div className="scoring-table-surface sticky top-16 sm:top-[7.25rem] z-20 border max-md:border-0 max-md:!bg-[var(--bg)] border-gray-400 rounded-md px-2 py-1.5 min-h-[52px] flex items-center justify-between gap-2 mb-2 overflow-x-auto">
+        <div className="scoring-table-surface sticky top-16 lg:top-[7.25rem] z-20 border max-md:border-0 max-md:!bg-[var(--bg)] border-gray-400 rounded-md px-2 py-1.5 min-h-[52px] flex items-center justify-between gap-2 mb-2 overflow-x-auto">
             <h4 className="font-bold text-black/80 flex items-center gap-1.5 text-xs sm:text-sm shrink-0">
               <Users size={14} className="text-emerald-700 shrink-0" />
               <span className="sm:hidden text-[11px] leading-tight">
@@ -9322,7 +9322,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
       </div>
 
       {!isScoreScreenMode && (
-      <div className="scoring-table-surface sticky top-16 sm:top-[7.25rem] z-30 flex items-center justify-between gap-2 px-2 py-1.5 min-h-[52px] border-b max-md:border-b-0 max-md:!bg-[var(--bg)] border-gray-400 overflow-x-auto">
+      <div className="scoring-table-surface sticky top-16 lg:top-[7.25rem] z-30 flex items-center justify-between gap-2 px-2 py-1.5 min-h-[52px] border-b max-md:border-b-0 max-md:!bg-[var(--bg)] border-gray-400 overflow-x-auto">
         <div className="flex items-center gap-2 shrink-0">
           {tournament.shifts_count > 1 && (
           <div className="inline-flex items-center gap-0.5">
@@ -9578,7 +9578,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
             ref={scoringHeaderScrollRef}
             className={isScoreScreenMode
               ? 'overflow-x-auto overflow-y-hidden no-scrollbar border-b border-gray-400 scoring-table-surface'
-              : 'sticky top-[7.25rem] sm:top-[10.5rem] z-[25] overflow-x-auto overflow-y-hidden no-scrollbar border-b border-gray-400 scoring-table-surface'}
+              : 'sticky top-[7.25rem] lg:top-[10.5rem] z-[25] overflow-x-auto overflow-y-hidden no-scrollbar border-b border-gray-400 scoring-table-surface'}
           >
             <table className="ui-table-minimal scoring-table-surface w-full text-left border-collapse text-[11px] sm:text-sm table-fixed">
               {renderScoringColGroup()}
@@ -17498,7 +17498,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           {/* Desktop full table — hidden on mobile */}
           <div
             ref={standingsHeaderScrollRef}
-            className={`hidden sm:block ${isStandingsScreenMode ? 'sticky top-0 z-30 overflow-x-auto overflow-y-hidden no-scrollbar border-b border-gray-400 bg-gray-50' : 'sticky top-[7.25rem] z-30 overflow-x-auto overflow-y-hidden no-scrollbar border-b border-gray-400 bg-gray-50'}`}
+            className={`hidden sm:block ${isStandingsScreenMode ? 'sticky top-0 z-30 overflow-x-auto overflow-y-hidden no-scrollbar border-b border-gray-400 bg-gray-50' : 'sticky top-16 lg:top-[7.25rem] z-30 overflow-x-auto overflow-y-hidden no-scrollbar border-b border-gray-400 bg-gray-50'}`}
           >
             <table className="ui-table-minimal w-full min-w-[760px] text-left border-collapse table-fixed">
               {renderStandingsColGroup()}
