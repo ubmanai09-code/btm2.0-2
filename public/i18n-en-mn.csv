@@ -1,10 +1,10 @@
 public.tab.participants,Participants,Тамирчид
 tab.participants,Participants,Тамирчид
-tab.lane_assignments,Lanes,Зам хуваарилалт
+tab.lane_assignments,Lanes,Замууд
 tab.scoring,Score,Оноо
 tab.brackets,Brackets,Бракетууд
 tab.brackets_v2,Brackets,Бракетууд
-tab.tournament_result,Standing,Тэмцээний дүн
+tab.tournament_result,Standing,Чансаа
 tab.tools,Tools,Хэрэгслүүд
 tab.league,League,Лиг
 key,english,mongolian
@@ -30,7 +30,7 @@ public.tab.lane_assignments,Lanes,Замууд
 public.tab.scoring,Score,Оноо
 public.tab.brackets,Brackets,Бракетууд
 public.tab.brackets_v2,Brackets,Бракетууд
-public.tab.tournament_result,Standing,Тэмцээний дүн
+public.tab.tournament_result,Standing,Чансаа
 public.tab.tools,Tools,Хэрэгслүүд
 public.status.draft,draft,Ноорог
 public.status.active,active,Идэвхтэй

@@ -3769,6 +3769,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                     role={isDesktopTournamentHeader ? undefined : 'button'}
                     tabIndex={isDesktopTournamentHeader ? -1 : 0}
                     aria-expanded={isDesktopTournamentHeader ? true : !isTournamentCardCollapsed}
+                    aria-label={isDesktopTournamentHeader ? undefined : `${tournament.name} - ${isTournamentCardCollapsed ? tPublic('public.tournament.show_summary', 'Show tournament summary') : tPublic('public.tournament.hide_summary', 'Hide tournament summary')}`}
                   >
                     <div className="min-w-0 flex items-center gap-2">
                       <div className="w-[50px] h-[50px] sm:w-[72px] sm:h-[72px] rounded-full border border-black/20 dark:border-white/30 shrink-0 flex items-center justify-center overflow-hidden" style={{ backgroundColor: logoBgColor }}>
@@ -3785,10 +3786,15 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                         />
                       </div>
 
-                      <div className="min-w-0 flex-1">
-                        <h1 className="text-lg sm:text-3xl font-bold tracking-tight uppercase leading-tight">
+                      <div className="min-w-0 flex-1 flex items-center gap-2">
+                        <h1 className="min-w-0 text-lg sm:text-3xl font-bold tracking-tight uppercase leading-tight">
                           {tournament.name}
                         </h1>
+                        {!isDesktopTournamentHeader && (
+                          isTournamentCardCollapsed
+                            ? <ChevronDown size={20} className="shrink-0 text-black/60 dark:text-white/70" aria-hidden="true" />
+                            : <ChevronUp size={20} className="shrink-0 text-black/60 dark:text-white/70" aria-hidden="true" />
+                        )}
                       </div>
 
                       {tournamentSponsors.length > 0 && (
