@@ -8358,6 +8358,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   const [activeWarningId, setActiveWarningId] = useState<string | null>(null);
   const [scoringWarmupSlots, setScoringWarmupSlots] = useState<WarmupSlot[]>([]);
   const importScoresInputRef = useRef<HTMLInputElement | null>(null);
+  const [showMobileScoreActions, setShowMobileScoreActions] = useState(false);
   const scoringHeaderScrollRef = useRef<HTMLDivElement | null>(null);
   const scoringBodyScrollRef = useRef<HTMLDivElement | null>(null);
   const scoringScrollRef = useRef<HTMLDivElement | null>(null);
@@ -9251,10 +9252,10 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
   const scoringTableColSpan = gameNumbers.length + 4 + (tournament.type === 'team' ? 1 : 0);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between md:items-center gap-3">
+    <div className="space-y-6 max-sm:space-y-1.5">
+      <div className="flex flex-col md:flex-row justify-between md:items-center gap-3 max-sm:gap-1">
         <div>
-          <h3 className="text-xl font-bold text-emerald-800 inline-flex items-center gap-2">
+          <h3 className="text-xl max-sm:text-lg font-bold text-emerald-800 inline-flex items-center gap-2">
             <span>{tx('Score Entry')}</span>
             {isScoreScreenMode && (
               <span className="inline-flex items-center rounded-md border border-gray-400 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-emerald-700">
@@ -9263,7 +9264,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
             )}
           </h3>
           <p className="text-xs text-black/50 mt-0.5">
-            {tx('Enter game results for each participant')}{tournament.type === 'team' ? ` ${tx('(assigned team players only)')}` : ''} • {isScoreScreenMode ? (presentShiftFilter !== null ? `${tx('Shift')} ${presentShiftFilter.join(', ')}` : tx('All Shifts')) : `${tx('Shift')} ${currentShift}`}
+            {tx('Enter game results for each participant')}<span className="max-sm:hidden">{tournament.type === 'team' ? ` ${tx('(assigned team players only)')}` : ''}</span> • {isScoreScreenMode ? (presentShiftFilter !== null ? `${tx('Shift')} ${presentShiftFilter.join(', ')}` : tx('All Shifts')) : `${tx('Shift')} ${currentShift}`}
           </p>
         </div>
         {isScoreScreenMode && (
@@ -9332,12 +9333,12 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
           </div>
           )}
           {canManageScores && (
-            <Button size="sm" variant="outline" onClick={handleRefreshScores} title="Refresh" ariaLabel="Refresh" className="px-2">
+            <Button size="sm" variant="outline" onClick={handleRefreshScores} title="Refresh" ariaLabel="Refresh" className="px-2 max-md:hidden">
               <RefreshCw size={14} />
             </Button>
           )}
           {canManageScores && (
-            <Button size="sm" variant="remove" onClick={handleClearScores} title="Clear" ariaLabel="Clear" className="px-2">
+            <Button size="sm" variant="remove" onClick={handleClearScores} title="Clear" ariaLabel="Clear" className="px-2 max-md:hidden">
               <Eraser size={12} />
             </Button>
           )}
@@ -9350,12 +9351,12 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
             </Button>
           )}
           {canManageScores && (
-            <Button size="sm" variant="outline" onClick={handleSaveScores} title="Save" ariaLabel="Save" className="px-2">
+            <Button size="sm" variant="outline" onClick={handleSaveScores} title="Save" ariaLabel="Save" className="px-2 max-md:hidden">
               <Save size={14} />
             </Button>
           )}
           {canManageScores && (
-            <Button size="sm" variant="outline" onClick={handleExportScores} title="Export" ariaLabel="Export" className="px-2">
+            <Button size="sm" variant="outline" onClick={handleExportScores} title="Export" ariaLabel="Export" className="px-2 max-md:hidden">
               <Upload size={14} />
             </Button>
           )}
@@ -9368,16 +9369,59 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
                 className="hidden"
                 onChange={handleImportScores}
               />
-              <Button size="sm" variant="outline" onClick={() => importScoresInputRef.current?.click()} title="Import" ariaLabel="Import" className="px-2">
+              <Button size="sm" variant="outline" onClick={() => importScoresInputRef.current?.click()} title="Import" ariaLabel="Import" className="px-2 max-md:hidden">
                 <Download size={14} />
               </Button>
             </>
           )}
-          <Button size="sm" variant="outline" onClick={handlePrintScores} title="Print" ariaLabel="Print" className="px-2">
+          <Button size="sm" variant="outline" onClick={handlePrintScores} title="Print" ariaLabel="Print" className="px-2 max-md:hidden">
             <Printer size={14} />
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setShowMobileScoreActions(true)} title="More score actions" ariaLabel="More score actions" className="px-2 md:hidden">
+            <MoreHorizontal size={16} />
           </Button>
         </div>
       </div>
+      )}
+
+      {showMobileScoreActions && (
+        <div className="fixed inset-0 z-[100] flex items-end bg-black/45 md:hidden" onClick={() => setShowMobileScoreActions(false)}>
+          <div className="w-full rounded-t-2xl border border-black/10 bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl" onClick={event => event.stopPropagation()}>
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-black/20" />
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="font-bold text-black">{tx('Score actions')}</h4>
+              <button type="button" onClick={() => setShowMobileScoreActions(false)} className="rounded-full p-2 text-black/55 hover:bg-black/5" aria-label="Close actions">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {canManageScores && (
+                <>
+                  <button type="button" onClick={() => { setShowMobileScoreActions(false); void handleRefreshScores(); }} className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80">
+                    <RefreshCw size={17} /> {tx('Refresh')}
+                  </button>
+                  <button type="button" onClick={() => { setShowMobileScoreActions(false); void handleSaveScores(); }} className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80">
+                    <Save size={17} /> {tx('Save')}
+                  </button>
+                  <button type="button" onClick={() => { setShowMobileScoreActions(false); handleExportScores(); }} className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80">
+                    <Upload size={17} /> {tx('Export')}
+                  </button>
+                  <button type="button" onClick={() => { setShowMobileScoreActions(false); importScoresInputRef.current?.click(); }} className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80">
+                    <Download size={17} /> {tx('Import')}
+                  </button>
+                </>
+              )}
+              <button type="button" onClick={() => { setShowMobileScoreActions(false); handlePrintScores(); }} className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80">
+                <Printer size={17} /> {tx('Print')}
+              </button>
+              {canManageScores && (
+                <button type="button" onClick={() => { setShowMobileScoreActions(false); void handleClearScores(); }} className="flex min-h-12 items-center gap-2 rounded-xl bg-red-50 px-3 text-sm font-semibold text-red-700">
+                  <Eraser size={17} /> {tx('Clear All')}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       <Card className="border-gray-400 overflow-visible relative">
