@@ -16745,7 +16745,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-3">
         <div>
           <h3 className="text-xl font-bold text-emerald-800 inline-flex items-center gap-2">
-            <span>{isStandingsScreenMode ? tx('Tournament Standings') : tx('Tournament Result')}</span>
+            <span>{isStandingsScreenMode ? tx('Tournament Standings') : tx('Standings')}</span>
             {isStandingsScreenMode && (
               <span className="inline-flex items-center rounded-md border border-gray-400 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-emerald-700">
                 {tx('Present Mode')}
