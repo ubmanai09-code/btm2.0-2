@@ -3745,10 +3745,10 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-sm:space-y-2">
       {!isPresentScreenMode && (
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 xl:grid-cols-[1fr_430px] gap-4">
+      <div className="space-y-4 max-sm:space-y-2">
+        <div className="grid grid-cols-1 xl:grid-cols-[1fr_430px] gap-4 max-sm:gap-2">
           <Card className="p-2 border border-gray-400 bg-gradient-to-br from-white via-emerald-50/60 to-[#AFDDE5]/35 shadow-sm xl:col-span-2">
             <div className="space-y-2">
               <div className={`grid grid-cols-1 gap-2 ${!isTournamentCardCollapsed ? 'xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] xl:items-center' : ''}`}>
@@ -5607,7 +5607,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       </div>
 
       {tournament.type === 'team' && (
-        <div className="lg:hidden -mt-4 sticky top-16 sm:top-[7.25rem] z-30 bg-[color:var(--bg)] flex items-center justify-between gap-2">
+        <div className="lg:hidden -mt-4 max-sm:-mt-1 sticky top-16 sm:top-[7.25rem] z-30 bg-[color:var(--bg)] flex items-center justify-between gap-2">
         <div className={`${segmentedTabContainerClass} w-fit`}>
           <button
             type="button"
@@ -5644,7 +5644,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 max-sm:gap-2">
         <div className={`${tournament.type === 'team' && mobileRosterTab !== 'players' ? 'hidden lg:block' : ''} lg:col-span-3`}>
           <Card className="border-gray-400 overflow-visible max-md:!border-0 max-md:!shadow-none max-md:!bg-[var(--bg)]">
             <div className={`p-3 max-md:px-2 max-md:py-1.5 max-md:min-h-[52px] border-b max-md:border-b-0 border-gray-400 scoring-table-surface max-md:!bg-[var(--bg)] sticky ${tournament.type === 'team' ? 'top-[6.125rem] sm:top-[9.375rem] lg:top-[7.25rem]' : 'top-16 sm:top-[7.25rem]'} z-20`}>
