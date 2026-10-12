@@ -58,6 +58,7 @@ import {
   Check,
   Lock,
   MoreHorizontal,
+  ListFilter,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import api, { Tournament, Participant, Team, LaneAssignment, WarmupSlot, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry, LeagueRankingResponse, StandingAdditionalScore, StandingBonus } from './services/api';
@@ -4549,6 +4550,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const [teamMemberSearchQuery, setTeamMemberSearchQuery] = useState('');
   const [playerSearchQuery, setPlayerSearchQuery] = useState('');
   const [showPlayersSearch, setShowPlayersSearch] = useState(false);
+  const [showPlayerSortMenu, setShowPlayerSortMenu] = useState(false);
   const [showTeamsSearch, setShowTeamsSearch] = useState(false);
   const [showPlayersClearMenu, setShowPlayersClearMenu] = useState(false);
   const [isPlayerSelectionMode, setIsPlayerSelectionMode] = useState(false);
@@ -5662,6 +5664,40 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     >
                       <Search size={14} />
                     </Button>
+                    <div className="relative md:hidden">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setShowPlayerSortMenu((prev) => !prev)}
+                        title="Sort Players"
+                        ariaLabel="Sort Players"
+                        className={`px-2 ${playerSort.key !== 'none' ? 'border-orange-400 text-orange-600' : ''}`}
+                      >
+                        <ListFilter size={14} />
+                      </Button>
+                      {showPlayerSortMenu && (
+                        <>
+                          <div className="fixed inset-0 z-30" onClick={() => setShowPlayerSortMenu(false)} />
+                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 z-40 w-40 rounded-md border border-gray-400 bg-white shadow-lg overflow-hidden">
+                            {([
+                              { key: 'first_name', label: tx('Name') },
+                              { key: 'gender', label: tx('Gender') },
+                              { key: 'club', label: tx('Club / Team') },
+                            ] as const).map((option) => (
+                              <button
+                                key={option.key}
+                                type="button"
+                                onClick={() => { togglePlayerSort(option.key); setShowPlayerSortMenu(false); }}
+                                className={`flex w-full items-center justify-between px-3 py-2 text-xs font-semibold text-left text-black hover:bg-gray-50 ${playerSort.key === option.key ? 'text-orange-600' : ''}`}
+                              >
+                                <span>{option.label}</span>
+                                <span>{playerSort.key === option.key ? (playerSort.direction === 'asc' ? '↑' : '↓') : ''}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
                     {canManageParticipants && (
                       <button
                         type="button"
@@ -5800,33 +5836,6 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 </Button>
               </div>
             )}
-            <div className="md:hidden flex items-center gap-1.5 px-2 pt-2">
-              <select
-                value={playerSort.key}
-                onChange={(e) => setPlayerSort({ key: e.target.value as typeof playerSort.key, direction: 'asc' })}
-                aria-label={tx('Sort players')}
-                className="h-8 flex-1 min-w-0 rounded-md border border-black/15 bg-white px-2 text-xs text-black focus:outline-none focus:ring-2 focus:ring-emerald-300"
-              >
-                <option value="none">{tx('Sort: Registration order')}</option>
-                <option value="first_name">{tx('First Name')}</option>
-                <option value="last_name">{tx('Family Name')}</option>
-                <option value="gender">{tx('Gender')}</option>
-                <option value="hand">{tx('Hand')}</option>
-                <option value="club">{tx('Club')}</option>
-                <option value="average">{tx('Average')}</option>
-              </select>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={playerSort.key === 'none'}
-                onClick={() => setPlayerSort((prev) => ({ ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' }))}
-                title="Toggle sort direction"
-                ariaLabel="Toggle sort direction"
-                className="px-2"
-              >
-                {playerSort.direction === 'asc' ? '↑' : '↓'}
-              </Button>
-            </div>
             <div className="md:hidden space-y-2">
               {participants.length === 0 ? (
                 <div className="px-4 py-8 text-center text-black/40 italic text-sm">
