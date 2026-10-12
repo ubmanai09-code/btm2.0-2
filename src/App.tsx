@@ -7645,10 +7645,10 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       : 'max-h-[72px]';
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+    <div className="space-y-6 max-sm:space-y-1.5">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 max-sm:gap-1">
         <div>
-          <h3 className="text-xl font-bold text-emerald-800">{tx('Lane Assignments')}</h3>
+          <h3 className="text-xl max-sm:text-lg font-bold text-emerald-800">{tx('Lane Assignments')}</h3>
           {!isPublic && (
             <>
               <p className="text-[10px] text-black/50 font-bold uppercase tracking-widest">
@@ -7789,20 +7789,9 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       {/* Lanes Grid */}
       <div>
         <div className="scoring-table-surface sticky top-16 sm:top-[7.25rem] z-20 border max-md:border-0 max-md:!bg-[var(--bg)] border-gray-400 rounded-md px-2 py-1.5 min-h-[52px] flex items-center justify-between gap-2 mb-2 overflow-x-auto">
-            <div className="flex-1 min-w-0" />
-            <div className="flex items-center justify-center shrink-0">
-              {canManageLanes && (
-                <button
-                  type="button"
-                  title="Auto-Assign"
-                  aria-label="Auto-Assign"
-                  onClick={() => { if (isMixedLanes) setAssignWhoOpen(true); else void handleAutoAssign(); }}
-                  className="h-12 w-12 rounded-full bg-orange-600 hover:bg-orange-700 text-white text-[10px] font-bold uppercase tracking-wide shadow flex items-center justify-center"
-                >
-                  {tx('Assign')}
-                </button>
-              )}
-            </div>
+            <h4 className="font-bold text-black/80 flex items-center gap-1.5 text-xs sm:text-sm shrink-0">
+              <Users size={14} className="text-emerald-700" />{tournament.lanes_count} {tx('Lanes')}
+            </h4>
             <div className="flex items-center justify-end gap-1.5 flex-1 min-w-0">
               {canManageLanes && (
                 <Button
@@ -7847,6 +7836,17 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
               <Button size="sm" variant="outline" onClick={handlePrintLanes} title="Print" ariaLabel="Print" className="px-2">
                 <Printer size={14} />
               </Button>
+              {canManageLanes && (
+                <button
+                  type="button"
+                  title="Auto-Assign"
+                  aria-label="Auto-Assign"
+                  onClick={() => { if (isMixedLanes) setAssignWhoOpen(true); else void handleAutoAssign(); }}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-600 text-[9px] font-bold uppercase text-white shadow-sm transition-colors hover:bg-orange-700 active:scale-95"
+                >
+                  {tx('Assign')}
+                </button>
+              )}
             </div>
           </div>
         {canManageLanes && isLaneSelectionMode && (
