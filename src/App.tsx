@@ -2222,7 +2222,7 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="pt-24 pb-12 max-sm:pb-32 px-6 max-w-7xl mx-auto">
+      <main className="pt-24 pb-12 max-sm:pt-[4.5rem] max-sm:pb-32 px-6 max-sm:px-2 max-w-7xl mx-auto">
         {view === 'glossary' && (
           <GlossaryPage lang={publicLanguage === 'mn' ? 'mn' : 'en'} role={currentRole} authToken={authToken} />
         )}
@@ -3749,7 +3749,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
       {!isPresentScreenMode && (
       <div className="space-y-4">
         <div className="grid grid-cols-1 xl:grid-cols-[1fr_430px] gap-4">
-          <Card className="max-sm:-mx-4 max-sm:-mt-3 max-sm:rounded-none p-2 border border-gray-400 bg-gradient-to-br from-white via-emerald-50/60 to-[#AFDDE5]/35 shadow-sm xl:col-span-2">
+          <Card className="p-2 border border-gray-400 bg-gradient-to-br from-white via-emerald-50/60 to-[#AFDDE5]/35 shadow-sm xl:col-span-2">
             <div className="space-y-2">
               <div className={`grid grid-cols-1 gap-2 ${!isTournamentCardCollapsed ? 'xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] xl:items-center' : ''}`}>
                 <div className="space-y-2 xl:self-center">
