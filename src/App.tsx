@@ -15383,6 +15383,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const [additionalDrafts, setAdditionalDrafts] = useState<Record<string, string>>({});
   const [savingAdditionalKey, setSavingAdditionalKey] = useState<string | null>(null);
   const [additionalApiAvailable, setAdditionalApiAvailable] = useState(true);
+  const [showMobileStandingsActions, setShowMobileStandingsActions] = useState(false);
   const [standingsMode, setStandingsMode] = useState<'players' | 'teams'>(tournament.type === 'team' ? 'teams' : 'players');
   const [autoScrollSpeed, setAutoScrollSpeed] = useState<'slow' | 'medium' | 'fast'>('slow');
   const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
@@ -17187,18 +17188,46 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           </>
         )}
 
-        <Card className="overflow-visible relative">
-          {!isStandingsScreenMode && (
-          <div className="border-b border-black/5 bg-white/95 max-sm:sticky max-sm:top-16 max-sm:z-20 max-sm:bg-[color:var(--bg-secondary)]">
-            {/* Title row — visible on small screens above toolbar */}
-            <div className="flex items-center gap-2 px-4 pt-2 pb-1 sm:hidden">
-              <h4 className="font-bold text-sm">{tx('Ranking')}</h4>
-              {standingsMode === 'teams' && isTeamTournament && !teamsCountValid && (
-                <p className="text-xs text-amber-700">{tx('Team mismatch - review Participants page.')}</p>
-              )}
+        {showMobileStandingsActions && !isStandingsScreenMode && (
+          <div className="fixed inset-0 z-[100] flex items-end bg-black/45 md:hidden" onClick={() => setShowMobileStandingsActions(false)}>
+            <div className="w-full rounded-t-2xl border border-black/10 bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl" onClick={event => event.stopPropagation()}>
+              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-black/20" />
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="font-bold text-black">{tx('Standings actions')}</h4>
+                <button type="button" onClick={() => setShowMobileStandingsActions(false)} className="rounded-full p-2 text-black/55 hover:bg-black/5" aria-label="Close actions">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {!isPublicView && (
+                  <>
+                    <button type="button" onClick={() => { setShowMobileStandingsActions(false); void handleSaveStandings(); }} className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80">
+                      <Save size={17} /> {tx('Save')}
+                    </button>
+                    <button type="button" onClick={() => { setShowMobileStandingsActions(false); handleExportStandings(); }} className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80">
+                      <Upload size={17} /> {tx('Export')}
+                    </button>
+                    <button type="button" onClick={() => { setShowMobileStandingsActions(false); standingsImportInputRef.current?.click(); }} className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80">
+                      <Download size={17} /> {tx('Import')}
+                    </button>
+                  </>
+                )}
+                <button type="button" onClick={() => { setShowMobileStandingsActions(false); handlePrintStandings(); }} className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80">
+                  <Printer size={17} /> {tx('Print')}
+                </button>
+              </div>
             </div>
+          </div>
+        )}
+
+        <Card className="overflow-visible relative max-md:!border-0 max-md:!shadow-none">
+          {!isStandingsScreenMode && (
+          <div className="border-b border-black/5 bg-white/95 max-md:border-b-0 max-sm:sticky max-sm:top-16 max-sm:z-20 max-md:!bg-[var(--bg)]">
+            {standingsMode === 'teams' && isTeamTournament && !teamsCountValid && (
+              <p className="text-xs text-amber-700 px-2 pt-1 sm:hidden">{tx('Team mismatch - review Participants page.')}</p>
+            )}
             {/* Main toolbar row */}
-            <div className="px-4 py-2 flex items-center justify-between gap-2 overflow-x-auto">
+            <div className="px-4 py-2 max-md:px-2 max-md:py-1.5 max-md:min-h-[52px] flex items-center justify-between gap-2 overflow-x-auto">
               {/* Left: title (hidden on small, shown on sm+) + mode toggle */}
               <div className="flex items-center gap-2 shrink-0">
                 <div className="hidden sm:block shrink-0">
@@ -17287,10 +17316,10 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
               )}
               {!isStandingsScreenMode && !isPublicView && (
                 <>
-                  <Button variant="outline" onClick={handleSaveStandings} title={tx('Save')} ariaLabel={tx('Save')}>
+                  <Button variant="outline" onClick={handleSaveStandings} title={tx('Save')} ariaLabel={tx('Save')} className="max-md:hidden">
                     <Save size={14} />
                   </Button>
-                  <Button variant="outline" onClick={handleExportStandings} title={tx('Export')} ariaLabel={tx('Export')}>
+                  <Button variant="outline" onClick={handleExportStandings} title={tx('Export')} ariaLabel={tx('Export')} className="max-md:hidden">
                     <Upload size={14} />
                   </Button>
                   <input
@@ -17300,16 +17329,19 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     className="hidden"
                     onChange={handleImportStandings}
                   />
-                  <Button variant="outline" onClick={() => standingsImportInputRef.current?.click()} title={tx('Import')} ariaLabel={tx('Import')}>
+                  <Button variant="outline" onClick={() => standingsImportInputRef.current?.click()} title={tx('Import')} ariaLabel={tx('Import')} className="max-md:hidden">
                     <Download size={14} />
                   </Button>
                 </>
               )}
               {!isStandingsScreenMode && (
-                <Button variant="outline" onClick={handlePrintStandings} title={tx('Print')} ariaLabel={tx('Print')}>
+                <Button variant="outline" onClick={handlePrintStandings} title={tx('Print')} ariaLabel={tx('Print')} className="max-md:hidden">
                   <Printer size={14} />
                 </Button>
               )}
+              <Button variant="outline" onClick={() => setShowMobileStandingsActions(true)} title={tx('More actions')} ariaLabel={tx('More actions')} className="md:hidden">
+                <MoreHorizontal size={16} />
+              </Button>
               </div>
             </div>
           </div>
