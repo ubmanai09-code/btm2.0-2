@@ -3770,7 +3770,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                     aria-expanded={isDesktopTournamentHeader ? true : !isTournamentCardCollapsed}
                   >
                     <div className="min-w-0 flex items-center gap-2">
-                      <div className="w-[72px] h-[72px] rounded-full border border-black/20 dark:border-white/30 shrink-0 flex items-center justify-center overflow-hidden" style={{ backgroundColor: logoBgColor }}>
+                      <div className="w-[50px] h-[50px] sm:w-[72px] sm:h-[72px] rounded-full border border-black/20 dark:border-white/30 shrink-0 flex items-center justify-center overflow-hidden" style={{ backgroundColor: logoBgColor }}>
                         <img
                           ref={logoImgRef}
                           src={tournament.logo || '/logo.png'}
@@ -3785,19 +3785,19 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight uppercase leading-tight">
+                        <h1 className="text-lg sm:text-3xl font-bold tracking-tight uppercase leading-tight">
                           {tournament.name}
                         </h1>
                       </div>
 
                       {tournamentSponsors.length > 0 && (
-                        <div className="flex flex-col items-center gap-1 shrink-0 sm:hidden">
+                        <div className="flex flex-col items-center gap-0.5 shrink-0 sm:hidden">
                           {tournamentSponsors.slice(0, 2).map((sponsor) => (
                             <button
                               key={sponsor.id}
                               type="button"
                               onClick={(e) => { e.stopPropagation(); setSelectedTournamentSponsor(sponsor); }}
-                              className="h-[44px] w-[44px] rounded-lg border border-black/10 bg-white p-1 flex items-center justify-center overflow-hidden cursor-pointer"
+                              className="h-[26px] w-[26px] rounded-md border border-black/10 bg-white p-0.5 flex items-center justify-center overflow-hidden cursor-pointer"
                               title={sponsor.name}
                               aria-label={sponsor.name}
                             >
