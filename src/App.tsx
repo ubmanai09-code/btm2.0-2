@@ -5917,7 +5917,6 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                           </span>
                         ) : null}
                       </div>
-                      <span className="text-[10px] text-black/60 font-semibold text-right">Avg {Number.isFinite(Number(p.average)) ? Number(p.average) : 0}</span>
                     </div>
                   </div>
                 ))
