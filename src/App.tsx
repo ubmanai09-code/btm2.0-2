@@ -3784,9 +3784,15 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                         />
                       </div>
 
+                      <div className="min-w-0 flex-1">
+                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight uppercase leading-tight">
+                          {tournament.name}
+                        </h1>
+                      </div>
+
                       {tournamentSponsors.length > 0 && (
                         <div className="flex flex-col items-center gap-1 shrink-0 sm:hidden">
-                          {tournamentSponsors.map((sponsor) => (
+                          {tournamentSponsors.slice(0, 2).map((sponsor) => (
                             <button
                               key={sponsor.id}
                               type="button"
@@ -3805,12 +3811,6 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                           ))}
                         </div>
                       )}
-
-                      <div className="min-w-0 flex-1">
-                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight uppercase leading-tight">
-                          {tournament.name}
-                        </h1>
-                      </div>
                     </div>
                   </div>
 
