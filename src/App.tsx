@@ -5879,50 +5879,45 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                     }}
                     className={`rounded-xl border p-3 text-left transition-colors select-none touch-pan-y cursor-pointer active:bg-orange-50 ${selectedParticipantIds.includes(p.id) && isPlayerSelectionMode ? 'border-orange-400 bg-orange-50 ring-1 ring-orange-200' : participantIssues.has(p.id) ? 'border-red-200 bg-red-50/40' : 'border-gray-300 bg-white'}`}
                   >
-                    <div className="grid grid-cols-2 gap-2 items-center">
-                      {/* Left: #id top, NAME FAMILYNAME below in caps */}
-                      <div className="flex flex-col items-start min-w-0">
-                        <span className={`text-[10px] font-mono ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/50'}`}>#{index + 1}</span>
-                        <span className={`mt-0.5 text-xs font-bold tracking-wide uppercase leading-tight ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>
-                          {(p.first_name || '')} {(p.last_name || '')}
+                    <div className="grid grid-cols-[1fr_auto] gap-x-2 gap-y-0.5 items-center">
+                      <span className={`text-[10px] font-mono ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black/50'}`}>#{index + 1}</span>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {showPlayerStyle && (
+                          <span className="text-[10px] text-black/60 font-semibold">{normalizeHandsStyle(p.hands)}</span>
+                        )}
+                        {canManageParticipants && isPlayerSelectionMode && (
+                          <input
+                            type="checkbox"
+                            checked={selectedParticipantIds.includes(p.id)}
+                            onChange={() => toggleSelectOne(p.id)}
+                            onClick={(event) => event.stopPropagation()}
+                            style={{ transform: 'scale(0.8)', width: 14, height: 14 }}
+                          />
+                        )}
+                        <span
+                          className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold border ${
+                            (p.gender || '').toLowerCase().startsWith('f')
+                              ? 'bg-pink-100 text-pink-700 border-pink-200'
+                              : (p.gender || '').toLowerCase().startsWith('m')
+                                ? 'bg-blue-100 text-blue-700 border-blue-200'
+                                : 'bg-black/5 text-black/50 border-black/10'
+                          }`}
+                          title={(p.gender || '').toLowerCase().startsWith('f') ? 'Female' : (p.gender || '').toLowerCase().startsWith('m') ? 'Male' : '-'}
+                        >
+                          {(p.gender || '').toLowerCase().startsWith('f') ? 'F' : (p.gender || '').toLowerCase().startsWith('m') ? 'M' : '-'}
                         </span>
                       </div>
-                      {/* Right: F 1H Avg 170, below that CLUB / TEAM */}
-                      <div className="flex flex-col items-start min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold border ${
-                              (p.gender || '').toLowerCase().startsWith('f')
-                                ? 'bg-pink-100 text-pink-700 border-pink-200'
-                                : (p.gender || '').toLowerCase().startsWith('m')
-                                  ? 'bg-blue-100 text-blue-700 border-blue-200'
-                                  : 'bg-black/5 text-black/50 border-black/10'
-                            }`}
-                            title={(p.gender || '').toLowerCase().startsWith('f') ? 'Female' : (p.gender || '').toLowerCase().startsWith('m') ? 'Male' : '-'}
-                          >
-                            {(p.gender || '').toLowerCase().startsWith('f') ? 'F' : (p.gender || '').toLowerCase().startsWith('m') ? 'M' : '-'}
-                          </span>
-                          <span className="text-[10px] text-black/60 font-semibold">Avg {Number.isFinite(Number(p.average)) ? Number(p.average) : 0}</span>
-                          {showPlayerStyle && (
-                            <span className="text-[10px] text-black/60 font-semibold">{normalizeHandsStyle(p.hands)}</span>
-                          )}
-                          {canManageParticipants && isPlayerSelectionMode && (
-                            <input
-                              type="checkbox"
-                              checked={selectedParticipantIds.includes(p.id)}
-                              onChange={() => toggleSelectOne(p.id)}
-                              onClick={(event) => event.stopPropagation()}
-                              className="ml-1"
-                              style={{ transform: 'scale(0.8)', width: 14, height: 14 }}
-                            />
-                          )}
-                        </div>
+                      <div className="flex items-baseline gap-2 min-w-0">
+                        <span className={`text-xs font-bold tracking-wide uppercase leading-tight shrink-0 ${participantIssues.has(p.id) ? 'text-red-700' : 'text-black'}`}>
+                          {(p.first_name || '')} {(p.last_name || '')}
+                        </span>
                         {(p.club || p.team_name) ? (
-                          <div className="text-[10px] text-black/60 font-bold uppercase mt-0.5 truncate max-w-full text-left">
+                          <span className="ml-auto text-[10px] text-black/60 font-bold uppercase truncate text-right">
                             {p.club || ''}{p.team_name ? `${p.club ? ' / ' : ''}${p.team_name}` : ''}
-                          </div>
+                          </span>
                         ) : null}
                       </div>
+                      <span className="text-[10px] text-black/60 font-semibold text-right">Avg {Number.isFinite(Number(p.average)) ? Number(p.average) : 0}</span>
                     </div>
                   </div>
                 ))
