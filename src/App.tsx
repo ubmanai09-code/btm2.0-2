@@ -16943,6 +16943,31 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     className={`shrink-0 text-black/40 transition-transform md:hidden ${highlightsExpanded ? 'rotate-180' : ''}`}
                   />
                 </button>
+                {!highlightsExpanded && (
+                  <button
+                    type="button"
+                    onClick={() => setHighlightsExpanded(true)}
+                    className="md:hidden mt-1.5 w-full grid grid-cols-2 gap-1.5 text-left"
+                    aria-label={tx('Show more highlights')}
+                  >
+                    {([
+                      { key: 'm', label: 'M', entry: topMaleScores[0], color: 'text-emerald-700' },
+                      { key: 'f', label: 'F', entry: topFemaleScores[0], color: 'text-rose-600' },
+                    ] as const).map(({ key, label, entry, color }) => (
+                      <div key={key} className="rounded-md border border-black/10 bg-black/[0.02] p-2 min-w-0">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-black/40">{tx('Top')} {label}</p>
+                        {entry ? (
+                          <div className="mt-0.5 flex items-center justify-between gap-1.5">
+                            <p className="min-w-0 flex-1 truncate text-[11px] font-bold leading-tight">{participantNameMap.get(entry.participant_id) || entry.participant_name || 'N/A'}</p>
+                            <span className={`shrink-0 text-sm leading-none font-extrabold tabular-nums ${color}`}>{entry.score}</span>
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-black/40 mt-0.5">—</p>
+                        )}
+                      </div>
+                    ))}
+                  </button>
+                )}
                 {/* Body — hidden on small screens unless expanded; always visible on md+ */}
                 <div className={`mt-1.5 md:mt-2 ${highlightsExpanded ? 'block' : 'hidden'} md:block`}>
 
