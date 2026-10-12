@@ -5646,7 +5646,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
         <div className={`${tournament.type === 'team' && mobileRosterTab !== 'players' ? 'hidden lg:block' : ''} lg:col-span-3`}>
-          <Card className="border-gray-400 overflow-visible">
+          <Card className="border-gray-400 overflow-visible max-md:!border-0 max-md:!shadow-none">
             <div className={`p-3 max-md:px-2 max-md:py-1.5 max-md:min-h-[52px] border-b max-md:border-b-0 border-gray-400 scoring-table-surface sticky ${tournament.type === 'team' ? 'top-[6.125rem] sm:top-[9.375rem] lg:top-[7.25rem]' : 'top-16 sm:top-[7.25rem]'} z-20`}>
               <div className="grid grid-cols-[1fr_auto] items-center md:flex md:flex-row md:items-center md:justify-between gap-3 max-md:gap-x-2 max-md:gap-y-1">
                 <div className={`${tournament.type === 'team' ? 'max-md:hidden max-md:col-start-2' : 'max-md:flex max-md:justify-start max-md:col-start-1'} max-md:row-start-1`}>
@@ -6089,7 +6089,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
         <div className={`${tournament.type === 'team' && mobileRosterTab !== 'teams' ? 'hidden lg:block' : ''} lg:col-span-2 space-y-6`}>
         {tournament.type === 'team' && (
-            <Card className="border-gray-400 overflow-visible">
+            <Card className="border-gray-400 overflow-visible max-md:!border-0 max-md:!shadow-none">
               <div className={`p-3 max-md:px-2 max-md:py-1.5 max-md:min-h-[52px] border-b max-md:border-b-0 border-gray-400 scoring-table-surface sticky top-[6.125rem] sm:top-[9.375rem] lg:top-[7.25rem] z-20`}>
                 <div className="grid grid-cols-[1fr_auto] items-center md:flex md:flex-row md:items-center md:justify-between gap-3 max-md:gap-x-2 max-md:gap-y-1">
                   <div className={`${tournament.type === 'team' ? 'max-md:hidden max-md:col-start-2' : 'max-md:flex max-md:justify-start max-md:col-start-1'} max-md:row-start-1`}>
