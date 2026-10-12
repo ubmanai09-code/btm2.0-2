@@ -17223,12 +17223,12 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
         <Card className="overflow-visible relative max-md:!border-0 max-md:!shadow-none">
           {!isStandingsScreenMode && (
-          <div className="border-b border-black/5 bg-white/95 max-md:border-b-0 max-sm:sticky max-sm:top-16 max-sm:z-20 max-md:!bg-[var(--bg)]">
+          <div className="border-b border-black/5 bg-white/95 max-md:border-b-0 max-sm:sticky max-sm:top-16 max-sm:z-40 max-md:!bg-[var(--bg)]">
             {standingsMode === 'teams' && isTeamTournament && !teamsCountValid && (
               <p className="text-xs text-amber-700 px-2 pt-1 sm:hidden">{tx('Team mismatch - review Participants page.')}</p>
             )}
             {/* Main toolbar row */}
-            <div className="px-4 py-2 max-md:px-2 max-md:py-1.5 max-md:min-h-[52px] flex items-center justify-between gap-2 overflow-x-auto">
+            <div className="px-4 py-2 max-md:px-2 max-md:py-1.5 max-md:min-h-[52px] flex items-center justify-between gap-2 overflow-x-auto max-md:overflow-visible">
               {/* Left: title (hidden on small, shown on sm+) + mode toggle */}
               <div className="flex items-center gap-2 shrink-0">
                 <div className="hidden sm:block shrink-0">
@@ -17333,7 +17333,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     </div>
                   )}
                   {standingsMode === 'players' && hasDivisions && (
-                    <div className="flex items-center gap-1 ml-0.5 border-l border-black/10 pl-1.5">
+                    <div className="max-md:hidden flex items-center gap-1 ml-0.5 border-l border-black/10 pl-1.5">
                       <span className="text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Zone')}:</span>
                       <select
                         value={divisionFilter}
