@@ -16845,9 +16845,9 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       <div className="space-y-6">
         {!isStandingsScreenMode && (
           <>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <div className="p-6 border-b border-black/5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-sm:gap-2">
+              <Card className="max-md:!border-0 max-md:!shadow-none max-md:!bg-transparent">
+                <div className="p-6 max-sm:p-2 border-b border-black/5 max-md:border-b-0">
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
                       <h4 className="font-bold">{tx('Tournament Winners')}</h4>
@@ -16927,7 +16927,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 </div>
               </Card>
 
-              <Card className="p-2.5 md:p-3">
+              <Card className="p-2.5 md:p-3 max-md:!border-0 max-md:!shadow-none max-md:!bg-transparent max-sm:!px-2">
                 {/* Header row — always visible; on small screens acts as toggle */}
                 <button
                   type="button"
