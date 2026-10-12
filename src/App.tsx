@@ -16850,7 +16850,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 <div className="p-6 max-sm:p-2 border-b border-black/5 max-md:border-b-0">
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
-                      <h4 className="font-bold">{tx('Tournament Winners')}</h4>
+                      <h4 className="font-bold">{tx('Winners Podium')}</h4>
                       <p className="text-xs text-black/45 mt-0.5">
                         {tx('Compact manual winners grid. Double-click a medal to add, or click a winner name to edit or replace it.')}
                       </p>
