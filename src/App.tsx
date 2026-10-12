@@ -7939,7 +7939,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
               <div key={shift} className={`rounded-lg p-2 ${shiftSectionClass}`}>
                 {tournament.shifts_count > 1 && (
                   <div className="mb-2 flex items-center gap-2 px-1">
-                    <span className={`lane-shift-label pointer-events-none ${getSegmentedTabButtonClass(true, 'compact')}`}>
+                    <span className={`pointer-events-none ${getSegmentedTabButtonClass(true, 'compact')}`}>
                       {tx('Shift')} {shift}
                     </span>
                   </div>
