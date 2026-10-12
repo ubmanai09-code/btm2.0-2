@@ -5800,6 +5800,33 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                 </Button>
               </div>
             )}
+            <div className="md:hidden flex items-center gap-1.5 px-2 pt-2">
+              <select
+                value={playerSort.key}
+                onChange={(e) => setPlayerSort({ key: e.target.value as typeof playerSort.key, direction: 'asc' })}
+                aria-label={tx('Sort players')}
+                className="h-8 flex-1 min-w-0 rounded-md border border-black/15 bg-white px-2 text-xs text-black focus:outline-none focus:ring-2 focus:ring-emerald-300"
+              >
+                <option value="none">{tx('Sort: Registration order')}</option>
+                <option value="first_name">{tx('First Name')}</option>
+                <option value="last_name">{tx('Family Name')}</option>
+                <option value="gender">{tx('Gender')}</option>
+                <option value="hand">{tx('Hand')}</option>
+                <option value="club">{tx('Club')}</option>
+                <option value="average">{tx('Average')}</option>
+              </select>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={playerSort.key === 'none'}
+                onClick={() => setPlayerSort((prev) => ({ ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' }))}
+                title="Toggle sort direction"
+                ariaLabel="Toggle sort direction"
+                className="px-2"
+              >
+                {playerSort.direction === 'asc' ? '↑' : '↓'}
+              </Button>
+            </div>
             <div className="md:hidden space-y-2">
               {participants.length === 0 ? (
                 <div className="px-4 py-8 text-center text-black/40 italic text-sm">
