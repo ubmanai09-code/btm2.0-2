@@ -9264,7 +9264,7 @@ function ScoringView({ tournament, role, sponsorsConfig, onPresentScoreScreen, s
             )}
           </h3>
           <p className="text-xs text-black/50 mt-0.5">
-            {tx('Enter game results for each participant')}<span className="max-sm:hidden">{tournament.type === 'team' ? ` ${tx('(assigned team players only)')}` : ''}</span> • {isScoreScreenMode ? (presentShiftFilter !== null ? `${tx('Shift')} ${presentShiftFilter.join(', ')}` : tx('All Shifts')) : `${tx('Shift')} ${currentShift}`}
+            {tx('Enter game results for each participant')}<span className="max-sm:hidden">{tournament.type === 'team' ? ` ${tx('(assigned team players only)')}` : ''}</span>{isScoreScreenMode && <> • {presentShiftFilter !== null ? `${tx('Shift')} ${presentShiftFilter.join(', ')}` : tx('All Shifts')}</>}
           </p>
         </div>
         {isScoreScreenMode && (
