@@ -11334,7 +11334,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     const isStaircaseCategory = (selectedBracketPreset === 'stepladder' || selectedBracketPreset === 'ladder');
     // Custom formats made of single-match rounds that end in a head-to-head chain (shootouts + stepladder) also use the staircase.
     const headToHeadTail = rounds.filter(ri => (byRound.get(ri) || []).every(m => m.matchType === 'head-to-head')).length;
-    const isCustomLadder = selectedBracketPreset === 'mixed' && rounds.length >= 4 && headToHeadTail >= 2;
+    // Saved/server-loaded brackets may report 'custom' or 'playoff' instead of 'mixed'.
+    const isCustomLadder = (selectedBracketPreset === 'mixed' || selectedBracketPreset === 'custom' || selectedBracketPreset === 'playoff') && rounds.length >= 4 && headToHeadTail >= 2;
     const isStepladder = (isStaircaseCategory || isCustomLadder) && rounds.every(ri => (byRound.get(ri) || []).length === 1);
     if (isStepladder && rounds.length >= 2) {
       const STEP_GAP = 14;
@@ -13948,6 +13949,40 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                         className="flex items-center justify-center gap-1.5 h-8 w-full rounded-md border border-dashed border-gray-400 bg-gray-50 text-[11px] font-bold text-gray-800 hover:bg-gray-50 transition-colors mb-1">
                         <Plus size={12} /> New Preset (blank)
                       </button>
+                      <label className="flex items-center justify-center gap-1.5 h-8 w-full rounded-md border border-dashed border-gray-400 bg-white text-[11px] font-bold text-gray-800 hover:bg-gray-50 transition-colors mb-1 cursor-pointer">
+                        Import Preset (.json)
+                        <input
+                          type="file"
+                          accept="application/json,.json"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const input = e.target;
+                            const file = input.files?.[0];
+                            input.value = '';
+                            if (!file) return;
+                            try {
+                              const parsed = JSON.parse(await file.text());
+                              const items = Array.isArray(parsed) ? parsed : [parsed];
+                              const imported: BuilderRulePreset[] = [];
+                              for (const item of items) {
+                                if (!item || !Array.isArray(item.rounds) || item.rounds.length === 0) throw new Error('Invalid preset file');
+                                const result = await api.createBuilderRulePreset({
+                                  name: String(item.name || 'Imported preset'),
+                                  description: item.description || undefined,
+                                  seeding_method: item.seeding_method === 'manual' || item.seeding_method === 'random' ? item.seeding_method : 'registration',
+                                  rounds: item.rounds,
+                                  bracketCategory: item.bracketCategory,
+                                });
+                                if (result?.preset) imported.push(result.preset as BuilderRulePreset);
+                              }
+                              setRulePresets(prev => [...prev, ...imported]);
+                              alert(`Imported ${imported.length} preset(s).`);
+                            } catch (err: any) {
+                              alert(`Import failed: ${err?.message || err}`);
+                            }
+                          }}
+                        />
+                      </label>
                       {/* Existing presets grouped by category */}
                       {([
                         { id: 'single-elim', label: 'Single Elimination' },
@@ -13980,7 +14015,23 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                                 }}
                                 className="flex items-center justify-between px-3 py-1.5 rounded-lg border border-gray-400 bg-white text-xs text-gray-800 font-medium hover:bg-gray-50 hover:border-gray-400 transition-colors text-left">
                                 <span>{p.name}</span>
-                                <span className="text-[9px] text-gray-500 shrink-0 ml-1">{p.rounds?.length || 0}R</span>
+                                <span className="flex items-center gap-1.5 shrink-0 ml-1">
+                                  <span
+                                    role="button"
+                                    title="Export preset"
+                                    onClick={(ev) => {
+                                      ev.stopPropagation();
+                                      const data = { name: p.name, description: p.description, seeding_method: p.seeding_method, bracketCategory: p.bracketCategory, rounds: p.rounds };
+                                      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+                                      const link = document.createElement('a');
+                                      link.href = url;
+                                      link.download = `${String(p.name).replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '') || 'preset'}.json`;
+                                      link.click();
+                                      URL.revokeObjectURL(url);
+                                    }}
+                                    className="text-[9px] font-bold text-emerald-700 hover:underline">Export</span>
+                                  <span className="text-[9px] text-gray-500">{p.rounds?.length || 0}R</span>
+                                </span>
                               </button>
                             ))}
                           </div>

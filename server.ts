@@ -1450,7 +1450,21 @@ async function startServer() {
     db.transaction(() => {
       for (const preset of KNOWN_BRACKET_FORMAT_DEFAULTS) {
         const existing = existsById.get(preset.id) as any;
-        if (existing) continue;
+        if (existing) {
+          // Refresh system presets so stale server copies pick up builder rounds/category.
+          db.prepare(`UPDATE bracket_presets SET name = ?, match_play_type = ?, round_match_counts = ?, round_rules = ?, placement_rules = ?, description = ?, min_qualified_count = ?, recommended_qualified_count = ? WHERE id = ? AND is_system = 1`).run(
+            preset.name,
+            preset.match_play_type,
+            JSON.stringify(preset.round_match_counts || []),
+            JSON.stringify(preset.round_rules || []),
+            JSON.stringify(('placement_rules' in preset && preset.placement_rules) ? preset.placement_rules : {}),
+            preset.description || null,
+            preset.min_qualified_count ?? null,
+            preset.recommended_qualified_count ?? null,
+            preset.id,
+          );
+          continue;
+        }
         insert.run(
           preset.id,
           preset.name,
