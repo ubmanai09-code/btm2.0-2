@@ -7800,6 +7800,9 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
             <div className="grid grid-cols-2 gap-2">
               {canManageLanes && (
                 <>
+                  <button type="button" onClick={() => { setShowMobileLaneActions(false); if (isLaneSelectionMode) setSelectedLaneKeys(new Set()); setIsLaneSelectionMode(v => !v); }} className={`flex min-h-12 items-center gap-2 rounded-xl px-3 text-sm font-semibold ${isLaneSelectionMode ? 'bg-orange-50 text-orange-600' : 'bg-gray-50 text-black/80'}`}>
+                    <Check size={17} /> {tx('Select')}
+                  </button>
                   <button type="button" onClick={() => { setShowMobileLaneActions(false); void handleSaveLanes(); }} className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80">
                     <Save size={17} /> {tx('Save')}
                   </button>
@@ -7835,7 +7838,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                   }}
                   title="Select lanes"
                   ariaLabel="Select lanes"
-                  className={`px-2 ${isLaneSelectionMode ? 'border-orange-400 text-orange-600' : ''}`}
+                  className={`px-2 max-md:hidden ${isLaneSelectionMode ? 'border-orange-400 text-orange-600' : ''}`}
                 >
                   <Check size={14} />
                 </Button>
@@ -7868,9 +7871,6 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
               <Button size="sm" variant="outline" onClick={handlePrintLanes} title="Print" ariaLabel="Print" className="px-2 max-md:hidden">
                 <Printer size={14} />
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setShowMobileLaneActions(true)} title="More lane actions" ariaLabel="More lane actions" className="px-2 md:hidden">
-                <MoreHorizontal size={16} />
-              </Button>
               {canManageLanes && (
                 <button
                   type="button"
@@ -7882,6 +7882,9 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                   {tx('Assign')}
                 </button>
               )}
+              <Button size="sm" variant="outline" onClick={() => setShowMobileLaneActions(true)} title="More lane actions" ariaLabel="More lane actions" className="px-2 md:hidden">
+                <MoreHorizontal size={16} />
+              </Button>
             </div>
           </div>
         {canManageLanes && isLaneSelectionMode && (
