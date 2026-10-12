@@ -7657,7 +7657,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                   ? `${tournament.players_per_lane} ${tx('Teams')} + ${tournament.singles_per_lane || 2} ${tx('Singles players')} / ${tx('Lane')}`
                   : `${tournament.players_per_lane} ${tournament.type === 'team' ? tx('Teams') : tx('Players')} / ${tx('Lane')}`}
               </p>
-              <p className="text-[10px] text-black/50 mt-0.5 max-sm:hidden">
+              <p className="text-[10px] text-black/50 mt-0.5">
                 {tx('Auto assigns randomly by tournament rules; Manual assigns from Waiting Queue to a selected lane.')}
               </p>
             </>
