@@ -6054,8 +6054,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         <div className={`${tournament.type === 'team' && mobileRosterTab !== 'teams' ? 'hidden lg:block' : ''} lg:col-span-2 space-y-6`}>
         {tournament.type === 'team' && (
             <Card className="border-gray-400 overflow-visible">
-              <div className={`p-3 border-b border-gray-400 scoring-table-surface sticky top-[6.125rem] sm:top-[9.375rem] lg:top-[7.25rem] z-20`}>
-                <div className="grid grid-cols-[1fr_auto] items-center md:flex md:flex-row md:items-center md:justify-between gap-2">
+              <div className={`p-3 max-md:px-2 max-md:py-1.5 border-b border-gray-400 scoring-table-surface sticky top-[6.125rem] sm:top-[9.375rem] lg:top-[7.25rem] z-20`}>
+                <div className="grid grid-cols-[1fr_auto] items-center md:flex md:flex-row md:items-center md:justify-between gap-3 max-md:gap-x-2 max-md:gap-y-1">
                   <div className={`${tournament.type === 'team' ? 'max-md:hidden' : 'max-md:flex max-md:justify-end'} max-md:col-start-2 max-md:row-start-1`}>
                     <h4 className="font-bold text-black/80 flex items-center gap-1.5 text-xs sm:text-sm"><Users size={14} className="text-emerald-700" /><span className="max-md:hidden">{tx('Teams')}</span><span>({teams.length})</span></h4>
                   </div>
