@@ -6873,6 +6873,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
   const [selectedItem, setSelectedItem] = useState<{ id: number, type: 'assignment' | 'waiting', kind?: 'participant' | 'team' } | null>(null);
   const [selectedLaneKeys, setSelectedLaneKeys] = useState<Set<string>>(new Set());
   const [isLaneSelectionMode, setIsLaneSelectionMode] = useState(false);
+  const [showMobileLaneActions, setShowMobileLaneActions] = useState(false);
   const frozenStorageKey = `btm_frozen_lanes_${tournament.id}`;
   const [frozenLaneKeys, setFrozenLaneKeys] = useState<Set<string>>(() => {
     try { return new Set<string>(JSON.parse(localStorage.getItem(`btm_frozen_lanes_${tournament.id}`) || '[]')); } catch { return new Set<string>(); }
@@ -7786,6 +7787,37 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
         </div>
       )}
 
+      {showMobileLaneActions && (
+        <div className="fixed inset-0 z-[100] flex items-end bg-black/45 md:hidden" onClick={() => setShowMobileLaneActions(false)}>
+          <div className="w-full rounded-t-2xl border border-black/10 bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl" onClick={event => event.stopPropagation()}>
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-black/20" />
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="font-bold text-black">{tx('Lane actions')}</h4>
+              <button type="button" onClick={() => setShowMobileLaneActions(false)} className="rounded-full p-2 text-black/55 hover:bg-black/5" aria-label="Close actions">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {canManageLanes && (
+                <>
+                  <button type="button" onClick={() => { setShowMobileLaneActions(false); void handleSaveLanes(); }} className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80">
+                    <Save size={17} /> {tx('Save')}
+                  </button>
+                  <button type="button" onClick={() => { setShowMobileLaneActions(false); handleExportLanes(); }} className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80">
+                    <Upload size={17} /> {tx('Export')}
+                  </button>
+                  <button type="button" onClick={() => { setShowMobileLaneActions(false); if (importLanesInputRef.current) { importLanesInputRef.current.value = ''; importLanesInputRef.current.click(); } }} className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80">
+                    <Download size={17} /> {tx('Import')}
+                  </button>
+                </>
+              )}
+              <button type="button" onClick={() => { setShowMobileLaneActions(false); handlePrintLanes(); }} className="flex min-h-12 items-center gap-2 rounded-xl bg-gray-50 px-3 text-sm font-semibold text-black/80">
+                <Printer size={17} /> {tx('Print')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Lanes Grid */}
       <div>
         <div className="scoring-table-surface sticky top-16 sm:top-[7.25rem] z-20 border max-md:border-0 max-md:!bg-[var(--bg)] border-gray-400 rounded-md px-2 py-1.5 min-h-[52px] flex items-center justify-between gap-2 mb-2 overflow-x-auto">
@@ -7809,12 +7841,12 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                 </Button>
               )}
               {canManageLanes && (
-                <Button size="sm" variant="outline" onClick={handleExportLanes} title="Export" ariaLabel="Export" className="px-2">
+                <Button size="sm" variant="outline" onClick={handleExportLanes} title="Export" ariaLabel="Export" className="px-2 max-md:hidden">
                   <Upload size={14} />
                 </Button>
               )}
               {canManageLanes && (
-                <div className="relative">
+                <div className="relative max-md:hidden">
                   <input
                     ref={importLanesInputRef}
                     type="file"
@@ -7829,12 +7861,15 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                 </div>
               )}
               {canManageLanes && (
-                <Button size="sm" variant="outline" onClick={handleSaveLanes} title="Save" ariaLabel="Save" className="px-2">
+                <Button size="sm" variant="outline" onClick={handleSaveLanes} title="Save" ariaLabel="Save" className="px-2 max-md:hidden">
                   <Save size={14} />
                 </Button>
               )}
-              <Button size="sm" variant="outline" onClick={handlePrintLanes} title="Print" ariaLabel="Print" className="px-2">
+              <Button size="sm" variant="outline" onClick={handlePrintLanes} title="Print" ariaLabel="Print" className="px-2 max-md:hidden">
                 <Printer size={14} />
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setShowMobileLaneActions(true)} title="More lane actions" ariaLabel="More lane actions" className="px-2 md:hidden">
+                <MoreHorizontal size={16} />
               </Button>
               {canManageLanes && (
                 <button
