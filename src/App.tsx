@@ -7652,12 +7652,12 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
           <h3 className="text-xl max-sm:text-lg font-bold text-emerald-800">{tx('Lane Assignments')}</h3>
           {!isPublic && (
             <>
-              <p className="text-[10px] text-black/50 font-bold uppercase tracking-widest">
+              <p className="text-[10px] text-black/50 font-bold uppercase tracking-widest max-sm:hidden">
                 {tournament.lanes_count} {tx('Lanes')} • {tournament.shifts_count} {tx('Shifts')} • {isMixedLanes
                   ? `${tournament.players_per_lane} ${tx('Teams')} + ${tournament.singles_per_lane || 2} ${tx('Singles players')} / ${tx('Lane')}`
                   : `${tournament.players_per_lane} ${tournament.type === 'team' ? tx('Teams') : tx('Players')} / ${tx('Lane')}`}
               </p>
-              <p className="text-[10px] text-black/50 mt-0.5">
+              <p className="text-[10px] text-black/50 mt-0.5 max-sm:hidden">
                 {tx('Auto assigns randomly by tournament rules; Manual assigns from Waiting Queue to a selected lane.')}
               </p>
             </>
@@ -7825,7 +7825,15 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       <div>
         <div className="scoring-table-surface sticky top-16 sm:top-[7.25rem] z-20 border max-md:border-0 max-md:!bg-[var(--bg)] border-gray-400 rounded-md px-2 py-1.5 min-h-[52px] flex items-center justify-between gap-2 mb-2 overflow-x-auto">
             <h4 className="font-bold text-black/80 flex items-center gap-1.5 text-xs sm:text-sm shrink-0">
-              <Users size={14} className="text-emerald-700" />{tournament.lanes_count} {tx('Lanes')}
+              <Users size={14} className="text-emerald-700 shrink-0" />
+              <span className="sm:hidden text-[11px] leading-tight">
+                {tournament.lanes_count} {tx('Lanes')} • {tournament.shifts_count} {tx('Shifts')}
+                <br />
+                {isMixedLanes
+                  ? `${tournament.players_per_lane}+${tournament.singles_per_lane || 2}`
+                  : tournament.players_per_lane} {tournament.type === 'team' ? tx('Teams') : tx('Players')} / {tx('Lane')}
+              </span>
+              <span className="max-sm:hidden">{tournament.lanes_count} {tx('Lanes')}</span>
             </h4>
             <div className="flex items-center justify-end gap-1.5 flex-1 min-w-0">
               {canManageLanes && (
