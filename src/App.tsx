@@ -5505,7 +5505,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   };
 
   return (
-    <div className="space-y-6 relative">
+    <div className="space-y-6 max-sm:space-y-1.5 relative">
       {showDestructiveImportModal && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => {
           setShowDestructiveImportModal(false);
@@ -5591,9 +5591,9 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         </div>
       )}
 
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 max-sm:gap-1">
         <div>
-          <h3 className="text-xl font-bold text-emerald-800">
+          <h3 className="text-xl max-sm:text-lg font-bold text-emerald-800">
             {tournament.type === 'team' && mobileRosterTab === 'teams'
               ? canManageParticipants ? tx('Manage Teams') : tx('Teams')
               : canManageParticipants ? tx('Manage Players') : tx('Players')}
@@ -5607,7 +5607,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       </div>
 
       {tournament.type === 'team' && (
-        <div className="lg:hidden -mt-4 max-sm:-mt-1 sticky top-16 sm:top-[7.25rem] z-30 bg-[color:var(--bg)] flex items-center justify-between gap-2">
+        <div className="lg:hidden -mt-4 max-sm:mt-0 sticky top-16 sm:top-[7.25rem] z-30 bg-[color:var(--bg)] flex items-center justify-between gap-2">
         <div className={`${segmentedTabContainerClass} w-fit`}>
           <button
             type="button"
@@ -5644,7 +5644,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 max-sm:gap-2">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 max-sm:gap-0">
         <div className={`${tournament.type === 'team' && mobileRosterTab !== 'players' ? 'hidden lg:block' : ''} lg:col-span-3`}>
           <Card className="border-gray-400 overflow-visible max-md:!border-0 max-md:!shadow-none max-md:!bg-[var(--bg)]">
             <div className={`p-3 max-md:px-2 max-md:py-1.5 max-md:min-h-[52px] border-b max-md:border-b-0 border-gray-400 scoring-table-surface max-md:!bg-[var(--bg)] sticky ${tournament.type === 'team' ? 'top-[6.125rem] sm:top-[9.375rem] lg:top-[7.25rem]' : 'top-16 sm:top-[7.25rem]'} z-20`}>
