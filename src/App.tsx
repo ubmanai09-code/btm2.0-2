@@ -3784,6 +3784,28 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                         />
                       </div>
 
+                      {tournamentSponsors.length > 0 && (
+                        <div className="flex flex-col items-center gap-1 shrink-0 sm:hidden">
+                          {tournamentSponsors.map((sponsor) => (
+                            <button
+                              key={sponsor.id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setSelectedTournamentSponsor(sponsor); }}
+                              className="h-[44px] w-[44px] rounded-lg border border-black/10 bg-white p-1 flex items-center justify-center overflow-hidden cursor-pointer"
+                              title={sponsor.name}
+                              aria-label={sponsor.name}
+                            >
+                              <img
+                                src={sponsor.logo}
+                                alt={sponsor.name}
+                                className="max-w-full max-h-full w-auto h-auto object-contain"
+                                onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/logo.png'; }}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
                       <div className="min-w-0 flex-1">
                         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight uppercase leading-tight">
                           {tournament.name}
@@ -3793,7 +3815,7 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                   </div>
 
                   {tournamentSponsors.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="hidden sm:flex flex-wrap items-center gap-1.5">
                       {tournamentSponsors.map((sponsor) => (
                         <button
                           key={sponsor.id}
