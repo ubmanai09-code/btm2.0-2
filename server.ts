@@ -1307,191 +1307,30 @@ async function startServer() {
 
   const KNOWN_BRACKET_FORMAT_DEFAULTS = [
     {
-      id: 'single-elimination-8',
-      name: 'Single Elimination (8)',
-      match_play_type: 'single_elimination',
-      round_match_counts: [4, 2, 1],
-      round_rules: ['duel', 'duel', 'duel'],
-      description: 'Classic 8-seed single elimination.',
-      min_qualified_count: 8,
-      recommended_qualified_count: 8,
-    },
-    {
-      id: 'single-elimination-16',
-      name: 'Single Elimination (16)',
-      match_play_type: 'single_elimination',
-      round_match_counts: [8, 4, 2, 1],
-      round_rules: ['duel', 'duel', 'duel', 'duel'],
-      description: 'Classic 16-seed single elimination.',
-      min_qualified_count: 16,
-      recommended_qualified_count: 16,
-    },
-    {
-      id: 'double-elimination-8',
-      name: 'Double Elimination (8)',
-      match_play_type: 'double_elimination',
-      round_match_counts: [4, 2, 1],
-      round_rules: ['duel', 'duel', 'duel'],
-      description: 'Base 8-seed bracket using double elimination mode.',
-      min_qualified_count: 8,
-      recommended_qualified_count: 8,
-    },
-    {
-      id: 'playoff-8-bronze',
-      name: 'Playoff (8 + Bronze)',
+      id: 'custom-shootout-6-3-stepladder-10',
+      name: 'Custom · 10 Seeds: Shootout 6→2 + Shootout 3→1 + Stepladder ×3',
       match_play_type: 'playoff',
-      round_match_counts: [4, 2, 2],
-      round_rules: ['duel', 'duel', 'duel'],
-      placement_rules: {
-        first: 'winner:3:0',
-        second: 'loser:3:0',
-        third: 'winner:3:1',
-      },
-      description: '8-player playoff with final and bronze match.',
-      min_qualified_count: 8,
-      recommended_qualified_count: 8,
-    },
-    {
-      id: 'team-selection-8',
-      name: 'Team Selection Playoff (8)',
-      match_play_type: 'team_selection_playoff',
-      round_match_counts: [4, 2, 1],
-      round_rules: ['duel', 'duel', 'duel'],
-      description: '8-player team selection playoff tree.',
-      min_qualified_count: 8,
-      recommended_qualified_count: 8,
-    },
-    {
-      id: 'team-selection-16',
-      name: 'Team Selection Playoff (16)',
-      match_play_type: 'team_selection_playoff',
-      round_match_counts: [8, 4, 2, 1],
-      round_rules: ['duel', 'duel', 'duel', 'duel'],
-      description: '16-seed team selection playoff tree.',
-      min_qualified_count: 16,
-      recommended_qualified_count: 16,
-    },
-    {
-      id: 'stepladder-6',
-      name: 'Stepladder (6)',
-      match_play_type: 'stepladder',
       round_match_counts: [1, 1, 1, 1, 1],
-      round_rules: ['duel', 'duel', 'duel', 'duel', 'duel'],
-      description: 'Stepladder progression from seed 6 to seed 1.',
-      min_qualified_count: 6,
-      recommended_qualified_count: 6,
-    },
-    {
-      id: 'ladder-6',
-      name: 'Ladder (6)',
-      match_play_type: 'ladder',
-      round_match_counts: [1, 1, 1, 1, 1],
-      round_rules: ['duel', 'duel', 'duel', 'duel', 'duel'],
-      description: 'Ladder progression with one match per round.',
-      min_qualified_count: 6,
-      recommended_qualified_count: 6,
-    },
-    {
-      id: 'survivor-8-cut',
-      name: 'Survivor Elimination (8)',
-      match_play_type: 'survivor_elimination',
-      round_match_counts: [1, 1, 1, 1, 1, 1, 1],
-      round_rules: ['survivor_cut', 'survivor_cut', 'survivor_cut', 'survivor_cut', 'survivor_cut', 'survivor_cut', 'survivor_cut'],
-      description: 'One elimination per round until a winner remains.',
-      min_qualified_count: 8,
-      recommended_qualified_count: 8,
-    },
-    {
-      id: 'bowling-hybrid-6',
-      name: 'Shoot(1out) + Stepladder ×3',
-      match_play_type: 'bowling_hybrid',
-      round_match_counts: [1, 1, 1, 1],
-      round_rules: ['shootout', 'duel', 'duel', 'duel'],
-      placement_rules: {
-        first:  'winner:4:0',
-        second: 'loser:4:0',
-        hybrid: [
-          { type: 'shootout', entering: [4, 5, 6], eliminate: 1 },
-          { type: 'duel',     entering: [3] },
-          { type: 'duel',     entering: [2] },
-          { type: 'duel',     entering: [1] },
-        ],
-      },
-      description: '6 seeds: R1 seeds 4-6 bowl (bottom 1 out), R2 winner vs seed 3, R3 winner vs seed 2, R4 winner vs seed 1 (final).',
-      min_qualified_count: 4,
-      recommended_qualified_count: 6,
-    },
-    {
-      id: 'bowling-hybrid-10',
-      name: 'Shoot×3(2out) + Stepladder ×3',
-      match_play_type: 'bowling_hybrid',
-      round_match_counts: [1, 1, 1, 1, 1, 1],
-      round_rules: ['shootout', 'shootout', 'shootout', 'duel', 'duel', 'duel'],
-      placement_rules: {
-        first:  'winner:6:0',
-        second: 'loser:6:0',
-        hybrid: [
-          { type: 'shootout', entering: [5, 6, 7, 8, 9, 10], eliminate: 2 },
-          { type: 'shootout', entering: [],                   eliminate: 2 },
-          { type: 'shootout', entering: [4],                  eliminate: 2 },
-          { type: 'duel',     entering: [3] },
-          { type: 'duel',     entering: [2] },
-          { type: 'duel',     entering: [1] },
-        ],
-      },
-      description: '10 seeds: R1 seeds 5-10 shootout (cut 2), R2 survivors shootout (cut 2), R3 survivors + seed 4 (cut 2), R4-R6 stepladder vs seeds 3, 2, 1.',
-      min_qualified_count: 6,
-      recommended_qualified_count: 10,
-    },
-    {
-      id: 'playoff-6-shootout-bronze',
-      name: 'Playoff 6 (Shootout + Bronze)',
-      match_play_type: 'playoff',
-      round_match_counts: [1, 2, 2],
-      round_rules: ['survivor_cut', 'duel', 'duel'],
-      placement_rules: {
-        first:  'winner:3:0',
-        second: 'loser:3:0',
-        third:  'winner:3:1',
-      },
-      description: '6 seeds: R1 all bowl (lowest 2 eliminated), R2 semifinals (1v4, 2v3), R3 bronze & final.',
-      min_qualified_count: 6,
-      recommended_qualified_count: 6,
-    },
-    {
-      id: 'playoff-hybrid-8',
-      name: 'Shootout(-2)+Play-Off',
-      match_play_type: 'bowling_hybrid',
-      round_match_counts: [4, 1, 1],
-      round_rules: ['duel', 'duel', 'duel', 'duel'],
+      round_rules: ['survivor_cut', 'survivor_cut', 'duel', 'duel', 'duel'],
       placement_rules: {
         first: '',
         second: '',
         third: '',
+        builder: {
+          seeding_method: 'registration',
+          bracketCategory: 'mixed',
+          rounds: [
+            { id: 'cx-r1', name: 'Shootout 1', matchType: 'group', sourceOutcome: 'winner', playersPerMatch: 6, scoringType: 'pins', bestOf: 1, advancementCount: 2, manualMatchCount: 1, reseed: false, injectParticipantSeeds: [5, 6, 7, 8, 9, 10] },
+            { id: 'cx-r2', name: 'Shootout 2', matchType: 'group', sourceOutcome: 'winner', playersPerMatch: 3, scoringType: 'pins', bestOf: 1, advancementCount: 1, manualMatchCount: 1, reseed: false, injectParticipantSeeds: [4] },
+            { id: 'cx-sl1', name: 'Step 1', matchType: 'head-to-head', sourceOutcome: 'winner', playersPerMatch: 2, scoringType: 'pins', bestOf: 1, advancementCount: 1, manualMatchCount: 1, reseed: false, injectParticipantSeeds: [3] },
+            { id: 'cx-sl2', name: 'Step 2', matchType: 'head-to-head', sourceOutcome: 'winner', playersPerMatch: 2, scoringType: 'pins', bestOf: 1, advancementCount: 1, manualMatchCount: 1, reseed: false, injectParticipantSeeds: [2] },
+            { id: 'cx-final', name: 'Final', matchType: 'head-to-head', sourceOutcome: 'winner', playersPerMatch: 2, scoringType: 'pins', bestOf: 1, advancementCount: 1, manualMatchCount: 1, reseed: false, injectParticipantSeeds: [1] },
+          ],
+        },
       },
-      description: '6 seeds: R1 all seeds shootout (cut 2), R2 play-off seed 1 vs seed 4, R3 play-off seed 2 vs seed 3.',
-      min_qualified_count: 6,
-      recommended_qualified_count: 6,
-    },
-    {
-      id: 'b-pro-male',
-      name: 'B Pro League Male',
-      match_play_type: 'stepladder',
-      round_match_counts: [1, 1, 1],
-      round_rules: ['duel', 'duel', 'duel'],
-      description: 'Top 4 male seeds after Game 6 cut. Stepladder: 4v3, winner v2, winner v1.',
-      min_qualified_count: 4,
-      recommended_qualified_count: 4,
-    },
-    {
-      id: 'b-pro-female',
-      name: 'B Pro League Female',
-      match_play_type: 'stepladder',
-      round_match_counts: [1, 1],
-      round_rules: ['duel', 'duel'],
-      description: 'Top 3 female seeds after Game 6 cut. Stepladder: 3v2, winner v1.',
-      min_qualified_count: 3,
-      recommended_qualified_count: 3,
+      description: '10 seeds: seeds 5-10 shootout (top 2 advance), survivors + seed 4 shootout (top 1 advances), then stepladder vs seed 3, seed 2, seed 1 (final). 3rd place = loser of the match vs seed 2.',
+      min_qualified_count: 10,
+      recommended_qualified_count: 10,
     },
   ] as const;
 
@@ -1635,14 +1474,15 @@ async function startServer() {
     return normalized.length > 0 ? normalized : null;
   };
 
-  const parseBracketDivision = (value: any): 'all' | 'male' | 'female' => {
+  const parseBracketDivision = (value: any): 'all' | 'male' | 'female' | 'team' => {
     const raw = String(value || '').trim().toLowerCase();
     if (raw === 'male' || raw === 'm') return 'male';
     if (raw === 'female' || raw === 'f') return 'female';
+    if (raw === 'team' || raw === 'teams') return 'team';
     return 'all';
   };
 
-  const divisionGenderFilter = (division: 'all' | 'male' | 'female'): 'male' | 'female' | null => {
+  const divisionGenderFilter = (division: 'all' | 'male' | 'female' | 'team'): 'male' | 'female' | null => {
     if (division === 'male') return 'male';
     if (division === 'female') return 'female';
     return null;
@@ -1876,7 +1716,7 @@ async function startServer() {
     if (refreshedNext.winner_id) return;
   };
 
-  const sanitizeBracketStateForDisplay = (tournamentId: string, matchPlayType: string | null | undefined, division: 'all' | 'male' | 'female' = 'all') => {
+  const sanitizeBracketStateForDisplay = (tournamentId: string, matchPlayType: string | null | undefined, division: 'all' | 'male' | 'female' | 'team' = 'all') => {
     const validParticipantRows = db.prepare(`
       SELECT id
       FROM participants
@@ -4219,7 +4059,8 @@ async function startServer() {
     const tournament = db.prepare("SELECT type FROM tournaments WHERE id = ?").get(req.params.id) as any;
     if (!tournament) return res.status(404).json({ error: "Tournament not found" });
 
-    if (tournament.type === 'team') {
+    // ?division=team ranks teams even in individual tournaments (participants carry a team_id).
+    if (tournament.type === 'team' || String(req.query.division || '').toLowerCase() === 'team') {
       const teamRows = db.prepare(`
         WITH team_game_totals AS (
           SELECT p.team_id, s.game_number, SUM(s.score) as game_total
@@ -4885,8 +4726,9 @@ async function startServer() {
     // Team tournaments generate the "Team" bracket (division 'all') from team totals; a
     // Male/Female division within a team tournament instead ranks individually flagged
     // singles entrants, so one tournament can produce Team + Singles brackets together.
-    const useTeamRanking = tournament.type === 'team' && division === 'all';
-    const restrictToSinglesEntrants = tournament.type === 'team' && division !== 'all';
+    // The explicit 'team' division does the same for individual tournaments.
+    const useTeamRanking = division === 'team' || (tournament.type === 'team' && division === 'all');
+    const restrictToSinglesEntrants = tournament.type === 'team' && division !== 'all' && division !== 'team';
 
     if (qualifiedEntries.length === 0 && useTeamRanking) {
       const rankedTeams = db.prepare(`

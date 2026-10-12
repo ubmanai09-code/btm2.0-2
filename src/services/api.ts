@@ -757,8 +757,8 @@ const api = {
     }
     return res.json();
   },
-  async getStandings(tournamentId: number): Promise<Standing[]> {
-    const res = await fetch(`/api/tournaments/${tournamentId}/standings`);
+  async getStandings(tournamentId: number, options?: { division?: 'team' }): Promise<Standing[]> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/standings${options?.division === 'team' ? '?division=team' : ''}`);
     return res.json();
   },
   // For team tournaments, ranks participants flagged `singles_entrant` (using the same
@@ -880,7 +880,7 @@ const api = {
     }
     return res.json();
   },
-  async getBrackets(tournamentId: number, options?: { division?: 'all' | 'male' | 'female' }): Promise<any[]> {
+  async getBrackets(tournamentId: number, options?: { division?: 'all' | 'male' | 'female' | 'team' }): Promise<any[]> {
     const params = new URLSearchParams();
     if (options?.division && options.division !== 'all') {
       params.set('division', options.division);
@@ -913,7 +913,7 @@ const api = {
     }
     return data;
   },
-  async clearBrackets(tournamentId: number, options?: { division?: 'all' | 'male' | 'female' }): Promise<{ success: boolean; deleted: number }> {
+  async clearBrackets(tournamentId: number, options?: { division?: 'all' | 'male' | 'female' | 'team' }): Promise<{ success: boolean; deleted: number }> {
     const params = new URLSearchParams();
     if (options?.division && options.division !== 'all') {
       params.set('division', options.division);
@@ -1008,7 +1008,7 @@ const api = {
       playoff_winners_count?: number;
       seed_ids?: number[];
       seed_kind?: 'team' | 'participant';
-      division?: 'all' | 'male' | 'female';
+      division?: 'all' | 'male' | 'female' | 'team';
       known_bracket_format_id?: string | null;
       team_selection_draft?: Record<string, number>;
     }
@@ -1037,7 +1037,7 @@ const api = {
         third?: string;
       };
       winners_mode: '1' | '3';
-      division?: 'all' | 'male' | 'female';
+      division?: 'all' | 'male' | 'female' | 'team';
       links?: Array<{
         from_round: number;
         from_match_index: number;

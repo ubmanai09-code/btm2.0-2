@@ -2357,7 +2357,7 @@ export default function App() {
                     <div className="grid grid-cols-1 gap-4">
                     <div>
                       {(() => {
-                        const standardDivisions = ['Open', 'Men', 'Women', 'Mixed', 'Senior', 'Junior'];
+                        const standardDivisions = ['Open', 'Men', 'Women', 'Teams', 'Mixed', 'Senior', 'Junior'];
                         const existingDivisions = (editingTournament?.divisions || '').split(',').map((value) => value.trim()).filter(Boolean);
                         const divisionOptions = [...standardDivisions, ...existingDivisions.filter((value) => !standardDivisions.includes(value))];
                         return (
@@ -9851,7 +9851,7 @@ type SavedBracketConfig = {
   seedImportMode?: V2SeedImportMode;
   // Which pool this bracket is seeded/stored under: 'all' (Team, for team tournaments,
   // or the whole field for individual ones) or a Singles gender split.
-  division?: 'all' | 'male' | 'female';
+  division?: 'all' | 'male' | 'female' | 'team';
 };
 
 type V2SeedImportMode = 'top-seeds' | 'manual' | 'create-list' | 'custom';
@@ -10352,7 +10352,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   const showLeftPanel = role !== 'public';
 
   // ── Division (Team vs Singles Male/Female, within one team tournament) ────
-  const [division, setDivision] = React.useState<'all' | 'male' | 'female'>('all');
+  const [division, setDivision] = React.useState<'all' | 'male' | 'female' | 'team'>('all');
 
   // ── Seeds ─────────────────────────────────────────────────────────────────
   const [seedImportMode, setSeedImportMode] = React.useState<V2SeedImportMode>('top-seeds');
@@ -10406,11 +10406,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         const injectedSeed = seedCount - index - 1;
         const isFirst = index === 0;
         const isFinal = index === seedCount - 2;
-        const name = isFirst
-          ? `${tx('Match 1')} (${seedCount} ${tx('vs')} ${seedCount - 1})`
-          : isFinal
-            ? `${tx('Final')} (${tx('Winner vs Seed')} 1)`
-            : `${tx('Match')} ${index + 1} (${tx('Winner vs Seed')} ${injectedSeed})`;
+        const name = isFinal ? tx('Final') : `${tx('Match')} ${index + 1}`;
         return {
           ...v2CreateRound(index),
           id: isFinal ? 'sl-final' : `sl-r${index + 1}`,
@@ -10770,7 +10766,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       }
       if (typeof s.selectedPresetId === 'string') setSelectedPresetId(s.selectedPresetId);
       if (s.bracketTypeMode === 'available' || s.bracketTypeMode === 'custom') setBracketTypeMode(s.bracketTypeMode);
-      if (s.division === 'male' || s.division === 'female' || s.division === 'all') setDivision(s.division);
+      if (s.division === 'male' || s.division === 'female' || s.division === 'all' || s.division === 'team') setDivision(s.division);
     } catch { /* ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -10804,9 +10800,12 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     setLoading(true);
     // A Team tournament's Team bracket (division 'all') seeds from team standings; a
     // Male/Female division within it instead seeds from singles-entrant standings.
-    const standingsRequest = tournament.type === 'team' && division !== 'all'
-      ? api.getSinglesStandings(tournament.id, division)
-      : api.getStandings(tournament.id);
+    // Individual tournaments seed per gender the same way, or from team totals for 'team'.
+    const standingsRequest = division === 'team'
+      ? api.getStandings(tournament.id, { division: 'team' })
+      : (division === 'male' || division === 'female')
+        ? api.getSinglesStandings(tournament.id, division)
+        : api.getStandings(tournament.id);
     Promise.all([
       api.getParticipants(tournament.id).catch(() => []),
       standingsRequest.catch(() => []),
@@ -10924,6 +10923,26 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     }
   }, [forceListMode, viewMode]);
 
+  const divisionChoices = React.useMemo((): Array<{ value: 'all' | 'male' | 'female' | 'team'; label: string }> => {
+    if (tournament.type === 'team') {
+      return [
+        { value: 'all', label: 'Team' },
+        { value: 'female', label: 'Singles \u2014 Female' },
+        { value: 'male', label: 'Singles \u2014 Male' },
+      ];
+    }
+    const configured = String(tournament.divisions || '').split(',').map((s) => s.trim().toLowerCase());
+    return [
+      { value: 'all', label: 'All Participants' },
+      ...(configured.includes('teams') ? [{ value: 'team' as const, label: 'Teams' }] : []),
+      { value: 'female', label: 'Female' },
+      { value: 'male', label: 'Male' },
+    ];
+  }, [tournament.type, tournament.divisions]);
+
+  const parseDivisionValue = (value: string): 'all' | 'male' | 'female' | 'team' =>
+    value === 'male' || value === 'female' || value === 'team' ? value : 'all';
+
   const topSeedsPoolSize = React.useMemo(() => {
     return standings.length;
   }, [standings.length]);
@@ -10940,7 +10959,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
 
   const importedTopSeedEntries = React.useMemo(() => {
     if (seedImportMode !== 'top-seeds' || standings.length === 0) return [] as Array<{ id: string; name: string; seed: number; totalScore: number; teamName: string | null }>;
-    const isTeam = tournament.type === 'team' && division === 'all';
+    const isTeam = (tournament.type === 'team' && division === 'all') || division === 'team';
     const getExtra = (pid: number) => {
       const key = `${isTeam ? 'team' : 'participant'}-${pid}`;
       return (Number(additionalScoresByKey[key]) || 0) + (Number(bonusScoresByKey[key]) || 0);
@@ -10964,7 +10983,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   // ── Manually picked entries (mode: manual = standings-picker) ─────────────
   const pickedStandingsEntries = React.useMemo(() => {
     if (seedImportMode !== 'manual' || standings.length === 0) return [] as Array<{ id: string; name: string; seed: number; totalScore: number; teamName: string | null }>;
-    const isTeam = tournament.type === 'team' && division === 'all';
+    const isTeam = (tournament.type === 'team' && division === 'all') || division === 'team';
     const getExtra = (pid: number) => {
       const key = `${isTeam ? 'team' : 'participant'}-${pid}`;
       return (Number(additionalScoresByKey[key]) || 0) + (Number(bonusScoresByKey[key]) || 0);
@@ -11313,7 +11332,10 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     // ── Stepladder staircase layout ──────────────────────────────────────
     // Apply for stepladder/ladder regardless of available vs preset-editor mode.
     const isStaircaseCategory = (selectedBracketPreset === 'stepladder' || selectedBracketPreset === 'ladder');
-    const isStepladder = isStaircaseCategory && rounds.every(ri => (byRound.get(ri) || []).length === 1);
+    // Custom formats made of single-match rounds that end in a head-to-head chain (shootouts + stepladder) also use the staircase.
+    const headToHeadTail = rounds.filter(ri => (byRound.get(ri) || []).every(m => m.matchType === 'head-to-head')).length;
+    const isCustomLadder = selectedBracketPreset === 'mixed' && rounds.length >= 4 && headToHeadTail >= 2;
+    const isStepladder = (isStaircaseCategory || isCustomLadder) && rounds.every(ri => (byRound.get(ri) || []).length === 1);
     if (isStepladder && rounds.length >= 2) {
       const STEP_GAP = 14;
       const STEP_X = 180; // tighter column spacing for staircase (vs engine default 280)
@@ -11653,7 +11675,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     setMatchOverrides(bkt.matchOverrides as typeof matchOverrides || {});
     setSlotOverrides(bkt.slotOverrides || {});
     setScoreDrafts(bkt.scoreDrafts || {});
-    setDivision(bkt.division === 'male' || bkt.division === 'female' ? bkt.division : 'all');
+    setDivision(bkt.division === 'male' || bkt.division === 'female' || bkt.division === 'team' ? bkt.division : 'all');
     setLoadBracketId(id);
     setActiveBracketName(bkt.name);
     setActiveBracketId(bkt.id);
@@ -11992,7 +12014,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     const isMatchScored = (match: { id: string; slots: Array<{ slotIndex: number; sourceType: string }> }) => {
       const draft = scoreDrafts[match.id] || {};
       const entrants = match.slots.filter((slot) => slot.sourceType !== 'empty');
-      return entrants.length > 0 && entrants.every((slot) => Number.isFinite(Number.parseInt(draft[slot.slotIndex] || '', 10)));
+      const scoredCount = entrants.filter((slot) => Number.isFinite(Number.parseInt(draft[slot.slotIndex] || '', 10))).length;
+      // A duel is decided once the winner's result is entered; the opponent may be left blank.
+      return entrants.length > 0 && (scoredCount === entrants.length || (entrants.length === 2 && scoredCount >= 1));
     };
 
     if (finalMatches.length === 0) return null;
@@ -12011,6 +12035,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     const isStepladderStyle = (
       activeCustomPreset?.bracketCategory === 'stepladder' ||
       activeCustomPreset?.bracketCategory === 'ladder' ||
+      activeCustomPreset?.bracketCategory === 'mixed' ||
       selectedBracketPreset === 'stepladder' ||
       selectedBracketPreset === 'ladder' ||
       selectedBracketPreset === 'mixed'
@@ -12036,6 +12061,10 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       .sort((left, right) => Number(right.score) - Number(left.score));
 
     let orderedSlots = rankedByScore.map((entry) => entry.slotIndex);
+    if (orderedSlots.length > 0) {
+      const unscoredSlots = championshipMatch.slots.map((slot) => slot.slotIndex).filter((slotIndex) => !orderedSlots.includes(slotIndex));
+      orderedSlots = [...orderedSlots, ...unscoredSlots];
+    }
     if (orderedSlots.length === 0) {
       const winnerSlot = simulation.winners[championshipMatch.id];
       const allSlots = championshipMatch.slots.map((slot) => slot.slotIndex);
@@ -12257,6 +12286,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     const isStepladderCat = (
       activeCustomPreset?.bracketCategory === 'stepladder' ||
       activeCustomPreset?.bracketCategory === 'ladder' ||
+      activeCustomPreset?.bracketCategory === 'mixed' ||
       tournament.match_play_type === 'stepladder' ||
       tournament.match_play_type === 'ladder' ||
       selectedBracketPreset === 'stepladder' ||
@@ -12419,9 +12449,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   }, [activeBracketName, participantNodes.length, rounds.length]);
   const canGeneratePreview = generationBlockers.length === 0;
   const showThirdPlaceToggle = React.useMemo(() => {
-    if (bracketTypeMode === 'custom') return true;
-    return selectedBracketPreset === 'single-elim' || selectedBracketPreset === 'playoff' || selectedBracketPreset === 'ladder' || selectedBracketPreset === 'match-play';
-  }, [bracketTypeMode, selectedBracketPreset]);
+    return true;
+  }, []);
   const thirdPlaceHint = React.useMemo(() => {
     if (selectedBracketPreset === 'single-elim' || selectedBracketPreset === 'playoff' || selectedBracketPreset === 'match-play') {
       return include3rdPlace ? '3rd place: Enabled (Final includes Final + 3rd Place from semifinal losers).' : '3rd place: Disabled (championship only).';
@@ -12430,18 +12459,18 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       return include3rdPlace ? '3rd place: Enabled (derived from semifinal loser, no extra bronze match).' : '3rd place: Disabled.';
     }
     if (selectedBracketPreset === 'stepladder') {
-      return '3rd place: inferred from ladder progression.';
+      return include3rdPlace ? '3rd place: Enabled (inferred from ladder progression, no extra bronze match).' : '3rd place: Disabled.';
     }
     if (selectedBracketPreset === 'double-elim') {
-      return '3rd place: losers bracket runner-up (no separate bronze match).';
+      return include3rdPlace ? '3rd place: Enabled (losers bracket runner-up, no separate bronze match).' : '3rd place: Disabled.';
     }
     if (selectedBracketPreset === 'round-robin') {
-      return '3rd place: determined by final standings (match points, then pinfall).';
+      return include3rdPlace ? '3rd place: Enabled (from final standings: match points, then pinfall).' : '3rd place: Disabled.';
     }
     if (selectedBracketPreset === 'custom') {
       return include3rdPlace ? '3rd place: Enabled (last round auto-shaped as placement round: Final + 3rd Place).' : '3rd place: Disabled.';
     }
-    return '3rd place: depends on your custom round structure.';
+    return include3rdPlace ? '3rd place: Enabled (derived from the round before the final).' : '3rd place: Disabled.';
   }, [selectedBracketPreset, include3rdPlace]);
 
   // ── Standard bracket presets ──────────────────────────────────────────────
@@ -12452,6 +12481,20 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     setSelectedBracketPreset(type);
     setSelectedPresetId('');
   }, [buildStandardPresetRounds, include3rdPlace, participantNodes.length, topSeedsCount]);
+
+  const applySavedPreset = React.useCallback((preset: BuilderRulePreset) => {
+    const loaded = Array.isArray(preset.rounds)
+      ? preset.rounds.map((r: any, i: number) => ({ ...v2CreateRound(i), ...r, id: r.id || `preset-${i}` }))
+      : [];
+    if (loaded.length === 0) return;
+    const category = (preset.bracketCategory && preset.bracketCategory !== 'custom' ? preset.bracketCategory : 'mixed') as V2BracketCategory;
+    setBracketTypeMode('available');
+    setSelectedBracketPreset(category);
+    setSelectedPresetId(String(preset.id));
+    setRounds(loaded);
+    setScoreDrafts({});
+    setSelectedMatchId(null);
+  }, []);
 
   const roundsRef = React.useRef(rounds);
   roundsRef.current = rounds;
@@ -12951,22 +12994,20 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
             <input
               value={draftValue}
               onChange={e => setDraftValue(e.target.value)}
-              placeholder={`${tournament.name} - ${division === 'male' ? tx('Male Singles') : division === 'female' ? tx('Female Singles') : tournament.type === 'team' ? tx('Team') : tx('All Participants')} - ${tournament.finals_format || tx('Finals')}`}
+              placeholder={`${tournament.name} - ${division === 'male' ? tx('Male Singles') : division === 'female' ? tx('Female Singles') : tournament.type === 'team' || division === 'team' ? tx('Team') : tx('All Participants')} - ${tournament.finals_format || tx('Finals')}`}
               className="h-11 w-full rounded-lg border border-black/15 bg-white px-3 text-sm focus:border-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-100"
             />
             <p className="mt-1 text-[11px] text-black/40">{tx('Leave empty to use the suggested name.')}</p>
           </div>
-          {tournament.type === 'team' && !activeBracketName && (
+          {!activeBracketName && (
             <div>
               <label className="mb-1 block text-xs font-semibold text-black/60">{tx('Division')}</label>
               <select
                 value={division}
-                onChange={e => setDivision(e.target.value === 'male' ? 'male' : e.target.value === 'female' ? 'female' : 'all')}
+                onChange={e => setDivision(parseDivisionValue(e.target.value))}
                 className="h-11 w-full rounded-lg border border-black/15 bg-white px-3 text-sm focus:border-orange-600 focus:outline-none"
               >
-                <option value="all">{tx('Team')}</option>
-                <option value="female">{tx('Singles \u2014 Female')}</option>
-                <option value="male">{tx('Singles \u2014 Male')}</option>
+                {divisionChoices.map(opt => <option key={opt.value} value={opt.value}>{tx(opt.label)}</option>)}
               </select>
             </div>
           )}
@@ -13009,15 +13050,18 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       const previewNodes = mobileShowAllSeeds ? participantNodes : participantNodes.slice(0, 5);
       return mobileSheetShell('Seeds', (
         <div className="flex flex-col gap-4">
-          {tournament.type === 'team' && (
+          {divisionChoices.length > 1 && (
             <div>
               <div className="mb-1.5 text-xs font-semibold text-black/60">{tx('Seed Pool')}</div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className={`grid gap-2 ${divisionChoices.length > 3 ? 'grid-cols-2' : 'grid-cols-3'}`}>
                 {([
-                  { value: 'all', label: 'Teams', desc: 'Team standings' },
-                  { value: 'male', label: 'Singles M', desc: 'Male individuals' },
-                  { value: 'female', label: 'Singles F', desc: 'Female individuals' },
-                ] as Array<{ value: 'all' | 'male' | 'female'; label: string; desc: string }>).map(opt => {
+                  { value: 'all', label: tournament.type === 'team' ? 'Teams' : 'All', desc: tournament.type === 'team' ? 'Team standings' : 'Everyone' },
+                  { value: 'team', label: 'Teams', desc: 'Team standings' },
+                  { value: 'male', label: tournament.type === 'team' ? 'Singles M' : 'Male', desc: 'Male individuals' },
+                  { value: 'female', label: tournament.type === 'team' ? 'Singles F' : 'Female', desc: 'Female individuals' },
+                ] as Array<{ value: 'all' | 'male' | 'female' | 'team'; label: string; desc: string }>)
+                  .filter(opt => divisionChoices.some(choice => choice.value === opt.value))
+                  .map(opt => {
                   const active = division === opt.value;
                   return (
                     <button
@@ -13224,6 +13268,24 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               ))}
             </div>
           </div>
+          {selectedBracketPreset === 'mixed' && rulePresets.some(p => p.bracketCategory === 'mixed') && (
+            <div>
+              <div className="mb-1.5 text-xs font-semibold text-black/60">{tx('Saved presets')}</div>
+              <div className="flex flex-col gap-1.5">
+                {rulePresets.filter(p => p.bracketCategory === 'mixed').map(preset => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => applySavedPreset(preset)}
+                    className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left text-xs font-medium ${bracketTypeMode === 'available' && String(selectedPresetId) === String(preset.id) ? 'border-orange-600 bg-orange-50' : 'border-black/10 bg-white'}`}
+                  >
+                    <span>{preset.name}</span>
+                    <span className="ml-2 shrink-0 text-[10px] text-black/40">{preset.rounds?.length || 0}R</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2.5 text-sm">
             <span className="text-black/55">{tx('Participants')}</span>
             <span className="font-semibold text-black/80">{participantNodes.length} {tx('seeds')}</span>
@@ -13328,7 +13390,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
             {activeBracketName && !activeBracketId && <option value="__current">{activeBracketName} ({tx('unsaved')})</option>}
             {savedBrackets.map((b) => (
               <option key={b.id} value={b.id}>
-                {b.name} · {b.division === 'male' ? tx('Singles M') : b.division === 'female' ? tx('Singles F') : tournament.type === 'team' ? tx('Team') : tx('All')}
+                {b.name} · {b.division === 'male' ? tx(tournament.type === 'team' ? 'Singles M' : 'Male') : b.division === 'female' ? tx(tournament.type === 'team' ? 'Singles F' : 'Female') : b.division === 'team' || tournament.type === 'team' ? tx('Team') : tx('All')}
               </option>
             ))}
             {activeBracketName && <option value="__new">+ {tx('New bracket')}</option>}
@@ -13387,9 +13449,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               {activeBracketName && (
                 <div className="flex items-center gap-2 mb-3 px-2 py-1.5 rounded-lg bg-emerald-50 border border-gray-400">
                   <span className="flex-1 text-xs font-semibold text-emerald-800 truncate">{activeBracketName}</span>
-                  {tournament.type === 'team' && division !== 'all' && (
+                  {division !== 'all' && (
                     <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide text-indigo-700 bg-indigo-100 border border-indigo-200 rounded-full px-1.5 py-0.5">
-                      {division === 'female' ? tx('Singles F') : tx('Singles M')}
+                      {division === 'team' ? tx('Teams') : division === 'female' ? tx(tournament.type === 'team' ? 'Singles F' : 'Female') : tx(tournament.type === 'team' ? 'Singles M' : 'Male')}
                     </span>
                   )}
                   <button
@@ -13420,27 +13482,23 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   {tx('Tournament settings')}: <span className="font-semibold text-black/75">{getTournamentFinalFormat()}</span>
                   {' · '}{getTournamentSeedCount()} {tx('seeds')}
                 </div>
-                {tournament.type === 'team' && (
-                  <div className="mb-1.5">
+                <div className="mb-1.5">
                     <label className="block text-[9px] font-bold uppercase tracking-widest text-black/35 mb-0.5">{tx('Division')}</label>
                     <select
                       value={division}
-                      onChange={(e) => setDivision(e.target.value === 'male' ? 'male' : e.target.value === 'female' ? 'female' : 'all')}
+                      onChange={(e) => setDivision(parseDivisionValue(e.target.value))}
                       className="w-full h-8 px-2 rounded-md border border-black/15 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-gray-400"
                     >
-                      <option value="all">{tx('Team')}</option>
-                      <option value="female">{tx('Singles \u2014 Female')}</option>
-                      <option value="male">{tx('Singles \u2014 Male')}</option>
+                      {divisionChoices.map(opt => <option key={opt.value} value={opt.value}>{tx(opt.label)}</option>)}
                     </select>
-                    <p className="mt-0.5 text-[9px] text-black/35">{tx('Singles brackets rank players flagged \u201cSingles Entrant\u201d by their recorded game scores.')}</p>
+                    {tournament.type === 'team' && <p className="mt-0.5 text-[9px] text-black/35">{tx('Singles brackets rank players flagged \u201cSingles Entrant\u201d by their recorded game scores.')}</p>}
                   </div>
-                )}
                 <div className="flex gap-1.5">
                   <input
                     value={bracketName}
                     onChange={e => setBracketName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') handleNewBracket(); }}
-                    placeholder={`${tournament.name} - ${division === 'male' ? tx('Male Singles') : division === 'female' ? tx('Female Singles') : tournament.type === 'team' ? tx('Team') : tx('All Participants')} - ${tournament.finals_format || tx('Finals')}`}
+                    placeholder={`${tournament.name} - ${division === 'male' ? tx('Male Singles') : division === 'female' ? tx('Female Singles') : tournament.type === 'team' || division === 'team' ? tx('Team') : tx('All Participants')} - ${tournament.finals_format || tx('Finals')}`}
                     className="flex-1 h-8 px-2 rounded-md border border-black/15 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-gray-400 bg-white"
                   />
                   <button
@@ -14250,7 +14308,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   : selectedBracketPreset === 'ladder' ? tx('Ladder')
                   : selectedBracketPreset === 'round-robin' ? tx('Round Robin')
                   : selectedBracketPreset === 'match-play' ? tx('Match Play')
-                  : selectedBracketPreset === 'mixed' ? tx('Mixed')
+                  : selectedBracketPreset === 'mixed' ? tx('Custom')
                   : tx('Custom');
                 const label = activeCustomPreset?.name ? `${categoryLabel} | ${activeCustomPreset.name}` : categoryLabel;
                 return (
@@ -14688,16 +14746,16 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
             /* ── List view ─────────────────────────────────────────────── */
             <div className="overflow-auto">
               <div
-                className="grid gap-2 items-start"
-                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 210px), 1fr))' }}
+                className="grid gap-3 items-start"
+                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))' }}
               >
                 {engineResult.rounds.map(round => {
                   const roundMatches = engineResult.matches.filter(m => m.roundId === round.roundId).sort((a, b) => a.matchIndex - b.matchIndex);
                   if (roundMatches.length === 0) return null;
                   return (
-                    <div key={round.roundId} className="rounded-lg border border-black/[0.08] bg-white p-2">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-black/40 px-1 mb-2">{round.roundName}</p>
-                      <div className="flex flex-col gap-2">
+                    <div key={round.roundId} className="rounded-md border border-[#e3e3e3] bg-transparent p-2">
+                      <p className="text-[11px] font-semibold text-center text-[#444] bg-[#ececec] border border-[#d4d4d4] rounded-md py-1.5 mb-2">{round.roundName}</p>
+                      <div className="flex flex-col gap-2.5">
                         {roundMatches.map(match => {
                       const override = matchOverrides[match.id] || {};
                       const isSelected = selectedMatchId === match.id;
@@ -14705,20 +14763,20 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                       return (
                         <div key={match.id}
                           onClick={() => canManageBracketV2 && setSelectedMatchId(isSelected ? null : match.id)}
-                          className={`rounded-lg border px-2 py-1.5 cursor-pointer transition-colors ${isSelected
-                            ? 'border-gray-400 bg-orange-50'
+                          className={`rounded-sm border overflow-hidden cursor-pointer transition-all ${isSelected
+                            ? 'border-[#a9a9a9] ring-1 ring-[#d3d3d3] bg-[#f1f1f1]'
                             : specialTone === 'final'
-                              ? 'border-amber-300 bg-amber-50/60 hover:border-amber-400'
+                              ? 'border-[#d8ae5f] bg-[#f3eddf]'
                               : specialTone === 'bronze'
-                                ? 'border-orange-300 bg-orange-50/60 hover:border-orange-400'
-                                : 'border-black/[0.08] bg-white hover:border-gray-400 hover:bg-orange-50/40'
+                                ? 'border-[#c89a6a] bg-[#f2e6da]'
+                                : 'border-[#d4d4d4] bg-[#f2f2f2] hover:border-gray-400'
                             }`}>
-                          <div className="flex flex-col gap-1">
-                            <span className="text-[11px] font-semibold text-black/70 truncate" title={getListMatchLabel(match) || override.name || match.label}>{getListMatchLabel(match) || override.name || match.label}</span>
-                            {override.notes && <span className="text-[9px] text-black/35 italic truncate">{override.notes}</span>}
-                            {Object.keys(override).length > 0 && <span className="text-[9px] text-orange-600 font-semibold">overridden</span>}
+                          <div className="flex flex-col gap-1 px-2 py-1.5 border-b border-[#e5e5e5]">
+                            <span className="text-xs font-bold text-[var(--text-secondary)] truncate" title={getListMatchLabel(match) || override.name || match.label}>{getListMatchLabel(match) || override.name || match.label}</span>
+                            {override.notes && <span className="text-[10px] text-[var(--text-quaternary)] italic truncate">{override.notes}</span>}
+                            {Object.keys(override).length > 0 && <span className="text-[10px] text-[var(--accent)] font-semibold">overridden</span>}
                           </div>
-                          <div className="flex flex-col gap-1 mt-1">
+                          <div className="flex flex-col gap-0">
                             {match.slots.map(slot => {
                               const key = `${match.id}:${slot.slotIndex}`;
                               const label = simulation.resolvedLabels.get(key) || slot.sourceLabel || 'TBD';
@@ -14727,33 +14785,33 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                               const score = scoreDrafts[match.id]?.[slot.slotIndex];
                               const canSwapList = canManageBracketV2 && slot.sourceType !== 'advance';
                               const isEditingSwapList = editingSlotKey === key;
+                              const scoreCellClass = isWinner ? 'bg-orange-600 text-white font-semibold' : 'bg-[#ececec] text-[#222]';
                               return (
-                                <div key={slot.slotIndex} className={`flex items-center justify-between px-1.5 py-0.5 rounded text-[10px] border ${isWinner ? 'border-gray-400 bg-orange-50' : 'border-black/[0.06] bg-gray-50'}`}>
-                                  <div className="min-w-0 flex items-center gap-1">
-                                    {slotSeed != null && <span className="shrink-0 rounded bg-orange-100 px-0.5 py-0 text-[8px] font-bold text-orange-600">S{slotSeed}</span>}
-                                    {isEditingSwapList ? (
-                                      <select autoFocus
-                                        value={slotOverrides[key] != null ? String(slotOverrides[key]) : (slot.participantId != null ? String(slot.participantId) : '')}
-                                        onChange={e => {
-                                          const val = e.target.value;
-                                          if (val === '') setSlotOverrides(prev => { const n = { ...prev }; delete n[key]; return n; });
-                                          else setSlotOverrides(prev => ({ ...prev, [key]: val }));
-                                          setEditingSlotKey(null);
-                                        }}
-                                        onBlur={() => setEditingSlotKey(null)}
-                                        className="h-5 rounded border border-gray-400 bg-white px-0.5 text-[9px] text-black/80 focus:outline-none focus:ring-1 focus:ring-orange-200">
-                                        <option value="">— Auto —</option>
-                                        {participantNodes.map(p => <option key={p.id} value={String(p.id)}>S{p.seed} {p.name}</option>)}
-                                      </select>
-                                    ) : (
-                                      <span
-                                        className={`truncate ${canSwapList ? 'cursor-pointer hover:underline hover:text-orange-600' : ''} ${label === 'TBD' ? 'text-black/30 italic' : isWinner ? 'font-semibold text-black' : 'text-black/70'}`}
-                                        onClick={canSwapList ? () => setEditingSlotKey(key) : undefined}
-                                        title={canSwapList ? 'Click to swap participant' : label}
-                                      >{label}{role !== 'public' && slotOverrides[key] != null && <span className="ml-0.5 text-[8px] text-violet-500">✎</span>}</span>
-                                    )}
-                                  </div>
-                                  {canManageBracketV2 && (
+                                <div key={slot.slotIndex} className={`flex items-center gap-0 border-b border-[#e5e5e5] last:border-b-0 ${isWinner ? 'bg-[#f6f6f6]' : 'bg-[#f2f2f2]'}`}>
+                                  {slotSeed != null && <span className="w-8 h-9 shrink-0 flex items-center justify-center text-[12px] font-semibold text-[#2d2d2d] bg-[#d9dde2] border-r border-[#cfd4d9]">{slotSeed}</span>}
+                                  {isEditingSwapList ? (
+                                    <select autoFocus
+                                      value={slotOverrides[key] != null ? String(slotOverrides[key]) : (slot.participantId != null ? String(slot.participantId) : '')}
+                                      onClick={e => e.stopPropagation()}
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        if (val === '') setSlotOverrides(prev => { const n = { ...prev }; delete n[key]; return n; });
+                                        else setSlotOverrides(prev => ({ ...prev, [key]: val }));
+                                        setEditingSlotKey(null);
+                                      }}
+                                      onBlur={() => setEditingSlotKey(null)}
+                                      className="flex-1 min-w-0 h-9 border-0 bg-[#f2f2f2] px-2 text-[12px] text-[#222] focus:outline-none">
+                                      <option value="">— Auto —</option>
+                                      {participantNodes.map(p => <option key={p.id} value={String(p.id)}>S{p.seed} {p.name}</option>)}
+                                    </select>
+                                  ) : (
+                                    <span
+                                      className={`flex-1 min-w-0 h-9 px-2 flex items-center text-[12px] leading-none truncate ${canSwapList ? 'cursor-pointer hover:underline' : ''} ${label === 'TBD' ? 'text-black/25 italic' : isWinner ? 'font-medium text-[#111]' : 'text-[#222]'}`}
+                                      onClick={canSwapList ? (e) => { e.stopPropagation(); setEditingSlotKey(key); } : undefined}
+                                      title={canSwapList ? 'Click to swap participant' : label}
+                                    >{label}{role !== 'public' && slotOverrides[key] != null && <span className="ml-1 text-[10px] text-violet-500">✎</span>}</span>
+                                  )}
+                                  {canManageBracketV2 ? (
                                     <input type="number" value={score ?? ''} placeholder="—"
                                       min={0}
                                       style={{ MozAppearance: 'textfield' } as React.CSSProperties}
@@ -14765,7 +14823,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                                         if (isNaN(num) || num < 0) return;
                                         setScoreDrafts(prev => ({ ...prev, [match.id]: { ...(prev[match.id] || {}), [slot.slotIndex]: String(num) } }));
                                       }}
-                                      className="w-10 text-right bg-white border border-black/10 rounded px-0.5 py-0 text-[9px] focus:outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                      className={`w-14 h-9 text-right border-0 px-2 text-[12px] focus:outline-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${scoreCellClass}`} />
+                                  ) : (
+                                    <span className={`w-14 h-9 px-2 flex items-center justify-end text-[12px] ${scoreCellClass}`}>{score ?? ''}</span>
                                   )}
                                 </div>
                               );
