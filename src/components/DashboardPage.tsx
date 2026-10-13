@@ -199,20 +199,39 @@ export default function DashboardPage(props: DashboardPageProps) {
   const safePage = Math.min(page, pageCount);
   const visibleRows = listRows.slice((safePage - 1) * LIST_SIZE, safePage * LIST_SIZE);
 
-  const topTeams = useMemo(
-    () => (highlights?.teams || []).slice(0, 3),
+  // Top results up to 10 for multi-column layout on portrait & desktop
+  const top10Women = useMemo(
+    () => (highlights?.players || []).filter((p) => p.gender === 'f').slice(0, 10),
+    [highlights?.players],
+  );
+
+  const top10Men = useMemo(
+    () => (highlights?.players || []).filter((p) => p.gender === 'm').slice(0, 10),
+    [highlights?.players],
+  );
+
+  const top10Open = useMemo(
+    () => (highlights?.players || []).filter((p) => p.gender !== 'f' && p.gender !== 'm').slice(0, 10),
+    [highlights?.players],
+  );
+
+  const top10Teams = useMemo(
+    () => (highlights?.teams || []).slice(0, 10),
     [highlights?.teams],
   );
 
-  const topMen = useMemo(
-    () => (highlights?.players || []).filter((p) => p.gender === 'm').slice(0, 3),
-    [highlights?.players],
-  );
-
-  const topWomen = useMemo(
-    () => (highlights?.players || []).filter((p) => p.gender === 'f').slice(0, 3),
-    [highlights?.players],
-  );
+  // Available categories with up to 10 results, strictly sorted in the requested order:
+  // 1. Single F (Women) (if available)
+  // 2. Single M (Men) (if available)
+  // 3. Teams (if available)
+  const heroRankingColumns = useMemo(() => {
+    const cols: Array<{ key: 'women' | 'men' | 'open' | 'team'; label: string; items: any[] }> = [];
+    if (top10Women.length > 0) cols.push({ key: 'women', label: 'Single F', items: top10Women });
+    if (top10Men.length > 0) cols.push({ key: 'men', label: 'Single M', items: top10Men });
+    if (cols.length === 0 && top10Open.length > 0) cols.push({ key: 'open', label: 'Singles', items: top10Open });
+    if (top10Teams.length > 0) cols.push({ key: 'team', label: t('dashboard.teams', 'Teams'), items: top10Teams });
+    return cols;
+  }, [top10Women, top10Men, top10Open, top10Teams, t]);
 
   const chip = (status: DisplayStatus) => {
     const map: Record<DisplayStatus, { label: string; cls: string }> = {
@@ -231,20 +250,20 @@ export default function DashboardPage(props: DashboardPageProps) {
   };
 
   const bestCard = (label: string, entry: Highlights['highest_men']) => (
-    <div className="ui-card min-w-0 rounded-lg border border-gray-400 bg-white px-2.5 py-2">
-      <p className="text-[9px] font-bold uppercase tracking-wider text-gray-500 truncate">{label}</p>
+    <div className="ui-card min-w-0 rounded-lg border border-gray-400 bg-white dark:bg-[#1E293B] dark:border-slate-700 px-2.5 py-2">
+      <p className="text-[9px] font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400 truncate">{label}</p>
       {entry ? (
         <div className="mt-0.5 flex items-baseline gap-2">
           <span className="text-2xl font-bold leading-none text-emerald-800">{entry.score}</span>
-          <span className="min-w-0 text-xs font-semibold text-black truncate" title={entry.name}>{shortName(entry.name)}</span>
+          <span className="min-w-0 text-xs font-semibold text-black dark:text-slate-100 truncate" title={entry.name}>{shortName(entry.name)}</span>
         </div>
       ) : (
-        <p className="mt-1 text-sm text-gray-500">—</p>
+        <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">—</p>
       )}
     </div>
   );
 
-  const iconBtn = 'h-9 w-9 flex items-center justify-center rounded-md border border-gray-400 bg-white text-gray-500 hover:text-emerald-800';
+  const iconBtn = 'h-9 w-9 flex items-center justify-center rounded-md border border-gray-400 dark:border-slate-700 bg-white dark:bg-[#1E293B] text-gray-500 dark:text-slate-400 hover:text-emerald-800 dark:hover:text-emerald-400';
 
   const summaryItems: Array<{ icon: React.ElementType; text: string }> = featured ? [
     { icon: Users, text: featured.type === 'team' ? `${t('dashboard.team', 'Team')} (${featured.players_per_team}/${t('dashboard.team_short', 'team')})` : t('dashboard.individual', 'Individual') },
@@ -298,7 +317,7 @@ export default function DashboardPage(props: DashboardPageProps) {
                             onClick={prevFeatured}
                             aria-label="Previous event"
                             title="Previous event"
-                            className="h-7 w-7 flex items-center justify-center rounded-full border border-gray-400 bg-white text-gray-600 hover:text-black hover:border-black transition-colors"
+                            className="h-7 w-7 flex items-center justify-center rounded-full border border-gray-400 dark:border-slate-700 bg-white dark:bg-[#1E293B] text-gray-600 dark:text-slate-300 hover:text-black dark:hover:text-white hover:border-black dark:hover:border-slate-500 transition-colors"
                           >
                             <ChevronLeft size={16} />
                           </button>
@@ -307,7 +326,7 @@ export default function DashboardPage(props: DashboardPageProps) {
                             onClick={nextFeatured}
                             aria-label="Next event"
                             title="Next event"
-                            className="h-7 w-7 flex items-center justify-center rounded-full border border-gray-400 bg-white text-gray-600 hover:text-black hover:border-black transition-colors"
+                            className="h-7 w-7 flex items-center justify-center rounded-full border border-gray-400 dark:border-slate-700 bg-white dark:bg-[#1E293B] text-gray-600 dark:text-slate-300 hover:text-black dark:hover:text-white hover:border-black dark:hover:border-slate-500 transition-colors"
                           >
                             <ChevronRight size={16} />
                           </button>
@@ -344,86 +363,81 @@ export default function DashboardPage(props: DashboardPageProps) {
               )}
 
               {showScores ? (
-                <div className="grid grid-cols-1 xl:grid-cols-[1.7fr_1fr] gap-4">
-                  {/* Top 3 Rankings: Team, Single M, Single F */}
-                  <div className="ui-card rounded-lg border border-gray-400 overflow-hidden divide-y divide-gray-300">
-                    {topTeams.length === 0 && topMen.length === 0 && topWomen.length === 0 ? (
-                      <p className="p-6 text-sm text-gray-500 text-center">{t('dashboard.no_scores', 'No scores recorded yet.')}</p>
-                    ) : (
-                      <>
-                        {topTeams.length > 0 && (
-                          <div>
-                            <div className="flex items-center justify-between px-3.5 py-1.5 bg-[#0f172a] text-white">
-                              <h3 className="text-xs font-bold uppercase tracking-wide">{t('dashboard.team', 'Team')} · Top 3</h3>
-                            </div>
+                <div className="space-y-4">
+                  {/* Category rankings: Multi-column layout for portrait and big screens displaying top up to 10 results */}
+                  {heroRankingColumns.length === 0 ? (
+                    <div className="ui-card rounded-lg border border-gray-400 dark:border-slate-700 bg-white dark:bg-[#1E293B] p-6 text-sm text-gray-500 dark:text-slate-400 text-center">
+                      {t('dashboard.no_scores', 'No scores recorded yet.')}
+                    </div>
+                  ) : (
+                    <div className={`grid gap-4 ${
+                      heroRankingColumns.length === 1
+                        ? 'grid-cols-1'
+                        : heroRankingColumns.length === 2
+                          ? 'grid-cols-1 sm:grid-cols-2'
+                          : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3'
+                    }`}>
+                      {heroRankingColumns.map((col) => (
+                        <div
+                          key={col.key}
+                          className="ui-card rounded-lg border border-gray-400 dark:border-slate-700 bg-white dark:bg-[#1E293B] overflow-hidden flex flex-col"
+                        >
+                          <div className="flex items-center justify-between px-3.5 py-2 bg-[#0f172a] text-white">
+                            <h3 className="text-xs font-bold uppercase tracking-wider">{col.label} · Top {col.items.length}</h3>
+                            <span className="text-[10px] text-slate-400 font-semibold uppercase">{col.key === 'team' ? t('dashboard.teams', 'Teams') : t('dashboard.players', 'Players')}</span>
+                          </div>
+                          <div className="overflow-x-auto flex-1">
                             <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b border-gray-200 dark:border-slate-700/80 text-[10px] uppercase font-bold text-gray-500 dark:text-slate-400 bg-gray-50/75 dark:bg-slate-900/40">
+                                  <th className="pl-3 pr-1 py-1.5 text-center w-8">#</th>
+                                  <th className="px-2 py-1.5 text-left font-semibold">{t('dashboard.name', 'Name')}</th>
+                                  <th className="px-2 py-1.5 text-right font-semibold tabular-nums">{t('dashboard.avg', 'Avg')}</th>
+                                  <th className="pl-2 pr-3.5 py-1.5 text-right font-semibold tabular-nums w-16">{t('dashboard.total', 'Total')}</th>
+                                </tr>
+                              </thead>
                               <tbody>
-                                {topTeams.map((row, index) => (
-                                  <tr key={row.id} className="border-t border-gray-200 first:border-t-0">
-                                    <td className="pl-3.5 pr-2 py-1.5 w-10">
-                                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${medalClass(index + 1)}`}>{index + 1}</span>
+                                {col.items.map((row: any, index: number) => (
+                                  <tr key={row.id} className="border-t border-gray-100 dark:border-slate-800/60 first:border-t-0 hover:bg-gray-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                                    <td className="pl-3 pr-1 py-1.5 w-8 text-center">
+                                      {index < 3 ? (
+                                        <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${medalClass(index + 1)}`}>
+                                          {index + 1}
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex h-5 w-5 items-center justify-center text-xs font-semibold text-gray-500 dark:text-slate-400 tabular-nums">
+                                          {index + 1}
+                                        </span>
+                                      )}
                                     </td>
-                                    <td className="px-2 py-1.5 font-semibold text-black truncate max-w-[160px] sm:max-w-none">{row.name}</td>
-                                    <td className="px-2 py-1.5 text-right text-xs text-gray-500 tabular-nums hidden sm:table-cell">{t('dashboard.avg', 'Avg')} {row.avg.toFixed(1)}</td>
-                                    <td className="pl-2 pr-3.5 py-1.5 text-right font-bold text-emerald-800 tabular-nums w-20">{row.total}</td>
+                                    <td className="px-2 py-1.5 font-semibold text-[#1E2233] dark:text-slate-100 truncate max-w-[130px] sm:max-w-[160px]" title={row.name}>
+                                      {row.name}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right text-xs text-gray-500 dark:text-slate-400 tabular-nums">
+                                      {typeof row.avg === 'number' ? row.avg.toFixed(1) : (row.avg || '—')}
+                                    </td>
+                                    <td className="pl-2 pr-3.5 py-1.5 text-right font-bold text-emerald-800 dark:text-emerald-400 tabular-nums w-16">
+                                      {row.total}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
                             </table>
                           </div>
-                        )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-                        {topMen.length > 0 && (
-                          <div>
-                            <div className="flex items-center justify-between px-3.5 py-1.5 bg-[#0f172a] text-white">
-                              <h3 className="text-xs font-bold uppercase tracking-wide">Single M · Top 3</h3>
-                            </div>
-                            <table className="w-full text-sm">
-                              <tbody>
-                                {topMen.map((row, index) => (
-                                  <tr key={row.id} className="border-t border-gray-200 first:border-t-0">
-                                    <td className="pl-3.5 pr-2 py-1.5 w-10">
-                                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${medalClass(index + 1)}`}>{index + 1}</span>
-                                    </td>
-                                    <td className="px-2 py-1.5 font-semibold text-black truncate max-w-[160px] sm:max-w-none">{row.name}</td>
-                                    <td className="px-2 py-1.5 text-right text-xs text-gray-500 tabular-nums hidden sm:table-cell">{t('dashboard.avg', 'Avg')} {row.avg.toFixed(1)}</td>
-                                    <td className="pl-2 pr-3.5 py-1.5 text-right font-bold text-emerald-800 tabular-nums w-20">{row.total}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-
-                        {topWomen.length > 0 && (
-                          <div>
-                            <div className="flex items-center justify-between px-3.5 py-1.5 bg-[#0f172a] text-white">
-                              <h3 className="text-xs font-bold uppercase tracking-wide">Single F · Top 3</h3>
-                            </div>
-                            <table className="w-full text-sm">
-                              <tbody>
-                                {topWomen.map((row, index) => (
-                                  <tr key={row.id} className="border-t border-gray-200 first:border-t-0">
-                                    <td className="pl-3.5 pr-2 py-1.5 w-10">
-                                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${medalClass(index + 1)}`}>{index + 1}</span>
-                                    </td>
-                                    <td className="px-2 py-1.5 font-semibold text-black truncate max-w-[160px] sm:max-w-none">{row.name}</td>
-                                    <td className="px-2 py-1.5 text-right text-xs text-gray-500 tabular-nums hidden sm:table-cell">{t('dashboard.avg', 'Avg')} {row.avg.toFixed(1)}</td>
-                                    <td className="pl-2 pr-3.5 py-1.5 text-right font-bold text-emerald-800 tabular-nums w-20">{row.total}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 content-start">
-                    {bestCard(t('dashboard.best_men', 'Highest game · Men'), highlights?.highest_men ?? null)}
+                  {/* Highlights best games card banner */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                     {bestCard(t('dashboard.best_women', 'Highest game · Women'), highlights?.highest_women ?? null)}
-                    {featured.scoring_type === 'handicap' && <p className="col-span-2 text-[11px] text-gray-500">{t('dashboard.scratch_note', 'Scores shown are scratch (without handicap).')}</p>}
+                    {bestCard(t('dashboard.best_men', 'Highest game · Men'), highlights?.highest_men ?? null)}
+                    {featured.scoring_type === 'handicap' && (
+                      <p className="col-span-full text-[11px] text-gray-500 dark:text-slate-400">
+                        {t('dashboard.scratch_note', 'Scores shown are scratch (without handicap).')}
+                      </p>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -449,16 +463,16 @@ export default function DashboardPage(props: DashboardPageProps) {
                     <button
                       type="button"
                       onClick={() => { if (manageAction) setManageAction(null); else setManageOpen((v) => !v); }}
-                      className={`px-4 h-9 text-xs font-bold uppercase tracking-wider rounded-md border inline-flex items-center gap-2 transition-colors ${manageAction ? 'bg-orange-600 border-orange-600 text-white' : 'bg-white border-gray-400 text-gray-500 hover:text-black'}`}
+                      className={`px-4 h-9 text-xs font-bold uppercase tracking-wider rounded-md border inline-flex items-center gap-2 transition-colors ${manageAction ? 'bg-orange-600 border-orange-600 text-white' : 'bg-white dark:bg-[#1E293B] border-gray-400 dark:border-slate-700 text-gray-500 dark:text-slate-300 hover:text-black dark:hover:text-white'}`}
                     >
                       {manageAction ? <X size={14} /> : <Settings2 size={14} />}{manageAction ? t('common.cancel', 'Cancel') : t('dashboard.manage', 'Manage')}
                     </button>
                     {manageOpen && !manageAction && (
-                      <div className="absolute right-0 z-30 mt-1 w-40 rounded-md border border-gray-400 bg-white py-1 shadow-lg">
-                        <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-black hover:bg-gray-100" onClick={() => { setManageOpen(false); setManageAction('export'); }}><Upload size={14} />{manageLabels.export}</button>
-                        {isAdmin && <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-black hover:bg-gray-100" onClick={() => { setManageOpen(false); onImportClick(); }}><Download size={14} />{t('dashboard.manage_import', 'Import')}</button>}
-                        <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-black hover:bg-gray-100" onClick={() => { setManageOpen(false); setManageAction('archive'); }}><Archive size={14} />{manageLabels.archive}</button>
-                        {isAdmin && <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-red-600 hover:bg-gray-100" onClick={() => { setManageOpen(false); setManageAction('delete'); }}><Trash2 size={14} />{manageLabels.delete}</button>}
+                      <div className="absolute right-0 z-30 mt-1 w-40 rounded-md border border-gray-400 dark:border-slate-700 bg-white dark:bg-[#1E293B] py-1 shadow-lg">
+                        <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-black dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800" onClick={() => { setManageOpen(false); setManageAction('export'); }}><Upload size={14} />{manageLabels.export}</button>
+                        {isAdmin && <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-black dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800" onClick={() => { setManageOpen(false); onImportClick(); }}><Download size={14} />{t('dashboard.manage_import', 'Import')}</button>}
+                        <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-black dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800" onClick={() => { setManageOpen(false); setManageAction('archive'); }}><Archive size={14} />{manageLabels.archive}</button>
+                        {isAdmin && <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-slate-800" onClick={() => { setManageOpen(false); setManageAction('delete'); }}><Trash2 size={14} />{manageLabels.delete}</button>}
                       </div>
                     )}
                   </div>
@@ -466,7 +480,7 @@ export default function DashboardPage(props: DashboardPageProps) {
                 <button
                   type="button"
                   onClick={() => { setShowArchive((v) => !v); setPage(1); }}
-                  className={`px-4 h-9 text-xs font-bold uppercase tracking-wider rounded-md border inline-flex items-center gap-2 transition-colors ${showArchive ? 'bg-emerald-800 border-emerald-800 text-white' : 'bg-white border-gray-400 text-gray-500 hover:text-black'}`}
+                  className={`px-4 h-9 text-xs font-bold uppercase tracking-wider rounded-md border inline-flex items-center gap-2 transition-colors ${showArchive ? 'bg-emerald-800 border-emerald-800 text-white' : 'bg-white dark:bg-[#1E293B] border-gray-400 dark:border-slate-700 text-gray-500 dark:text-slate-300 hover:text-black dark:hover:text-white'}`}
                 >
                   <Archive size={14} />{t('dashboard.archived', 'Archived')} ({archiveList.length})
                 </button>
@@ -488,22 +502,22 @@ export default function DashboardPage(props: DashboardPageProps) {
                   const statusConfig: Record<DisplayStatus, { stripe: string; badgeCls: string; label: string }> = {
                     incoming: {
                       stripe: 'bg-orange-500',
-                      badgeCls: 'bg-orange-100/90 text-orange-700',
+                      badgeCls: 'bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300 dark:border dark:border-orange-800/50',
                       label: t('status.upcoming', 'Upcoming'),
                     },
                     active: {
                       stripe: 'bg-emerald-500',
-                      badgeCls: 'bg-emerald-100 text-emerald-700',
+                      badgeCls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border dark:border-emerald-800/50',
                       label: t('status.live', 'Active'),
                     },
                     finished: {
-                      stripe: 'bg-gray-300',
-                      badgeCls: 'bg-gray-100 text-gray-600',
+                      stripe: 'bg-gray-300 dark:bg-slate-600',
+                      badgeCls: 'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-300 dark:border dark:border-slate-700',
                       label: t('status.completed', 'Completed'),
                     },
                     archived: {
-                      stripe: 'bg-gray-300',
-                      badgeCls: 'bg-gray-100 text-gray-500',
+                      stripe: 'bg-gray-300 dark:bg-slate-600',
+                      badgeCls: 'bg-gray-100 text-gray-500 dark:bg-slate-800 dark:text-slate-400 dark:border dark:border-slate-700',
                       label: t('status.archived', 'Archived'),
                     },
                   };
@@ -512,25 +526,25 @@ export default function DashboardPage(props: DashboardPageProps) {
                   return (
                     <div
                       key={item.id}
-                      className={`ui-card group relative overflow-hidden flex items-center gap-3.5 pl-4 pr-3.5 py-3 cursor-pointer border border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm transition-all ${
+                      className={`ui-card group relative overflow-hidden flex items-center gap-3.5 pl-4 pr-3.5 py-3 cursor-pointer border border-gray-200 dark:border-slate-700 bg-white dark:bg-[#1E293B] hover:border-gray-300 dark:hover:border-slate-600 hover:shadow-sm transition-all ${
                         manageAction ? (manageAction === 'delete' ? 'hover:border-red-600 ring-1 ring-orange-600/40' : 'hover:border-orange-600 ring-1 ring-orange-600/40') : ''
                       }`}
                       onClick={() => pickTournament(item, status)}
                     >
                       <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${conf.stripe}`} />
 
-                      <div className="w-14 h-14 shrink-0 rounded-xl bg-gray-100/90 flex flex-col items-center justify-center text-center">
-                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-orange-600 leading-none">{badge.month}</span>
-                        <span className="text-2xl font-black text-[#1E2233] leading-none mt-1">{badge.day}</span>
+                      <div className="w-14 h-14 shrink-0 rounded-xl bg-gray-100/90 dark:bg-slate-800 flex flex-col items-center justify-center text-center">
+                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-orange-600 dark:text-orange-400 leading-none">{badge.month}</span>
+                        <span className="text-2xl font-black text-[#1E2233] dark:text-slate-100 leading-none mt-1">{badge.day}</span>
                       </div>
 
                       <div className="min-w-0 flex-1 space-y-1">
-                        <p className="text-base font-bold text-[#1E2233] leading-snug truncate group-hover:text-orange-600 transition-colors">
+                        <p className="text-base font-bold text-[#1E2233] dark:text-slate-100 leading-snug truncate group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
                           {item.name}
                         </p>
                         {(item.location || item.organizer) && (
-                          <div className="flex items-center gap-1 text-xs text-gray-500 truncate">
-                            <MapPin size={13} className="shrink-0 text-gray-400" />
+                          <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-slate-400 truncate">
+                            <MapPin size={13} className="shrink-0 text-gray-400 dark:text-slate-500" />
                             <span className="truncate">{item.location || item.organizer}</span>
                           </div>
                         )}
@@ -541,18 +555,19 @@ export default function DashboardPage(props: DashboardPageProps) {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-3 shrink-0">
                         {canManage && !manageAction && (
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); onEdit(item); }}
                             title={t('common.edit', 'Edit')}
-                            className="p-1.5 text-gray-400 hover:text-orange-600 transition-colors"
+                            aria-label={t('common.edit', 'Edit')}
+                            className="p-2 -m-1 text-gray-400 hover:text-orange-600 dark:text-slate-400 dark:hover:text-orange-400 transition-colors rounded-md hover:bg-gray-100 dark:hover:bg-slate-800"
                           >
-                            <Edit size={15} />
+                            <Edit size={16} />
                           </button>
                         )}
-                        <ChevronRight size={18} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
+                        <ChevronRight size={18} className="text-gray-400 group-hover:text-gray-600 dark:text-slate-400 dark:group-hover:text-slate-200 transition-colors" />
                       </div>
                     </div>
                   );

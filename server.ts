@@ -4042,7 +4042,7 @@ async function startServer() {
       WHERE p.tournament_id = ?
       GROUP BY p.id
       ORDER BY total DESC, avg DESC, p.id ASC
-      LIMIT 20
+      LIMIT 100
     `).all(id);
     const teams = db.prepare(`
       SELECT t.id, t.name, COUNT(s.id) AS games, COALESCE(SUM(s.score), 0) AS total,
