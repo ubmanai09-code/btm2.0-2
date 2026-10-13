@@ -92,6 +92,7 @@
 
   /* Spacing & Radius */
   --ui-radius: 6px;
+  --ui-card-radius: 10px;
   --ui-space-8: 8px;
   --ui-space-12: 12px;
   --ui-space-16: 16px;
@@ -225,7 +226,7 @@ body {
 .ui-card {
   background: var(--card);
   border: 1px solid #9ca3af; /* gray-400: default container border */
-  border-radius: var(--ui-radius);
+  border-radius: var(--ui-card-radius, 10px) !important;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
@@ -236,8 +237,8 @@ body {
   color: var(--text);
 }
 
-[class~="rounded"],
-[class*="rounded-"]:not([class*="rounded-full"]) {
+[class~="rounded"]:not(.ui-card),
+[class*="rounded-"]:not([class*="rounded-full"]):not(.ui-card) {
   border-radius: var(--ui-radius) !important;
 }
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Archive, ArrowRight, Calendar, ChevronRight, ClipboardList, Settings2, X, Columns4, Download, Edit, GitBranch, MapPin, Plus, Save, Target, Trash2, Trophy, Upload, Users,
+  Archive, ArrowRight, Calendar, ChevronLeft, ChevronRight, ClipboardList, Settings2, X, Columns4, Download, Edit, GitBranch, MapPin, Plus, Save, Target, Trash2, Trophy, Upload, Users,
 } from 'lucide-react';
 import type { Tournament } from '../services/api';
 
@@ -83,22 +83,73 @@ export default function DashboardPage(props: DashboardPageProps) {
   const pastList = useMemo(() => withStatus.filter((r) => r.status === 'finished'), [withStatus]);
   const archiveList = useMemo(() => withStatus.filter((r) => r.status === 'archived'), [withStatus]);
 
-  // Featured: live events (switchable); otherwise the next incoming event; otherwise the latest finished one.
-  const nextEvent = upcomingList.length > 0 ? upcomingList[0].item : null;
-  const featuredOptions = useMemo(
-    () => (liveEvents.length > 0 ? liveEvents : nextEvent ? [nextEvent] : latestFinished ? [latestFinished] : []),
-    [liveEvents, nextEvent, latestFinished],
-  );
-  const [featuredId, setFeaturedId] = useState<number | null>(null);
-  const featured = featuredOptions.find((i) => i.id === featuredId) || featuredOptions[0] || null;
+  // Featured options for hero carousel: live events first, then upcoming, then latest finished.
+  const featuredOptions = useMemo(() => {
+    const list: Tournament[] = [];
+    liveEvents.forEach((item) => {
+      if (!list.some((x) => x.id === item.id)) list.push(item);
+    });
+    upcomingList.forEach((r) => {
+      if (!list.some((x) => x.id === r.item.id)) list.push(r.item);
+    });
+    if (latestFinished && !list.some((x) => x.id === latestFinished.id)) {
+      list.push(latestFinished);
+    }
+    return list;
+  }, [liveEvents, upcomingList, latestFinished]);
+
+  const [featuredIndex, setFeaturedIndex] = useState(0);
+
+  // Keep index within bounds if featuredOptions changes
+  useEffect(() => {
+    if (featuredIndex >= featuredOptions.length && featuredOptions.length > 0) {
+      setFeaturedIndex(0);
+    }
+  }, [featuredOptions.length, featuredIndex]);
+
+  const featured = featuredOptions[featuredIndex] || null;
   const isLive = featured ? resolveStatus(featured) === 'active' : false;
   const featuredStatus: DisplayStatus = featured ? resolveStatus(featured) : 'finished';
   const showScores = featuredStatus === 'active' || featuredStatus === 'finished';
-  const isTeam = featured?.type === 'team';
 
   const [highlights, setHighlights] = useState<Highlights | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
-  const [showAll, setShowAll] = useState(false);
+
+  // Swipe gesture handling for hero carousel
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+
+  const prevFeatured = () => {
+    if (featuredOptions.length <= 1) return;
+    setFeaturedIndex((prev) => (prev - 1 + featuredOptions.length) % featuredOptions.length);
+  };
+
+  const nextFeatured = () => {
+    if (featuredOptions.length <= 1) return;
+    setFeaturedIndex((prev) => (prev + 1) % featuredOptions.length);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
+    const deltaY = e.changedTouches[0].clientY - touchStartYRef.current;
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+
+    // Trigger only if horizontal swipe dominates and exceeds threshold
+    if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+      if (deltaX < 0) {
+        nextFeatured();
+      } else {
+        prevFeatured();
+      }
+    }
+  };
 
   useEffect(() => {
     if (!featured || !showScores) { setHighlights(null); return; }
@@ -148,10 +199,20 @@ export default function DashboardPage(props: DashboardPageProps) {
   const safePage = Math.min(page, pageCount);
   const visibleRows = listRows.slice((safePage - 1) * LIST_SIZE, safePage * LIST_SIZE);
 
-  const rows = isTeam
-    ? (highlights?.teams || []).map((r) => ({ id: r.id, name: r.name, gender: '', games: r.games, total: r.total, avg: r.avg }))
-    : (highlights?.players || []).map((r) => ({ id: r.id, name: r.name, gender: r.gender, games: r.games, total: r.total, avg: r.avg }));
-  const shownRows = rows.slice(0, showAll ? 10 : 5);
+  const topTeams = useMemo(
+    () => (highlights?.teams || []).slice(0, 3),
+    [highlights?.teams],
+  );
+
+  const topMen = useMemo(
+    () => (highlights?.players || []).filter((p) => p.gender === 'm').slice(0, 3),
+    [highlights?.players],
+  );
+
+  const topWomen = useMemo(
+    () => (highlights?.players || []).filter((p) => p.gender === 'f').slice(0, 3),
+    [highlights?.players],
+  );
 
   const chip = (status: DisplayStatus) => {
     const map: Record<DisplayStatus, { label: string; cls: string }> = {
@@ -170,7 +231,7 @@ export default function DashboardPage(props: DashboardPageProps) {
   };
 
   const bestCard = (label: string, entry: Highlights['highest_men']) => (
-    <div className="min-w-0 rounded-lg border border-gray-400 bg-white px-2.5 py-2">
+    <div className="ui-card min-w-0 rounded-lg border border-gray-400 bg-white px-2.5 py-2">
       <p className="text-[9px] font-bold uppercase tracking-wider text-gray-500 truncate">{label}</p>
       {entry ? (
         <div className="mt-0.5 flex items-baseline gap-2">
@@ -215,7 +276,9 @@ export default function DashboardPage(props: DashboardPageProps) {
         <div className="space-y-5 min-w-0">
           {featured ? (
             <section
-              className={`ui-card p-5 space-y-4 ${showScores ? '' : 'hero-nolive relative overflow-hidden sm:min-h-[170px]'}`}
+              className={`ui-card p-5 space-y-4 select-none ${showScores ? '' : 'hero-nolive relative overflow-hidden sm:min-h-[170px]'}`}
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
             >
               <div className="relative flex flex-wrap items-start justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-4">
@@ -226,13 +289,31 @@ export default function DashboardPage(props: DashboardPageProps) {
                       </p>
                       {chip(featuredStatus)}
                     </div>
-                    {featuredOptions.length > 1 ? (
-                      <select value={featured.id} onChange={(e) => { setFeaturedId(Number(e.target.value)); setShowAll(false); }} className="ui-input mt-1 h-10 px-3 rounded-md text-lg font-bold max-w-full">
-                        {featuredOptions.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
-                      </select>
-                    ) : (
-                      <h2 className="mt-1 text-2xl font-bold leading-tight" style={showScores ? undefined : { color: 'var(--hero-fg)' }}>{featured.name}</h2>
-                    )}
+                    <div className="mt-1 flex items-center gap-2">
+                      <h2 className="text-2xl font-bold leading-tight" style={showScores ? undefined : { color: 'var(--hero-fg)' }}>{featured.name}</h2>
+                      {featuredOptions.length > 1 && (
+                        <div className="flex items-center gap-1 ml-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={prevFeatured}
+                            aria-label="Previous event"
+                            title="Previous event"
+                            className="h-7 w-7 flex items-center justify-center rounded-full border border-gray-400 bg-white text-gray-600 hover:text-black hover:border-black transition-colors"
+                          >
+                            <ChevronLeft size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={nextFeatured}
+                            aria-label="Next event"
+                            title="Next event"
+                            className="h-7 w-7 flex items-center justify-center rounded-full border border-gray-400 bg-white text-gray-600 hover:text-black hover:border-black transition-colors"
+                          >
+                            <ChevronRight size={16} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs" style={{ color: showScores ? undefined : 'var(--hero-muted)' }}>
                       <span className="inline-flex items-center gap-1.5"><Calendar size={14} />{formatDate(featured.date)}{featured.end_date && featured.end_date !== featured.date ? ` – ${formatDate(featured.end_date)}` : ''}</span>
                       {featured.location && <span className="inline-flex items-center gap-1.5"><MapPin size={14} />{featured.location}</span>}
@@ -241,39 +322,104 @@ export default function DashboardPage(props: DashboardPageProps) {
                     </div>
                   </div>
                 </div>
-                <button onClick={() => onOpen(featured)} className="h-9 px-4 inline-flex items-center gap-2 rounded-md bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold uppercase tracking-wide">
-                  {t('dashboard.view_event', 'View event')}<ArrowRight size={14} />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => onOpen(featured)} className="h-9 px-4 inline-flex items-center gap-2 rounded-md bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold uppercase tracking-wide">
+                    {t('dashboard.view_event', 'View event')}<ArrowRight size={14} />
+                  </button>
+                </div>
               </div>
+
+              {featuredOptions.length > 1 && (
+                <div className="flex items-center justify-center gap-1.5 pt-1">
+                  {featuredOptions.map((opt, idx) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      aria-label={`Go to slide ${idx + 1}`}
+                      onClick={() => setFeaturedIndex(idx)}
+                      className={`h-1.5 rounded-full transition-all ${idx === featuredIndex ? 'w-6 bg-orange-600' : 'w-2 bg-gray-300 hover:bg-gray-400'}`}
+                    />
+                  ))}
+                </div>
+              )}
 
               {showScores ? (
                 <div className="grid grid-cols-1 xl:grid-cols-[1.7fr_1fr] gap-4">
-                  <div className="rounded-lg border border-gray-400 overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-2.5 bg-[#0f172a] text-white">
-                      <h3 className="text-sm font-bold">{isTeam ? t('dashboard.top_teams', 'Top teams') : t('dashboard.top_players', 'Top players')}</h3>
-                      {rows.length > 5 && (
-                        <button onClick={() => setShowAll((v) => !v)} className="text-[11px] font-semibold uppercase tracking-wide text-orange-400 hover:text-orange-300">
-                          {showAll ? t('dashboard.show_less', 'Top 5') : t('dashboard.show_more', 'Top 10')}
-                        </button>
-                      )}
-                    </div>
-                    {shownRows.length === 0 ? (
+                  {/* Top 3 Rankings: Team, Single M, Single F */}
+                  <div className="ui-card rounded-lg border border-gray-400 overflow-hidden divide-y divide-gray-300">
+                    {topTeams.length === 0 && topMen.length === 0 && topWomen.length === 0 ? (
                       <p className="p-6 text-sm text-gray-500 text-center">{t('dashboard.no_scores', 'No scores recorded yet.')}</p>
                     ) : (
-                      <table className="w-full text-sm">
-                        <tbody>
-                          {shownRows.map((row, index) => (
-                            <tr key={row.id} className="border-t border-gray-300 first:border-t-0">
-                              <td className="pl-4 pr-2 py-2 w-12"><span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${medalClass(index + 1)}`}>{index + 1}</span></td>
-                              <td className="px-2 py-2 font-semibold text-black">{row.name}</td>
-                              <td className="px-2 py-2 text-right text-xs text-gray-500 tabular-nums hidden sm:table-cell">{t('dashboard.avg', 'Avg')} {row.avg.toFixed(1)}</td>
-                              <td className="pl-2 pr-4 py-2 text-right font-bold text-emerald-800 tabular-nums w-24">{row.total}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                      <>
+                        {topTeams.length > 0 && (
+                          <div>
+                            <div className="flex items-center justify-between px-3.5 py-1.5 bg-[#0f172a] text-white">
+                              <h3 className="text-xs font-bold uppercase tracking-wide">{t('dashboard.team', 'Team')} · Top 3</h3>
+                            </div>
+                            <table className="w-full text-sm">
+                              <tbody>
+                                {topTeams.map((row, index) => (
+                                  <tr key={row.id} className="border-t border-gray-200 first:border-t-0">
+                                    <td className="pl-3.5 pr-2 py-1.5 w-10">
+                                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${medalClass(index + 1)}`}>{index + 1}</span>
+                                    </td>
+                                    <td className="px-2 py-1.5 font-semibold text-black truncate max-w-[160px] sm:max-w-none">{row.name}</td>
+                                    <td className="px-2 py-1.5 text-right text-xs text-gray-500 tabular-nums hidden sm:table-cell">{t('dashboard.avg', 'Avg')} {row.avg.toFixed(1)}</td>
+                                    <td className="pl-2 pr-3.5 py-1.5 text-right font-bold text-emerald-800 tabular-nums w-20">{row.total}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {topMen.length > 0 && (
+                          <div>
+                            <div className="flex items-center justify-between px-3.5 py-1.5 bg-[#0f172a] text-white">
+                              <h3 className="text-xs font-bold uppercase tracking-wide">Single M · Top 3</h3>
+                            </div>
+                            <table className="w-full text-sm">
+                              <tbody>
+                                {topMen.map((row, index) => (
+                                  <tr key={row.id} className="border-t border-gray-200 first:border-t-0">
+                                    <td className="pl-3.5 pr-2 py-1.5 w-10">
+                                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${medalClass(index + 1)}`}>{index + 1}</span>
+                                    </td>
+                                    <td className="px-2 py-1.5 font-semibold text-black truncate max-w-[160px] sm:max-w-none">{row.name}</td>
+                                    <td className="px-2 py-1.5 text-right text-xs text-gray-500 tabular-nums hidden sm:table-cell">{t('dashboard.avg', 'Avg')} {row.avg.toFixed(1)}</td>
+                                    <td className="pl-2 pr-3.5 py-1.5 text-right font-bold text-emerald-800 tabular-nums w-20">{row.total}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {topWomen.length > 0 && (
+                          <div>
+                            <div className="flex items-center justify-between px-3.5 py-1.5 bg-[#0f172a] text-white">
+                              <h3 className="text-xs font-bold uppercase tracking-wide">Single F · Top 3</h3>
+                            </div>
+                            <table className="w-full text-sm">
+                              <tbody>
+                                {topWomen.map((row, index) => (
+                                  <tr key={row.id} className="border-t border-gray-200 first:border-t-0">
+                                    <td className="pl-3.5 pr-2 py-1.5 w-10">
+                                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${medalClass(index + 1)}`}>{index + 1}</span>
+                                    </td>
+                                    <td className="px-2 py-1.5 font-semibold text-black truncate max-w-[160px] sm:max-w-none">{row.name}</td>
+                                    <td className="px-2 py-1.5 text-right text-xs text-gray-500 tabular-nums hidden sm:table-cell">{t('dashboard.avg', 'Avg')} {row.avg.toFixed(1)}</td>
+                                    <td className="pl-2 pr-3.5 py-1.5 text-right font-bold text-emerald-800 tabular-nums w-20">{row.total}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
+
                   <div className="grid grid-cols-2 gap-2 content-start">
                     {bestCard(t('dashboard.best_men', 'Highest game · Men'), highlights?.highest_men ?? null)}
                     {bestCard(t('dashboard.best_women', 'Highest game · Women'), highlights?.highest_women ?? null)}
@@ -336,23 +482,78 @@ export default function DashboardPage(props: DashboardPageProps) {
             {visibleRows.length === 0 ? (
               <div className="ui-card p-6 text-center text-sm text-gray-500">{t('dashboard.nothing_here', 'Nothing to show here.')}</div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              <div className="flex flex-col gap-2.5">
                 {visibleRows.map(({ item, status }) => {
                   const badge = dateBadge(item.date);
+                  const statusConfig: Record<DisplayStatus, { stripe: string; badgeCls: string; label: string }> = {
+                    incoming: {
+                      stripe: 'bg-orange-500',
+                      badgeCls: 'bg-orange-100/90 text-orange-700',
+                      label: t('status.upcoming', 'Upcoming'),
+                    },
+                    active: {
+                      stripe: 'bg-emerald-500',
+                      badgeCls: 'bg-emerald-100 text-emerald-700',
+                      label: t('status.live', 'Active'),
+                    },
+                    finished: {
+                      stripe: 'bg-gray-300',
+                      badgeCls: 'bg-gray-100 text-gray-600',
+                      label: t('status.completed', 'Completed'),
+                    },
+                    archived: {
+                      stripe: 'bg-gray-300',
+                      badgeCls: 'bg-gray-100 text-gray-500',
+                      label: t('status.archived', 'Archived'),
+                    },
+                  };
+                  const conf = statusConfig[status] || statusConfig.finished;
+
                   return (
-                    <div key={item.id} className={`ui-card group flex items-center gap-2.5 px-2.5 py-2 cursor-pointer ${manageAction ? (manageAction === 'delete' ? 'hover:border-red-600 ring-1 ring-orange-600/40' : 'hover:border-orange-600 ring-1 ring-orange-600/40') : 'hover:border-emerald-800'}`} onClick={() => pickTournament(item, status)}>
-                      <div className="w-12 shrink-0 overflow-hidden rounded-md border border-gray-400 text-center">
-                        <div className={`text-[9px] font-bold uppercase leading-4 text-white ${status === 'incoming' ? 'bg-orange-600' : status === 'active' ? 'bg-emerald-800' : 'bg-gray-600'}`}>{badge.month}</div>
-                        <div className="py-1 text-base font-bold leading-none text-black">{badge.day}</div>
+                    <div
+                      key={item.id}
+                      className={`ui-card group relative overflow-hidden flex items-center gap-3.5 pl-4 pr-3.5 py-3 cursor-pointer border border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm transition-all ${
+                        manageAction ? (manageAction === 'delete' ? 'hover:border-red-600 ring-1 ring-orange-600/40' : 'hover:border-orange-600 ring-1 ring-orange-600/40') : ''
+                      }`}
+                      onClick={() => pickTournament(item, status)}
+                    >
+                      <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${conf.stripe}`} />
+
+                      <div className="w-14 h-14 shrink-0 rounded-xl bg-gray-100/90 flex flex-col items-center justify-center text-center">
+                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-orange-600 leading-none">{badge.month}</span>
+                        <span className="text-2xl font-black text-[#1E2233] leading-none mt-1">{badge.day}</span>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold leading-tight text-black truncate group-hover:text-emerald-800">{item.name}</p>
-                        <p className="text-[11px] text-gray-500 truncate">{item.location || item.organizer}</p>
+
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="text-base font-bold text-[#1E2233] leading-snug truncate group-hover:text-orange-600 transition-colors">
+                          {item.name}
+                        </p>
+                        {(item.location || item.organizer) && (
+                          <div className="flex items-center gap-1 text-xs text-gray-500 truncate">
+                            <MapPin size={13} className="shrink-0 text-gray-400" />
+                            <span className="truncate">{item.location || item.organizer}</span>
+                          </div>
+                        )}
+                        <div>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold leading-tight ${conf.badgeCls}`}>
+                            {conf.label}
+                          </span>
+                        </div>
                       </div>
-                      {canManage && !manageAction && (
-                        <button onClick={(e) => { e.stopPropagation(); onEdit(item); }} title={t('common.edit', 'Edit')} className="shrink-0 p-1 text-gray-500 hover:text-emerald-800"><Edit size={13} /></button>
-                      )}
-                      {(!canManage || manageAction) && <ChevronRight size={16} className="shrink-0 text-gray-400" />}
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        {canManage && !manageAction && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); onEdit(item); }}
+                            title={t('common.edit', 'Edit')}
+                            className="p-1.5 text-gray-400 hover:text-orange-600 transition-colors"
+                          >
+                            <Edit size={15} />
+                          </button>
+                        )}
+                        <ChevronRight size={18} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
+                      </div>
                     </div>
                   );
                 })}

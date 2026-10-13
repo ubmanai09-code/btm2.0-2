@@ -2098,7 +2098,7 @@ export default function App() {
     <UiTranslationContext.Provider value={translateUiText}>
     <div className="min-h-screen bg-gradient-to-b from-[color:var(--bg)] to-[color:var(--card)]/50 text-[color:var(--text)]">
       {/* Sidebar / Nav */}
-      <nav className="fixed top-0 left-0 right-0 h-16 bg-black/95 backdrop-blur-sm border-b border-white/10 z-50 px-6 flex items-center justify-between">
+      <nav className="fixed top-0 left-0 right-0 h-16 bg-black/95 backdrop-blur-sm border-b border-white/10 z-50 px-4 sm:px-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div
             className="w-11 h-11 rounded-full overflow-hidden border border-white/30 flex items-center justify-center cursor-pointer hover:shadow-lg transition shrink-0"
@@ -2222,7 +2222,7 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="pt-24 pb-12 max-sm:pt-[4.5rem] max-lg:pb-32 px-6 max-sm:px-2 max-w-7xl mx-auto">
+      <main className="pt-24 pb-12 max-sm:pt-[4.5rem] max-lg:pb-32 px-6 max-sm:px-4 max-w-7xl mx-auto">
         {view === 'glossary' && (
           <GlossaryPage lang={publicLanguage === 'mn' ? 'mn' : 'en'} role={currentRole} authToken={authToken} />
         )}
@@ -7744,7 +7744,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
       {assignModePrompt && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50" onClick={() => { assignModePrompt.resolve(null); setAssignModePrompt(null); }}>
-          <div className="w-full max-w-sm rounded-xl border border-gray-400 bg-[var(--card)] p-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="ui-card w-full max-w-sm rounded-xl border border-gray-400 bg-[var(--card)] p-4 shadow-2xl" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-bold text-black">{tx('Some lanes already have assignments')}</h3>
             <p className="mt-1 text-xs text-black/60">{assignModePrompt.placed} {tx('already placed. How should the remaining players be assigned?')}</p>
             <div className="mt-3 space-y-2">
@@ -7778,7 +7778,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
       {assignWhoOpen && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50" onClick={() => setAssignWhoOpen(false)}>
-          <div className="w-full max-w-xs rounded-xl border border-gray-400 bg-[var(--card)] p-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="ui-card w-full max-w-xs rounded-xl border border-gray-400 bg-[var(--card)] p-4 shadow-2xl" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-bold text-black">{tx('Who do you want to assign?')}</h3>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button type="button" className="flex flex-col items-center gap-1 rounded-lg border border-gray-400 px-3 py-3 text-sm font-bold text-black hover:border-orange-600" onClick={() => { setAssignWhoOpen(false); void handleAutoAssign('team'); }}>
@@ -8227,7 +8227,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       {/* UT/NT slot picker modal */}
       {warmupPickerSlotNumber !== null && (
         <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center p-4" onClick={() => { setWarmupPickerSlotNumber(null); setWarmupPickerSearch(''); }}>
-          <div className="w-full max-w-lg bg-white rounded-lg border border-black/15 shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="ui-card w-full max-w-lg bg-white rounded-lg border border-black/15 shadow-xl overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className={`px-4 py-3 border-b flex items-center justify-between gap-2 ${warmupSession === 'UT' ? 'bg-amber-50 border-amber-200' : 'bg-violet-50 border-violet-200'}`}>
               <div>
                 <h4 className="text-sm font-bold uppercase tracking-wide">Assign to {warmupSession === 'UT' ? tx('Pre') : tx('Post')}-{warmupPickerSlotNumber}</h4>
@@ -8289,7 +8289,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
 
       {lanePickerLaneNumber !== null && (
         <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center p-4" onClick={() => { setLanePickerLaneNumber(null); setLanePickerShift(1); setLanePickerSearchQuery(''); }}>
-          <div className="w-full max-w-lg bg-white rounded-lg border border-gray-400 shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="ui-card w-full max-w-lg bg-white rounded-lg border border-gray-400 shadow-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-4 py-3 border-b border-gray-400 bg-emerald-50 flex items-center justify-between gap-2">
               <div>
                 <h4 className="text-sm font-bold text-emerald-800 uppercase tracking-wide">Assign to Lane {lanePickerLaneNumber} • {tx('Shift')} {lanePickerShift}</h4>
@@ -14674,7 +14674,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         {/* Podium winner picker modal */}
         {podiumPickerSlot && canManageBracketV2 && (
           <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center p-4" onClick={() => { setPodiumPickerSlot(null); setPodiumSelectValue(''); }}>
-            <div className="w-full max-w-sm rounded-2xl border border-black/10 bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="ui-card w-full max-w-sm rounded-2xl border border-black/10 bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between gap-3 border-b border-black/10 px-4 py-3">
                 <div>
                   <h5 className="text-sm font-bold text-black/80">{tx('Set')} {podiumPickerSlot === 'first' ? `🥇 ${tx('1st')}` : podiumPickerSlot === 'second' ? `🥈 ${tx('2nd')}` : `🥉 ${tx('3rd')}`} {tx('Place')}</h5>
