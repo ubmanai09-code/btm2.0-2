@@ -10,7 +10,7 @@ export type DashboardTab = 'participants' | 'standings' | 'scoring' | 'lanes' | 
 interface Highlights {
   tournament: { id: number; name: string; games_count: number };
   players: Array<{ id: number; name: string; gender: string; games: number; total: number; avg: number }>;
-  teams: Array<{ id: number; name: string; games: number; total: number; avg: number }>;
+  teams: Array<{ id: number; name: string; games: number; total: number; avg: number; members?: string[] }>;
   highest_men: { score: number; game_number: number; name: string } | null;
   highest_women: { score: number; game_number: number; name: string } | null;
   counts: { players: number; teams: number; rounds: number };
@@ -151,8 +151,8 @@ export default function DashboardPage(props: DashboardPageProps) {
   const safePage = Math.min(page, pageCount);
   const visibleRows = listRows.slice((safePage - 1) * LIST_SIZE, safePage * LIST_SIZE);
 
-  const toRows = (list: Array<{ id: number; name: string; avg: number; total: number }>) =>
-    list.map((r) => ({ id: r.id, name: r.name, avg: r.avg, total: r.total }));
+  const toRows = (list: Array<{ id: number; name: string; avg: number; total: number; members?: string[] }>) =>
+    list.map((r) => ({ id: r.id, name: r.name, avg: r.avg, total: r.total, members: r.members || [] }));
   const players = highlights?.players || [];
   const groups: Array<{ key: string; title: string; rows: ReturnType<typeof toRows> }> = isTeam
     ? [{ key: 'teams', title: t('dashboard.top_teams', 'Top teams'), rows: toRows(highlights?.teams || []) }]
@@ -278,7 +278,10 @@ export default function DashboardPage(props: DashboardPageProps) {
                               {g.rows.slice(0, maxRows).map((row, index) => (
                                 <tr key={row.id} className="border-t border-gray-300 first:border-t-0">
                                   <td className="pl-4 pr-2 py-2 w-12"><span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${medalClass(index + 1)}`}>{index + 1}</span></td>
-                                  <td className="px-2 py-2 font-semibold text-black">{row.name}</td>
+                                  <td className="px-2 py-2 font-semibold text-black">
+                                    {row.name}
+                                    {row.members.length > 0 && <div className="mt-0.5 text-[11px] font-normal text-gray-500 leading-snug">{row.members.join(' · ')}</div>}
+                                  </td>
                                   <td className="px-2 py-2 text-right text-xs text-gray-500 tabular-nums hidden 2xl:table-cell">{t('dashboard.avg', 'Avg')} {row.avg.toFixed(1)}</td>
                                   <td className="pl-2 pr-4 py-2 text-right font-bold text-emerald-800 tabular-nums w-20">{row.total}</td>
                                 </tr>

@@ -689,9 +689,9 @@ const Select = ({ label, options, ...props }: any) => {
 // --- Main App ---
 
 function DashboardPageResponsive(props: React.ComponentProps<typeof DashboardPage>) {
-  const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches);
+  const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px) and (min-height: 600px)').matches);
   useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)');
+    const mq = window.matchMedia('(min-width: 1024px) and (min-height: 600px)');
     const onChange = () => setIsDesktop(mq.matches);
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);

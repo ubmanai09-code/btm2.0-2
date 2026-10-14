@@ -4054,7 +4054,12 @@ async function startServer() {
       GROUP BY t.id
       ORDER BY total DESC, t.id ASC
       LIMIT 20
-    `).all(id);
+    `).all(id) as any[];
+    const memberStmt = db.prepare(`
+      SELECT (first_name || ' ' || last_name) AS name FROM participants
+      WHERE team_id = ? ORDER BY COALESCE(team_order, 999), id
+    `);
+    for (const team of teams) team.members = (memberStmt.all(team.id) as any[]).map((m) => m.name);
     const highest = (letter: string) => db.prepare(`
       SELECT s.score, s.game_number, (p.first_name || ' ' || p.last_name) AS name
       FROM scores s JOIN participants p ON p.id = s.participant_id

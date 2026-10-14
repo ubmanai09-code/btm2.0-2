@@ -10,7 +10,7 @@ export type DashboardTab = 'participants' | 'standings' | 'scoring' | 'lanes' | 
 interface Highlights {
   tournament: { id: number; name: string; games_count: number };
   players: Array<{ id: number; name: string; gender: string; games: number; total: number; avg: number }>;
-  teams: Array<{ id: number; name: string; games: number; total: number; avg: number }>;
+  teams: Array<{ id: number; name: string; games: number; total: number; avg: number; members?: string[] }>;
   highest_men: { score: number; game_number: number; name: string } | null;
   highest_women: { score: number; game_number: number; name: string } | null;
   counts: { players: number; teams: number; rounds: number };
@@ -410,8 +410,11 @@ export default function DashboardPage(props: DashboardPageProps) {
                                         </span>
                                       )}
                                     </td>
-                                    <td className="px-2 py-1.5 font-semibold text-[#1E2233] dark:text-slate-100 truncate max-w-[130px] sm:max-w-[160px]" title={row.name}>
-                                      {row.name}
+                                    <td className="px-2 py-1.5 font-semibold text-[#1E2233] dark:text-slate-100 max-w-[130px] sm:max-w-[160px]" title={row.name}>
+                                      <div className="truncate">{row.name}</div>
+                                      {Array.isArray(row.members) && row.members.length > 0 && (
+                                        <div className="text-[10px] font-normal leading-snug text-gray-500 dark:text-slate-400 whitespace-normal">{row.members.join(' · ')}</div>
+                                      )}
                                     </td>
                                     <td className="px-2 py-1.5 text-right text-xs text-gray-500 dark:text-slate-400 tabular-nums">
                                       {typeof row.avg === 'number' ? row.avg.toFixed(1) : (row.avg || '—')}
