@@ -55,6 +55,7 @@ import {
   ChevronUp,
   BookOpen,
   Wrench,
+  Play,
   Check,
   Lock,
   MoreHorizontal,
@@ -5660,7 +5661,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 max-sm:gap-0">
         <div className={`${tournament.type === 'team' && mobileRosterTab !== 'players' ? 'hidden lg:block' : ''} lg:col-span-3`}>
           <Card className="border-gray-400 overflow-visible max-md:!border-0 max-md:!shadow-none max-md:!bg-[var(--bg)]">
-            <div className={`p-3 max-md:px-2 max-md:py-1.5 max-md:min-h-[52px] border-b max-md:border-b-0 border-gray-400 scoring-table-surface max-md:!bg-[var(--bg)] sticky ${tournament.type === 'team' ? 'top-[6.125rem] lg:top-[7.25rem]' : 'top-16 lg:top-[7.25rem]'} z-20`}>
+            <div className={`p-3 max-md:px-2 max-md:py-1.5 max-md:min-h-[52px] border-b max-md:border-b-0 border-gray-400 scoring-table-surface max-md:!bg-[var(--bg)] sticky ${tournament.type === 'team' ? 'top-[6.125rem] lg:top-[7.25rem]' : 'top-16 lg:top-[7.25rem]'} z-20 relative`}>
               <div className="grid grid-cols-[1fr_auto] items-center md:flex md:flex-row md:items-center md:justify-between gap-3 max-md:gap-x-2 max-md:gap-y-1">
                 <div className={`max-md:flex max-md:justify-start max-md:col-start-1 max-md:row-start-1`}>
                   <h4 className="font-bold text-black/80 flex items-center gap-1.5 text-xs sm:text-sm"><User size={14} className="text-emerald-700" /><span className="max-md:hidden">{tx('Players')}</span><span>({participants.length}) M({maleCount}) F({femaleCount})</span></h4>
@@ -5717,7 +5718,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                         onClick={() => { setEditingPlayer(null); setShowAddPlayer(true); }}
                         title="Add Player"
                         aria-label="Add Player"
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-600 text-white shadow-sm transition-colors hover:bg-orange-700 active:scale-95"
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-600 text-white shadow-sm transition-colors hover:bg-orange-700 active:scale-95 md:absolute md:left-1/2 md:-translate-x-1/2"
                       >
                         <UserRoundPlus size={17} />
                       </button>
@@ -6092,7 +6093,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         <div className={`${tournament.type === 'team' && mobileRosterTab !== 'teams' ? 'hidden lg:flex' : 'lg:flex'} lg:flex-col lg:col-span-2 space-y-6 lg:space-y-0`}>
         {tournament.type === 'team' && (
             <Card className="lg:flex-1 border-gray-400 overflow-visible max-md:!border-0 max-md:!shadow-none max-md:!bg-[var(--bg)]">
-              <div className={`p-3 max-md:px-2 max-md:py-1.5 max-md:min-h-[52px] border-b max-md:border-b-0 border-gray-400 scoring-table-surface max-md:!bg-[var(--bg)] sticky top-[6.125rem] lg:top-[7.25rem] z-20`}>
+              <div className={`p-3 max-md:px-2 max-md:py-1.5 max-md:min-h-[52px] border-b max-md:border-b-0 border-gray-400 scoring-table-surface max-md:!bg-[var(--bg)] sticky top-[6.125rem] lg:top-[7.25rem] z-20 relative`}>
                 <div className="grid grid-cols-[1fr_auto] items-center md:flex md:flex-row md:items-center md:justify-between gap-3 max-md:gap-x-2 max-md:gap-y-1">
                   <div className={`max-md:flex max-md:justify-start max-md:col-start-1 max-md:row-start-1`}>
                     <h4 className="font-bold text-black/80 flex items-center gap-1.5 text-xs sm:text-sm"><Users size={14} className="text-emerald-700" /><span className="max-md:hidden">{tx('Teams')}</span><span>({teams.length})</span></h4>
@@ -6115,7 +6116,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                           onClick={openCreateTeamModal}
                           title="Add Team"
                           aria-label="Add Team"
-                          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-600 text-white shadow-sm transition-colors hover:bg-orange-700 active:scale-95"
+                          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-600 text-white shadow-sm transition-colors hover:bg-orange-700 active:scale-95 md:absolute md:left-1/2 md:-translate-x-1/2"
                         >
                           <span className="relative inline-flex">
                             <Users size={17} />
@@ -7065,11 +7066,15 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       return;
     }
 
+    const shuffle = <T,>(items: T[]) => {
+      for (let i = items.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [items[i], items[j]] = [items[j], items[i]];
+      }
+    };
+    shuffle(availableSlots);
     const shuffled = [...unassignedItems];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
+    shuffle(shuffled);
 
     const assignments: Partial<LaneAssignment>[] = [];
     for (const item of shuffled) {
@@ -7841,7 +7846,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
       )}
       {/* Lanes Grid */}
       <div>
-        <div className="scoring-table-surface sticky top-16 lg:top-[7.25rem] z-20 border max-md:border-0 max-md:!bg-[var(--bg)] border-gray-400 rounded-md px-2 py-1.5 min-h-[52px] flex items-center justify-between gap-2 mb-2 overflow-x-auto">
+        <div className="scoring-table-surface sticky top-16 lg:top-[7.25rem] z-20 border max-md:border-0 max-md:!bg-[var(--bg)] border-gray-400 rounded-md px-2 py-1.5 min-h-[52px] flex items-center justify-between gap-2 mb-2 overflow-x-auto relative">
             <h4 className="font-bold text-black/80 flex items-center gap-1.5 text-xs sm:text-sm shrink-0">
               <Users size={14} className="text-emerald-700 shrink-0" />
               <span className="sm:hidden text-[11px] leading-tight">
@@ -7903,9 +7908,10 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                   title="Auto-Assign"
                   aria-label="Auto-Assign"
                   onClick={() => { if (isMixedLanes) setAssignWhoOpen(true); else void handleAutoAssign(); }}
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-600 text-[9px] font-bold uppercase text-white shadow-sm transition-colors hover:bg-orange-700 active:scale-95"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-orange-600 text-[9px] font-bold uppercase text-white shadow-sm transition-colors hover:bg-orange-700 active:scale-95 md:absolute md:left-1/2 md:-translate-x-1/2"
                 >
-                  {tx('Assign')}
+                  <Play size={16} fill="currentColor" className="hidden md:block" />
+                  <span className="md:hidden">{tx('Assign')}</span>
                 </button>
               )}
               <Button size="sm" variant="outline" onClick={() => setShowMobileLaneActions(true)} title="More lane actions" ariaLabel="More lane actions" className="px-2 md:hidden">
