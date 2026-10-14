@@ -73,6 +73,7 @@ import {
   type TournamentRoundConfig,
 } from './utils/tournamentEngine';
 import DashboardPage from './components/DashboardPage';
+import DashboardPageDesktop from './components/DashboardPageDesktop';
 import GlossaryPage from './components/GlossaryPage';
 import ToolsPage from './components/ToolsPage';
 
@@ -686,6 +687,17 @@ const Select = ({ label, options, ...props }: any) => {
 };
 
 // --- Main App ---
+
+function DashboardPageResponsive(props: React.ComponentProps<typeof DashboardPage>) {
+  const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const onChange = () => setIsDesktop(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return isDesktop ? <DashboardPageDesktop {...props} /> : <DashboardPage {...props} />;
+}
 
 export default function App() {
   const lockedRole = parseRole((import.meta as any).env?.VITE_LOCK_ROLE);
@@ -2237,7 +2249,7 @@ export default function App() {
                 onChange={handleImport}
               />
             )}
-            <DashboardPage
+            <DashboardPageResponsive
               tournaments={tournaments}
               sponsors={dashboardSponsors}
               isAdmin={isAdmin}
