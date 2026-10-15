@@ -2,6 +2,8 @@ import type { Participant } from '../services/api';
 
 export type ParticipantImportRow = Pick<Participant, 'first_name' | 'last_name' | 'gender' | 'hands' | 'club' | 'average' | 'email'> & {
   id?: number;
+  player_database_id?: number;
+  team_name?: string;
   division?: string;
 };
 
@@ -71,6 +73,7 @@ export const parseParticipantCsv = (text: string): ParticipantImportRow[] => {
     return hasHeader ? index : fallback;
   };
   const participantIdColumn = findColumn(['participant id', 'id'], -1);
+  const playerDatabaseIdColumn = findColumn(['player database id', 'player id'], -1);
   const firstColumn = findColumn(['first name', 'firstname', 'given name', 'givenname', 'name', 'participant name'], 0);
   const lastColumn = findColumn(['last name', 'lastname', 'family name', 'surname'], 1);
   const genderColumn = findColumn(['gender', 'sex'], 2);
@@ -78,6 +81,7 @@ export const parseParticipantCsv = (text: string): ParticipantImportRow[] => {
   const clubColumn = findColumn(['club', 'team', 'organization'], 3);
   const averageColumn = findColumn(['average', 'avg'], 4);
   const emailColumn = findColumn(['contact details', 'contact', 'email', 'e mail'], 5);
+  const teamNameColumn = findColumn(['team name', 'registered team', 'teams'], -1);
   const divisionColumn = findColumn(['division'], -1);
   const dataRows = hasHeader ? rows.slice(1) : rows;
   const cell = (values: string[], column: number) => column >= 0 ? (values[column] || '').trim() : '';
@@ -87,6 +91,11 @@ export const parseParticipantCsv = (text: string): ParticipantImportRow[] => {
     const parsedId = idText ? Number(idText) : undefined;
     if (idText && (!Number.isSafeInteger(parsedId) || (parsedId !== undefined && parsedId <= 0))) {
       throw new Error(`Invalid Participant ID on CSV row ${index + (hasHeader ? 2 : 1)}.`);
+    }
+    const playerDatabaseIdText = cell(values, playerDatabaseIdColumn);
+    const parsedPlayerDatabaseId = playerDatabaseIdText ? Number(playerDatabaseIdText) : undefined;
+    if (playerDatabaseIdText && (!Number.isSafeInteger(parsedPlayerDatabaseId) || (parsedPlayerDatabaseId !== undefined && parsedPlayerDatabaseId <= 0))) {
+      throw new Error(`Invalid Player Database ID on CSV row ${index + (hasHeader ? 2 : 1)}.`);
     }
     let first_name = cell(values, firstColumn);
     let last_name = cell(values, lastColumn);
@@ -107,6 +116,7 @@ export const parseParticipantCsv = (text: string): ParticipantImportRow[] => {
     const handsValue = cell(values, handsColumn).toLowerCase();
     return [{
       ...(parsedId ? { id: parsedId } : {}),
+      ...(parsedPlayerDatabaseId ? { player_database_id: parsedPlayerDatabaseId } : {}),
       first_name,
       last_name,
       gender: cell(values, genderColumn),
@@ -114,6 +124,7 @@ export const parseParticipantCsv = (text: string): ParticipantImportRow[] => {
       club: cell(values, clubColumn),
       average: Number.isFinite(parsedAverage) ? parsedAverage : 0,
       email: cell(values, emailColumn),
+      ...(teamNameColumn >= 0 && cell(values, teamNameColumn) ? { team_name: cell(values, teamNameColumn) } : {}),
       ...(divisionColumn >= 0 && cell(values, divisionColumn) ? { division: cell(values, divisionColumn) } : {}),
     }];
   });

@@ -14,6 +14,16 @@ Recommended production target on Hostinger Business: MySQL.
 3. Open:
    `http://localhost:3000`
 
+## Player database
+
+Admins can open **Account → Player database** from the top navigation. The directory is stored in the app's SQLite database; it is shared across tournaments and is not exposed through the public API.
+
+- Import historic participant CSVs one tournament at a time. Confirm the event name, bowling center, and series so the app can rank players for future events. Give each occurrence a unique event name (include its date or round); re-importing the same event and category does not count attendance twice.
+- During imports, same-name players with a different club or complementary missing profile details are flagged for confirmation before the import is saved. The admin directory also groups likely duplicates for review and merging.
+- Export the directory to CSV for backup or transfer to the future MBA website. Contact details are included, so share exports only with authorized recipients.
+- On a tournament's Players tab, moderators and admins can add attendees from the database. Suggestions prioritize players with attendance at that tournament's center or series. Adding a new participant through the roster also saves their details to the shared directory.
+- Existing participant CSV imports and exports preserve the Player Database ID when available, so rosters can keep linking to the same player record.
+
 ## Site management rules
 
 Operational and governance rules are in:

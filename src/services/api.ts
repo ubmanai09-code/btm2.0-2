@@ -39,6 +39,7 @@ export interface Tournament {
 export interface Participant {
   id: number;
   tournament_id: number;
+  player_database_id?: number | null;
   first_name: string;
   last_name: string;
   gender: string;
@@ -54,6 +55,54 @@ export interface Participant {
   // Marks a team-tournament participant who also competes in a Singles division,
   // so their team-game scores can seed a separate Male/Female singles bracket.
   singles_entrant?: number | boolean;
+}
+
+export type PlayerImportChoice = 'existing' | 'incoming' | 'merge' | 'separate';
+
+export interface PlayerImportConflict {
+  key: string;
+  kind: 'club' | 'missing_info';
+  first_name: string;
+  last_name: string;
+  incoming_club: string;
+  existing_clubs: string[];
+  missing_from_existing: string[];
+  missing_from_incoming: string[];
+  rows: number;
+}
+
+export interface PlayerImportResult {
+  success: boolean;
+  preview: boolean;
+  imported: number;
+  added: number;
+  updated: number;
+  history_added: number;
+  conflicts: PlayerImportConflict[];
+}
+
+export interface PlayerDatabaseRecord {
+  id: number;
+  first_name: string;
+  last_name: string;
+  gender: string;
+  hands: string;
+  club: string;
+  average: number;
+  email: string;
+  teams?: string;
+  tournaments_played: number;
+  last_tournament_date?: string | null;
+  center_counts?: Record<string, number>;
+  series_counts?: Record<string, number>;
+  likelihood?: number;
+  likelihood_reason?: string;
+}
+
+export interface PlayerDatabaseSuggestions {
+  target_center: string;
+  target_series: string;
+  players: PlayerDatabaseRecord[];
 }
 
 export interface Team {
@@ -472,7 +521,59 @@ const api = {
     const res = await fetch(`/api/tournaments/${tournamentId}/participants`);
     return res.json();
   },
-  async addParticipant(tournamentId: number, data: Partial<Participant>): Promise<{ id: number; family_name_filled?: boolean; last_name?: string }> {
+  async getPlayerDatabase(): Promise<PlayerDatabaseRecord[]> {
+    const res = await fetch('/api/player-database');
+    const data = await this.safeJson(res);
+    if (!res.ok) throw new Error(data?.error || 'Failed to load player database');
+    return data;
+  },
+  async importPlayerDatabase(
+    players: Partial<PlayerDatabaseRecord>[],
+    source?: { name: string; center: string; series: string },
+    options?: { preview?: boolean; resolutions?: Record<string, PlayerImportChoice> }
+  ): Promise<PlayerImportResult> {
+    const res = await fetch('/api/player-database/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ players, source, preview: options?.preview, resolutions: options?.resolutions }),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) throw new Error(data?.error || 'Failed to import player database');
+    return data;
+  },
+  async mergePlayerDatabaseRecords(keepId: number, removeIds: number[]): Promise<{ success: boolean }> {
+    const res = await fetch('/api/player-database/merge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keep_id: keepId, remove_ids: removeIds }),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) throw new Error(data?.error || 'Failed to merge players');
+    return data;
+  },
+  async updatePlayerDatabaseRecord(id: number, player: Partial<PlayerDatabaseRecord>): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/player-database/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(player),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) throw new Error(data?.error || 'Failed to update player');
+    return data;
+  },
+  async deletePlayerDatabaseRecord(id: number): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/player-database/${id}`, { method: 'DELETE' });
+    const data = await this.safeJson(res);
+    if (!res.ok) throw new Error(data?.error || 'Failed to delete player');
+    return data;
+  },
+  async getTournamentPlayerSuggestions(tournamentId: number): Promise<PlayerDatabaseSuggestions> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/player-database`);
+    const data = await this.safeJson(res);
+    if (!res.ok) throw new Error(data?.error || 'Failed to load player suggestions');
+    return data;
+  },
+  async addParticipant(tournamentId: number, data: Partial<Participant>): Promise<{ id: number; player_database_id?: number; player_database_synced?: boolean; family_name_filled?: boolean; last_name?: string }> {
     const res = await fetch(`/api/tournaments/${tournamentId}/participants`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -484,7 +585,7 @@ const api = {
     }
     return res.json();
   },
-  async updateParticipant(id: number, data: Partial<Participant>): Promise<{ success: boolean }> {
+  async updateParticipant(id: number, data: Partial<Participant>): Promise<{ success: boolean; player_database_id?: number; player_database_synced?: boolean }> {
     const res = await fetch(`/api/participants/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

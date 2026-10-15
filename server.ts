@@ -368,9 +368,35 @@ function initDb() {
       FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS player_database (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      first_name TEXT NOT NULL,
+      last_name TEXT NOT NULL DEFAULT '',
+      gender TEXT,
+      hands TEXT NOT NULL DEFAULT '1H',
+      club TEXT,
+      average INTEGER NOT NULL DEFAULT 0,
+      email TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS player_database_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      player_id INTEGER NOT NULL,
+      source_name TEXT NOT NULL,
+      center TEXT NOT NULL DEFAULT '',
+      series TEXT NOT NULL DEFAULT '',
+      team_name TEXT NOT NULL DEFAULT '',
+      imported_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (player_id, source_name, center, series),
+      FOREIGN KEY (player_id) REFERENCES player_database(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS participants (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tournament_id INTEGER NOT NULL,
+      player_database_id INTEGER,
       first_name TEXT NOT NULL DEFAULT '',
       last_name TEXT NOT NULL DEFAULT '',
       gender TEXT,
@@ -771,6 +797,12 @@ function initDb() {
       }
     });
   }
+  const participantColumns = (db.prepare("PRAGMA table_info(participants)").all() as any[]).map((column) => column.name);
+  if (!participantColumns.includes('player_database_id')) {
+    db.exec('ALTER TABLE participants ADD COLUMN player_database_id INTEGER');
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_participants_player_database_id ON participants(player_database_id)');
+
   // ── Glossary category column migration ──────────────────────────────
   {
     const gTableInfo = db.prepare("PRAGMA table_info(glossary_terms)").all() as any[];
@@ -857,6 +889,112 @@ const normalizeParticipant = (raw: any) => {
     division: (raw?.division ?? '').toString().trim() || null,
     singles_entrant: raw?.singles_entrant ? 1 : 0,
   };
+};
+
+const normalizePlayerIdentityPart = (value: unknown) => String(value ?? '')
+  .normalize('NFKC')
+  .replace(/[.,'’`"]/g, '')
+  .replace(/-/g, ' ')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLocaleLowerCase();
+
+const savePlayerDatabaseRecord = (
+  raw: any,
+  requestedId?: unknown,
+  allowIdentityChange = false,
+  preserveExistingData = true,
+  forceNew = false,
+): number => {
+  const firstName = String(raw?.first_name ?? '').trim();
+  let lastName = String(raw?.last_name ?? '').trim();
+  if (!firstName) throw new Error('Player first name is required');
+
+  const club = String(raw?.club ?? '').trim();
+  const requested = Number(requestedId ?? raw?.player_database_id);
+  let existing: any = Number.isSafeInteger(requested) && requested > 0
+    ? db.prepare('SELECT * FROM player_database WHERE id = ?').get(requested)
+    : null;
+
+  if (existing && !lastName && !existing.last_name) {
+    lastName = '';
+  } else if (existing && normalizePlayerIdentityPart(lastName) === 'player' && !existing.last_name) {
+    lastName = '';
+  }
+
+  if (existing && (
+    normalizePlayerIdentityPart(existing.first_name) !== normalizePlayerIdentityPart(firstName) ||
+    normalizePlayerIdentityPart(existing.last_name) !== normalizePlayerIdentityPart(lastName)
+  )) {
+    if (!allowIdentityChange) existing = null;
+  }
+
+  if (!existing && !forceNew) {
+    const matches = db.prepare(`
+      SELECT * FROM player_database
+      WHERE lower(trim(first_name)) = lower(trim(?))
+        AND lower(trim(last_name)) = lower(trim(?))
+        AND lower(trim(COALESCE(club, ''))) = lower(trim(?))
+    `).all(firstName, lastName, club) as any[];
+    if (matches.length === 1) existing = matches[0];
+  }
+
+  const gender = String(raw?.gender ?? '').trim();
+  const hands = String(raw?.hands ?? '').trim().toLowerCase().startsWith('2') ? '2H' : '1H';
+  const parsedAverage = Number.parseInt(String(raw?.average ?? ''), 10);
+  const average = Number.isFinite(parsedAverage) ? parsedAverage : 0;
+  const email = String(raw?.email ?? '').trim();
+
+  if (existing) {
+    db.prepare(`
+      UPDATE player_database SET
+        first_name = ?, last_name = ?, gender = ?, hands = ?, club = ?, average = ?, email = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(
+      firstName,
+      lastName,
+      preserveExistingData ? gender || existing.gender : gender || null,
+      hands || existing.hands,
+      preserveExistingData ? club || existing.club : club || null,
+      preserveExistingData ? average || existing.average : average,
+      preserveExistingData ? email || existing.email : email || null,
+      existing.id,
+    );
+    return Number(existing.id);
+  }
+
+  const result = db.prepare(`
+    INSERT INTO player_database (first_name, last_name, gender, hands, club, average, email)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(firstName, lastName, gender || null, hands, club || null, average, email || null);
+  return Number(result.lastInsertRowid);
+};
+
+const mergePlayerDatabaseRecords = (keepId: number, removeIds: number[]) => {
+  const ids = removeIds.filter((id) => Number.isSafeInteger(id) && id > 0 && id !== keepId);
+  const keep = db.prepare('SELECT * FROM player_database WHERE id = ?').get(keepId) as any;
+  if (!keep) throw new Error('Player to keep was not found');
+  db.transaction(() => {
+    for (const id of ids) {
+      const other = db.prepare('SELECT * FROM player_database WHERE id = ?').get(id) as any;
+      if (!other) continue;
+      db.prepare(`
+        UPDATE player_database SET
+          last_name = COALESCE(NULLIF(last_name, ''), ?),
+          gender = COALESCE(NULLIF(gender, ''), ?),
+          club = COALESCE(NULLIF(club, ''), ?),
+          email = COALESCE(NULLIF(email, ''), ?),
+          average = CASE WHEN average > 0 THEN average ELSE ? END,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(other.last_name || '', other.gender, other.club, other.email, other.average || 0, keepId);
+      db.prepare('UPDATE OR IGNORE player_database_history SET player_id = ? WHERE player_id = ?').run(keepId, id);
+      db.prepare('DELETE FROM player_database_history WHERE player_id = ?').run(id);
+      db.prepare('UPDATE participants SET player_database_id = ? WHERE player_database_id = ?').run(keepId, id);
+      db.prepare('DELETE FROM player_database WHERE id = ?').run(id);
+    }
+  })();
 };
 
 const normalizeParticipantMatchValue = (value: unknown) => String(value || '')
@@ -2827,6 +2965,438 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  app.get('/api/player-database', requireAdmin, (_req, res) => {
+    try {
+      const rows = db.prepare(`
+        SELECT p.*,
+          COUNT(DISTINCT pa.tournament_id) AS linked_tournaments_played,
+          MAX(t.date) AS last_tournament_date,
+          GROUP_CONCAT(DISTINCT tm.name) AS teams,
+          GROUP_CONCAT(DISTINCT NULLIF(ph.team_name, '')) AS historical_teams,
+          (
+            SELECT COUNT(DISTINCT ph_count.source_name)
+            FROM player_database_history ph_count
+            WHERE ph_count.player_id = p.id
+              AND NOT EXISTS (
+                SELECT 1
+                FROM participants pa_count
+                JOIN tournaments t_count ON t_count.id = pa_count.tournament_id
+                WHERE pa_count.player_database_id = p.id
+                  AND lower(trim(t_count.name)) = lower(trim(ph_count.source_name))
+              )
+          ) AS imported_tournaments
+        FROM player_database p
+        LEFT JOIN participants pa ON pa.player_database_id = p.id
+        LEFT JOIN tournaments t ON t.id = pa.tournament_id
+        LEFT JOIN teams tm ON tm.id = pa.team_id
+        LEFT JOIN player_database_history ph ON ph.player_id = p.id
+        GROUP BY p.id
+        ORDER BY lower(p.last_name), lower(p.first_name), p.id
+      `).all();
+      res.setHeader('Cache-Control', 'no-store');
+      res.json((rows as any[]).map((row) => ({
+        ...row,
+        tournaments_played: Number(row.linked_tournaments_played || 0) + Number(row.imported_tournaments || 0),
+        teams: [...new Set(`${row.teams || ''};${row.historical_teams || ''}`.split(';').map((team) => team.trim()).filter(Boolean))].join('; '),
+      })));
+    } catch (err: any) {
+      console.error('Failed to load player database:', err);
+      res.status(500).json({ error: err.message || 'Failed to load player database' });
+    }
+  });
+
+  app.post('/api/player-database/import', requireAdmin, (req, res) => {
+    try {
+      const players = Array.isArray(req.body?.players) ? req.body.players : [];
+      if (players.length === 0 || players.length > 10000) {
+        return res.status(400).json({ error: 'Upload between 1 and 10,000 player rows.' });
+      }
+      const sourceName = String(req.body?.source?.name ?? '').trim().slice(0, 200);
+      const sourceText = sourceName.toLocaleLowerCase();
+      const centerInput = String(req.body?.source?.center ?? '').trim();
+      const center = ['B Bowling', 'King Bowling', 'Unknown'].includes(centerInput)
+        ? centerInput
+        : /b[\s_-]*bowling|b[\s_-]*pro|b[\s_-]*champ/i.test(sourceText)
+          ? 'B Bowling'
+          : /king|mixed|mpba|\bmba\b/i.test(sourceText)
+            ? 'King Bowling'
+            : 'Unknown';
+      const seriesInput = String(req.body?.source?.series ?? '').trim();
+      const series = ['B-Pro', 'B-Champ', 'Mixed Tour', 'MBA', 'MPBA', 'Other'].includes(seriesInput)
+        ? seriesInput
+        : /b[\s_-]*pro/i.test(sourceText) ? 'B-Pro'
+          : /b[\s_-]*champ/i.test(sourceText) ? 'B-Champ'
+            : /mixed/i.test(sourceText) ? 'Mixed Tour'
+              : /mpba/i.test(sourceText) ? 'MPBA'
+                : /\bmba\b/i.test(sourceText) ? 'MBA'
+                  : 'Other';
+      const resolutions: Record<string, string> = req.body?.resolutions && typeof req.body.resolutions === 'object' ? req.body.resolutions : {};
+      const preview = req.body?.preview === true;
+      const norm = normalizePlayerIdentityPart;
+      const byFirst = new Map<string, any[]>();
+      (db.prepare('SELECT id, first_name, last_name, club, gender, email, average FROM player_database').all() as any[]).forEach((row) => {
+        const key = norm(row.first_name);
+        if (!byFirst.has(key)) byFirst.set(key, []);
+        byFirst.get(key)!.push(row);
+      });
+      const conflicts = new Map<string, any>();
+      const findHistory = db.prepare(`
+        SELECT 1 FROM player_database_history
+        WHERE player_id = ? AND source_name = ? AND center = ? AND series = ?
+      `);
+      const addHistory = db.prepare(`
+        INSERT INTO player_database_history (player_id, source_name, center, series, team_name)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(player_id, source_name, center, series)
+        DO UPDATE SET team_name = CASE WHEN excluded.team_name != '' THEN excluded.team_name ELSE player_database_history.team_name END
+      `);
+      const countPlayers = db.prepare('SELECT COUNT(*) AS count FROM player_database');
+      const previewDone = new Error('preview');
+      let summary: any = null;
+      const importPlayers = db.transaction(() => {
+        const before = Number((countPlayers.get() as any).count);
+        let historyAdded = 0;
+        for (const player of players) {
+          const first = String(player?.first_name ?? '').trim();
+          let last = String(player?.last_name ?? '').trim();
+          if (norm(last) === 'player') last = '';
+          const club = String(player?.club ?? '').trim();
+          const nFirst = norm(first);
+          const nLast = norm(last);
+          const nClub = norm(club);
+          const payload = { ...player, first_name: first, last_name: last, player_database_id: undefined };
+          const candidates = (byFirst.get(nFirst) || [])
+            .filter((c) => !nLast || !norm(c.last_name) || norm(c.last_name) === nLast)
+            .sort((x, y) => Number(norm(x.last_name) !== nLast) - Number(norm(y.last_name) !== nLast)
+              || Number(norm(x.club) !== nClub) - Number(norm(y.club) !== nClub));
+          let target: any = null;
+          let useIncomingClub = false;
+          let forceNew = false;
+          if (candidates.length) {
+            const compatible = candidates.filter((c) => !nClub || !norm(c.club) || norm(c.club) === nClub);
+            if (compatible.length) {
+              target = compatible[0];
+              const fields: Array<[string, unknown, unknown]> = [
+                ['club', target.club, club],
+                ['gender', target.gender, player?.gender],
+                ['email', target.email, player?.email],
+                ['average', Number(target.average) > 0 ? target.average : '', Number(player?.average) > 0 ? player.average : ''],
+              ];
+              const missingFromExisting = fields
+                .filter(([, existingValue, incomingValue]) => !String(existingValue ?? '').trim() && String(incomingValue ?? '').trim())
+                .map(([field]) => field);
+              const missingFromIncoming = fields
+                .filter(([, existingValue, incomingValue]) => String(existingValue ?? '').trim() && !String(incomingValue ?? '').trim())
+                .map(([field]) => field);
+              if (missingFromExisting.length || missingFromIncoming.length) {
+                const key = `${nFirst}|${nLast}|${norm(target.club)}|missing-info`;
+                const choice = resolutions[key];
+                const conflict = conflicts.get(key) || {
+                  key,
+                  kind: 'missing_info',
+                  first_name: first,
+                  last_name: last || String(target.last_name || ''),
+                  incoming_club: club,
+                  existing_clubs: [String(target.club || '').trim()].filter(Boolean),
+                  missing_from_existing: missingFromExisting,
+                  missing_from_incoming: missingFromIncoming,
+                  rows: 0,
+                };
+                conflict.rows += 1;
+                conflicts.set(key, conflict);
+                if (choice === 'separate') {
+                  target = null;
+                  forceNew = true;
+                }
+              }
+            } else {
+              const key = `${nFirst}|${nLast}|${nClub}|club`;
+              const choice = resolutions[key];
+              const conflict = conflicts.get(key) || {
+                key,
+                kind: 'club',
+                first_name: first,
+                last_name: last,
+                incoming_club: club,
+                existing_clubs: Array.from(new Set(candidates.map((c) => String(c.club || '').trim()).filter(Boolean))),
+                missing_from_existing: [],
+                missing_from_incoming: [],
+                rows: 0,
+              };
+              conflict.rows += 1;
+              conflicts.set(key, conflict);
+              if (choice !== 'separate') {
+                target = candidates[0];
+                useIncomingClub = choice === 'incoming';
+              }
+            }
+          }
+
+          let playerId: number;
+          if (target) {
+            const mergedLast = last || String(target.last_name || '');
+            const mergedClub = useIncomingClub ? club : String(target.club || '') || club;
+            playerId = savePlayerDatabaseRecord({ ...payload, last_name: mergedLast, club: mergedClub }, target.id, true, true);
+            target.last_name = mergedLast;
+            target.club = mergedClub;
+            target.gender = String(player?.gender || target.gender || '');
+            target.email = String(player?.email || target.email || '');
+            target.average = Number(player?.average) || target.average;
+          } else {
+            playerId = savePlayerDatabaseRecord(payload, undefined, false, true, forceNew);
+            const list = byFirst.get(nFirst) || [];
+            if (!list.some((c) => c.id === playerId)) {
+              list.push({
+                id: playerId,
+                first_name: first,
+                last_name: last,
+                club,
+                gender: player?.gender || '',
+                email: player?.email || '',
+                average: player?.average || '',
+              });
+              byFirst.set(nFirst, list);
+            }
+          }
+
+          if (sourceName) {
+            const teamName = String(player?.team_name ?? '').trim();
+            const centerValue = center === 'Unknown' ? '' : center;
+            const existed = findHistory.get(playerId, sourceName, centerValue, series);
+            const historyResult = addHistory.run(playerId, sourceName, centerValue, series, teamName);
+            if (!existed) historyAdded += historyResult.changes;
+          }
+        }
+        const after = Number((countPlayers.get() as any).count);
+        summary = {
+          imported: players.length,
+          added: after - before,
+          updated: players.length - (after - before),
+          history_added: historyAdded,
+        };
+        if (preview) throw previewDone;
+      });
+      try {
+        importPlayers();
+      } catch (err) {
+        if (err !== previewDone) throw err;
+      }
+      res.json({ success: true, preview, ...summary, conflicts: Array.from(conflicts.values()) });
+    } catch (err: any) {
+      console.error('Failed to import player database:', err);
+      res.status(400).json({ error: err.message || 'Failed to import player database' });
+    }
+  });
+
+  app.put('/api/player-database/:id', requireAdmin, (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const existing = db.prepare('SELECT id FROM player_database WHERE id = ?').get(id);
+      if (!existing) return res.status(404).json({ error: 'Player not found' });
+      savePlayerDatabaseRecord(req.body, id, true, false);
+      const saved = db.prepare('SELECT first_name, last_name, club FROM player_database WHERE id = ?').get(id) as any;
+      const sameKey = (row: any) => [row.first_name, row.last_name, row.club].map(normalizePlayerIdentityPart).join('|');
+      const duplicates = (db.prepare('SELECT id, first_name, last_name, club FROM player_database WHERE id != ?').all(id) as any[])
+        .filter((row) => sameKey(row) === sameKey(saved))
+        .map((row) => Number(row.id));
+      if (duplicates.length) mergePlayerDatabaseRecords(id, duplicates);
+      res.json({ success: true, merged: duplicates.length });
+    } catch (err: any) {
+      console.error('Failed to update player database record:', err);
+      res.status(400).json({ error: err.message || 'Failed to update player' });
+    }
+  });
+
+  app.post('/api/player-database/merge', requireAdmin, (req, res) => {
+    try {
+      const keepId = Number(req.body?.keep_id);
+      const removeIds = Array.isArray(req.body?.remove_ids) ? req.body.remove_ids.map(Number) : [];
+      if (!removeIds.length) return res.status(400).json({ error: 'Choose players to merge' });
+      mergePlayerDatabaseRecords(keepId, removeIds);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || 'Failed to merge players' });
+    }
+  });
+
+  app.delete('/api/player-database/:id', requireAdmin, (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const result = db.transaction(() => {
+        db.prepare('UPDATE participants SET player_database_id = NULL WHERE player_database_id = ?').run(id);
+        return db.prepare('DELETE FROM player_database WHERE id = ?').run(id);
+      })();
+      if (result.changes === 0) return res.status(404).json({ error: 'Player not found' });
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error('Failed to delete player database record:', err);
+      res.status(500).json({ error: err.message || 'Failed to delete player' });
+    }
+  });
+
+  app.get('/api/tournaments/:id/player-database', requirePermission('participants:manage', (req) => req.params.id), (req, res) => {
+    try {
+      const tournament = db.prepare('SELECT name, location FROM tournaments WHERE id = ?').get(req.params.id) as { name: string; location: string | null } | undefined;
+      if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
+      const target = `${tournament.name} ${tournament.location || ''}`;
+      const targetSeries = /b[\s_-]*pro/i.test(target) ? 'B-Pro'
+        : /b[\s_-]*champ/i.test(target) ? 'B-Champ'
+          : /mixed/i.test(target) ? 'Mixed Tour'
+            : /mpba/i.test(target) ? 'MPBA'
+              : /\bmba\b/i.test(target) ? 'MBA'
+                : '';
+      const targetCenter = /b[\s_-]*bowling/i.test(target) || /b[\s_-]*pro|b[\s_-]*champ/i.test(target)
+        ? 'B Bowling'
+        : /king/i.test(target) || /mixed|mpba|\bmba\b/i.test(target)
+          ? 'King Bowling'
+          : '';
+      const players = db.prepare(`
+        SELECT p.id, p.first_name, p.last_name, p.gender, p.hands, p.club, p.average
+        FROM player_database p
+      `).all() as any[];
+      const histories = db.prepare(`
+        SELECT pa.player_database_id AS player_id, t.name, t.location, '' AS series, t.id AS tournament_id, t.date AS event_date
+        FROM participants pa
+        JOIN tournaments t ON t.id = pa.tournament_id
+        WHERE pa.player_database_id IS NOT NULL AND t.id != ?
+        UNION ALL
+        SELECT player_id, source_name AS name, center AS location, series, NULL AS tournament_id, imported_at AS event_date
+        FROM player_database_history
+      `).all(req.params.id) as any[];
+      const classifyEvent = (history: any) => {
+        const name = `${history.name || ''} ${history.location || ''}`;
+        const center = /b[\s_-]*bowling/i.test(name) || /b[\s_-]*pro|b[\s_-]*champ/i.test(name)
+          ? 'B Bowling'
+          : /king/i.test(name) || /mixed|mpba|\bmba\b/i.test(name)
+            ? 'King Bowling'
+            : '';
+        const series = history.series || (/b[\s_-]*pro/i.test(name) ? 'B-Pro'
+          : /b[\s_-]*champ/i.test(name) ? 'B-Champ'
+            : /mixed/i.test(name) ? 'Mixed Tour'
+              : /mpba/i.test(name) ? 'MPBA'
+                : /\bmba\b/i.test(name) ? 'MBA'
+                  : '');
+        return { center, series };
+      };
+      // One entry per distinct past event, regardless of how many players attended it.
+      const linkedEventNames = new Set(histories.filter((h) => h.tournament_id).map((h) => normalizePlayerIdentityPart(h.name)));
+      const pastEvents = new Map<string, { date: string; center: string; series: string }>();
+      const attendedByPlayer = new Map<number, Set<string>>();
+      for (const history of histories) {
+        const normalizedName = normalizePlayerIdentityPart(history.name);
+        if (!history.tournament_id && linkedEventNames.has(normalizedName)) continue;
+        const key = history.tournament_id ? `tournament:${history.tournament_id}` : `import:${normalizedName}|${history.series || ''}`;
+        if (!pastEvents.has(key)) {
+          pastEvents.set(key, { date: String(history.event_date || ''), ...classifyEvent(history) });
+        }
+        const attended = attendedByPlayer.get(Number(history.player_id)) || new Set<string>();
+        attended.add(key);
+        attendedByPlayer.set(Number(history.player_id), attended);
+      }
+      const recentEventsFor = (match: (event: { center: string; series: string }) => boolean) => Array.from(pastEvents.entries())
+        .filter(([, event]) => match(event))
+        .sort((a, b) => b[1].date.localeCompare(a[1].date))
+        .slice(0, 8)
+        .map(([key, event]) => ({ key, ...event }));
+      let poolLabel = targetSeries;
+      let pool = targetSeries ? recentEventsFor((event) => event.series === targetSeries) : [];
+      if (!pool.length && targetCenter) {
+        poolLabel = targetCenter;
+        pool = recentEventsFor((event) => event.center === targetCenter);
+      }
+      if (!pool.length) {
+        poolLabel = 'recent';
+        pool = recentEventsFor(() => true);
+      }
+      const centerPool = targetCenter ? recentEventsFor((event) => event.center === targetCenter) : [];
+      // Recency-weighted attendance rate: the newest event counts the most.
+      const weightedRate = (events: { key: string }[], attended: Set<string>) => {
+        let total = 0;
+        let hit = 0;
+        events.forEach((event, rank) => {
+          const weight = Math.pow(0.85, rank);
+          total += weight;
+          if (attended.has(event.key)) hit += weight;
+        });
+        return total ? hit / total : 0;
+      };
+      const likelihoodFor = (playerId: number) => {
+        const attended = attendedByPlayer.get(playerId);
+        if (!attended || !pool.length) return { likelihood: 0, reason: 'No past events recorded' };
+        const hits = pool.filter((event) => attended.has(event.key));
+        let likelihood = weightedRate(pool, attended) * 100;
+        let reason = hits.length
+          ? `Played ${hits.length} of last ${pool.length} ${poolLabel} events${hits[0] === pool[0] ? ' (incl. the latest)' : ''}`
+          : '';
+        if (!hits.length && centerPool.length && poolLabel !== targetCenter) {
+          const centerHits = centerPool.filter((event) => attended.has(event.key));
+          if (centerHits.length) {
+            likelihood = weightedRate(centerPool, attended) * 50;
+            reason = `Plays at ${targetCenter} (${centerHits.length} of last ${centerPool.length} events)`;
+          }
+        }
+        return { likelihood: Math.round(likelihood), reason: reason || 'Not seen at similar events' };
+      };
+      const historyByPlayer = new Map<number, { centers: Record<string, number>; series: Record<string, number>; events: Set<string>; linkedNames: Set<string> }>();
+      for (const history of histories) {
+        const id = Number(history.player_id);
+        const aggregate = historyByPlayer.get(id) || {
+          centers: {},
+          series: {},
+          events: new Set<string>(),
+          linkedNames: new Set<string>(),
+        };
+        const normalizedEventName = normalizePlayerIdentityPart(history.name);
+        if (!history.tournament_id && aggregate.linkedNames.has(normalizedEventName)) continue;
+        const eventKey = history.tournament_id ? `tournament:${history.tournament_id}` : `import:${normalizedEventName}`;
+        if (aggregate.events.has(eventKey)) continue;
+        aggregate.events.add(eventKey);
+        if (history.tournament_id) aggregate.linkedNames.add(normalizedEventName);
+        const name = `${history.name || ''} ${history.location || ''}`;
+        const center = /b[\s_-]*bowling/i.test(name) || /b[\s_-]*pro|b[\s_-]*champ/i.test(name)
+          ? 'B Bowling'
+          : /king/i.test(name) || /mixed|mpba|\bmba\b/i.test(name)
+            ? 'King Bowling'
+            : '';
+        const series = history.series || (/b[\s_-]*pro/i.test(name) ? 'B-Pro'
+          : /b[\s_-]*champ/i.test(name) ? 'B-Champ'
+            : /mixed/i.test(name) ? 'Mixed Tour'
+              : /mpba/i.test(name) ? 'MPBA'
+                : /\bmba\b/i.test(name) ? 'MBA'
+                  : '');
+        if (center) aggregate.centers[center] = (aggregate.centers[center] || 0) + 1;
+        if (series) aggregate.series[series] = (aggregate.series[series] || 0) + 1;
+        historyByPlayer.set(id, aggregate);
+      }
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({
+        target_center: targetCenter,
+        target_series: targetSeries,
+        players: players.map((player) => ({
+          ...player,
+          tournaments_played: historyByPlayer.get(Number(player.id))?.events.size || 0,
+          center_counts: historyByPlayer.get(Number(player.id))?.centers || {},
+          series_counts: historyByPlayer.get(Number(player.id))?.series || {},
+          ...(() => {
+            const result = likelihoodFor(Number(player.id));
+            return { likelihood: result.likelihood, likelihood_reason: result.reason };
+          })(),
+        })).sort((a, b) => {
+          const aCount = targetSeries
+            ? (a.series_counts[targetSeries] || 0)
+            : targetCenter ? (a.center_counts[targetCenter] || 0) : Number(a.tournaments_played);
+          const bCount = targetSeries
+            ? (b.series_counts[targetSeries] || 0)
+            : targetCenter ? (b.center_counts[targetCenter] || 0) : Number(b.tournaments_played);
+          return b.likelihood - a.likelihood || bCount - aCount || a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name);
+        }),
+      });
+    } catch (err: any) {
+      console.error('Failed to load tournament player suggestions:', err);
+      res.status(500).json({ error: err.message || 'Failed to load player suggestions' });
+    }
+  });
+
   // Participants
   app.get("/api/tournaments/:id/participants", (req, res) => {
     const rows = db.prepare(`
@@ -2849,12 +3419,30 @@ async function startServer() {
       const { first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant } = normalizeParticipant(resolvedBody);
       const assignedTeamOrder = team_id ? (team_order || getNextTeamOrder(req.params.id, team_id)) : 0;
       console.log('Adding participant:', { first_name, last_name, gender, hands, club, average, email, team_id, team_order: assignedTeamOrder, division, singles_entrant });
-      const info = db.prepare(`
-        INSERT INTO participants (tournament_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(req.params.id, first_name, last_name, gender, hands, club, average || 0, email, team_id || null, assignedTeamOrder, division || null, singles_entrant);
+      const info = db.transaction(() => {
+        const playerDatabaseId = savePlayerDatabaseRecord({
+          ...resolvedBody,
+          first_name,
+          last_name: String(resolvedBody?.last_name ?? '').trim(),
+          gender,
+          hands,
+          club,
+          average,
+          email,
+        }, resolvedBody?.player_database_id);
+        return db.prepare(`
+          INSERT INTO participants (tournament_id, player_database_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(req.params.id, playerDatabaseId, first_name, last_name, gender, hands, club, average || 0, email, team_id || null, assignedTeamOrder, division || null, singles_entrant);
+      })();
       if (team_id) resequenceTeamMembers(team_id);
-      res.json({ id: info.lastInsertRowid, family_name_filled: familyNameFilled, last_name });
+      res.json({
+        id: info.lastInsertRowid,
+        player_database_id: Number((db.prepare('SELECT player_database_id FROM participants WHERE id = ?').get(info.lastInsertRowid) as any)?.player_database_id),
+        player_database_synced: true,
+        family_name_filled: familyNameFilled,
+        last_name,
+      });
     } catch (err: any) {
       console.error('Error adding participant:', err);
       res.status(500).json({ error: err.message });
@@ -2871,16 +3459,31 @@ async function startServer() {
     }
     const { first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant } = normalizeParticipant({ ...existing, ...req.body });
     const assignedTeamOrder = team_id ? (team_order || getNextTeamOrder(existing.tournament_id.toString(), team_id)) : 0;
-    db.prepare(`
-      UPDATE participants SET 
-        first_name = ?, last_name = ?, gender = ?, hands = ?, club = ?, average = ?, email = ?, team_id = ?, team_order = ?, division = ?, singles_entrant = ?
-      WHERE id = ?
-    `).run(first_name, last_name, gender, hands, club, average || 0, email, team_id || null, assignedTeamOrder, division || null, singles_entrant, req.params.id);
+    const sameIdentity = normalizePlayerIdentityPart(existing.first_name) === normalizePlayerIdentityPart(first_name)
+      && normalizePlayerIdentityPart(existing.last_name) === normalizePlayerIdentityPart(last_name);
+    let playerDatabaseId = 0;
+    db.transaction(() => {
+      playerDatabaseId = savePlayerDatabaseRecord({
+        ...req.body,
+        first_name,
+        last_name: String(req.body?.last_name ?? last_name).trim(),
+        gender,
+        hands,
+        club,
+        average,
+        email,
+      }, sameIdentity ? (req.body?.player_database_id || existing.player_database_id) : req.body?.player_database_id);
+      db.prepare(`
+        UPDATE participants SET
+          player_database_id = ?, first_name = ?, last_name = ?, gender = ?, hands = ?, club = ?, average = ?, email = ?, team_id = ?, team_order = ?, division = ?, singles_entrant = ?
+        WHERE id = ?
+      `).run(playerDatabaseId, first_name, last_name, gender, hands, club, average || 0, email, team_id || null, assignedTeamOrder, division || null, singles_entrant, req.params.id);
+    })();
     if (existing?.team_id && existing.team_id !== team_id) {
       resequenceTeamMembers(existing.team_id);
     }
     if (team_id) resequenceTeamMembers(team_id);
-    res.json({ success: true });
+    res.json({ success: true, player_database_id: playerDatabaseId, player_database_synced: true });
   });
 
   app.put("/api/participants/:id/team-order", requirePermission('participants:manage', (req) => {
@@ -3157,12 +3760,12 @@ async function startServer() {
         if (id !== null && !existingParticipantIds.has(id)) importedIds[index] = null;
       });
       const insert = db.prepare(`
-        INSERT INTO participants (tournament_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO participants (tournament_id, player_database_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const update = db.prepare(`
         UPDATE participants SET
-          first_name = ?, last_name = ?, gender = ?, hands = ?, club = ?, average = ?, email = ?,
+          player_database_id = ?, first_name = ?, last_name = ?, gender = ?, hands = ?, club = ?, average = ?, email = ?,
           team_id = ?, team_order = ?, division = ?, singles_entrant = ?
         WHERE id = ? AND tournament_id = ?
       `);
@@ -3179,9 +3782,25 @@ async function startServer() {
           const assignedTeamOrder = normalized.team_id
             ? (normalized.team_order || getNextTeamOrder(String(tournamentId), normalized.team_id))
             : 0;
+          const keepDatabaseId = current
+            && normalizePlayerIdentityPart(current.first_name) === normalizePlayerIdentityPart(normalized.first_name)
+            && normalizePlayerIdentityPart(current.last_name) === normalizePlayerIdentityPart(normalized.last_name)
+            ? current.player_database_id
+            : undefined;
+          const playerDatabaseId = savePlayerDatabaseRecord({
+            ...rawParticipant,
+            first_name: normalized.first_name,
+            last_name: normalized.last_name,
+            gender: normalized.gender,
+            hands: normalized.hands,
+            club: normalized.club,
+            average: normalized.average,
+            email: normalized.email,
+          }, rawParticipant?.player_database_id || keepDatabaseId);
 
           if (current && importedId) {
             update.run(
+              playerDatabaseId,
               normalized.first_name,
               normalized.last_name,
               normalized.gender,
@@ -3201,6 +3820,7 @@ async function startServer() {
           } else {
             const result = insert.run(
               tournamentId,
+              playerDatabaseId,
               normalized.first_name,
               normalized.last_name,
               normalized.gender,

@@ -55,6 +55,7 @@ import {
   ChevronUp,
   BookOpen,
   Wrench,
+  Database,
   Play,
   Check,
   Lock,
@@ -62,7 +63,7 @@ import {
   ListFilter,
 } from 'lucide-react';
 import { toPng } from 'html-to-image';
-import api, { Tournament, Participant, Team, LaneAssignment, WarmupSlot, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry, LeagueRankingResponse, StandingAdditionalScore, StandingBonus } from './services/api';
+import api, { Tournament, Participant, Team, LaneAssignment, WarmupSlot, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry, LeagueRankingResponse, StandingAdditionalScore, StandingBonus, PlayerDatabaseSuggestions } from './services/api';
 import { parseCsvRows, parseParticipantCsv } from './utils/participantCsv';
 import { buildKnownBracketTemplateDefaults } from './utils/bracketTemplates';
 import {
@@ -77,6 +78,7 @@ import DashboardPage from './components/DashboardPage';
 import DashboardPageDesktop from './components/DashboardPageDesktop';
 import GlossaryPage from './components/GlossaryPage';
 import ToolsPage from './components/ToolsPage';
+import AdminPlayersPage from './components/AdminPlayersPage';
 
 type UserRole = 'admin' | 'moderator' | 'public';
 
@@ -747,7 +749,7 @@ export default function App() {
   const [sponsorsConfigDraft, setSponsorsConfigDraft] = useState<SponsorsConfig>(DEFAULT_SPONSORS_CONFIG);
   const [sponsorsConfigScope, setSponsorsConfigScope] = useState<string>('global');
   const [sponsorsConfigError, setSponsorsConfigError] = useState('');
-  const [view, setView] = useState<'list' | 'detail' | 'create' | 'edit' | 'glossary'>(() => {
+  const [view, setView] = useState<'list' | 'detail' | 'create' | 'edit' | 'glossary' | 'players'>(() => {
     const savedView = localStorage.getItem('btm_view');
     return savedView === 'detail' ? 'detail' : 'list';
   });
@@ -776,6 +778,10 @@ export default function App() {
   const [publicDictionary, setPublicDictionary] = useState<Map<string, BilingualTerm>>(new Map());
   const isAdmin = currentRole === 'admin';
   const canManageTournaments = currentRole === 'admin' || currentRole === 'moderator';
+
+  useEffect(() => {
+    if (view === 'players' && currentRole !== 'admin') setView('list');
+  }, [view, currentRole]);
   const scoreScreenQueryParams = (() => {
     if (typeof window === 'undefined') {
       return {
@@ -2210,6 +2216,17 @@ export default function App() {
                               <Shield size={13} />
                               {t('auth.moderator_access', 'Moderator Access')}
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowAdminSettingsMenu(false);
+                                setView('players');
+                              }}
+                              className="w-full text-left px-3 py-2 rounded-md text-xs font-semibold uppercase tracking-wide text-black/75 hover:bg-emerald-50 hover:text-emerald-700 transition-colors flex items-center gap-2"
+                            >
+                              <Database size={13} />
+                              Player database
+                            </button>
                           </>
                         )}
                         <div className="border-t border-black/10 mt-1 pt-1">
@@ -2238,6 +2255,9 @@ export default function App() {
       <main className="pt-24 pb-12 max-sm:pt-[4.5rem] max-lg:pb-32 px-6 max-sm:px-4 max-w-7xl mx-auto">
         {view === 'glossary' && (
           <GlossaryPage lang={publicLanguage === 'mn' ? 'mn' : 'en'} role={currentRole} authToken={authToken} />
+        )}
+        {view === 'players' && isAdmin && (
+          <AdminPlayersPage onBack={() => setView('list')} />
         )}
         {view === 'list' && (
           <>
@@ -4574,6 +4594,14 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const [showPlayersClearMenu, setShowPlayersClearMenu] = useState(false);
   const [isPlayerSelectionMode, setIsPlayerSelectionMode] = useState(false);
   const [showDestructiveImportModal, setShowDestructiveImportModal] = useState(false);
+  const [playerDatabaseSuggestions, setPlayerDatabaseSuggestions] = useState<PlayerDatabaseSuggestions | null>(null);
+  const [showPlayerDatabaseModal, setShowPlayerDatabaseModal] = useState(false);
+  const [loadingPlayerDatabase, setLoadingPlayerDatabase] = useState(false);
+  const [playerDatabaseSearch, setPlayerDatabaseSearch] = useState('');
+  const [playerDatabaseFilter, setPlayerDatabaseFilter] = useState<'recommended' | 'series' | 'center' | 'all'>('recommended');
+  const [selectedDatabasePlayerIds, setSelectedDatabasePlayerIds] = useState<number[]>([]);
+  const [likelyThreshold, setLikelyThreshold] = useState(50);
+  const [addingDatabasePlayers, setAddingDatabasePlayers] = useState(false);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
   const [importRequiresDestructiveConfirmation, setImportRequiresDestructiveConfirmation] = useState(false);
   const [destructiveImportConfirmation, setDestructiveImportConfirmation] = useState('');
@@ -4677,12 +4705,18 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       if (editingPlayer) {
         result = await api.updateParticipant(editingPlayer.id, data);
         console.log('Update result:', result);
+        if (result.player_database_synced) {
+          alert('Participant changes saved and synchronized with the global player database.');
+        }
       } else {
         result = await api.addParticipant(tournament.id, data);
         console.log('Add result:', result);
+        const notices: string[] = [];
         if (result.family_name_filled && result.last_name) {
-          alert(`Family name completed from a full name or past tournament record: ${result.last_name}`);
+          notices.push(`Family name completed from a full name or past tournament record: ${result.last_name}`);
         }
+        if (result.player_database_synced) notices.push('Player saved to the global player database.');
+        if (notices.length) alert(notices.join('\n'));
       }
       
       setShowAddPlayer(false);
@@ -4703,9 +4737,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
   const handleExportCSV = () => {
     const hasDivisionData = participants.some(p => p.division && p.division.trim());
-    const headers = ['Participant ID', 'First Name', 'Last Name', 'Gender', 'Hands', 'Club', 'Average', 'Contact Details', ...(hasDivisionData ? ['Division'] : [])];
+    const hasTeamData = participants.some(p => p.team_name && p.team_name.trim());
+    const headers = ['Participant ID', 'Player Database ID', 'First Name', 'Last Name', 'Gender', 'Hands', 'Club', 'Average', 'Contact Details', ...(hasDivisionData ? ['Division'] : []), ...(hasTeamData ? ['Team Name'] : [])];
     const rows = participants.map(p => [
       p.id,
+      p.player_database_id || '',
       p.first_name,
       p.last_name,
       p.gender,
@@ -4714,6 +4750,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       p.average,
       p.email,
       ...(hasDivisionData ? [p.division || ''] : []),
+      ...(hasTeamData ? [p.team_name || ''] : []),
     ]);
     
     const escapeCsvValue = (value: unknown) => {
@@ -4746,6 +4783,73 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     setDestructiveImportConfirmation('');
     setShowDestructiveImportModal(true);
     inputEl.value = '';
+  };
+
+  const isPlayerInRoster = (player: { id: number; first_name: string; last_name: string }) => participants.some((participant) =>
+    participant.player_database_id === player.id ||
+    (
+      participant.first_name.trim().toLocaleLowerCase() === player.first_name.trim().toLocaleLowerCase() &&
+      participant.last_name.trim().toLocaleLowerCase() === player.last_name.trim().toLocaleLowerCase()
+    )
+  );
+
+  const selectLikelyPlayers = (threshold: number) => {
+    setLikelyThreshold(threshold);
+    setSelectedDatabasePlayerIds(
+      (playerDatabaseSuggestions?.players || [])
+        .filter((player) => (player.likelihood || 0) >= threshold && !isPlayerInRoster(player))
+        .map((player) => player.id)
+    );
+  };
+
+  const openPlayerDatabase = async () => {
+    setLoadingPlayerDatabase(true);
+    setShowPlayerDatabaseModal(true);
+    setPlayerDatabaseSearch('');
+    setSelectedDatabasePlayerIds([]);
+    try {
+      const suggestions = await api.getTournamentPlayerSuggestions(tournament.id);
+      setPlayerDatabaseSuggestions(suggestions);
+      const hasPredictions = suggestions.players.some((player) => (player.likelihood || 0) > 0);
+      setPlayerDatabaseFilter(hasPredictions ? 'recommended' : suggestions.target_series ? 'series' : suggestions.target_center ? 'center' : 'all');
+      setSelectedDatabasePlayerIds(
+        suggestions.players
+          .filter((player) => (player.likelihood || 0) >= likelyThreshold && !isPlayerInRoster(player))
+          .map((player) => player.id)
+      );
+    } catch (err) {
+      setShowPlayerDatabaseModal(false);
+      alert(err instanceof Error ? err.message : 'Failed to load player database');
+    } finally {
+      setLoadingPlayerDatabase(false);
+    }
+  };
+
+  const addSelectedDatabasePlayers = async () => {
+    if (!playerDatabaseSuggestions || selectedDatabasePlayerIds.length === 0) return;
+    const chosen = playerDatabaseSuggestions.players.filter((player) => selectedDatabasePlayerIds.includes(player.id));
+    const additions = chosen.map((player) => ({
+      player_database_id: player.id,
+      first_name: player.first_name,
+      last_name: player.last_name,
+      gender: player.gender,
+      hands: player.hands,
+      club: player.club,
+      average: player.average,
+      email: '',
+    }));
+    setAddingDatabasePlayers(true);
+    try {
+      await api.bulkAddParticipants(tournament.id, additions);
+      setShowPlayerDatabaseModal(false);
+      setSelectedDatabasePlayerIds([]);
+      await loadData();
+      alert(`Added ${additions.length} player(s) from the player database.`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to add selected players');
+    } finally {
+      setAddingDatabasePlayers(false);
+    }
   };
 
   const handleProceedWithDestructiveImport = async () => {
@@ -5523,6 +5627,24 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     return renderFemaleInitialUnderline(fullName, isFemale);
   };
 
+  const filteredDatabasePlayers = (() => {
+    const list = playerDatabaseSuggestions?.players || [];
+    const term = playerDatabaseSearch.trim().toLocaleLowerCase();
+    const searched = list.filter((player) =>
+      !isPlayerInRoster(player) &&
+      (!term || `${player.first_name} ${player.last_name} ${player.gender} ${player.club}`.toLocaleLowerCase().includes(term))
+    );
+    if (!playerDatabaseSuggestions || playerDatabaseFilter === 'all') return searched;
+    if (playerDatabaseFilter === 'recommended') {
+      const predicted = searched.filter((player) => (player.likelihood || 0) > 0);
+      return predicted.length ? predicted : searched;
+    }
+    const matching = searched.filter((player) => playerDatabaseFilter === 'series'
+      ? Boolean(playerDatabaseSuggestions.target_series && player.series_counts?.[playerDatabaseSuggestions.target_series])
+      : Boolean(playerDatabaseSuggestions.target_center && player.center_counts?.[playerDatabaseSuggestions.target_center]));
+    return matching.length ? matching : searched;
+  })();
+
   return (
     <div className="space-y-6 max-sm:space-y-1.5 relative">
       {showDestructiveImportModal && (
@@ -5603,6 +5725,114 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   ariaLabel="Confirm participant import"
                 >
                   Confirm import
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {showPlayerDatabaseModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 p-4" onClick={() => setShowPlayerDatabaseModal(false)}>
+          <Card className="flex max-h-[90vh] w-full max-w-3xl flex-col p-5" onClick={(event: any) => event.stopPropagation()}>
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-emerald-800">Add from player database</h3>
+                <p className="mt-1 text-sm text-black/60">
+                  {playerDatabaseSuggestions?.target_series
+                    ? `Suggested for ${playerDatabaseSuggestions.target_series}`
+                    : playerDatabaseSuggestions?.target_center
+                      ? `Suggested for ${playerDatabaseSuggestions.target_center}`
+                      : 'Choose players to add to this tournament'}
+                  . Players are pre-selected by how often they attended similar past events; adjust as needed. They are added without replacing the current roster.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => setShowPlayerDatabaseModal(false)} title="Close" ariaLabel="Close">
+                <X size={14} />
+              </Button>
+            </div>
+            <div className="mb-3 flex flex-wrap gap-2">
+              <input
+                type="search"
+                value={playerDatabaseSearch}
+                onChange={(event) => setPlayerDatabaseSearch(event.target.value)}
+                placeholder="Search players or clubs"
+                className="ui-input h-10 min-w-[200px] flex-1 rounded-md px-3 text-sm"
+              />
+              <select
+                value={playerDatabaseFilter}
+                onChange={(event) => setPlayerDatabaseFilter(event.target.value as typeof playerDatabaseFilter)}
+                className="ui-input h-10 rounded-md px-3 text-sm"
+                aria-label="Filter suggested players"
+              >
+                <option value="recommended">Recommended</option>
+                {playerDatabaseSuggestions?.target_series && <option value="series">{playerDatabaseSuggestions.target_series}</option>}
+                {playerDatabaseSuggestions?.target_center && <option value="center">{playerDatabaseSuggestions.target_center}</option>}
+                <option value="all">All players</option>
+              </select>
+            </div>
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+              <span className="font-semibold">Likely attendees</span>
+              <select
+                value={likelyThreshold}
+                onChange={(event) => selectLikelyPlayers(Number(event.target.value))}
+                className="ui-input h-8 rounded-md px-2 text-xs"
+                aria-label="Minimum attendance likelihood"
+              >
+                <option value={30}>30%+ (wide)</option>
+                <option value={50}>50%+ (balanced)</option>
+                <option value={70}>70%+ (regulars only)</option>
+              </select>
+              <button type="button" onClick={() => selectLikelyPlayers(likelyThreshold)} className="rounded-md border border-emerald-300 px-2 py-1 text-xs font-semibold hover:bg-emerald-100">Select likely</button>
+              <button type="button" onClick={() => setSelectedDatabasePlayerIds([])} className="rounded-md border border-black/15 px-2 py-1 text-xs font-semibold text-black/70 hover:bg-white">Clear</button>
+            </div>
+            <div className="min-h-[180px] flex-1 overflow-y-auto rounded-md border border-black/10">
+              {loadingPlayerDatabase ? (
+                <p className="p-8 text-center text-sm text-black/50">Loading player database...</p>
+              ) : filteredDatabasePlayers.length ? (
+                <div className="divide-y divide-black/5">
+                  {filteredDatabasePlayers.map((player) => {
+                    const count = playerDatabaseSuggestions?.target_series
+                      ? player.series_counts?.[playerDatabaseSuggestions.target_series] || 0
+                      : playerDatabaseSuggestions?.target_center
+                        ? player.center_counts?.[playerDatabaseSuggestions.target_center] || 0
+                        : player.tournaments_played || 0;
+                    return (
+                      <label key={player.id} className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-emerald-50/60">
+                        <input
+                          type="checkbox"
+                          checked={selectedDatabasePlayerIds.includes(player.id)}
+                          onChange={(event) => setSelectedDatabasePlayerIds((ids) => event.target.checked
+                            ? [...ids, player.id]
+                            : ids.filter((id) => id !== player.id))}
+                          className="h-4 w-4 accent-emerald-800"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-semibold text-black">{player.first_name} {player.last_name}</span>
+                          <span className="block truncate text-xs text-black/55">{[player.gender, player.club].filter(Boolean).join(' · ') || 'No club recorded'}</span>
+                        </span>
+                        <span className="shrink-0 text-right text-xs text-black/50">
+                          {(player.likelihood || 0) > 0 && <span className="block font-semibold text-emerald-800">{player.likelihood}% likely</span>}
+                          <span className="block max-w-[200px] truncate" title={player.likelihood_reason}>{player.likelihood_reason && (player.likelihood || 0) > 0 ? player.likelihood_reason : `${count} event${count === 1 ? '' : 's'}`}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="p-8 text-center text-sm text-black/50">
+                  {playerDatabaseSuggestions?.players.length
+                    ? 'No matching players. Try All players or a different search.'
+                    : 'The database is empty. An admin can add players or import a CSV from the Player database page.'}
+                </p>
+              )}
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <span className="text-sm text-black/60">{selectedDatabasePlayerIds.length} selected</span>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setShowPlayerDatabaseModal(false)} title="Cancel" ariaLabel="Cancel">Cancel</Button>
+                <Button onClick={() => void addSelectedDatabasePlayers()} disabled={!selectedDatabasePlayerIds.length || addingDatabasePlayers || loadingPlayerDatabase} title="Add selected players" ariaLabel="Add selected players">
+                  {addingDatabasePlayers ? 'Adding...' : `Add ${selectedDatabasePlayerIds.length || ''} selected`}
                 </Button>
               </div>
             </div>
@@ -5797,6 +6027,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                           <Download size={14} />
                         </Button>
                       </div>
+                    )}
+                    {canManageParticipants && (
+                      <Button size="sm" variant="outline" onClick={() => void openPlayerDatabase()} title="Add from player database" ariaLabel="Add from player database" className="px-2">
+                        <Database size={14} />
+                      </Button>
                     )}
                     {canManageParticipants && (
                       <Button size="sm" variant="outline" onClick={handleSaveParticipants} title="Save Players" ariaLabel="Save Players" className="px-2">
@@ -6500,6 +6735,18 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   >
                     <Download size={17} /> {tx('Import')}
                   </button>
+                  {mobileRosterTab !== 'teams' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMobileRosterActions(false);
+                        void openPlayerDatabase();
+                      }}
+                      className="flex min-h-12 items-center gap-2 rounded-xl bg-emerald-50 px-3 text-sm font-semibold text-emerald-800"
+                    >
+                      <Database size={17} /> From database
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
