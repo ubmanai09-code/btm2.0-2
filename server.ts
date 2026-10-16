@@ -992,6 +992,24 @@ const savePlayerDatabaseRecord = (
   return Number(result.lastInsertRowid);
 };
 
+class PlayerDatabaseReferenceError extends Error {}
+
+const getExistingPlayerDatabaseId = (requestedId: unknown, firstName: string, lastName: string): number | null => {
+  if (requestedId == null || String(requestedId).trim() === '') return null;
+  const id = Number(requestedId);
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    throw new PlayerDatabaseReferenceError('Player Database ID must be a positive integer.');
+  }
+  const existing = db.prepare('SELECT id, first_name, last_name FROM player_database WHERE id = ?').get(id) as
+    { id: number; first_name: string; last_name: string } | undefined;
+  if (!existing) throw new PlayerDatabaseReferenceError('Player database record not found.');
+  if (normalizePlayerIdentityPart(existing.first_name) !== normalizePlayerIdentityPart(firstName)
+    || normalizePlayerIdentityPart(existing.last_name) !== normalizePlayerIdentityPart(lastName)) {
+    throw new PlayerDatabaseReferenceError('Selected player database record does not match the participant name.');
+  }
+  return Number(existing.id);
+};
+
 const mergePlayerDatabaseRecords = (keepId: number, removeIds: number[]) => {
   const ids = removeIds.filter((id) => Number.isSafeInteger(id) && id > 0 && id !== keepId);
   const keep = db.prepare('SELECT * FROM player_database WHERE id = ?').get(keepId) as any;
@@ -3504,18 +3522,21 @@ async function startServer() {
       const familyNameFilled = resolvedBody !== req.body;
       const { first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant } = normalizeParticipant(resolvedBody);
       const assignedTeamOrder = team_id ? (team_order || getNextTeamOrder(req.params.id, team_id)) : 0;
+      const isAdmin = getRequestRole(req) === 'admin';
       console.log('Adding participant:', { first_name, last_name, gender, hands, club, average, email, team_id, team_order: assignedTeamOrder, division, singles_entrant });
       const info = db.transaction(() => {
-        const playerDatabaseId = savePlayerDatabaseRecord({
-          ...resolvedBody,
-          first_name,
-          last_name: String(resolvedBody?.last_name ?? '').trim(),
-          gender,
-          hands,
-          club,
-          average,
-          email,
-        }, resolvedBody?.player_database_id);
+        const playerDatabaseId = isAdmin
+          ? savePlayerDatabaseRecord({
+            ...resolvedBody,
+            first_name,
+            last_name: String(resolvedBody?.last_name ?? '').trim(),
+            gender,
+            hands,
+            club,
+            average,
+            email,
+          }, resolvedBody?.player_database_id)
+          : getExistingPlayerDatabaseId(resolvedBody?.player_database_id, first_name, last_name);
         return db.prepare(`
           INSERT INTO participants (tournament_id, player_database_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -3524,14 +3545,14 @@ async function startServer() {
       if (team_id) resequenceTeamMembers(team_id);
       res.json({
         id: info.lastInsertRowid,
-        player_database_id: Number((db.prepare('SELECT player_database_id FROM participants WHERE id = ?').get(info.lastInsertRowid) as any)?.player_database_id),
-        player_database_synced: true,
+        player_database_id: (db.prepare('SELECT player_database_id FROM participants WHERE id = ?').get(info.lastInsertRowid) as any)?.player_database_id ?? null,
+        player_database_synced: isAdmin,
         family_name_filled: familyNameFilled,
         last_name,
       });
     } catch (err: any) {
       console.error('Error adding participant:', err);
-      res.status(500).json({ error: err.message });
+      res.status(err instanceof PlayerDatabaseReferenceError ? 400 : 500).json({ error: err.message });
     }
   });
 
@@ -3547,18 +3568,32 @@ async function startServer() {
     const assignedTeamOrder = team_id ? (team_order || getNextTeamOrder(existing.tournament_id.toString(), team_id)) : 0;
     const sameIdentity = normalizePlayerIdentityPart(existing.first_name) === normalizePlayerIdentityPart(first_name)
       && normalizePlayerIdentityPart(existing.last_name) === normalizePlayerIdentityPart(last_name);
-    let playerDatabaseId = 0;
+    const isAdmin = getRequestRole(req) === 'admin';
+    const requestedPlayerDatabaseId = req.body?.player_database_id !== undefined
+      ? req.body.player_database_id
+      : sameIdentity ? existing.player_database_id : undefined;
+    let linkedPlayerDatabaseId: number | null = null;
+    if (!isAdmin) {
+      try {
+        linkedPlayerDatabaseId = getExistingPlayerDatabaseId(requestedPlayerDatabaseId, first_name, last_name);
+      } catch (err: any) {
+        return res.status(400).json({ error: err.message });
+      }
+    }
+    let playerDatabaseId: number | null = null;
     db.transaction(() => {
-      playerDatabaseId = savePlayerDatabaseRecord({
-        ...req.body,
-        first_name,
-        last_name: String(req.body?.last_name ?? last_name).trim(),
-        gender,
-        hands,
-        club,
-        average,
-        email,
-      }, sameIdentity ? (req.body?.player_database_id || existing.player_database_id) : req.body?.player_database_id);
+      playerDatabaseId = isAdmin
+        ? savePlayerDatabaseRecord({
+          ...req.body,
+          first_name,
+          last_name: String(req.body?.last_name ?? last_name).trim(),
+          gender,
+          hands,
+          club,
+          average,
+          email,
+        }, requestedPlayerDatabaseId)
+        : linkedPlayerDatabaseId;
       db.prepare(`
         UPDATE participants SET
           player_database_id = ?, first_name = ?, last_name = ?, gender = ?, hands = ?, club = ?, average = ?, email = ?, team_id = ?, team_order = ?, division = ?, singles_entrant = ?
@@ -3569,7 +3604,7 @@ async function startServer() {
       resequenceTeamMembers(existing.team_id);
     }
     if (team_id) resequenceTeamMembers(team_id);
-    res.json({ success: true, player_database_id: playerDatabaseId, player_database_synced: true });
+    res.json({ success: true, player_database_id: playerDatabaseId, player_database_synced: isAdmin });
   });
 
   app.put("/api/participants/:id/team-order", requirePermission('participants:manage', (req) => {
@@ -3820,6 +3855,7 @@ async function startServer() {
 
       const resolvedParticipants: Array<Record<string, any>> = participants.map((participant) => inferParticipantFamilyName(tournamentId, participant));
       const familyNamesFilled = resolvedParticipants.filter((participant, index) => participant !== participants[index]).length;
+      const isAdmin = getRequestRole(req) === 'admin';
       const existingParticipantRows = db.prepare("SELECT * FROM participants WHERE tournament_id = ?").all(tournamentId) as any[];
       const existingParticipantIds = new Set(existingParticipantRows.map((participant) => Number(participant.id)));
       const hasScores = Number((db.prepare("SELECT COUNT(*) AS count FROM scores WHERE tournament_id = ?").get(tournamentId) as any)?.count) > 0;
@@ -3873,16 +3909,21 @@ async function startServer() {
             && normalizePlayerIdentityPart(current.last_name) === normalizePlayerIdentityPart(normalized.last_name)
             ? current.player_database_id
             : undefined;
-          const playerDatabaseId = savePlayerDatabaseRecord({
-            ...rawParticipant,
-            first_name: normalized.first_name,
-            last_name: normalized.last_name,
-            gender: normalized.gender,
-            hands: normalized.hands,
-            club: normalized.club,
-            average: normalized.average,
-            email: normalized.email,
-          }, rawParticipant?.player_database_id || keepDatabaseId);
+          const requestedPlayerDatabaseId = rawParticipant?.player_database_id !== undefined
+            ? rawParticipant.player_database_id
+            : keepDatabaseId;
+          const playerDatabaseId = isAdmin
+            ? savePlayerDatabaseRecord({
+              ...rawParticipant,
+              first_name: normalized.first_name,
+              last_name: normalized.last_name,
+              gender: normalized.gender,
+              hands: normalized.hands,
+              club: normalized.club,
+              average: normalized.average,
+              email: normalized.email,
+            }, requestedPlayerDatabaseId)
+            : getExistingPlayerDatabaseId(requestedPlayerDatabaseId, normalized.first_name, normalized.last_name);
 
           if (current && importedId) {
             update.run(
@@ -3944,7 +3985,7 @@ async function startServer() {
       res.json({ success: true, family_names_filled: familyNamesFilled, preserved_existing: preservedExisting });
     } catch (err: any) {
       console.error('Error bulk importing participants:', err);
-      res.status(500).json({ error: err.message || 'Failed to bulk import participants' });
+      res.status(err instanceof PlayerDatabaseReferenceError ? 400 : 500).json({ error: err.message || 'Failed to bulk import participants' });
     }
   });
 
