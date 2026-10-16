@@ -147,10 +147,32 @@ export default function AdminPlayersPage({ onBack }: { onBack: () => void }) {
     }
   };
 
-  const queueCsvImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const queueCsvImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+    setError('');
+    try {
+      const text = await file.text();
+      const parsed = parseParticipantCsv(text).map((player) => ({
+        ...player,
+        last_name: player.last_name === 'Player' ? '' : player.last_name,
+      }));
+      const headerLine = text.replace(/^\uFEFF/, '').split(/\r\n|\n|\r/, 1)[0].toLowerCase().replace(/["_-]+/g, ' ');
+      // Files exported from this app are cumulative (Event History column, even if some players have none), so no single event applies.
+      if (parsed.length && (/event history/.test(headerLine) || parsed.some((player) => player.history?.length))) {
+        setSaving(true);
+        try {
+          await startImport(parsed, undefined, true);
+        } finally {
+          setSaving(false);
+        }
+        return;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to read CSV');
+      return;
+    }
     const name = file.name.replace(/(?:[_ -]participants)?\.csv$/i, '').trim();
     const lowerName = name.toLocaleLowerCase();
     const inferredSeries = /b[\s_-]*pro/.test(lowerName) ? 'B-Pro'
@@ -248,11 +270,20 @@ export default function AdminPlayersPage({ onBack }: { onBack: () => void }) {
     }
   };
 
-  const exportCsv = () => {
-    const headers = ['Player Database ID', 'First Name', 'Last Name', 'Gender', 'Hands', 'Club', 'Average', 'Contact Details', 'Teams', 'Tournaments Played'];
-    const rows = players.map((player) => [
+  const exportCsv = async () => {
+    let exported: Awaited<ReturnType<typeof api.exportPlayerDatabase>>;
+    try {
+      exported = await api.exportPlayerDatabase();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to export players');
+      return;
+    }
+    const teamsById = new Map(players.map((player) => [player.id, player.teams || '']));
+    const headers = ['Player Database ID', 'First Name', 'Last Name', 'Gender', 'Hands', 'Club', 'Average', 'Contact Details', 'Teams', 'Tournaments Played', 'Event History'];
+    const rows = exported.map((player) => [
       player.id, player.first_name, player.last_name, player.gender, player.hands,
-      player.club, player.average || '', player.email, player.teams || '', player.tournaments_played,
+      player.club, player.average || '', player.email, teamsById.get(player.id) || '', player.history.length,
+      player.history.length ? JSON.stringify(player.history) : '',
     ]);
     const content = [headers, ...rows].map((row) => row.map(csvValue).join(',')).join('\r\n');
     const blob = new Blob(['\uFEFF', content], { type: 'text/csv;charset=utf-8;' });
@@ -287,7 +318,7 @@ export default function AdminPlayersPage({ onBack }: { onBack: () => void }) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <input ref={importRef} type="file" accept=".csv,text/csv" className="hidden" onChange={queueCsvImport} />
+          <input ref={importRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => void queueCsvImport(event)} />
           <button type="button" onClick={() => importRef.current?.click()} className="ui-card flex h-9 items-center gap-2 rounded-md px-3 text-sm font-semibold text-black hover:border-orange-500">
             <Upload size={15} /> Import CSV
           </button>
@@ -296,7 +327,7 @@ export default function AdminPlayersPage({ onBack }: { onBack: () => void }) {
               Duplicates ({duplicateGroups.length})
             </button>
           )}
-          <button type="button" onClick={exportCsv} disabled={!players.length} className="ui-card flex h-9 items-center gap-2 rounded-md px-3 text-sm font-semibold text-black hover:border-orange-500 disabled:opacity-50">
+          <button type="button" onClick={() => void exportCsv()} disabled={!players.length} className="ui-card flex h-9 items-center gap-2 rounded-md px-3 text-sm font-semibold text-black hover:border-orange-500 disabled:opacity-50">
             <Download size={15} /> Export CSV
           </button>
           <button type="button" onClick={openNew} className="flex h-9 items-center gap-2 rounded-md bg-emerald-800 px-3 text-sm font-semibold text-white hover:bg-emerald-700">

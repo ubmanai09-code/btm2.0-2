@@ -541,6 +541,12 @@ const api = {
     if (!res.ok) throw new Error(data?.error || 'Failed to import player database');
     return data;
   },
+  async exportPlayerDatabase(): Promise<(PlayerDatabaseRecord & { history: { name: string; center: string; series: string; team: string }[] })[]> {
+    const res = await fetch('/api/player-database/export');
+    const data = await this.safeJson(res);
+    if (!res.ok) throw new Error(data?.error || 'Failed to export player database');
+    return data;
+  },
   async mergePlayerDatabaseRecords(keepId: number, removeIds: number[]): Promise<{ success: boolean }> {
     const res = await fetch('/api/player-database/merge', {
       method: 'POST',

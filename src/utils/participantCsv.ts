@@ -5,6 +5,27 @@ export type ParticipantImportRow = Pick<Participant, 'first_name' | 'last_name' 
   player_database_id?: number;
   team_name?: string;
   division?: string;
+  history?: PlayerEventHistory[];
+};
+
+export type PlayerEventHistory = { name: string; center: string; series: string; team: string };
+
+const parseEventHistory = (text: string): PlayerEventHistory[] | undefined => {
+  if (!text) return undefined;
+  try {
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed)) return undefined;
+    return parsed
+      .map((entry) => ({
+        name: String(entry?.name ?? '').trim(),
+        center: String(entry?.center ?? '').trim(),
+        series: String(entry?.series ?? '').trim(),
+        team: String(entry?.team ?? '').trim(),
+      }))
+      .filter((entry) => entry.name);
+  } catch {
+    return undefined;
+  }
 };
 
 export const parseParticipantCsv = (text: string): ParticipantImportRow[] => {
@@ -83,6 +104,7 @@ export const parseParticipantCsv = (text: string): ParticipantImportRow[] => {
   const emailColumn = findColumn(['contact details', 'contact', 'email', 'e mail'], 5);
   const teamNameColumn = findColumn(['team name', 'registered team', 'teams'], -1);
   const divisionColumn = findColumn(['division'], -1);
+  const historyColumn = findColumn(['event history'], -1);
   const dataRows = hasHeader ? rows.slice(1) : rows;
   const cell = (values: string[], column: number) => column >= 0 ? (values[column] || '').trim() : '';
 
@@ -126,6 +148,7 @@ export const parseParticipantCsv = (text: string): ParticipantImportRow[] => {
       email: cell(values, emailColumn),
       ...(teamNameColumn >= 0 && cell(values, teamNameColumn) ? { team_name: cell(values, teamNameColumn) } : {}),
       ...(divisionColumn >= 0 && cell(values, divisionColumn) ? { division: cell(values, divisionColumn) } : {}),
+      ...(historyColumn >= 0 && parseEventHistory(cell(values, historyColumn)) ? { history: parseEventHistory(cell(values, historyColumn)) } : {}),
     }];
   });
 };

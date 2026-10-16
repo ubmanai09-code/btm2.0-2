@@ -899,6 +899,27 @@ const normalizePlayerIdentityPart = (value: unknown) => String(value ?? '')
   .replace(/\s+/g, ' ')
   .toLocaleLowerCase();
 
+const PLAYER_CENTERS = ['B Bowling', 'King Bowling'];
+const PLAYER_SERIES = ['B-Pro', 'B-Champ', 'Mixed Tour', 'MBA', 'MPBA', 'Other'];
+
+const classifyPlayerEvent = (name: unknown, location: unknown, series?: unknown) => {
+  const text = `${name || ''} ${location || ''}`;
+  const center = /b[\s_-]*bowling|b[\s_-]*pro|b[\s_-]*champ/i.test(text)
+    ? 'B Bowling'
+    : /king|mixed|mpba|\bmba\b/i.test(text)
+      ? 'King Bowling'
+      : '';
+  const knownSeries = String(series ?? '').trim();
+  const detectedSeries = PLAYER_SERIES.includes(knownSeries) ? knownSeries
+    : /b[\s_-]*pro/i.test(text) ? 'B-Pro'
+      : /b[\s_-]*champ/i.test(text) ? 'B-Champ'
+        : /mixed/i.test(text) ? 'Mixed Tour'
+          : /mpba/i.test(text) ? 'MPBA'
+            : /\bmba\b/i.test(text) ? 'MBA'
+              : 'Other';
+  return { center, series: detectedSeries };
+};
+
 const savePlayerDatabaseRecord = (
   raw: any,
   requestedId?: unknown,
@@ -3005,6 +3026,50 @@ async function startServer() {
     }
   });
 
+  app.get('/api/player-database/export', requireAdmin, (_req, res) => {
+    try {
+      const players = db.prepare('SELECT * FROM player_database ORDER BY lower(last_name), lower(first_name), id').all() as any[];
+      const linked = db.prepare(`
+        SELECT pa.player_database_id AS player_id, t.name, t.location, COALESCE(tm.name, '') AS team_name
+        FROM participants pa
+        JOIN tournaments t ON t.id = pa.tournament_id
+        LEFT JOIN teams tm ON tm.id = pa.team_id
+        WHERE pa.player_database_id IS NOT NULL
+      `).all() as any[];
+      const imported = db.prepare(`
+        SELECT player_id, source_name AS name, center, series, team_name FROM player_database_history
+      `).all() as any[];
+      const byPlayer = new Map<number, Map<string, { name: string; center: string; series: string; team: string }>>();
+      const add = (playerId: number, entry: { name: string; center: string; series: string; team: string }) => {
+        const entries = byPlayer.get(playerId) || new Map();
+        const key = normalizePlayerIdentityPart(entry.name);
+        const existing = entries.get(key);
+        if (!existing) entries.set(key, entry);
+        else if (!existing.team && entry.team) existing.team = entry.team;
+        byPlayer.set(playerId, entries);
+      };
+      for (const row of linked) {
+        add(Number(row.player_id), { name: row.name, ...classifyPlayerEvent(row.name, row.location), team: row.team_name });
+      }
+      for (const row of imported) {
+        add(Number(row.player_id), {
+          name: row.name,
+          center: PLAYER_CENTERS.includes(row.center) ? row.center : classifyPlayerEvent(row.name, '').center,
+          series: row.series || 'Other',
+          team: row.team_name || '',
+        });
+      }
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(players.map((player) => ({
+        ...player,
+        history: Array.from(byPlayer.get(Number(player.id))?.values() || []),
+      })));
+    } catch (err: any) {
+      console.error('Failed to export player database:', err);
+      res.status(500).json({ error: err.message || 'Failed to export player database' });
+    }
+  });
+
   app.post('/api/player-database/import', requireAdmin, (req, res) => {
     try {
       const players = Array.isArray(req.body?.players) ? req.body.players : [];
@@ -3159,11 +3224,32 @@ async function startServer() {
             }
           }
 
+          const historyEntries: Array<{ name: string; center: string; series: string; team: string }> = [];
           if (sourceName) {
-            const teamName = String(player?.team_name ?? '').trim();
-            const centerValue = center === 'Unknown' ? '' : center;
-            const existed = findHistory.get(playerId, sourceName, centerValue, series);
-            const historyResult = addHistory.run(playerId, sourceName, centerValue, series, teamName);
+            historyEntries.push({
+              name: sourceName,
+              center: center === 'Unknown' ? '' : center,
+              series,
+              team: String(player?.team_name ?? '').trim(),
+            });
+          }
+          if (Array.isArray(player?.history)) {
+            for (const entry of player.history.slice(0, 500)) {
+              const entryName = String(entry?.name ?? '').trim().slice(0, 200);
+              if (!entryName) continue;
+              const entryCenter = String(entry?.center ?? '').trim();
+              const entrySeries = String(entry?.series ?? '').trim();
+              historyEntries.push({
+                name: entryName,
+                center: PLAYER_CENTERS.includes(entryCenter) ? entryCenter : '',
+                series: PLAYER_SERIES.includes(entrySeries) ? entrySeries : 'Other',
+                team: String(entry?.team ?? '').trim(),
+              });
+            }
+          }
+          for (const entry of historyEntries) {
+            const existed = findHistory.get(playerId, entry.name, entry.center, entry.series);
+            const historyResult = addHistory.run(playerId, entry.name, entry.center, entry.series, entry.team);
             if (!existed) historyAdded += historyResult.changes;
           }
         }
