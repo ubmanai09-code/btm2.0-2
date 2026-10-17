@@ -487,6 +487,22 @@ const api = {
     }
     return data;
   },
+  async getMasters(tournamentId: number, division: string): Promise<{ state: any | null; updatedAt: string | null }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/masters/${division}`, { cache: 'no-store' });
+    const data = await this.safeJson(res);
+    if (!res.ok) throw new Error(data?.error || 'Failed to load Masters data');
+    return data;
+  },
+  async saveMasters(tournamentId: number, division: string, state: any, token?: string): Promise<{ success: boolean }> {
+    const res = await fetch(`/api/tournaments/${tournamentId}/masters/${division}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...(this.authHeaders(token) as Record<string, string>) },
+      body: JSON.stringify({ state }),
+    });
+    const data = await this.safeJson(res);
+    if (!res.ok) throw new Error(data?.error || 'Failed to save Masters data');
+    return data;
+  },
   async saveSponsorsConfig(config: any): Promise<{ success: boolean }> {
     const res = await fetch('/api/sponsors-config', {
       method: 'PUT',

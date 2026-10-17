@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { BookOpen, Shuffle, Percent } from 'lucide-react';
+import { BookOpen, Shuffle, Percent, Sigma } from 'lucide-react';
 import GlossaryPage from './GlossaryPage';
+import CumulativeScoringTool from './CumulativeScoringTool';
 
 interface ToolsPageProps {
   lang: 'mn' | 'en';
@@ -8,7 +9,7 @@ interface ToolsPageProps {
   authToken?: string;
 }
 
-type ToolId = 'glossary' | 'handicap' | 'draw';
+type ToolId = 'glossary' | 'handicap' | 'draw' | 'cumulative';
 
 const num = (v: string) => {
   const n = parseFloat(v);
@@ -94,6 +95,7 @@ export default function ToolsPage({ lang, role, authToken }: ToolsPageProps) {
     { id: 'glossary', label: mn ? 'Толь' : 'Glossary', icon: BookOpen },
     { id: 'handicap', label: mn ? 'Гандикап' : 'Handicap', icon: Percent },
     { id: 'draw', label: mn ? 'Сугалаа' : 'Random draw', icon: Shuffle },
+    ...(role !== 'public' ? [{ id: 'cumulative' as ToolId, label: mn ? 'Нэгдсэн оноо' : 'Cumulative scoring', icon: Sigma }] : []),
   ];
   return (
     <div className="space-y-4">
@@ -114,6 +116,7 @@ export default function ToolsPage({ lang, role, authToken }: ToolsPageProps) {
         <div className="ui-card p-5 max-w-3xl">
           {tool === 'handicap' && <HandicapTool mn={mn} />}
           {tool === 'draw' && <DrawTool mn={mn} />}
+          {tool === 'cumulative' && role !== 'public' && <CumulativeScoringTool mn={mn} />}
         </div>
       )}
     </div>

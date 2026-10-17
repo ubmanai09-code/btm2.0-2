@@ -350,6 +350,21 @@ function initDb() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS masters_state (
+      division TEXT PRIMARY KEY,
+      payload TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS masters_tournament_state (
+      tournament_id INTEGER NOT NULL,
+      division TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (tournament_id, division),
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS tournament_snapshots (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tournament_id INTEGER NOT NULL,
@@ -1420,6 +1435,40 @@ async function startServer() {
     checkpointTournamentMutation(req, 'tournament');
     return next();
   };
+
+  const parseMastersDivision = (value: string) => (value === 'men' || value === 'women' ? value : null);
+
+  app.get('/api/tournaments/:id/masters/:division', (req, res) => {
+    const division = parseMastersDivision(req.params.division);
+    if (!division) return res.status(400).json({ error: 'Invalid division' });
+    const tournamentId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(tournamentId)) return res.status(400).json({ error: 'Invalid tournament' });
+    const row = db.prepare('SELECT payload, updated_at FROM masters_tournament_state WHERE tournament_id = ? AND division = ?')
+      .get(tournamentId, division) as { payload: string; updated_at: string } | undefined;
+    let state: unknown = null;
+    try { state = row ? JSON.parse(row.payload) : null; } catch { state = null; }
+    return res.json({ state, updatedAt: row?.updated_at ?? null });
+  });
+
+  // Autosaves on every edit, so this deliberately skips requirePermission (which would snapshot the tournament each time).
+  app.put('/api/tournaments/:id/masters/:division', (req, res) => {
+    if (!rolePermissions[getRequestRole(req)].has('brackets:manage')) {
+      return res.status(403).json({ error: 'Forbidden: insufficient permissions' });
+    }
+    const division = parseMastersDivision(req.params.division);
+    if (!division) return res.status(400).json({ error: 'Invalid division' });
+    const tournamentId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(tournamentId) || !db.prepare('SELECT id FROM tournaments WHERE id = ?').get(tournamentId)) {
+      return res.status(404).json({ error: 'Tournament not found' });
+    }
+    const state = req.body?.state;
+    if (!state || typeof state !== 'object' || Array.isArray(state)) return res.status(400).json({ error: 'Invalid state' });
+    const payload = JSON.stringify(state);
+    if (payload.length > 500_000) return res.status(413).json({ error: 'State too large' });
+    db.prepare(`INSERT INTO masters_tournament_state (tournament_id, division, payload, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(tournament_id, division) DO UPDATE SET payload = excluded.payload, updated_at = CURRENT_TIMESTAMP`).run(tournamentId, division, payload);
+    return res.json({ success: true });
+  });
 
   app.get('/api/sponsors-config', (req, res) => {
     try {
