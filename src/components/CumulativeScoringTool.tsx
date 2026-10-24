@@ -37,7 +37,7 @@ export default function CumulativeScoringTool({ mn, canExport = false }: { mn: b
     return a.total === b.total && range(a) === range(b) && avg(a) === avg(b);
   };
   useEffect(() => {
-    api.getTournaments().then(setTournaments).catch((err) => setError(err?.message || 'Failed to load tournaments'));
+    api.getTournaments().then((list) => setTournaments([...list].sort((x, y) => String(y.date).localeCompare(String(x.date)) || y.id - x.id))).catch((err) => setError(err?.message || 'Failed to load tournaments'));
   }, []);
 
   const toggle = (id: number) => {
