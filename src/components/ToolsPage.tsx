@@ -95,7 +95,7 @@ export default function ToolsPage({ lang, role, authToken }: ToolsPageProps) {
     { id: 'glossary', label: mn ? 'Толь' : 'Glossary', icon: BookOpen },
     { id: 'handicap', label: mn ? 'Гандикап' : 'Handicap', icon: Percent },
     { id: 'draw', label: mn ? 'Сугалаа' : 'Random draw', icon: Shuffle },
-    ...(role !== 'public' ? [{ id: 'cumulative' as ToolId, label: mn ? 'Нэгдсэн оноо' : 'Cumulative scoring', icon: Sigma }] : []),
+    { id: 'cumulative', label: mn ? 'Нэгдсэн дүн' : 'Cumulative result', icon: Sigma },
   ];
   return (
     <div className="space-y-4">
@@ -113,10 +113,10 @@ export default function ToolsPage({ lang, role, authToken }: ToolsPageProps) {
       </div>
       {tool === 'glossary' && <GlossaryPage lang={lang} role={role} authToken={authToken} />}
       {tool !== 'glossary' && (
-        <div className="ui-card p-5 max-w-3xl">
+        <div className={`ui-card p-5 ${tool === 'cumulative' ? 'w-full' : 'max-w-3xl'}`}>
           {tool === 'handicap' && <HandicapTool mn={mn} />}
           {tool === 'draw' && <DrawTool mn={mn} />}
-          {tool === 'cumulative' && role !== 'public' && <CumulativeScoringTool mn={mn} />}
+          {tool === 'cumulative' && <CumulativeScoringTool mn={mn} canExport={role !== 'public'} />}
         </div>
       )}
     </div>

@@ -46,6 +46,12 @@ export const genderDivision = (raw: unknown): CumulativeDivision | '' => {
 const clean = (value: unknown) => String(value ?? '').replace(/[",\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
 const nameKey = (first: string, last: string) => `${first} ${last}`.trim().replace(/\s+/g, ' ').toLowerCase();
 
+/** Same tie-break order as the Standing table: total, then smaller score range, then higher average, then name. */
+const scoreRange = (scores: (number | null)[]) => {
+  const played = scores.filter((v): v is number => v != null);
+  return played.length > 1 ? Math.max(...played) - Math.min(...played) : 0;
+};
+
 /** Sources must be ordered oldest first: game columns follow that order and club/hands come from the latest event. */
 export function accumulate(sources: SourceTournament[], division: CumulativeDivision): CumulativeRow[] {
   const totalSlots = sources.reduce((sum, s) => sum + s.gameCount, 0);
@@ -89,8 +95,9 @@ export function accumulate(sources: SourceTournament[], division: CumulativeDivi
   }
   return [...byPlayer.values()]
     .filter((row) => row.games > 0)
-    .sort((a, b) => b.total - a.total || b.games - a.games || a.name.localeCompare(b.name))
-    .map((row, index) => ({ ...row, rank: index + 1 }));
+    .map((row) => ({ ...row, average: Number((row.total / row.games).toFixed(1)), range: scoreRange(row.scores) }))
+    .sort((a, b) => b.total - a.total || a.range - b.range || b.average - a.average || a.name.localeCompare(b.name))
+    .map(({ average: _average, range: _range, ...row }, index) => ({ ...row, rank: index + 1 }));
 }
 
 /**
@@ -140,7 +147,7 @@ export function parseCumulativeFile(text: string): CumulativeExport {
   const result: CumulativeExport = { kind: 'btm-cumulative-scores', version: 3, tournaments: [], slots: [], men: [], women: [] };
   if (trimmed.startsWith('{')) {
     const data = JSON.parse(trimmed);
-    if (data?.kind !== 'btm-cumulative-scores') throw new Error('Not a cumulative scores file');
+    if (data?.kind !== 'btm-cumulative-scores') throw new Error('Not a cumulative result file');
     result.tournaments = Array.isArray(data.tournaments) ? data.tournaments : [];
     result.slots = Array.isArray(data.slots) ? data.slots : [];
     result.men = Array.isArray(data.men) ? data.men : [];
