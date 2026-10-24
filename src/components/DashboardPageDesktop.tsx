@@ -3,14 +3,15 @@ import {
   Archive, ArrowRight, Calendar, ChevronRight, ClipboardList, Settings2, X, Columns4, Download, Edit, GitBranch, MapPin, Plus, Save, Target, Trash2, Trophy, Upload, Users,
 } from 'lucide-react';
 import type { Tournament } from '../services/api';
+import { buildRankingCategories, type RankingPlayer, type RankingTeam } from './dashboardRankings';
 
 type DisplayStatus = 'active' | 'incoming' | 'finished' | 'archived';
 export type DashboardTab = 'participants' | 'standings' | 'scoring' | 'lanes' | 'brackets-v2';
 
 interface Highlights {
   tournament: { id: number; name: string; games_count: number };
-  players: Array<{ id: number; name: string; gender: string; games: number; total: number; avg: number }>;
-  teams: Array<{ id: number; name: string; games: number; total: number; avg: number; members?: string[] }>;
+  players: RankingPlayer[];
+  teams: RankingTeam[];
   highest_men: { score: number; game_number: number; name: string } | null;
   highest_women: { score: number; game_number: number; name: string } | null;
   counts: { players: number; teams: number; rounds: number };
@@ -151,18 +152,19 @@ export default function DashboardPage(props: DashboardPageProps) {
   const safePage = Math.min(page, pageCount);
   const visibleRows = listRows.slice((safePage - 1) * LIST_SIZE, safePage * LIST_SIZE);
 
-  const toRows = (list: Array<{ id: number; name: string; avg: number; total: number; members?: string[] }>) =>
-    list.map((r) => ({ id: r.id, name: r.name, avg: r.avg, total: r.total, members: r.members || [] }));
-  const players = highlights?.players || [];
-  const groups: Array<{ key: string; title: string; rows: ReturnType<typeof toRows> }> = isTeam
-    ? [{ key: 'teams', title: t('dashboard.top_teams', 'Top teams'), rows: toRows(highlights?.teams || []) }]
-    : [
-      { key: 'f', title: t('dashboard.top_women', 'Top women'), rows: toRows(players.filter((p) => p.gender === 'f')) },
-      { key: 'm', title: t('dashboard.top_men', 'Top men'), rows: toRows(players.filter((p) => p.gender === 'm')) },
-      { key: 'o', title: t('dashboard.top_players', 'Top players'), rows: toRows(players.filter((p) => p.gender !== 'f' && p.gender !== 'm')) },
-    ].filter((g) => g.key !== 'o' || g.rows.length > 0);
+  const [rankingKey, setRankingKey] = useState('');
+  const rankingCategories = buildRankingCategories(isTeam ? [] : highlights?.players || [], highlights?.teams || [], {
+    women: t('dashboard.women', 'Women'),
+    men: t('dashboard.men', 'Men'),
+    players: t('dashboard.players', 'Players'),
+    teams: t('dashboard.teams', 'Teams'),
+    womenTeams: t('dashboard.women_teams', 'Women teams'),
+    menTeams: t('dashboard.men_teams', 'Men teams'),
+    mixedTeams: t('dashboard.mixed_teams', 'Mixed teams'),
+  });
+  const activeRanking = rankingCategories.find((c) => c.key === rankingKey) || rankingCategories[0] || null;
   const maxRows = showAll ? 10 : 5;
-  const canExpand = groups.some((g) => g.rows.length > 5);
+  const canExpand = (activeRanking?.rows.length || 0) > 5;
 
   const chip = (status: DisplayStatus) => {
     const map: Record<DisplayStatus, { label: string; cls: string }> = {
@@ -259,23 +261,30 @@ export default function DashboardPage(props: DashboardPageProps) {
 
               {showScores ? (
                 <div className="space-y-3">
-                  <div className={`grid grid-cols-1 gap-4 ${groups.length > 1 ? 'md:grid-cols-2' : ''} ${groups.length > 2 ? 'xl:grid-cols-3' : ''}`}>
-                    {groups.map((g) => (
-                      <div key={g.key} className="rounded-lg border border-gray-400 overflow-hidden">
-                        <div className="flex items-center justify-between px-4 py-2.5 bg-[#0f172a] text-white">
-                          <h3 className="text-sm font-bold">{g.title}</h3>
-                          {g.key === groups[0].key && canExpand && (
-                            <button onClick={() => setShowAll((v) => !v)} className="text-[11px] font-semibold uppercase tracking-wide text-orange-400 hover:text-orange-300">
-                              {showAll ? t('dashboard.show_less', 'Top 5') : t('dashboard.show_more', 'Top 10')}
-                            </button>
-                          )}
-                        </div>
-                        {g.rows.length === 0 ? (
-                          <p className="p-6 text-sm text-gray-500 text-center">{t('dashboard.no_scores', 'No scores recorded yet.')}</p>
-                        ) : (
-                          <table className="w-full text-sm">
+                  <div className="rounded-lg border border-gray-400 overflow-hidden">
+                    <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 bg-[#0f172a] text-white">
+                      {rankingCategories.map((c) => (
+                        <button
+                          key={c.key}
+                          type="button"
+                          onClick={() => setRankingKey(c.key)}
+                          className={`h-8 px-4 rounded-md border text-xs font-bold uppercase tracking-wide transition-colors ${activeRanking?.key === c.key ? 'bg-orange-600 border-orange-600 text-white' : 'border-slate-600 text-slate-300 hover:border-orange-500'}`}
+                        >
+                          {c.label}
+                        </button>
+                      ))}
+                      {canExpand && (
+                        <button onClick={() => setShowAll((v) => !v)} className="ml-auto text-[11px] font-semibold uppercase tracking-wide text-orange-400 hover:text-orange-300">
+                          {showAll ? t('dashboard.show_less', 'Top 5') : t('dashboard.show_more', 'Top 10')}
+                        </button>
+                      )}
+                    </div>
+                    {!activeRanking || activeRanking.rows.length === 0 ? (
+                      <p className="p-6 text-sm text-gray-500 text-center">{t('dashboard.no_scores', 'No scores recorded yet.')}</p>
+                    ) : (
+                      <table className="w-full text-sm">
                             <tbody>
-                              {g.rows.slice(0, maxRows).map((row, index) => (
+                              {activeRanking.rows.slice(0, maxRows).map((row, index) => (
                                 <tr key={row.id} className="border-t border-gray-300 first:border-t-0">
                                   <td className="pl-4 pr-2 py-2 w-12"><span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${medalClass(index + 1)}`}>{index + 1}</span></td>
                                   <td className="px-2 py-2 font-semibold text-black">
@@ -288,9 +297,7 @@ export default function DashboardPage(props: DashboardPageProps) {
                               ))}
                             </tbody>
                           </table>
-                        )}
-                      </div>
-                    ))}
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     {bestCard(t('dashboard.best_women', 'Highest game · Women'), highlights?.highest_women ?? null)}

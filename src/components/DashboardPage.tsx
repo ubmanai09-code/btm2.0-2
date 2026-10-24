@@ -3,14 +3,15 @@ import {
   Archive, ArrowRight, Calendar, ChevronLeft, ChevronRight, ClipboardList, Settings2, X, Columns4, Download, Edit, GitBranch, MapPin, Plus, Save, Target, Trash2, Trophy, Upload, Users,
 } from 'lucide-react';
 import type { Tournament } from '../services/api';
+import { buildRankingCategories, type RankingPlayer, type RankingTeam } from './dashboardRankings';
 
 type DisplayStatus = 'active' | 'incoming' | 'finished' | 'archived';
 export type DashboardTab = 'participants' | 'standings' | 'scoring' | 'lanes' | 'brackets-v2';
 
 interface Highlights {
   tournament: { id: number; name: string; games_count: number };
-  players: Array<{ id: number; name: string; gender: string; games: number; total: number; avg: number }>;
-  teams: Array<{ id: number; name: string; games: number; total: number; avg: number; members?: string[] }>;
+  players: RankingPlayer[];
+  teams: RankingTeam[];
   highest_men: { score: number; game_number: number; name: string } | null;
   highest_women: { score: number; game_number: number; name: string } | null;
   counts: { players: number; teams: number; rounds: number };
@@ -199,39 +200,21 @@ export default function DashboardPage(props: DashboardPageProps) {
   const safePage = Math.min(page, pageCount);
   const visibleRows = listRows.slice((safePage - 1) * LIST_SIZE, safePage * LIST_SIZE);
 
-  // Top results up to 10 for multi-column layout on portrait & desktop
-  const top10Women = useMemo(
-    () => (highlights?.players || []).filter((p) => p.gender === 'f').slice(0, 10),
-    [highlights?.players],
+  const [rankingKey, setRankingKey] = useState('');
+  const rankingCategories = useMemo(
+    () => buildRankingCategories(highlights?.players || [], highlights?.teams || [], {
+      women: t('dashboard.women', 'Women'),
+      men: t('dashboard.men', 'Men'),
+      players: t('dashboard.players', 'Players'),
+      teams: t('dashboard.teams', 'Teams'),
+      womenTeams: t('dashboard.women_teams', 'Women teams'),
+      menTeams: t('dashboard.men_teams', 'Men teams'),
+      mixedTeams: t('dashboard.mixed_teams', 'Mixed teams'),
+    }),
+    [highlights?.players, highlights?.teams, t],
   );
-
-  const top10Men = useMemo(
-    () => (highlights?.players || []).filter((p) => p.gender === 'm').slice(0, 10),
-    [highlights?.players],
-  );
-
-  const top10Open = useMemo(
-    () => (highlights?.players || []).filter((p) => p.gender !== 'f' && p.gender !== 'm').slice(0, 10),
-    [highlights?.players],
-  );
-
-  const top10Teams = useMemo(
-    () => (highlights?.teams || []).slice(0, 10),
-    [highlights?.teams],
-  );
-
-  // Available categories with up to 10 results, strictly sorted in the requested order:
-  // 1. Single F (Women) (if available)
-  // 2. Single M (Men) (if available)
-  // 3. Teams (if available)
-  const heroRankingColumns = useMemo(() => {
-    const cols: Array<{ key: 'women' | 'men' | 'open' | 'team'; label: string; items: any[] }> = [];
-    if (top10Women.length > 0) cols.push({ key: 'women', label: 'Single F', items: top10Women });
-    if (top10Men.length > 0) cols.push({ key: 'men', label: 'Single M', items: top10Men });
-    if (cols.length === 0 && top10Open.length > 0) cols.push({ key: 'open', label: 'Singles', items: top10Open });
-    if (top10Teams.length > 0) cols.push({ key: 'team', label: t('dashboard.teams', 'Teams'), items: top10Teams });
-    return cols;
-  }, [top10Women, top10Men, top10Open, top10Teams, t]);
+  const activeRanking = rankingCategories.find((c) => c.key === rankingKey) || rankingCategories[0] || null;
+  const activeRankingRows = activeRanking ? activeRanking.rows.slice(0, 10) : [];
 
   const chip = (status: DisplayStatus) => {
     const map: Record<DisplayStatus, { label: string; cls: string }> = {
@@ -365,39 +348,37 @@ export default function DashboardPage(props: DashboardPageProps) {
               {showScores ? (
                 <div className="space-y-4">
                   {/* Category rankings: Multi-column layout for portrait and big screens displaying top up to 10 results */}
-                  {heroRankingColumns.length === 0 ? (
+                  {!activeRanking ? (
                     <div className="ui-card rounded-lg border border-gray-400 dark:border-slate-700 bg-white dark:bg-[#1E293B] p-6 text-sm text-gray-500 dark:text-slate-400 text-center">
                       {t('dashboard.no_scores', 'No scores recorded yet.')}
                     </div>
                   ) : (
-                    <div className={`grid gap-4 ${
-                      heroRankingColumns.length === 1
-                        ? 'grid-cols-1'
-                        : heroRankingColumns.length === 2
-                          ? 'grid-cols-1 sm:grid-cols-2'
-                          : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3'
-                    }`}>
-                      {heroRankingColumns.map((col) => (
-                        <div
-                          key={col.key}
-                          className="ui-card rounded-lg border border-gray-400 dark:border-slate-700 bg-white dark:bg-[#1E293B] overflow-hidden flex flex-col"
-                        >
-                          <div className="flex items-center justify-between px-3.5 py-2 bg-[#0f172a] text-white">
-                            <h3 className="text-xs font-bold uppercase tracking-wider">{col.label} · Top {col.items.length}</h3>
-                            <span className="text-[10px] text-slate-400 font-semibold uppercase">{col.key === 'team' ? t('dashboard.teams', 'Teams') : t('dashboard.players', 'Players')}</span>
-                          </div>
-                          <div className="overflow-x-auto flex-1">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="border-b border-gray-200 dark:border-slate-700/80 text-[10px] uppercase font-bold text-gray-500 dark:text-slate-400 bg-gray-50/75 dark:bg-slate-900/40">
-                                  <th className="pl-3 pr-1 py-1.5 text-center w-8">#</th>
-                                  <th className="px-2 py-1.5 text-left font-semibold">{t('dashboard.name', 'Name')}</th>
-                                  <th className="px-2 py-1.5 text-right font-semibold tabular-nums">{t('dashboard.avg', 'Avg')}</th>
-                                  <th className="pl-2 pr-3.5 py-1.5 text-right font-semibold tabular-nums w-16">{t('dashboard.total', 'Total')}</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {col.items.map((row: any, index: number) => (
+                    <div className="ui-card rounded-lg border border-gray-400 dark:border-slate-700 bg-white dark:bg-[#1E293B] overflow-hidden flex flex-col">
+                      <div className="flex flex-wrap items-center gap-1.5 px-3 py-2 bg-[#0f172a] text-white">
+                        {rankingCategories.map((c) => (
+                          <button
+                            key={c.key}
+                            type="button"
+                            onClick={() => setRankingKey(c.key)}
+                            className={`h-7 px-3 rounded-md border text-[11px] font-bold uppercase tracking-wide transition-colors ${activeRanking.key === c.key ? 'bg-orange-600 border-orange-600 text-white' : 'border-slate-600 text-slate-300 hover:border-orange-500'}`}
+                          >
+                            {c.label}
+                          </button>
+                        ))}
+                        <span className="ml-auto text-[10px] text-slate-400 font-semibold uppercase">Top {activeRankingRows.length}</span>
+                      </div>
+                      <div className="overflow-x-auto flex-1">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-gray-200 dark:border-slate-700/80 text-[10px] uppercase font-bold text-gray-500 dark:text-slate-400 bg-gray-50/75 dark:bg-slate-900/40">
+                              <th className="pl-3 pr-1 py-1.5 text-center w-8">#</th>
+                              <th className="px-2 py-1.5 text-left font-semibold">{t('dashboard.name', 'Name')}</th>
+                              <th className="px-2 py-1.5 text-right font-semibold tabular-nums">{t('dashboard.avg', 'Avg')}</th>
+                              <th className="pl-2 pr-3.5 py-1.5 text-right font-semibold tabular-nums w-16">{t('dashboard.total', 'Total')}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                                {activeRankingRows.map((row, index) => (
                                   <tr key={row.id} className="border-t border-gray-100 dark:border-slate-800/60 first:border-t-0 hover:bg-gray-50/80 dark:hover:bg-slate-800/50 transition-colors">
                                     <td className="pl-3 pr-1 py-1.5 w-8 text-center">
                                       {index < 3 ? (
@@ -424,11 +405,9 @@ export default function DashboardPage(props: DashboardPageProps) {
                                     </td>
                                   </tr>
                                 ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
 
