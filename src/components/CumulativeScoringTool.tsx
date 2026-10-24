@@ -126,7 +126,7 @@ export default function CumulativeScoringTool({ mn, canExport = false }: { mn: b
         <thead>
           {groups.length > 0 && (
             <tr className="text-[10px] text-black/60">
-              <th colSpan={3} className="sticky top-0 z-[4] h-12 bg-gray-50">
+              <th colSpan={2} className="sticky top-0 left-0 z-[6] h-12 bg-gray-50">
                 <div className="flex h-full items-center gap-2 px-2">
                   {(['men', 'women'] as const).map((d) => (
                     <button
@@ -140,13 +140,14 @@ export default function CumulativeScoringTool({ mn, canExport = false }: { mn: b
                   ))}
                 </div>
               </th>
+              <th className="sticky top-0 z-[4] h-12 bg-gray-50" />
               {groups.map((g, i) => <th key={i} colSpan={g.count} className="sticky top-0 z-[4] h-12 bg-gray-50 text-center px-1 font-semibold border-b border-gray-200 whitespace-nowrap truncate overflow-hidden text-ellipsis" title={g.name}>{g.name}</th>)}
               <th colSpan={2} className="sticky top-0 z-[4] h-12 bg-gray-50" />
             </tr>
           )}
           <tr className="bg-gray-50 text-[10px] font-bold uppercase tracking-wide text-black/60">
-            <th className="sticky top-12 z-[4] bg-gray-50 px-2 py-1.5 text-left">#</th>
-            <th className="sticky top-12 z-[4] bg-gray-50 px-2 py-1.5 text-left">{mn ? 'Нэр' : 'Name'}</th>
+            <th className="sticky top-12 left-0 z-[6] bg-gray-50 px-2 py-1.5 text-left">#</th>
+            <th className="sticky top-12 left-12 z-[6] bg-gray-50 px-2 py-1.5 text-left">{mn ? 'Нэр' : 'Name'}</th>
             <th className="sticky top-12 z-[4] bg-gray-50 px-2.5 py-1.5 text-left">{mn ? 'Клуб' : 'Club'}</th>
             {slots.map((label, i) => <th key={i} className="sticky top-12 z-[4] bg-gray-50 px-2.5 py-1.5 text-center" title={label}>G{i + 1}</th>)}
             <th className="sticky top-12 z-[4] bg-gray-50 px-2.5 py-1.5 text-right text-emerald-700">{mn ? 'Нийт' : 'Total'}</th>
@@ -155,15 +156,15 @@ export default function CumulativeScoringTool({ mn, canExport = false }: { mn: b
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.rank} className={`border-t border-black/5 hover:bg-emerald-50 transition-colors ${r.rank > n ? 'opacity-50' : ''}`}>
-              <td className="px-2 py-1.5 text-xs font-bold text-black/60">{r.rank}</td>
-              <td className="px-2 py-1.5 text-xs font-bold leading-tight truncate" title={r.name}>
+            <tr key={r.rank} className={`group border-t border-black/5 transition-colors ${r.rank > n ? 'text-black/40' : ''}`}>
+              <td className="sticky left-0 z-[2] bg-white group-hover:bg-emerald-50 px-2 py-1.5 text-xs font-bold text-black/60">{r.rank}</td>
+              <td className="sticky left-12 z-[2] bg-white group-hover:bg-emerald-50 px-2 py-1.5 text-xs font-bold leading-tight truncate" title={r.name}>
                 {r.gender === 'Female' ? <><span className="text-red-600 underline underline-offset-2">{r.name.charAt(0)}</span>{r.name.slice(1)}</> : r.name}
               </td>
-              <td className="px-2.5 py-1.5 text-black/70 text-[13px] font-medium leading-tight truncate" title={r.club}>{r.club}</td>
-              {slots.map((_, i) => <td key={i} className="px-2.5 py-1.5 text-center">{r.scores[i] ?? ''}</td>)}
-              <td className="px-2.5 py-1.5 text-right font-bold text-emerald-700">{r.total}</td>
-              <td className="px-2.5 py-1.5 text-center font-semibold text-sky-700">{r.games > 0 ? (r.total / r.games).toFixed(1) : '0.0'}</td>
+              <td className="group-hover:bg-emerald-50 px-2.5 py-1.5 text-black/70 text-[13px] font-medium leading-tight truncate" title={r.club}>{r.club}</td>
+              {slots.map((_, i) => <td key={i} className="group-hover:bg-emerald-50 px-2.5 py-1.5 text-center">{r.scores[i] ?? ''}</td>)}
+              <td className="group-hover:bg-emerald-50 px-2.5 py-1.5 text-right font-bold text-emerald-700">{r.total}</td>
+              <td className="group-hover:bg-emerald-50 px-2.5 py-1.5 text-center font-semibold text-sky-700">{r.games > 0 ? (r.total / r.games).toFixed(1) : '0.0'}</td>
             </tr>
           ))}
         </tbody>
