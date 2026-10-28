@@ -659,6 +659,157 @@ function initDb() {
     }
   });
 
+  // ── MBA public platform — additive only (see MBA-website docs/api-contract.md) ──
+  const pubTournamentInfo = db.prepare("PRAGMA table_info(tournaments)").all() as any[];
+  const pubTournamentColumns = pubTournamentInfo.map((c: any) => c.name);
+  const publicTournamentMigrations = [
+    { name: 'results_status', type: "TEXT NOT NULL DEFAULT 'none'" },
+    { name: 'name_en', type: 'TEXT' },
+    { name: 'description_en', type: 'TEXT' },
+    { name: 'description_mn', type: 'TEXT' },
+    { name: 'registration_deadline', type: 'TEXT' },
+    { name: 'entry_fee', type: 'TEXT' },
+    { name: 'rules_document_url', type: 'TEXT' },
+  ];
+  publicTournamentMigrations.forEach(m => {
+    if (!pubTournamentColumns.includes(m.name)) {
+      try {
+        db.exec(`ALTER TABLE tournaments ADD COLUMN ${m.name} ${m.type}`);
+      } catch (e) {}
+    }
+  });
+
+  const pubPlayerInfo = db.prepare("PRAGMA table_info(player_database)").all() as any[];
+  const pubPlayerColumns = pubPlayerInfo.map((c: any) => c.name);
+  if (!pubPlayerColumns.includes('photo_public')) {
+    try {
+      db.exec(`ALTER TABLE player_database ADD COLUMN photo_public INTEGER NOT NULL DEFAULT 0`);
+    } catch (e) {}
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS clubs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      name_en TEXT,
+      logo TEXT,
+      district TEXT,
+      description_en TEXT,
+      description_mn TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS centers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      name_en TEXT,
+      district TEXT,
+      lanes_count INTEGER,
+      description_en TEXT,
+      description_mn TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category TEXT NOT NULL DEFAULT 'governance',
+      title_en TEXT,
+      title_mn TEXT,
+      file_url TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      published_at TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS rankings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      season TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'national',
+      rank INTEGER NOT NULL,
+      previous_rank INTEGER,
+      player_database_id INTEGER,
+      display_name TEXT,
+      club TEXT,
+      points INTEGER NOT NULL DEFAULT 0,
+      average REAL,
+      high_game INTEGER,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (player_database_id) REFERENCES player_database(id) ON DELETE SET NULL
+    );
+    CREATE TABLE IF NOT EXISTS result_corrections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id INTEGER NOT NULL,
+      changed_by TEXT,
+      field TEXT,
+      old_value TEXT,
+      new_value TEXT,
+      reason TEXT,
+      changed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+    );
+
+    -- Stage 3: player accounts (see MBA-website docs/player-accounts.md)
+    CREATE TABLE IF NOT EXISTS player_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      player_database_id INTEGER,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      email_verified INTEGER NOT NULL DEFAULT 0,
+      display_name TEXT,
+      language TEXT NOT NULL DEFAULT 'mn',
+      privacy_json TEXT NOT NULL DEFAULT '{"show_profile":false,"show_photo":false,"show_stats":true}',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (player_database_id) REFERENCES player_database(id) ON DELETE SET NULL
+    );
+    CREATE TABLE IF NOT EXISTS player_account_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER NOT NULL,
+      player_database_id INTEGER NOT NULL,
+      method TEXT NOT NULL DEFAULT 'admin',
+      status TEXT NOT NULL DEFAULT 'pending',
+      note TEXT,
+      requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      decided_at TEXT,
+      decided_by TEXT,
+      FOREIGN KEY (account_id) REFERENCES player_accounts(id) ON DELETE CASCADE,
+      FOREIGN KEY (player_database_id) REFERENCES player_database(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS player_auth_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      type TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (account_id) REFERENCES player_accounts(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS player_sessions (
+      token TEXT PRIMARY KEY,
+      account_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      expires_at TEXT NOT NULL,
+      FOREIGN KEY (account_id) REFERENCES player_accounts(id) ON DELETE CASCADE
+    );
+  `);
+
+  // Rankings table gained snapshot columns after the first draft; add if missing.
+  const rankingsInfo = db.prepare("PRAGMA table_info(rankings)").all() as any[];
+  const rankingsColumns = rankingsInfo.map((c: any) => c.name);
+  ['display_name', 'club'].forEach(col => {
+    if (!rankingsColumns.includes(col)) {
+      try {
+        db.exec(`ALTER TABLE rankings ADD COLUMN ${col} TEXT`);
+      } catch (e) {}
+    }
+  });
+  const ageInfo = db.prepare("PRAGMA table_info(player_database)").all() as any[];
+  if (!ageInfo.map((c: any) => c.name).includes('age_category')) {
+    try {
+      db.exec(`ALTER TABLE player_database ADD COLUMN age_category TEXT`);
+    } catch (e) {}
+  }
+  // ── end MBA public platform schema ──
+
   const presetTableInfo = db.prepare("PRAGMA table_info(bracket_presets)").all() as any[];
   const presetColumns = presetTableInfo.map((c: any) => c.name);
   const presetMigrations = [
@@ -2876,6 +3027,558 @@ async function startServer() {
     const rows = db.prepare("SELECT * FROM tournaments ORDER BY created_at DESC").all();
     res.json(rows);
   });
+
+  // ── MBA PUBLIC API (v1) ─────────────────────────────────────────────────────
+  // Read-only, privacy-stripped endpoints for mongoliabowling.mn (docs/api-contract.md).
+  // 'draft' tournaments are never exposed. Emails and internal IDs never leave these routes.
+  const PUBLIC_TOURNAMENT_STATUSES = ['upcoming', 'registration_open', 'registration_closed', 'ongoing', 'completed', 'cancelled', 'archived'];
+  // Legacy BTM statuses are mapped onto the public lifecycle: 'finished' → 'completed'.
+  const PUBLIC_STATUS_MAP: Record<string, string> = { finished: 'completed', active: 'ongoing' };
+  const publicStatus = (internal: any) => PUBLIC_STATUS_MAP[String(internal)] || internal;
+  const publicTournamentWhere = `status IN ('upcoming','registration_open','registration_closed','ongoing','active','completed','cancelled','finished','archived')`;
+  const setPublicHeaders = (response: any) => {
+    response.setHeader('Access-Control-Allow-Origin', process.env.BTM_PUBLIC_CORS_ORIGIN || '*');
+    response.setHeader('Cache-Control', 'public, max-age=30');
+  };
+  // Preflight for cross-origin browser calls from the website.
+  app.options('/api/public/*', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', process.env.BTM_PUBLIC_CORS_ORIGIN || '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.sendStatus(204);
+  });
+
+  app.get('/api/public/v1/tournaments', (req, res) => {
+    setPublicHeaders(res);
+    const clauses: string[] = [publicTournamentWhere];
+    const params: any[] = [];
+    if (req.query.status && PUBLIC_TOURNAMENT_STATUSES.includes(String(req.query.status))) {
+      const wanted = String(req.query.status);
+      clauses.push(wanted === 'completed' ? "status IN ('completed','finished')" : wanted === 'ongoing' ? "status IN ('ongoing','active')" : 'status = ?');
+      if (wanted !== 'completed' && wanted !== 'ongoing') params.push(wanted);
+    }
+    if (req.query.year) { clauses.push("substr(date, 1, 4) = ?"); params.push(String(req.query.year)); }
+    if (req.query.center) { clauses.push('location = ?'); params.push(String(req.query.center)); }
+    if (req.query.organizer) { clauses.push('organizer = ?'); params.push(String(req.query.organizer)); }
+    const rows = db.prepare(`
+      SELECT id, name, name_en, date, end_date, location, organizer, type, status, results_status,
+             games_count, competition_style, finals_format, logo
+      FROM tournaments WHERE ${clauses.join(' AND ')} ORDER BY date DESC, id DESC
+    `).all(...params) as any[];
+    res.json(rows.map(r => ({ ...r, status: publicStatus(r.status) })));
+  });
+
+  app.get('/api/public/v1/tournaments/:id', (req, res) => {
+    setPublicHeaders(res);
+    const row = db.prepare(`
+      SELECT id, name, name_en, date, end_date, location, organizer, type, status, results_status,
+             games_count, competition_style, finals_format, logo, divisions, genders_rule,
+             lanes_count, players_per_team, scoring_type, oil_pattern,
+             description_en, description_mn, registration_deadline, entry_fee, rules_document_url
+      FROM tournaments WHERE id = ? AND ${publicTournamentWhere}
+    `).get(req.params.id) as any;
+    if (!row) return res.status(404).json({ error: 'Tournament not found', code: 'NOT_FOUND' });
+    row.status = publicStatus(row.status);
+    res.json(row);
+  });
+
+  app.get('/api/public/v1/tournaments/:id/participants', (req, res) => {
+    setPublicHeaders(res);
+    const tournament = db.prepare(`SELECT id FROM tournaments WHERE id = ? AND ${publicTournamentWhere}`).get(req.params.id);
+    if (!tournament) return res.status(404).json({ error: 'Tournament not found', code: 'NOT_FOUND' });
+    const rows = db.prepare(`
+      SELECT p.id, (p.first_name || ' ' || p.last_name) AS name, p.club, t.name AS team_name,
+             p.gender, p.division,
+             CASE WHEN COALESCE(pd.photo_public, 0) = 1 THEN p.photo_url ELSE NULL END AS photo_url
+      FROM participants p
+      LEFT JOIN teams t ON p.team_id = t.id
+      LEFT JOIN player_database pd ON p.player_database_id = pd.id
+      WHERE p.tournament_id = ?
+      ORDER BY t.name, p.team_order, p.id
+    `).all(req.params.id);
+    res.json(rows);
+  });
+
+  app.get('/api/public/v1/tournaments/:id/standings', (req, res) => {
+    setPublicHeaders(res);
+    const tournament = db.prepare(`SELECT id, type, results_status FROM tournaments WHERE id = ? AND ${publicTournamentWhere}`).get(req.params.id) as any;
+    if (!tournament) return res.status(404).json({ error: 'Tournament not found', code: 'NOT_FOUND' });
+    const division = String(req.query.division || 'overall').toLowerCase();
+    let rows: any[] = [];
+    if (division === 'teams' || (division === 'overall' && tournament.type === 'team')) {
+      rows = db.prepare(`
+        SELECT t.name AS name, NULL AS club,
+               COALESCE(SUM(s.score), 0) AS total_score,
+               ROUND(COALESCE(AVG(s.score), 0), 1) AS average_score,
+               COUNT(s.game_number) AS games_played
+        FROM teams t
+        LEFT JOIN participants p ON p.team_id = t.id
+        LEFT JOIN scores s ON s.participant_id = p.id
+        WHERE t.tournament_id = ?
+        GROUP BY t.id
+        ORDER BY total_score DESC, t.id ASC
+      `).all(req.params.id);
+    } else {
+      const gender = division === 'men' ? 'male' : division === 'women' ? 'female' : null;
+      rows = db.prepare(`
+        SELECT (p.first_name || ' ' || p.last_name) AS name, p.club,
+               COALESCE(SUM(s.score), 0) AS total_score,
+               ROUND(COALESCE(AVG(s.score), 0), 1) AS average_score,
+               COUNT(s.game_number) AS games_played
+        FROM participants p
+        LEFT JOIN scores s ON s.participant_id = p.id
+        WHERE p.tournament_id = ? AND (? IS NULL OR p.gender = ?)
+        GROUP BY p.id
+        ORDER BY total_score DESC, average_score DESC, p.id ASC
+      `).all(req.params.id, gender, gender);
+      const gameStmt = db.prepare('SELECT game_number, score FROM scores WHERE tournament_id = ? AND participant_id = ? ORDER BY game_number');
+      const idStmt = db.prepare("SELECT id FROM participants WHERE tournament_id = ? AND (first_name || ' ' || last_name) = ?");
+      rows = rows.map(r => {
+        const participant = idStmt.get(req.params.id, r.name) as any;
+        return { ...r, game_scores: participant ? gameStmt.all(req.params.id, participant.id) : [] };
+      });
+    }
+    rows = rows.map((r, i) => ({ rank: i + 1, ...r }));
+    res.json({ results_status: tournament.results_status || 'none', standings: rows });
+  });
+
+  app.get('/api/public/v1/documents', (req, res) => {
+    setPublicHeaders(res);
+    const clauses = ["status IN ('published', 'official')"];
+    const params: any[] = [];
+    if (req.query.category) { clauses.push('category = ?'); params.push(String(req.query.category)); }
+    const rows = db.prepare(`
+      SELECT id, category, title_en, title_mn, file_url, status, published_at
+      FROM documents WHERE ${clauses.join(' AND ')} ORDER BY published_at DESC, id DESC
+    `).all(...params);
+    res.json(rows);
+  });
+
+  // Status lifecycle guard — the public status is set explicitly by authorized staff.
+  app.patch('/api/tournaments/:id/status', requirePermission('tournaments:manage', (req) => req.params.id), (req, res) => {
+    const status = String(req.body?.status || '');
+    const allowed = ['draft', 'active', 'finished', ...PUBLIC_TOURNAMENT_STATUSES];
+    if (!allowed.includes(status)) return res.status(400).json({ error: 'Invalid status', code: 'BAD_STATUS' });
+    db.prepare('UPDATE tournaments SET status = ? WHERE id = ?').run(status, req.params.id);
+    res.json({ success: true, status });
+  });
+  app.get('/api/public/v1/rankings', (req, res) => {
+    setPublicHeaders(res);
+    const season = String(req.query.season || new Date().getFullYear());
+    const category = String(req.query.category || 'national').toLowerCase();
+    const allowed = ['national', 'men', 'women', 'youth', 'seniors', 'clubs'];
+    if (!allowed.includes(category)) return res.status(400).json({ error: 'Invalid category', code: 'BAD_CATEGORY' });
+    const rows = db.prepare(`
+      SELECT rank, previous_rank, display_name AS player, club, points, average, high_game
+      FROM rankings WHERE season = ? AND category = ? ORDER BY rank ASC
+    `).all(season, category);
+    const updated = db.prepare('SELECT MAX(updated_at) AS u FROM rankings WHERE season = ? AND category = ?').get(season, category) as any;
+    res.json({ season, category, updated_at: updated?.u || null, rows });
+  });
+
+  // Rankings computation — admin-triggered rebuild of the public rankings table.
+  // Formula (docs/api-contract.md §4.5): per counting tournament, placement points
+  // 1st = 50, -1 per place, floor 10; season total = sum of the player's best 8.
+  // Counting tournaments: results official, or completed/finished with recorded scores.
+  app.post('/api/rankings/recompute', requireAdmin, (req, res) => {
+    try {
+      const season = String(req.body?.season || req.query.season || new Date().getFullYear());
+      const previousSeason = String(Number(season) - 1);
+      const counting = db.prepare(`
+        SELECT id FROM tournaments
+        WHERE substr(date, 1, 4) = ? AND (results_status = 'official' OR status IN ('completed', 'finished'))
+      `).all(season) as any[];
+      const perPlayer = new Map<any, any>();
+      for (const t of counting) {
+        const rows = db.prepare(`
+          SELECT p.player_database_id AS pdid, p.gender AS p_gender,
+                 (p.first_name || ' ' || p.last_name) AS name, p.club,
+                 SUM(s.score) AS total_score, COUNT(s.game_number) AS games, MAX(s.score) AS high_game
+          FROM participants p JOIN scores s ON s.participant_id = p.id
+          WHERE p.tournament_id = ?
+          GROUP BY p.id ORDER BY total_score DESC
+        `).all(t.id) as any[];
+        rows.forEach((r, index) => {
+          const points = Math.max(10, 51 - (index + 1));
+          // Official identity is player_database_id; legacy tournaments fall back to normalized name.
+          const key = r.pdid != null ? Number(r.pdid) : `name:${String(r.name).trim().toLowerCase()}`;
+          if (!perPlayer.has(key)) {
+            const pd = r.pdid != null ? db.prepare('SELECT gender, age_category FROM player_database WHERE id = ?').get(Number(r.pdid)) as any : null;
+            perPlayer.set(key, { points: [], pins: 0, games: 0, high: 0, name: r.name, club: r.club || '', gender: pd?.gender || r.p_gender || '', age: pd?.age_category || '' });
+          }
+          const cur = perPlayer.get(key);
+          cur.points.push(points);
+          cur.pins += Number(r.total_score) || 0;
+          cur.games += Number(r.games) || 0;
+          cur.high = Math.max(cur.high, Number(r.high_game) || 0);
+          if (!cur.club && r.club) cur.club = r.club;
+        });
+      }
+      const prevRank = (category: string, pdid: number) => {
+        const row = db.prepare('SELECT rank FROM rankings WHERE season = ? AND category = ? AND player_database_id = ?').get(previousSeason, category, pdid) as any;
+        return row ? row.rank : null;
+      };
+      const finalized = [...perPlayer.entries()].map(([key, p]) => ({
+        pdid: typeof key === 'number' ? key : null, name: p.name, club: p.club, gender: p.gender, age: p.age,
+        points: p.points.sort((a: number, b: number) => b - a).slice(0, 8).reduce((a: number, b: number) => a + b, 0),
+        average: p.games ? Math.round((p.pins / p.games) * 10) / 10 : 0,
+        high: p.high,
+      }));
+      const insert = db.prepare('INSERT INTO rankings (season, category, rank, previous_rank, player_database_id, display_name, club, points, average, high_game, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)');
+      const writeCategory = (category: string, list: any[]) => {
+        db.prepare('DELETE FROM rankings WHERE season = ? AND category = ?').run(season, category);
+        list.sort((a, b) => b.points - a.points || b.average - a.average);
+        list.forEach((p, i) => insert.run(season, category, i + 1, p.pdid ? prevRank(category, p.pdid) : null, p.pdid, p.name, p.club, p.points, p.average, p.high));
+      };
+      const rebuild = db.transaction(() => {
+        writeCategory('national', finalized);
+        writeCategory('men', finalized.filter(p => p.gender === 'male'));
+        writeCategory('women', finalized.filter(p => p.gender === 'female'));
+        writeCategory('youth', finalized.filter(p => p.age === 'youth'));
+        writeCategory('seniors', finalized.filter(p => p.age === 'senior'));
+        const byClub = new Map<string, number>();
+        finalized.forEach(p => { if (p.club) byClub.set(p.club, (byClub.get(p.club) || 0) + p.points); });
+        const clubRows = [...byClub.entries()].map(([club, points]) => ({ club, points })).sort((a, b) => b.points - a.points);
+        db.prepare("DELETE FROM rankings WHERE season = ? AND category = 'clubs'").run(season);
+        clubRows.forEach((c, i) => insert.run(season, 'clubs', i + 1, null, null, c.club, c.club, c.points, null, null));
+      });
+      rebuild();
+      res.json({ success: true, season, tournaments_counted: counting.length, players_ranked: finalized.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+  // ── Player accounts (Stage 3, docs/player-accounts.md) ─────────────────────
+  const createPlayerToken = (accountId: number, type: 'verify' | 'reset', ttlMs: number) => {
+    const token = randomUUID();
+    db.prepare('INSERT INTO player_auth_tokens (account_id, token, type, expires_at) VALUES (?, ?, ?, ?)')
+      .run(accountId, token, type, new Date(Date.now() + ttlMs).toISOString());
+    return token;
+  };
+  const consumePlayerToken = (token: string, type: string) => {
+    const row = db.prepare('SELECT * FROM player_auth_tokens WHERE token = ? AND type = ? AND used_at IS NULL').get(token, type) as any;
+    if (!row || new Date(row.expires_at).getTime() < Date.now()) return null;
+    db.prepare('UPDATE player_auth_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = ?').run(row.id);
+    return row;
+  };
+  const readPlayerSession = (req: express.Request) => {
+    const header = String(req.headers.authorization || '');
+    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    if (!token) return null;
+    const row = db.prepare('SELECT * FROM player_sessions WHERE token = ?').get(token) as any;
+    if (!row) return null;
+    if (new Date(row.expires_at).getTime() < Date.now()) {
+      db.prepare('DELETE FROM player_sessions WHERE token = ?').run(token);
+      return null;
+    }
+    return row;
+  };
+
+  app.post('/api/public/v1/auth/register', async (req, res) => {
+    setPublicHeaders(res);
+    try {
+      const email = String(req.body?.email || '').trim().toLowerCase();
+      const password = String(req.body?.password || '');
+      const displayName = String(req.body?.display_name || '').trim().slice(0, 120);
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Valid email required', code: 'BAD_EMAIL' });
+      if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters', code: 'WEAK_PASSWORD' });
+      if (!displayName) return res.status(400).json({ error: 'Name required', code: 'BAD_NAME' });
+      const exists = db.prepare('SELECT id FROM player_accounts WHERE email = ?').get(email);
+      if (exists) return res.status(409).json({ error: 'Account already exists', code: 'EMAIL_TAKEN' });
+      const passwordHash = await hash(password, 10);
+      const info = db.prepare('INSERT INTO player_accounts (email, password_hash, display_name) VALUES (?, ?, ?)').run(email, passwordHash, displayName);
+      const accountId = Number(info.lastInsertRowid);
+      const token = createPlayerToken(accountId, 'verify', 24 * 60 * 60 * 1000);
+      // TODO(production): send via SMTP (registration@mongoliabowling.mn). Development: logged to server console.
+      console.log(`[player-auth] verify ${email}: /players/verify?token=${token}`);
+      const payload: any = { success: true, account_id: accountId };
+      if (process.env.BTM_LOCK_ROLE) payload.dev_verify_token = token;
+      res.status(201).json(payload);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/public/v1/auth/verify', (req, res) => {
+    setPublicHeaders(res);
+    const row = consumePlayerToken(String(req.body?.token || ''), 'verify');
+    if (!row) return res.status(400).json({ error: 'Invalid or expired token', code: 'BAD_TOKEN' });
+    db.prepare('UPDATE player_accounts SET email_verified = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(row.account_id);
+    res.json({ success: true });
+  });
+
+  app.post('/api/public/v1/auth/login', async (req, res) => {
+    setPublicHeaders(res);
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+    const account = db.prepare('SELECT * FROM player_accounts WHERE email = ?').get(email) as any;
+    if (!account || !(await compare(password, account.password_hash))) {
+      return res.status(401).json({ error: 'Invalid email or password', code: 'BAD_CREDENTIALS' });
+    }
+    if (!account.email_verified) return res.status(403).json({ error: 'Email not verified', code: 'UNVERIFIED' });
+    const token = randomUUID();
+    db.prepare('INSERT INTO player_sessions (token, account_id, expires_at) VALUES (?, ?, ?)')
+      .run(token, account.id, new Date(Date.now() + SESSION_TTL_MS).toISOString());
+    res.json({ token, role: 'player', id: account.id, email: account.email });
+  });
+
+  app.post('/api/public/v1/auth/forgot', (req, res) => {
+    setPublicHeaders(res);
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    const account = db.prepare('SELECT id FROM player_accounts WHERE email = ?').get(email) as any;
+    if (account) {
+      const token = createPlayerToken(account.id, 'reset', 60 * 60 * 1000);
+      console.log(`[player-auth] reset ${email}: /players/reset?token=${token}`);
+      if (process.env.BTM_LOCK_ROLE) return res.json({ success: true, dev_reset_token: token });
+    }
+    res.json({ success: true }); // never reveal whether the email exists
+  });
+
+  app.post('/api/public/v1/auth/reset', async (req, res) => {
+    setPublicHeaders(res);
+    const password = String(req.body?.password || '');
+    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters', code: 'WEAK_PASSWORD' });
+    const row = consumePlayerToken(String(req.body?.token || ''), 'reset');
+    if (!row) return res.status(400).json({ error: 'Invalid or expired token', code: 'BAD_TOKEN' });
+    db.prepare('UPDATE player_accounts SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(await hash(password, 10), row.account_id);
+    db.prepare('DELETE FROM player_sessions WHERE account_id = ?').run(row.account_id);
+    res.json({ success: true });
+  });
+
+  app.get('/api/public/v1/me', (req, res) => {
+    setPublicHeaders(res);
+    const session = readPlayerSession(req);
+    if (!session) return res.status(401).json({ error: 'Not authenticated', code: 'NO_SESSION' });
+    const account = db.prepare('SELECT id, email, display_name, language, privacy_json, email_verified, player_database_id FROM player_accounts WHERE id = ?').get(session.account_id) as any;
+    if (!account) return res.status(404).json({ error: 'Account not found', code: 'NOT_FOUND' });
+    let player = null;
+    if (account.player_database_id) {
+      player = db.prepare("SELECT id, (first_name || ' ' || last_name) AS name, club, gender, average FROM player_database WHERE id = ?").get(account.player_database_id);
+    }
+    let privacy: any = {};
+    try { privacy = JSON.parse(account.privacy_json || '{}'); } catch {}
+    res.json({ account: { ...account, privacy_json: privacy }, player });
+  });
+
+  app.put('/api/public/v1/me', (req, res) => {
+    setPublicHeaders(res);
+    const session = readPlayerSession(req);
+    if (!session) return res.status(401).json({ error: 'Not authenticated', code: 'NO_SESSION' });
+    const account = db.prepare('SELECT * FROM player_accounts WHERE id = ?').get(session.account_id) as any;
+    if (!account) return res.status(404).json({ error: 'Account not found', code: 'NOT_FOUND' });
+    const displayName = req.body?.display_name !== undefined ? String(req.body.display_name).trim().slice(0, 120) : account.display_name;
+    const language = ['mn', 'en'].includes(String(req.body?.language)) ? String(req.body.language) : account.language;
+    let privacy: any = {};
+    try { privacy = JSON.parse(account.privacy_json || '{}'); } catch {}
+    if (req.body?.privacy && typeof req.body.privacy === 'object') {
+      for (const key of ['show_profile', 'show_photo', 'show_stats']) {
+        if (typeof req.body.privacy[key] === 'boolean') privacy[key] = req.body.privacy[key];
+      }
+    }
+    db.prepare('UPDATE player_accounts SET display_name = ?, language = ?, privacy_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(displayName, language, JSON.stringify(privacy), account.id);
+    res.json({ success: true });
+  });
+
+  app.post('/api/public/v1/auth/logout', (req, res) => {
+    setPublicHeaders(res);
+    const header = String(req.headers.authorization || '');
+    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    if (token) db.prepare('DELETE FROM player_sessions WHERE token = ?').run(token);
+    res.json({ success: true });
+  });
+  // Identity claim: player links their account to a player_database record (organizer-approved).
+  app.get('/api/public/v1/me/claim-candidates', (req, res) => {
+    setPublicHeaders(res);
+    const session = readPlayerSession(req);
+    if (!session) return res.status(401).json({ error: 'Not authenticated', code: 'NO_SESSION' });
+    const name = String(req.query.name || '').trim().toLowerCase();
+    if (name.length < 3) return res.json([]);
+    const rows = db.prepare(`
+      SELECT pd.id, (pd.first_name || ' ' || pd.last_name) AS name, pd.club,
+             (SELECT COUNT(*) FROM participants p WHERE p.player_database_id = pd.id) AS tournaments_played
+      FROM player_database pd
+      WHERE LOWER(pd.first_name || ' ' || pd.last_name) LIKE ?
+      ORDER BY tournaments_played DESC LIMIT 10
+    `).all(`%${name}%`);
+    res.json(rows);
+  });
+
+  app.post('/api/public/v1/me/claim', (req, res) => {
+    setPublicHeaders(res);
+    const session = readPlayerSession(req);
+    if (!session) return res.status(401).json({ error: 'Not authenticated', code: 'NO_SESSION' });
+    const account = db.prepare('SELECT * FROM player_accounts WHERE id = ?').get(session.account_id) as any;
+    if (!account) return res.status(404).json({ error: 'Account not found', code: 'NOT_FOUND' });
+    if (account.player_database_id) return res.status(409).json({ error: 'Account already linked', code: 'ALREADY_LINKED' });
+    const pdid = Number(req.body?.player_database_id);
+    if (!Number.isFinite(pdid)) return res.status(400).json({ error: 'player_database_id required', code: 'BAD_ID' });
+    const player = db.prepare('SELECT id FROM player_database WHERE id = ?').get(pdid);
+    if (!player) return res.status(404).json({ error: 'Player record not found', code: 'NOT_FOUND' });
+    const taken = db.prepare('SELECT id FROM player_accounts WHERE player_database_id = ?').get(pdid);
+    if (taken) return res.status(409).json({ error: 'Player record already claimed', code: 'PLAYER_TAKEN' });
+    const pending = db.prepare("SELECT id FROM player_account_links WHERE account_id = ? AND status = 'pending'").get(session.account_id);
+    if (pending) return res.status(409).json({ error: 'Claim already pending review', code: 'CLAIM_PENDING' });
+    const info = db.prepare("INSERT INTO player_account_links (account_id, player_database_id, method) VALUES (?, ?, 'player')").run(session.account_id, pdid);
+    res.status(201).json({ success: true, claim_id: Number(info.lastInsertRowid) });
+  });
+
+  app.get('/api/public/v1/me/claim', (req, res) => {
+    setPublicHeaders(res);
+    const session = readPlayerSession(req);
+    if (!session) return res.status(401).json({ error: 'Not authenticated', code: 'NO_SESSION' });
+    const row = db.prepare(`
+      SELECT l.id, l.status, l.requested_at, l.decided_at, l.note,
+             (pd.first_name || ' ' || pd.last_name) AS player_name, pd.club AS player_club
+      FROM player_account_links l JOIN player_database pd ON pd.id = l.player_database_id
+      WHERE l.account_id = ? ORDER BY l.requested_at DESC LIMIT 1
+    `).get(session.account_id);
+    res.json(row || null);
+  });
+
+  // Admin review queue for identity claims.
+  app.get('/api/player-links', requireAdmin, (req, res) => {
+    const rows = db.prepare(`
+      SELECT l.*, a.email AS account_email, a.display_name AS account_name,
+             (pd.first_name || ' ' || pd.last_name) AS player_name, pd.club AS player_club,
+             (SELECT COUNT(*) FROM participants p WHERE p.player_database_id = pd.id) AS tournaments_played
+      FROM player_account_links l
+      JOIN player_accounts a ON a.id = l.account_id
+      JOIN player_database pd ON pd.id = l.player_database_id
+      ORDER BY l.status = 'pending' DESC, l.requested_at DESC
+    `).all();
+    res.json(rows);
+  });
+
+  app.post('/api/player-links/:id/approve', requireAdmin, (req, res) => {
+    const link = db.prepare('SELECT * FROM player_account_links WHERE id = ?').get(req.params.id) as any;
+    if (!link) return res.status(404).json({ error: 'Claim not found' });
+    if (link.status !== 'pending') return res.status(400).json({ error: 'Claim already decided' });
+    const taken = db.prepare('SELECT id FROM player_accounts WHERE player_database_id = ?').get(link.player_database_id);
+    if (taken) return res.status(409).json({ error: 'Player record already linked to another account' });
+    const approve = db.transaction(() => {
+      db.prepare("UPDATE player_account_links SET status='approved', decided_at=CURRENT_TIMESTAMP, decided_by=? WHERE id=?").run(readSessionUsername(req) || 'admin', link.id);
+      db.prepare('UPDATE player_accounts SET player_database_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(link.player_database_id, link.account_id);
+    });
+    approve();
+    res.json({ success: true });
+  });
+
+  app.post('/api/player-links/:id/reject', requireAdmin, (req, res) => {
+    const link = db.prepare('SELECT * FROM player_account_links WHERE id = ?').get(req.params.id) as any;
+    if (!link) return res.status(404).json({ error: 'Claim not found' });
+    if (link.status !== 'pending') return res.status(400).json({ error: 'Claim already decided' });
+    db.prepare("UPDATE player_account_links SET status='rejected', decided_at=CURRENT_TIMESTAMP, decided_by=?, note=? WHERE id=?")
+      .run(readSessionUsername(req) || 'admin', String(req.body?.note || '').slice(0, 300), link.id);
+    res.json({ success: true });
+  });
+  // Player tournament record + analytics + export (Stage 3 step 4).
+  const playerParticipations = (pdid: number) => db.prepare(`
+    SELECT t.id, t.name, t.date, t.location, t.competition_style, t.type,
+           p.id AS participant_id,
+           COALESCE(SUM(s.score), 0) AS total_score, COUNT(s.game_number) AS games,
+           MAX(s.score) AS high_game
+    FROM participants p
+    JOIN tournaments t ON t.id = p.tournament_id
+    LEFT JOIN scores s ON s.participant_id = p.id
+    WHERE p.player_database_id = ?
+    GROUP BY p.id ORDER BY t.date DESC
+  `).all(pdid) as any[];
+
+  const positionIn = (tournamentId: number, participantId: number) => {
+    const rows = db.prepare(`
+      SELECT p.id, COALESCE(SUM(s.score), 0) AS total
+      FROM participants p LEFT JOIN scores s ON s.participant_id = p.id
+      WHERE p.tournament_id = ? GROUP BY p.id ORDER BY total DESC, p.id ASC
+    `).all(tournamentId) as any[];
+    const index = rows.findIndex(r => Number(r.id) === Number(participantId));
+    return index < 0 ? null : index + 1;
+  };
+
+  app.get('/api/public/v1/me/tournaments', (req, res) => {
+    setPublicHeaders(res);
+    const session = readPlayerSession(req);
+    if (!session) return res.status(401).json({ error: 'Not authenticated', code: 'NO_SESSION' });
+    const account = db.prepare('SELECT player_database_id FROM player_accounts WHERE id = ?').get(session.account_id) as any;
+    if (!account?.player_database_id) return res.json([]);
+    const rows = playerParticipations(account.player_database_id).map(r => ({
+      ...r,
+      position: r.games > 0 ? positionIn(r.id, r.participant_id) : null,
+      average: r.games ? Math.round((r.total_score / r.games) * 10) / 10 : 0,
+    }));
+    res.json(rows);
+  });
+
+  app.get('/api/public/v1/me/scores', (req, res) => {
+    setPublicHeaders(res);
+    const session = readPlayerSession(req);
+    if (!session) return res.status(401).json({ error: 'Not authenticated', code: 'NO_SESSION' });
+    const account = db.prepare('SELECT player_database_id FROM player_accounts WHERE id = ?').get(session.account_id) as any;
+    if (!account?.player_database_id) return res.json([]);
+    const rows = db.prepare(`
+      SELECT s.game_number, s.score FROM scores s
+      JOIN participants p ON s.participant_id = p.id
+      WHERE p.player_database_id = ? AND s.tournament_id = ?
+      ORDER BY s.game_number
+    `).all(account.player_database_id, Number(req.query.tournament_id));
+    res.json(rows);
+  });
+
+  app.get('/api/public/v1/me/analytics', (req, res) => {
+    setPublicHeaders(res);
+    const session = readPlayerSession(req);
+    if (!session) return res.status(401).json({ error: 'Not authenticated', code: 'NO_SESSION' });
+    const account = db.prepare('SELECT player_database_id FROM player_accounts WHERE id = ?').get(session.account_id) as any;
+    if (!account?.player_database_id) return res.status(400).json({ error: 'No linked player record', code: 'NOT_LINKED' });
+    const pdid = account.player_database_id;
+    const games = db.prepare(`
+      SELECT s.score, t.date, t.location FROM scores s
+      JOIN participants p ON s.participant_id = p.id
+      JOIN tournaments t ON t.id = p.tournament_id
+      WHERE p.player_database_id = ? ORDER BY t.date, s.game_number
+    `).all(pdid) as any[];
+    const totals = games.reduce((a, g) => ({ pins: a.pins + g.score, n: a.n + 1 }), { pins: 0, n: 0 });
+    const average = totals.n ? Math.round((totals.pins / totals.n) * 10) / 10 : 0;
+    const variance = totals.n ? games.reduce((a, g) => a + Math.pow(g.score - average, 2), 0) / totals.n : 0;
+    const group = (keyOf: (g: any) => string) => {
+      const m = new Map<string, { pins: number; n: number }>();
+      games.forEach(g => { const k = keyOf(g); const cur = m.get(k) || { pins: 0, n: 0 }; cur.pins += g.score; cur.n += 1; m.set(k, cur); });
+      return [...m.entries()].map(([key, v]) => ({ key, average: Math.round((v.pins / v.n) * 10) / 10, games: v.n }));
+    };
+    const high = games.length ? games.reduce((best, g) => (g.score > best.score ? g : best), games[0]) : null;
+    const season = String(new Date().getFullYear());
+    const rankRow = db.prepare("SELECT rank, previous_rank, points FROM rankings WHERE season = ? AND category = 'national' AND player_database_id = ?").get(season, pdid) as any;
+    res.json({
+      games_played: totals.n,
+      total_pins: totals.pins,
+      average,
+      high_game: high ? high.score : null,
+      consistency_stddev: Math.round(Math.sqrt(variance) * 10) / 10,
+      by_month: group(g => String(g.date).slice(0, 7)),
+      by_center: group(g => String(g.location || '—')),
+      current_rank: rankRow || null,
+    });
+  });
+
+  app.get('/api/public/v1/me/export.csv', (req, res) => {
+    const session = readPlayerSession(req);
+    if (!session) return res.status(401).json({ error: 'Not authenticated', code: 'NO_SESSION' });
+    const account = db.prepare('SELECT player_database_id, display_name FROM player_accounts WHERE id = ?').get(session.account_id) as any;
+    if (!account?.player_database_id) return res.status(400).json({ error: 'No linked player record', code: 'NOT_LINKED' });
+    const rows = playerParticipations(account.player_database_id);
+    const escCsv = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = ['date,tournament,center,games,total,average,high_game,position'];
+    rows.forEach(r => lines.push([
+      r.date, escCsv(r.name), escCsv(r.location || ''), r.games, r.total_score,
+      r.games ? Math.round((r.total_score / r.games) * 10) / 10 : 0,
+      r.high_game ?? '', r.games > 0 ? positionIn(r.id, r.participant_id) ?? '' : '',
+    ].join(',')));
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="mba-player-history.csv"`);
+    res.send('\uFEFF' + lines.join('\n'));
+  });
+  // ── end player accounts ──
+  // ── end MBA PUBLIC API ──
 
   app.post("/api/tournaments", requirePermission('tournaments:manage'), (req, res) => {
     const { 
