@@ -3030,12 +3030,19 @@ async function startServer() {
 
   // ── MBA PUBLIC API (v1) ─────────────────────────────────────────────────────
   // Read-only, privacy-stripped endpoints for mongoliabowling.mn (docs/api-contract.md).
-  // 'draft' tournaments are never exposed. Emails and internal IDs never leave these routes.
+  // In BTM, status 'draft' means "Automatic (by date)", so it is public and its status is derived from the date.
+  // Emails and internal IDs never leave these routes.
   const PUBLIC_TOURNAMENT_STATUSES = ['upcoming', 'registration_open', 'registration_closed', 'ongoing', 'completed', 'cancelled', 'archived'];
   // Legacy BTM statuses are mapped onto the public lifecycle: 'finished' → 'completed'.
   const PUBLIC_STATUS_MAP: Record<string, string> = { finished: 'completed', active: 'ongoing' };
-  const publicStatus = (internal: any) => PUBLIC_STATUS_MAP[String(internal)] || internal;
-  const publicTournamentWhere = `status IN ('upcoming','registration_open','registration_closed','ongoing','active','completed','cancelled','finished','archived')`;
+  const publicStatus = (internal: any, date?: any) => {
+    if (String(internal) !== 'draft') return PUBLIC_STATUS_MAP[String(internal)] || internal;
+    const day = String(date || '').slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    if (!day || day > today) return 'upcoming';
+    return day === today ? 'ongoing' : 'completed';
+  };
+  const publicTournamentWhere = `status IN ('draft','upcoming','registration_open','registration_closed','ongoing','active','completed','cancelled','finished','archived')`;
   const setPublicHeaders = (response: any) => {
     response.setHeader('Access-Control-Allow-Origin', process.env.BTM_PUBLIC_CORS_ORIGIN || '*');
     response.setHeader('Cache-Control', 'public, max-age=30');
@@ -3052,11 +3059,7 @@ async function startServer() {
     setPublicHeaders(res);
     const clauses: string[] = [publicTournamentWhere];
     const params: any[] = [];
-    if (req.query.status && PUBLIC_TOURNAMENT_STATUSES.includes(String(req.query.status))) {
-      const wanted = String(req.query.status);
-      clauses.push(wanted === 'completed' ? "status IN ('completed','finished')" : wanted === 'ongoing' ? "status IN ('ongoing','active')" : 'status = ?');
-      if (wanted !== 'completed' && wanted !== 'ongoing') params.push(wanted);
-    }
+    const wanted = req.query.status && PUBLIC_TOURNAMENT_STATUSES.includes(String(req.query.status)) ? String(req.query.status) : null;
     if (req.query.year) { clauses.push("substr(date, 1, 4) = ?"); params.push(String(req.query.year)); }
     if (req.query.center) { clauses.push('location = ?'); params.push(String(req.query.center)); }
     if (req.query.organizer) { clauses.push('organizer = ?'); params.push(String(req.query.organizer)); }
@@ -3065,7 +3068,7 @@ async function startServer() {
              games_count, competition_style, finals_format, logo
       FROM tournaments WHERE ${clauses.join(' AND ')} ORDER BY date DESC, id DESC
     `).all(...params) as any[];
-    res.json(rows.map(r => ({ ...r, status: publicStatus(r.status) })));
+    res.json(rows.map(r => ({ ...r, status: publicStatus(r.status, r.date) })).filter(r => !wanted || r.status === wanted));
   });
 
   app.get('/api/public/v1/tournaments/:id', (req, res) => {
@@ -3078,7 +3081,7 @@ async function startServer() {
       FROM tournaments WHERE id = ? AND ${publicTournamentWhere}
     `).get(req.params.id) as any;
     if (!row) return res.status(404).json({ error: 'Tournament not found', code: 'NOT_FOUND' });
-    row.status = publicStatus(row.status);
+    row.status = publicStatus(row.status, row.date);
     res.json(row);
   });
 
