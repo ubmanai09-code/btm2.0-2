@@ -19,7 +19,7 @@ export interface Tournament {
   players_per_team: number;
   shifts_count: number;
   oil_pattern: string;
-  status: 'draft' | 'upcoming' | 'active' | 'finished' | 'archived';
+  status: 'draft' | 'unpublished' | 'upcoming' | 'active' | 'finished' | 'archived';
   has_additional_scores?: number;
   has_bonus?: number;
   show_player_style?: number;

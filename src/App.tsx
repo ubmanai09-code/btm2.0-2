@@ -1339,7 +1339,7 @@ export default function App() {
           qualified_count: Number(raw?.qualified_count) || 0,
           playoff_winners_count: Number(raw?.playoff_winners_count) || 0,
           known_bracket_format_id: raw?.known_bracket_format_id ?? null,
-          status: raw?.status === 'active' || raw?.status === 'upcoming' || raw?.status === 'finished' || raw?.status === 'archived'
+          status: raw?.status === 'active' || raw?.status === 'upcoming' || raw?.status === 'finished' || raw?.status === 'archived' || raw?.status === 'unpublished'
             ? raw.status
             : 'draft',
         };
@@ -2066,8 +2066,9 @@ export default function App() {
     }
   };
 
-  const resolveTournamentDisplayStatus = (tournamentItem: Tournament): 'active' | 'incoming' | 'finished' | 'archived' => {
-    // 'draft' means automatic: the status follows the tournament date unless set manually.
+  const resolveTournamentDisplayStatus = (tournamentItem: Tournament): 'active' | 'incoming' | 'finished' | 'archived' | 'draft' => {
+    // 'draft' in the DB means automatic (follows the date); 'unpublished' is the real Draft hidden from public.
+    if (tournamentItem.status === 'unpublished') return 'draft';
     if (tournamentItem.status === 'archived') return 'archived';
     if (tournamentItem.status === 'finished') return 'finished';
     if (tournamentItem.status === 'active') return 'active';
@@ -2081,13 +2082,14 @@ export default function App() {
     return 'incoming';
   };
 
-  const getDateBadgeClass = (status: 'active' | 'incoming' | 'finished' | 'archived') => {
+  const getDateBadgeClass = (status: 'active' | 'incoming' | 'finished' | 'archived' | 'draft') => {
     if (status === 'incoming') return 'bg-[color:var(--accent)]';
     if (status === 'active') return 'bg-[color:var(--success-dark)]';
     return 'bg-gray-600';
   };
 
-  const getStatusLabel = (status: 'active' | 'incoming' | 'finished' | 'archived') => {
+  const getStatusLabel = (status: 'active' | 'incoming' | 'finished' | 'archived' | 'draft') => {
+    if (status === 'draft') return t('status.draft', 'Draft');
     if (status === 'incoming') return t('status.upcoming', 'Upcoming');
     if (status === 'active') return t('status.ongoing', 'Ongoing');
     if (status === 'finished') return t('status.completed', 'Completed');
@@ -2539,6 +2541,7 @@ export default function App() {
                       name="status" 
                       defaultValue={editingTournament?.status}
                       options={[
+                        { value: 'unpublished', label: t('status.draft_hidden', 'Draft (hidden from public)') },
                         { value: 'draft', label: t('status.auto', 'Automatic (by date)') },
                         { value: 'upcoming', label: t('status.upcoming', 'Upcoming') },
                         { value: 'active', label: t('status.ongoing', 'Ongoing') },

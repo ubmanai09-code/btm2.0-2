@@ -230,7 +230,7 @@ function MastersDivision({ tournamentId, division, mn, canEdit, authToken }: { t
       if (picked.length < PLAYER_COUNT) {
         setPrefillMessage(mn ? `${picked.length}/${PLAYER_COUNT} тоглогч олдлоо.` : `Only ${picked.length} of ${PLAYER_COUNT} participants found.`);
       } else if (missing > 0) {
-        setPrefillMessage(mn ? `${missing} тоглогчийн нэгдсэн оноо олдсонгүй.` : `${missing} participant(s) have no imported cumulative score.`);
+        setPrefillMessage(mn ? `${missing} тоглогчийн нэгдсэн дүн олдсонгүй.` : `${missing} participant(s) have no imported cumulative result.`);
       }
     } catch (err: any) {
       setPrefillMessage(err?.message || 'Failed to load participants');
@@ -413,7 +413,7 @@ function MastersDivision({ tournamentId, division, mn, canEdit, authToken }: { t
               {mn ? 'Оролцогчдоос татах' : 'Pull from participants'}
             </button>
             <label className="text-xs text-emerald-800 underline cursor-pointer">
-              {mn ? 'Нэгдсэн оноо оруулах (JSON/CSV)' : 'Import cumulative scores (JSON/CSV)'}
+              {mn ? 'Нэгдсэн дүн оруулах (JSON/CSV)' : 'Import cumulative result (JSON/CSV)'}
               <input
                 type="file"
                 accept=".json,.csv,application/json,text/csv"
@@ -436,7 +436,7 @@ function MastersDivision({ tournamentId, division, mn, canEdit, authToken }: { t
 
       {ready && state.cumulative && (
         <div className="ui-card p-3">
-          <div className="font-bold text-sm">{mn ? 'Нэгдсэн оноо (суутгал)' : 'Seeding – cumulative score'}</div>
+          <div className="font-bold text-sm">{mn ? 'Нэгдсэн дүн (суулгалт)' : 'Seeding – cumulative result'}</div>
           {state.cumulative.tournaments.length > 0 && <div className="text-xs text-gray-500 mb-2">{state.cumulative.tournaments.join(' + ')}</div>}
           <table className="w-full text-sm">
             <thead><tr className="text-left text-xs text-gray-500"><th className="w-8">#</th><th>{mn ? 'Нэр' : 'Name'}</th><th className="w-12">{mn ? 'Бүлэг' : 'Group'}</th><th className="text-right">{mn ? 'Нийт' : 'Total'}</th></tr></thead>

@@ -5,7 +5,7 @@ import {
 import type { Tournament } from '../services/api';
 import { buildRankingCategories, type RankingPlayer, type RankingTeam } from './dashboardRankings';
 
-type DisplayStatus = 'active' | 'incoming' | 'finished' | 'archived';
+type DisplayStatus = 'active' | 'incoming' | 'finished' | 'archived' | 'draft';
 export type DashboardTab = 'participants' | 'standings' | 'scoring' | 'lanes' | 'brackets-v2';
 
 interface Highlights {
@@ -172,6 +172,7 @@ export default function DashboardPage(props: DashboardPageProps) {
       active: { label: t('status.live', 'Live'), cls: 'bg-emerald-800 text-white border-emerald-800' },
       finished: { label: t('status.completed', 'Completed'), cls: 'bg-gray-100 text-gray-500 border-gray-300' },
       archived: { label: t('status.archived', 'Archived'), cls: 'bg-gray-100 text-gray-500 border-gray-300' },
+      draft: { label: t('status.draft', 'Draft'), cls: 'bg-amber-50 text-amber-800 border-amber-300' },
     };
     const entry = map[status];
     return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-none ${entry.cls}`}>{entry.label}</span>;

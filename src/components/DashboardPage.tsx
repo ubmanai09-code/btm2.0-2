@@ -5,7 +5,7 @@ import {
 import type { Tournament } from '../services/api';
 import { buildRankingCategories, type RankingPlayer, type RankingTeam } from './dashboardRankings';
 
-type DisplayStatus = 'active' | 'incoming' | 'finished' | 'archived';
+type DisplayStatus = 'active' | 'incoming' | 'finished' | 'archived' | 'draft';
 export type DashboardTab = 'participants' | 'standings' | 'scoring' | 'lanes' | 'brackets-v2';
 
 interface Highlights {
@@ -222,6 +222,7 @@ export default function DashboardPage(props: DashboardPageProps) {
       active: { label: t('status.live', 'Live'), cls: 'bg-emerald-800 text-white border-emerald-800' },
       finished: { label: t('status.completed', 'Completed'), cls: 'bg-gray-100 text-gray-500 border-gray-300' },
       archived: { label: t('status.archived', 'Archived'), cls: 'bg-gray-100 text-gray-500 border-gray-300' },
+      draft: { label: t('status.draft', 'Draft'), cls: 'bg-amber-50 text-amber-800 border-amber-300' },
     };
     const entry = map[status];
     return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-none ${entry.cls}`}>{entry.label}</span>;
@@ -501,6 +502,11 @@ export default function DashboardPage(props: DashboardPageProps) {
                       stripe: 'bg-gray-300 dark:bg-slate-600',
                       badgeCls: 'bg-gray-100 text-gray-500 dark:bg-slate-800 dark:text-slate-400 dark:border dark:border-slate-700',
                       label: t('status.archived', 'Archived'),
+                    },
+                    draft: {
+                      stripe: 'bg-amber-400',
+                      badgeCls: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 dark:border dark:border-amber-800/50',
+                      label: t('status.draft', 'Draft'),
                     },
                   };
                   const conf = statusConfig[status] || statusConfig.finished;

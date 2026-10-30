@@ -1,0 +1,16 @@
+{
+	"name": "BTM",
+	"image": "mcr.microsoft.com/devcontainers/typescript-node:22",
+	"forwardPorts": [3000],
+	"portsAttributes": {
+		"3000": {
+			"label": "BTM app",
+			"onAutoForward": "openBrowser"
+		}
+	},
+	"otherPortsAttributes": {
+		"onAutoForward": "ignore"
+	},
+	"postCreateCommand": "npm install",
+	"postAttachCommand": "nohup npm run dev > /tmp/btm-dev.log 2>&1 &"
+}

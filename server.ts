@@ -1589,6 +1589,14 @@ async function startServer() {
 
   const parseMastersDivision = (value: string) => (value === 'men' || value === 'women' ? value : null);
 
+  // Draft ('unpublished') tournaments are invisible to public viewers across all tournament routes.
+  app.use('/api/tournaments/:id', (req, res, next) => {
+    if (getRequestRole(req) !== 'public') return next();
+    const row = db.prepare('SELECT status FROM tournaments WHERE id = ?').get(req.params.id) as { status?: string } | undefined;
+    if (row?.status === 'unpublished') return res.status(404).json({ error: 'Tournament not found' });
+    return next();
+  });
+
   app.get('/api/tournaments/:id/masters/:division', (req, res) => {
     const division = parseMastersDivision(req.params.division);
     if (!division) return res.status(400).json({ error: 'Invalid division' });
@@ -3025,7 +3033,7 @@ async function startServer() {
 
   app.get("/api/tournaments", (req, res) => {
     const rows = db.prepare("SELECT * FROM tournaments ORDER BY created_at DESC").all();
-    res.json(rows);
+    res.json(getRequestRole(req) === 'public' ? rows.filter((row: any) => row.status !== 'unpublished') : rows);
   });
 
   // ── MBA PUBLIC API (v1) ─────────────────────────────────────────────────────
@@ -5555,13 +5563,19 @@ async function startServer() {
       WHERE t.tournament_id = ?
       GROUP BY t.id
       ORDER BY total DESC, t.id ASC
-      LIMIT 20
+      LIMIT 100
     `).all(id) as any[];
     const memberStmt = db.prepare(`
-      SELECT (first_name || ' ' || last_name) AS name FROM participants
+      SELECT (first_name || ' ' || last_name) AS name, LOWER(SUBSTR(COALESCE(gender, ''), 1, 1)) AS gender FROM participants
       WHERE team_id = ? ORDER BY COALESCE(team_order, 999), id
     `);
-    for (const team of teams) team.members = (memberStmt.all(team.id) as any[]).map((m) => m.name);
+    for (const team of teams) {
+      const members = memberStmt.all(team.id) as any[];
+      team.members = members.map((m) => m.name);
+      const genders = new Set(members.map((m) => m.gender));
+      // 'f' / 'm' when every member shares a gender, otherwise 'x' (mixed or unknown)
+      team.gender = genders.size === 1 && (genders.has('f') || genders.has('m')) ? [...genders][0] : 'x';
+    }
     const highest = (letter: string) => db.prepare(`
       SELECT s.score, s.game_number, (p.first_name || ' ' || p.last_name) AS name
       FROM scores s JOIN participants p ON p.id = s.participant_id
