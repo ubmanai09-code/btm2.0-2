@@ -13228,10 +13228,16 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     return Math.max(400, maxBottom + 40);
   }, [engineResult, topAlignedPos, visualMatchHeights]);
 
+  const exportContentWidth = React.useMemo(() => {
+    if (!engineResult || engineResult.matches.length === 0) return 0;
+    const maxX = Math.max(...engineResult.matches.map((match) => (topAlignedPos.get(match.id)?.x ?? match.x) + match.width));
+    return Math.min(engineResult.layout.width, maxX + 8);
+  }, [engineResult, topAlignedPos]);
+
   const exportAreaWidth = React.useMemo(() => {
-    if (!engineResult) return 1100;
-    return Math.max(1100, engineResult.layout.width + 40);
-  }, [engineResult]);
+    if (!engineResult) return 560;
+    return Math.max(560, exportContentWidth + 40);
+  }, [engineResult, exportContentWidth]);
 
   const exportRoundsBounds = React.useMemo(() => {
     if (!engineResult || engineResult.matches.length === 0) {
@@ -15486,8 +15492,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
             {/* Podium */}
             {podium && (
               <div style={{ padding: '12px 20px', borderBottom: '1px solid #e5e7eb' }}>
-                <div style={{ width: engineResult.layout.width, maxWidth: '100%', margin: '0 auto' }}>
-                  <div style={{ marginLeft: exportRoundsBounds.left, width: exportRoundsBounds.width || engineResult.layout.width }}>
+                <div style={{ width: exportContentWidth, maxWidth: '100%', margin: '0 auto' }}>
+                  <div style={{ marginLeft: exportRoundsBounds.left, width: exportRoundsBounds.width || exportContentWidth }}>
                     <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6b7280', marginBottom: 10, textAlign: 'center' }}>
                       Results / Podium
                     </div>
@@ -15528,7 +15534,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
             )}
             {/* Bracket canvas */}
             <div style={{ padding: '16px 20px' }}>
-              <div style={{ position: 'relative', height: canvasHeight + visualCardsTopOffset, width: engineResult.layout.width, margin: '0 auto', background: 'transparent', border: '1px solid #e3e3e3', borderRadius: 6 }}>
+              <div style={{ position: 'relative', height: canvasHeight + visualCardsTopOffset, width: exportContentWidth, margin: '0 auto', background: 'transparent', border: '1px solid #e3e3e3', borderRadius: 6 }}>
                 {engineResult.rounds.map((round) => {
                   const roundMatches = engineResult.matches.filter(m => m.roundId === round.roundId);
                   if (roundMatches.length === 0) return null;
@@ -15545,7 +15551,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                     </div>
                   );
                 })}
-                <svg width={engineResult.layout.width} height={canvasHeight + visualCardsTopOffset} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} aria-hidden="true">
+                <svg width={exportContentWidth} height={canvasHeight + visualCardsTopOffset} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} aria-hidden="true">
                   <g transform={`translate(0 ${visualCardsTopOffset})`}>
                     {connectorPaths.map((segment) => (
                       <path key={`export-${segment.key}`} d={segment.d} fill="none"
