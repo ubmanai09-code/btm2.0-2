@@ -3,7 +3,7 @@ import {
   Archive, ArrowRight, Calendar, ChevronLeft, ChevronRight, ClipboardList, Settings2, X, Columns4, Download, Edit, GitBranch, MapPin, Plus, Save, Target, Trash2, Trophy, Upload, Users,
 } from 'lucide-react';
 import type { Tournament } from '../services/api';
-import { buildRankingCategories, type RankingPlayer, type RankingTeam } from './dashboardRankings';
+import { buildRankingCategories, type RankingFinalWinner, type RankingPlayer, type RankingTeam } from './dashboardRankings';
 
 type DisplayStatus = 'active' | 'incoming' | 'finished' | 'archived' | 'draft';
 export type DashboardTab = 'participants' | 'standings' | 'scoring' | 'lanes' | 'brackets-v2';
@@ -12,6 +12,7 @@ interface Highlights {
   tournament: { id: number; name: string; games_count: number };
   players: RankingPlayer[];
   teams: RankingTeam[];
+  final_winners?: RankingFinalWinner[];
   highest_men: { score: number; game_number: number; name: string } | null;
   highest_women: { score: number; game_number: number; name: string } | null;
   counts: { players: number; teams: number; rounds: number };
@@ -210,8 +211,8 @@ export default function DashboardPage(props: DashboardPageProps) {
       womenTeams: t('dashboard.women_teams', 'Women teams'),
       menTeams: t('dashboard.men_teams', 'Men teams'),
       mixedTeams: t('dashboard.mixed_teams', 'Mixed teams'),
-    }, featured?.type === 'team'),
-    [highlights?.players, highlights?.teams, featured?.type, t],
+    }, featured?.type === 'team', highlights?.final_winners || []),
+    [highlights?.players, highlights?.teams, highlights?.final_winners, featured?.type, t],
   );
   useEffect(() => setRankingKey(''), [featured?.id]);
   const activeRanking = rankingCategories.find((c) => c.key === rankingKey) || rankingCategories[0] || null;
@@ -367,7 +368,9 @@ export default function DashboardPage(props: DashboardPageProps) {
                             {c.label}
                           </button>
                         ))}
-                        <span className="ml-auto text-[10px] text-slate-400 font-semibold uppercase">Top {activeRankingRows.length}</span>
+                        <span className="ml-auto text-[10px] text-slate-400 font-semibold uppercase">
+                          {activeRanking.isFinalPlacement ? t('dashboard.final_placements', 'Final placements') : `Top ${activeRankingRows.length}`}
+                        </span>
                       </div>
                       <div className="overflow-x-auto flex-1">
                         <table className="w-full text-sm">
@@ -375,8 +378,8 @@ export default function DashboardPage(props: DashboardPageProps) {
                             <tr className="border-b border-gray-200 dark:border-slate-700/80 text-[10px] uppercase font-bold text-gray-500 dark:text-slate-400 bg-gray-50/75 dark:bg-slate-900/40">
                               <th className="pl-3 pr-1 py-1.5 text-center w-8">#</th>
                               <th className="px-2 py-1.5 text-left font-semibold">{t('dashboard.name', 'Name')}</th>
-                              <th className="px-2 py-1.5 text-right font-semibold tabular-nums">{t('dashboard.avg', 'Avg')}</th>
-                              <th className="pl-2 pr-3.5 py-1.5 text-right font-semibold tabular-nums w-16">{t('dashboard.total', 'Total')}</th>
+                              {!activeRanking.isFinalPlacement && <th className="px-2 py-1.5 text-right font-semibold tabular-nums">{t('dashboard.avg', 'Avg')}</th>}
+                              {!activeRanking.isFinalPlacement && <th className="pl-2 pr-3.5 py-1.5 text-right font-semibold tabular-nums w-16">{t('dashboard.total', 'Total')}</th>}
                             </tr>
                           </thead>
                           <tbody>
@@ -396,15 +399,21 @@ export default function DashboardPage(props: DashboardPageProps) {
                                     <td className="px-2 py-1.5 font-semibold text-[#1E2233] dark:text-slate-100 max-w-[130px] sm:max-w-[160px]" title={row.name}>
                                       <div className="truncate">{row.name}</div>
                                       {Array.isArray(row.members) && row.members.length > 0 && (
-                                        <div className="text-[10px] font-normal leading-snug text-gray-500 dark:text-slate-400 whitespace-normal">{row.members.join(' · ')}</div>
+                                        <div className="text-[10px] font-normal leading-snug text-gray-500 dark:text-slate-400 whitespace-normal">
+                                          {activeRanking.isFinalPlacement ? `(${row.members.join(', ')})` : row.members.join(' · ')}
+                                        </div>
                                       )}
                                     </td>
-                                    <td className="px-2 py-1.5 text-right text-xs text-gray-500 dark:text-slate-400 tabular-nums">
-                                      {typeof row.avg === 'number' ? row.avg.toFixed(1) : (row.avg || '—')}
-                                    </td>
-                                    <td className="pl-2 pr-3.5 py-1.5 text-right font-bold text-emerald-800 dark:text-emerald-400 tabular-nums w-16">
-                                      {row.total}
-                                    </td>
+                                    {!activeRanking.isFinalPlacement && (
+                                      <>
+                                        <td className="px-2 py-1.5 text-right text-xs text-gray-500 dark:text-slate-400 tabular-nums">
+                                          {typeof row.avg === 'number' ? row.avg.toFixed(1) : (row.avg || '—')}
+                                        </td>
+                                        <td className="pl-2 pr-3.5 py-1.5 text-right font-bold text-emerald-800 dark:text-emerald-400 tabular-nums w-16">
+                                          {row.total}
+                                        </td>
+                                      </>
+                                    )}
                                   </tr>
                                 ))}
                           </tbody>

@@ -5587,7 +5587,15 @@ async function startServer() {
              (SELECT COUNT(*) FROM teams WHERE tournament_id = ?) AS teams,
              (SELECT COALESCE(MAX(game_number), 0) FROM scores WHERE tournament_id = ?) AS rounds
     `).get(id, id, id);
-    res.json({ tournament, players, teams, highest_men: highest('m'), highest_women: highest('f'), counts });
+    const final_winners = db.prepare(`
+      SELECT division, place, display_name
+      FROM manual_winners
+      WHERE tournament_id = ? AND TRIM(COALESCE(display_name, '')) != ''
+      ORDER BY CASE division WHEN 'all' THEN 0 WHEN 'male' THEN 1 ELSE 2 END,
+               CASE place WHEN 'first' THEN 0 WHEN 'second' THEN 1 ELSE 2 END,
+               id ASC
+    `).all(id);
+    res.json({ tournament, players, teams, highest_men: highest('m'), highest_women: highest('f'), counts, final_winners });
   });
 
   app.get("/api/tournaments/:id/standings", (req, res) => {

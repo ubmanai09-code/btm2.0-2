@@ -3,7 +3,7 @@ import {
   Archive, ArrowRight, Calendar, ChevronRight, ClipboardList, Settings2, X, Columns4, Download, Edit, GitBranch, MapPin, Plus, Save, Target, Trash2, Trophy, Upload, Users,
 } from 'lucide-react';
 import type { Tournament } from '../services/api';
-import { buildRankingCategories, type RankingPlayer, type RankingTeam } from './dashboardRankings';
+import { buildRankingCategories, type RankingFinalWinner, type RankingPlayer, type RankingTeam } from './dashboardRankings';
 
 type DisplayStatus = 'active' | 'incoming' | 'finished' | 'archived' | 'draft';
 export type DashboardTab = 'participants' | 'standings' | 'scoring' | 'lanes' | 'brackets-v2';
@@ -12,6 +12,7 @@ interface Highlights {
   tournament: { id: number; name: string; games_count: number };
   players: RankingPlayer[];
   teams: RankingTeam[];
+  final_winners?: RankingFinalWinner[];
   highest_men: { score: number; game_number: number; name: string } | null;
   highest_women: { score: number; game_number: number; name: string } | null;
   counts: { players: number; teams: number; rounds: number };
@@ -161,7 +162,7 @@ export default function DashboardPage(props: DashboardPageProps) {
     womenTeams: t('dashboard.women_teams', 'Women teams'),
     menTeams: t('dashboard.men_teams', 'Men teams'),
     mixedTeams: t('dashboard.mixed_teams', 'Mixed teams'),
-  }, isTeam);
+  }, isTeam, highlights?.final_winners || []);
   useEffect(() => setRankingKey(''), [featured?.id]);
   const activeRanking = rankingCategories.find((c) => c.key === rankingKey) || rankingCategories[0] || null;
   const maxRows = showAll ? 10 : 5;
@@ -291,10 +292,14 @@ export default function DashboardPage(props: DashboardPageProps) {
                                   <td className="pl-4 pr-2 py-2 w-12"><span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${medalClass(index + 1)}`}>{index + 1}</span></td>
                                   <td className="px-2 py-2 font-semibold text-black">
                                     {row.name}
-                                    {row.members.length > 0 && <div className="mt-0.5 text-[11px] font-normal text-gray-500 leading-snug">{row.members.join(' · ')}</div>}
+                                    {row.members.length > 0 && <div className="mt-0.5 text-[11px] font-normal text-gray-500 leading-snug">{activeRanking.isFinalPlacement ? `(${row.members.join(', ')})` : row.members.join(' · ')}</div>}
                                   </td>
-                                  <td className="px-2 py-2 text-right text-xs text-gray-500 tabular-nums hidden 2xl:table-cell">{t('dashboard.avg', 'Avg')} {row.avg.toFixed(1)}</td>
-                                  <td className="pl-2 pr-4 py-2 text-right font-bold text-emerald-800 tabular-nums w-20">{row.total}</td>
+                                  {!activeRanking.isFinalPlacement && (
+                                    <>
+                                      <td className="px-2 py-2 text-right text-xs text-gray-500 tabular-nums hidden 2xl:table-cell">{t('dashboard.avg', 'Avg')} {row.avg.toFixed(1)}</td>
+                                      <td className="pl-2 pr-4 py-2 text-right font-bold text-emerald-800 tabular-nums w-20">{row.total}</td>
+                                    </>
+                                  )}
                                 </tr>
                               ))}
                             </tbody>
