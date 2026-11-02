@@ -8,8 +8,8 @@ const toRows = (list: Array<{ id: number; name: string; avg: number; total: numb
 
 type Labels = { women: string; men: string; players: string; teams: string; womenTeams: string; menTeams: string; mixedTeams: string };
 
-/** Selector categories for the dashboard: players and teams, each split by gender when the data has it. */
-export function buildRankingCategories(players: RankingPlayer[], teams: RankingTeam[], labels: Labels): RankingCategory[] {
+/** Selector categories for the dashboard: team events rank teams first, then individual players by gender. */
+export function buildRankingCategories(players: RankingPlayer[], teams: RankingTeam[], labels: Labels, isTeamTournament = false): RankingCategory[] {
   const women = players.filter((p) => p.gender === 'f');
   const men = players.filter((p) => p.gender === 'm');
   const open = players.filter((p) => p.gender !== 'f' && p.gender !== 'm');
@@ -19,6 +19,12 @@ export function buildRankingCategories(players: RankingPlayer[], teams: RankingT
   const splitTeams = teamWomen.length > 0 || teamMen.length > 0;
 
   const list: RankingCategory[] = [];
+  if (isTeamTournament) {
+    if (teams.length > 0) list.push({ key: 't', label: labels.teams, rows: toRows(teams) });
+    if (men.length > 0) list.push({ key: 'm', label: labels.men, rows: toRows(men) });
+    if (women.length > 0) list.push({ key: 'f', label: labels.women, rows: toRows(women) });
+    return list;
+  }
   if (women.length > 0) list.push({ key: 'f', label: labels.women, rows: toRows(women) });
   if (men.length > 0) list.push({ key: 'm', label: labels.men, rows: toRows(men) });
   if (women.length === 0 && men.length === 0 && open.length > 0) list.push({ key: 'o', label: labels.players, rows: toRows(open) });

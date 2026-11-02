@@ -210,9 +210,10 @@ export default function DashboardPage(props: DashboardPageProps) {
       womenTeams: t('dashboard.women_teams', 'Women teams'),
       menTeams: t('dashboard.men_teams', 'Men teams'),
       mixedTeams: t('dashboard.mixed_teams', 'Mixed teams'),
-    }),
-    [highlights?.players, highlights?.teams, t],
+    }, featured?.type === 'team'),
+    [highlights?.players, highlights?.teams, featured?.type, t],
   );
+  useEffect(() => setRankingKey(''), [featured?.id]);
   const activeRanking = rankingCategories.find((c) => c.key === rankingKey) || rankingCategories[0] || null;
   const activeRankingRows = activeRanking ? activeRanking.rows.slice(0, 10) : [];
 

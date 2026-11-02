@@ -153,7 +153,7 @@ export default function DashboardPage(props: DashboardPageProps) {
   const visibleRows = listRows.slice((safePage - 1) * LIST_SIZE, safePage * LIST_SIZE);
 
   const [rankingKey, setRankingKey] = useState('');
-  const rankingCategories = buildRankingCategories(isTeam ? [] : highlights?.players || [], highlights?.teams || [], {
+  const rankingCategories = buildRankingCategories(highlights?.players || [], highlights?.teams || [], {
     women: t('dashboard.women', 'Women'),
     men: t('dashboard.men', 'Men'),
     players: t('dashboard.players', 'Players'),
@@ -161,7 +161,8 @@ export default function DashboardPage(props: DashboardPageProps) {
     womenTeams: t('dashboard.women_teams', 'Women teams'),
     menTeams: t('dashboard.men_teams', 'Men teams'),
     mixedTeams: t('dashboard.mixed_teams', 'Mixed teams'),
-  });
+  }, isTeam);
+  useEffect(() => setRankingKey(''), [featured?.id]);
   const activeRanking = rankingCategories.find((c) => c.key === rankingKey) || rankingCategories[0] || null;
   const maxRows = showAll ? 10 : 5;
   const canExpand = (activeRanking?.rows.length || 0) > 5;
