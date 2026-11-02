@@ -65,6 +65,7 @@ import {
 import { toPng } from 'html-to-image';
 import api, { Tournament, Participant, Team, LaneAssignment, WarmupSlot, Standing, Score, ModeratorTournamentAccess, UserAccount, AuthUser, KnownBracketFormat, KnownBracketFormatInput, BuilderRulePreset, ManualWinnerEntry, LeagueRankingResponse, StandingAdditionalScore, StandingBonus, PlayerDatabaseSuggestions } from './services/api';
 import { parseCsvRows, parseParticipantCsv } from './utils/participantCsv';
+import { matchesMongolianSearch } from './utils/mongolianSearch';
 import { buildKnownBracketTemplateDefaults } from './utils/bracketTemplates';
 import {
   buildTournamentEngine,
@@ -5418,14 +5419,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       // --- Bulk selection logic (must be after filteredParticipants is declared) ---
       // (removed duplicate bulk selection logic; only keep after filteredParticipants)
     if (!activePlayerSearch) return true;
-    const fullName = `${participant.first_name || ''} ${participant.last_name || ''}`.trim().toLowerCase();
-    const club = (participant.club || '').trim().toLowerCase();
-    const email = (participant.email || '').trim().toLowerCase();
-    const teamName = (participant.team_name || '').trim().toLowerCase();
-    return fullName.includes(activePlayerSearch)
-      || club.includes(activePlayerSearch)
-      || (canManageParticipants && email.includes(activePlayerSearch))
-      || teamName.includes(activePlayerSearch);
+    const fullName = `${participant.first_name || ''} ${participant.last_name || ''}`;
+    return matchesMongolianSearch(fullName, activePlayerSearch)
+      || matchesMongolianSearch(participant.club, activePlayerSearch)
+      || (canManageParticipants && matchesMongolianSearch(participant.email, activePlayerSearch))
+      || matchesMongolianSearch(participant.team_name, activePlayerSearch);
   });
 
   // --- Bulk selection logic (must be after filteredParticipants is declared) ---
@@ -5514,12 +5512,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const filteredTeams = (() => {
     const base = teams.filter((team) => {
       if (!activePlayerSearch) return true;
-      const teamName = (team.name || '').trim().toLowerCase();
-      if (teamName.includes(activePlayerSearch)) return true;
+      if (matchesMongolianSearch(team.name, activePlayerSearch)) return true;
       const memberNames = participants
         .filter((participant) => participant.team_id === team.id)
-        .map((participant) => `${participant.first_name || ''} ${participant.last_name || ''}`.trim().toLowerCase());
-      return memberNames.some((name) => name.includes(activePlayerSearch));
+        .map((participant) => `${participant.first_name || ''} ${participant.last_name || ''}`.trim());
+      return memberNames.some((name) => matchesMongolianSearch(name, activePlayerSearch));
     });
     if (teamSort.key === 'none') return base;
     return [...base].sort((a, b) => {
@@ -5542,15 +5539,13 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     });
   };
 
-  const normalizedTeamMemberSearch = teamMemberSearchQuery.trim().toLowerCase();
+  const normalizedTeamMemberSearch = teamMemberSearchQuery.trim();
   const filteredTeamMemberCandidates = participants.filter((player) => {
     if (!normalizedTeamMemberSearch) return true;
-    const fullName = `${player.first_name || ''} ${player.last_name || ''}`.trim().toLowerCase();
-    const club = (player.club || '').trim().toLowerCase();
-    const email = (player.email || '').trim().toLowerCase();
-    return fullName.includes(normalizedTeamMemberSearch)
-      || club.includes(normalizedTeamMemberSearch)
-      || email.includes(normalizedTeamMemberSearch);
+    const fullName = `${player.first_name || ''} ${player.last_name || ''}`.trim();
+    return matchesMongolianSearch(fullName, normalizedTeamMemberSearch)
+      || matchesMongolianSearch(player.club, normalizedTeamMemberSearch)
+      || matchesMongolianSearch(player.email, normalizedTeamMemberSearch);
   });
 
   const multiTeamPlayerMap = new Map<string, Set<number>>();
@@ -7871,17 +7866,16 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
           : []),
       ];
 
-  const normalizedLanePickerSearch = lanePickerSearchQuery.trim().toLowerCase();
+  const normalizedLanePickerSearch = lanePickerSearchQuery.trim();
   const filteredLanePickerQueue = waitingQueue.filter((item) => {
     if (!normalizedLanePickerSearch) return true;
     if (isParticipantItem(item)) {
       const participant = item;
-      const fullName = `${participant.first_name || ''} ${participant.last_name || ''}`.trim().toLowerCase();
-      const club = (participant.club || '').trim().toLowerCase();
-      return fullName.includes(normalizedLanePickerSearch) || club.includes(normalizedLanePickerSearch);
+      const fullName = `${participant.first_name || ''} ${participant.last_name || ''}`.trim();
+      return matchesMongolianSearch(fullName, normalizedLanePickerSearch)
+        || matchesMongolianSearch(participant.club, normalizedLanePickerSearch);
     }
-    const teamName = ((item as Team).name || '').trim().toLowerCase();
-    return teamName.includes(normalizedLanePickerSearch);
+    return matchesMongolianSearch((item as Team).name, normalizedLanePickerSearch);
   });
 
   const shifts = Array.from({ length: Math.max(1, tournament.shifts_count || 1) }, (_, i) => i + 1);
@@ -8519,7 +8513,7 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
             </div>
             <div className="max-h-[360px] overflow-y-auto p-3 space-y-1.5">
               {(() => {
-                const query = warmupPickerSearch.trim().toLowerCase();
+                const query = warmupPickerSearch.trim();
                 // Exclude players already in any warmup slot or tournament lane
                 const alreadyInWarmup = new Set<number>(
                   tournament.type === 'individual'
@@ -8534,12 +8528,12 @@ function LaneView({ tournament, role }: { tournament: Tournament; role: UserRole
                 const items = tournament.type === 'individual'
                   ? participants.filter(p => {
                       if (alreadyInWarmup.has(p.id) || alreadyInLane.has(p.id)) return false;
-                      const name = `${p.first_name} ${p.last_name}`.toLowerCase();
-                      return !query || name.includes(query) || (p.club || '').toLowerCase().includes(query);
+                      const name = `${p.first_name} ${p.last_name}`;
+                      return !query || matchesMongolianSearch(name, query) || matchesMongolianSearch(p.club, query);
                     })
                   : teams.filter(t => {
                       if (alreadyInWarmup.has(t.id) || alreadyInLane.has(t.id)) return false;
-                      return !query || t.name.toLowerCase().includes(query);
+                      return !query || matchesMongolianSearch(t.name, query);
                     });
                 if (items.length === 0) return <p className="text-xs text-black/40 italic text-center py-6">No available players.</p>;
                 return items.map(item => {
@@ -13563,7 +13557,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   <div className="max-h-56 divide-y divide-black/5 overflow-y-auto rounded-lg border border-black/10">
                     {[...standings]
                       .sort((a, b) => b.total_score - a.total_score)
-                      .filter(s => !standingsFilter || (s.participant_name || '').toLowerCase().includes(standingsFilter.toLowerCase()) || (s.team_name || '').toLowerCase().includes(standingsFilter.toLowerCase()))
+                      .filter(s => !standingsFilter || matchesMongolianSearch(s.participant_name, standingsFilter) || matchesMongolianSearch(s.team_name, standingsFilter))
                       .map(s => {
                         const picked = manualPickedIds.includes(s.participant_id);
                         return (
@@ -14098,7 +14092,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                         <div className="flex flex-col gap-0 max-h-48 overflow-y-auto border border-black/[0.06] rounded-md divide-y divide-black/[0.05]">
                           {[...standings]
                             .sort((a, b) => b.total_score - a.total_score)
-                            .filter(s => !standingsFilter || (s.participant_name || '').toLowerCase().includes(standingsFilter.toLowerCase()) || (s.team_name || '').toLowerCase().includes(standingsFilter.toLowerCase()))
+                            .filter(s => !standingsFilter || matchesMongolianSearch(s.participant_name, standingsFilter) || matchesMongolianSearch(s.team_name, standingsFilter))
                             .map(s => {
                               const isPicked = manualPickedIds.includes(s.participant_id);
                               return (
