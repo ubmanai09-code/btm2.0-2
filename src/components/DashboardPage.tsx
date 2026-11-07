@@ -402,10 +402,13 @@ export default function DashboardPage(props: DashboardPageProps) {
                                         </span>
                                       )}
                                     </td>
-                                    <td className={`px-2 py-1.5 font-semibold text-[#1E2233] dark:text-slate-100 ${activeRanking.isFinalPlacement ? 'w-full' : 'max-w-[130px] sm:max-w-[160px]'}`} title={row.name}>
+                                    <td className={`px-2 py-1.5 font-semibold text-[#1E2233] dark:text-slate-100 ${activeRanking.isFinalPlacement || (featured?.type === 'team' && activeRanking.key === 't') ? 'w-full' : 'max-w-[130px] sm:max-w-[160px]'}`} title={row.name}>
                                       {activeRanking.isFinalPlacement ? <FinalPlacementDetails details={row.details || []} t={t} /> : <div className="truncate">{row.name}</div>}
                                       {!activeRanking.isFinalPlacement && row.memberDetails && row.memberDetails.length > 0 ? (
-                                        <ul className="mt-1 grid gap-x-4 gap-y-1 text-[10px] font-normal leading-snug text-gray-500 dark:text-slate-400 tabular-nums sm:grid-cols-2">
+                                        <ul
+                                          className="mt-1 grid gap-x-4 gap-y-1 text-[10px] font-normal leading-snug text-gray-500 dark:text-slate-400 tabular-nums"
+                                          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 13rem), 1fr))' }}
+                                        >
                                           {row.memberDetails.map((member, memberIndex) => (
                                             <li key={`${member.name}-${memberIndex}`} className="min-w-0">
                                               <div className="break-words">{member.name}</div>
