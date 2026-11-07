@@ -12,7 +12,7 @@ export default function FinalPlacementDetails({ details, t }: {
           <div className="flex flex-wrap items-baseline justify-between gap-x-3">
             <div className="font-semibold break-words">{detail.name}</div>
             <div className="text-xs font-normal text-gray-500 dark:text-slate-400 tabular-nums">
-              {detail.isTeam ? t('dashboard.team_total', 'Team total') : t('dashboard.standings_total', 'Standings total')}: <span className="font-bold text-emerald-800 dark:text-emerald-400">{detail.total ?? '—'}</span>
+              {detail.isTeam ? t('dashboard.team_total', 'Team total') : t('dashboard.total', 'Total')}: <span className="font-bold text-emerald-800 dark:text-emerald-400">{detail.total ?? '—'}</span>
               {!detail.isTeam && <> · {t('dashboard.avg', 'Avg')}: {detail.avg !== null ? detail.avg.toFixed(1) : '—'}</>}
             </div>
           </div>
