@@ -9,7 +9,7 @@ export default function FinalPlacementDetails({ details, t }: {
     <div className="space-y-1.5">
       {details.map((detail, index) => (
         <div key={`${detail.name}-${index}`} className="min-w-0">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3">
             <div className="font-semibold break-words">{detail.name}</div>
             <div className="text-xs font-normal text-gray-500 dark:text-slate-400 tabular-nums">
               {detail.isTeam ? t('dashboard.team_total', 'Team total') : t('dashboard.total', 'Total')}: <span className="font-bold text-emerald-800 dark:text-emerald-400">{detail.total ?? '—'}</span>

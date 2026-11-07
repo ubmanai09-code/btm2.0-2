@@ -13,6 +13,7 @@ test('renders each tied placement and its own scores and team members', () => {
     assert.ok(html.includes(text), `Missing ${text}`);
   }
   assert.ok(!html.includes('Standings total'));
+  assert.ok(html.includes('grid-cols-[minmax(0,1fr)_auto]'));
   assert.ok(html.includes('repeat(auto-fit, minmax(min(100%, 13rem), 1fr))'));
   assert.ok(html.includes('aria-label="Members"'));
 });
