@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import type { Tournament } from '../services/api';
 import { buildRankingCategories, type RankingFinalWinner, type RankingPlayer, type RankingTeam } from './dashboardRankings';
+import FinalPlacementDetails from './FinalPlacementDetails';
 
 type DisplayStatus = 'active' | 'incoming' | 'finished' | 'archived' | 'draft';
 export type DashboardTab = 'participants' | 'standings' | 'scoring' | 'lanes' | 'brackets-v2';
@@ -12,6 +13,8 @@ interface Highlights {
   tournament: { id: number; name: string; games_count: number };
   players: RankingPlayer[];
   teams: RankingTeam[];
+  podium_players?: RankingPlayer[];
+  podium_teams?: RankingTeam[];
   final_winners?: RankingFinalWinner[];
   highest_men: { score: number; game_number: number; name: string } | null;
   highest_women: { score: number; game_number: number; name: string } | null;
@@ -162,7 +165,10 @@ export default function DashboardPage(props: DashboardPageProps) {
     womenTeams: t('dashboard.women_teams', 'Women teams'),
     menTeams: t('dashboard.men_teams', 'Men teams'),
     mixedTeams: t('dashboard.mixed_teams', 'Mixed teams'),
-  }, isTeam, highlights?.final_winners || []);
+  }, isTeam, highlights?.final_winners || [], Boolean(featured?.enable_singles_division), {
+    players: highlights?.podium_players ?? highlights?.players ?? [],
+    teams: highlights?.podium_teams ?? highlights?.teams ?? [],
+  });
   useEffect(() => setRankingKey(''), [featured?.id]);
   const activeRanking = rankingCategories.find((c) => c.key === rankingKey) || rankingCategories[0] || null;
   const maxRows = showAll ? 10 : 5;
@@ -276,6 +282,9 @@ export default function DashboardPage(props: DashboardPageProps) {
                           {c.label}
                         </button>
                       ))}
+                      {activeRanking?.isFinalPlacement && (
+                        <span className="ml-auto text-[11px] font-semibold uppercase text-slate-400">{t('dashboard.final_placements', 'Final placements')}</span>
+                      )}
                       {canExpand && (
                         <button onClick={() => setShowAll((v) => !v)} className="ml-auto text-[11px] font-semibold uppercase tracking-wide text-orange-400 hover:text-orange-300">
                           {showAll ? t('dashboard.show_less', 'Top 5') : t('dashboard.show_more', 'Top 10')}
@@ -289,10 +298,10 @@ export default function DashboardPage(props: DashboardPageProps) {
                             <tbody>
                               {activeRanking.rows.slice(0, maxRows).map((row, index) => (
                                 <tr key={row.id} className="border-t border-gray-300 first:border-t-0">
-                                  <td className="pl-4 pr-2 py-2 w-12"><span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${medalClass(index + 1)}`}>{index + 1}</span></td>
-                                  <td className="px-2 py-2 font-semibold text-black">
-                                    {row.name}
-                                    {row.members.length > 0 && <div className="mt-0.5 text-[11px] font-normal text-gray-500 leading-snug">{activeRanking.isFinalPlacement ? `(${row.members.join(', ')})` : row.members.join(' · ')}</div>}
+                                  <td className={`pl-4 pr-2 w-12 ${activeRanking.isFinalPlacement ? 'py-1.5 align-top' : 'py-2'}`}><span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${medalClass(row.rank ?? index + 1)}`}>{row.rank ?? index + 1}</span></td>
+                                  <td className={`px-2 font-semibold text-black ${activeRanking.isFinalPlacement ? 'w-full py-1.5' : 'py-2'}`}>
+                                    {activeRanking.isFinalPlacement ? <FinalPlacementDetails details={row.details || []} t={t} /> : row.name}
+                                    {!activeRanking.isFinalPlacement && row.members.length > 0 && <div className="mt-0.5 text-[11px] font-normal text-gray-500 leading-snug">{row.members.join(' · ')}</div>}
                                   </td>
                                   {!activeRanking.isFinalPlacement && (
                                     <>
@@ -306,11 +315,11 @@ export default function DashboardPage(props: DashboardPageProps) {
                           </table>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  {!activeRanking?.isFinalPlacement && <div className="grid grid-cols-2 gap-2">
                     {bestCard(t('dashboard.best_women', 'Highest game · Women'), highlights?.highest_women ?? null)}
                     {bestCard(t('dashboard.best_men', 'Highest game · Men'), highlights?.highest_men ?? null)}
                     {featured.scoring_type === 'handicap' && <p className="col-span-2 text-[11px] text-gray-500">{t('dashboard.scratch_note', 'Scores shown are scratch (without handicap).')}</p>}
-                  </div>
+                  </div>}
                 </div>
               ) : (
                 <div className="relative flex flex-wrap gap-1">

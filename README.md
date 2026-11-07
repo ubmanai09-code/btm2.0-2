@@ -24,6 +24,11 @@ Admins can open **Account → Player database** from the top navigation. The dir
 - On a tournament's Players tab, moderators and admins can add attendees from the database. Suggestions prioritize players with attendance at that tournament's center or series. Only admins can create or update shared player records; moderators can use existing records to build a tournament roster without changing the global database.
 - Existing participant CSV imports and exports preserve the Player Database ID when available, so rosters can keep linking to the same player record.
 
+## Dashboard results
+
+The dashboard shows score rankings during an event. Once any winner is saved in the Standings tab's Winners Podium, it shows only the saved podium placements and divisions instead of score rankings. Empty podium places are omitted; update or clear the podium entries in Standings to change the dashboard.
+Final placements include standings totals and individual averages; team placements also show each member's standings total and average. These are standings scores, not final-match scores. Manually entered names that cannot be uniquely matched to a player or team show a dash for unavailable details.
+
 ## Site management rules
 
 Operational and governance rules are in:

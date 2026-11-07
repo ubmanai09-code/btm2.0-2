@@ -77,6 +77,7 @@ import {
 } from './utils/tournamentEngine';
 import DashboardPage from './components/DashboardPage';
 import DashboardPageDesktop from './components/DashboardPageDesktop';
+import { parseWinnerNames } from './components/winnerNames';
 import GlossaryPage from './components/GlossaryPage';
 import ToolsPage from './components/ToolsPage';
 import MastersTool from './components/MastersTool';
@@ -15687,31 +15688,6 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const [standingsDebugSummary, setStandingsDebugSummary] = useState('');
 
   const toManualWinnerKey = (division: ManualWinnerDivision, place: ManualWinnerPlace) => `${division === 'team' ? 'all' : division}:${place}`;
-  const parseWinnerNames = (raw: string) => {
-    const text = String(raw || '').trim();
-    if (!text) return [] as string[];
-    if (text.startsWith('[') && text.endsWith(']')) {
-      try {
-        const parsed = JSON.parse(text);
-        if (Array.isArray(parsed)) {
-          return Array.from(new Set(
-            parsed
-              .map((item) => String(item || '').trim())
-              .filter((item) => item.length > 0)
-          ));
-        }
-      } catch {
-        // fall back to line/comma parsing
-      }
-    }
-    return Array.from(new Set(
-      text
-        .split(/\r?\n|\s*,\s*/)
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0)
-    ));
-  };
-
   const toBonusKey = (kind: 'participant' | 'team', id: number) => `${kind}-${id}`;
   const getBonus = (kind: 'participant' | 'team', id: number) => Number(bonusByKey[toBonusKey(kind, id)] || 0);
   const getAdditional = (kind: 'participant' | 'team', id: number) => Number(additionalByKey[toBonusKey(kind, id)] || 0);

@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import type { Tournament } from '../services/api';
 import { buildRankingCategories, type RankingFinalWinner, type RankingPlayer, type RankingTeam } from './dashboardRankings';
+import FinalPlacementDetails from './FinalPlacementDetails';
 
 type DisplayStatus = 'active' | 'incoming' | 'finished' | 'archived' | 'draft';
 export type DashboardTab = 'participants' | 'standings' | 'scoring' | 'lanes' | 'brackets-v2';
@@ -12,6 +13,8 @@ interface Highlights {
   tournament: { id: number; name: string; games_count: number };
   players: RankingPlayer[];
   teams: RankingTeam[];
+  podium_players?: RankingPlayer[];
+  podium_teams?: RankingTeam[];
   final_winners?: RankingFinalWinner[];
   highest_men: { score: number; game_number: number; name: string } | null;
   highest_women: { score: number; game_number: number; name: string } | null;
@@ -211,8 +214,11 @@ export default function DashboardPage(props: DashboardPageProps) {
       womenTeams: t('dashboard.women_teams', 'Women teams'),
       menTeams: t('dashboard.men_teams', 'Men teams'),
       mixedTeams: t('dashboard.mixed_teams', 'Mixed teams'),
-    }, featured?.type === 'team', highlights?.final_winners || []),
-    [highlights?.players, highlights?.teams, highlights?.final_winners, featured?.type, t],
+    }, featured?.type === 'team', highlights?.final_winners || [], Boolean(featured?.enable_singles_division), {
+      players: highlights?.podium_players ?? highlights?.players ?? [],
+      teams: highlights?.podium_teams ?? highlights?.teams ?? [],
+    }),
+    [highlights, featured?.type, featured?.enable_singles_division, t],
   );
   useEffect(() => setRankingKey(''), [featured?.id]);
   const activeRanking = rankingCategories.find((c) => c.key === rankingKey) || rankingCategories[0] || null;
@@ -385,10 +391,10 @@ export default function DashboardPage(props: DashboardPageProps) {
                           <tbody>
                                 {activeRankingRows.map((row, index) => (
                                   <tr key={row.id} className="border-t border-gray-100 dark:border-slate-800/60 first:border-t-0 hover:bg-gray-50/80 dark:hover:bg-slate-800/50 transition-colors">
-                                    <td className="pl-3 pr-1 py-1.5 w-8 text-center">
-                                      {index < 3 ? (
-                                        <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${medalClass(index + 1)}`}>
-                                          {index + 1}
+                                    <td className={`pl-3 pr-1 py-1.5 w-8 text-center ${activeRanking.isFinalPlacement ? 'align-top' : ''}`}>
+                                      {(row.rank ?? index + 1) <= 3 ? (
+                                        <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${medalClass(row.rank ?? index + 1)}`}>
+                                          {row.rank ?? index + 1}
                                         </span>
                                       ) : (
                                         <span className="inline-flex h-5 w-5 items-center justify-center text-xs font-semibold text-gray-500 dark:text-slate-400 tabular-nums">
@@ -396,11 +402,11 @@ export default function DashboardPage(props: DashboardPageProps) {
                                         </span>
                                       )}
                                     </td>
-                                    <td className="px-2 py-1.5 font-semibold text-[#1E2233] dark:text-slate-100 max-w-[130px] sm:max-w-[160px]" title={row.name}>
-                                      <div className="truncate">{row.name}</div>
-                                      {Array.isArray(row.members) && row.members.length > 0 && (
+                                    <td className={`px-2 py-1.5 font-semibold text-[#1E2233] dark:text-slate-100 ${activeRanking.isFinalPlacement ? 'w-full' : 'max-w-[130px] sm:max-w-[160px]'}`} title={row.name}>
+                                      {activeRanking.isFinalPlacement ? <FinalPlacementDetails details={row.details || []} t={t} /> : <div className="truncate">{row.name}</div>}
+                                      {!activeRanking.isFinalPlacement && row.members.length > 0 && (
                                         <div className="text-[10px] font-normal leading-snug text-gray-500 dark:text-slate-400 whitespace-normal">
-                                          {activeRanking.isFinalPlacement ? `(${row.members.join(', ')})` : row.members.join(' · ')}
+                                          {row.members.join(' · ')}
                                         </div>
                                       )}
                                     </td>
@@ -423,7 +429,7 @@ export default function DashboardPage(props: DashboardPageProps) {
                   )}
 
                   {/* Highlights best games card banner */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {!activeRanking?.isFinalPlacement && <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                     {bestCard(t('dashboard.best_women', 'Highest game · Women'), highlights?.highest_women ?? null)}
                     {bestCard(t('dashboard.best_men', 'Highest game · Men'), highlights?.highest_men ?? null)}
                     {featured.scoring_type === 'handicap' && (
@@ -431,7 +437,7 @@ export default function DashboardPage(props: DashboardPageProps) {
                         {t('dashboard.scratch_note', 'Scores shown are scratch (without handicap).')}
                       </p>
                     )}
-                  </div>
+                  </div>}
                 </div>
               ) : (
                 <div className="relative flex flex-wrap gap-1">

@@ -5541,37 +5541,120 @@ async function startServer() {
   // Standings
   // Public dashboard highlights: top players/teams and highest single games by gender.
   app.get("/api/tournaments/:id/highlights", (req, res) => {
-    const tournament = db.prepare("SELECT id, name, games_count FROM tournaments WHERE id = ?").get(req.params.id) as any;
+    const tournament = db.prepare("SELECT id, name, games_count, has_additional_scores, has_bonus FROM tournaments WHERE id = ?").get(req.params.id) as any;
     if (!tournament) return res.status(404).json({ error: "Tournament not found" });
     const id = tournament.id;
+    const officialGameCount = Math.max(1, Number(tournament.games_count) || 0);
+    const hasAdditionalScores = Number(tournament.has_additional_scores) === 1;
+    const hasBonus = Number(tournament.has_bonus) === 1;
     const players = db.prepare(`
-      SELECT p.id, (p.first_name || ' ' || p.last_name) AS name, LOWER(SUBSTR(COALESCE(p.gender, ''), 1, 1)) AS gender,
-             COUNT(s.id) AS games, COALESCE(SUM(s.score), 0) AS total, COALESCE(AVG(s.score), 0) AS avg
-      FROM participants p
-      JOIN scores s ON s.participant_id = p.id
-      WHERE p.tournament_id = ?
-      GROUP BY p.id
-      ORDER BY total DESC, avg DESC, p.id ASC
-      LIMIT 100
-    `).all(id);
+      WITH ranked_scores AS (
+        SELECT participant_id, game_number, score,
+               ROW_NUMBER() OVER (PARTITION BY participant_id, game_number ORDER BY id DESC) AS score_version
+        FROM scores
+        WHERE tournament_id = ? AND game_number <= ?
+      ), participant_totals AS (
+        SELECT participant_id, SUM(score) AS official_total,
+               SUM(CASE WHEN score > 0 THEN 1 ELSE 0 END) AS games_played,
+               COALESCE(MAX(score) - MIN(score), 0) AS score_range
+        FROM ranked_scores
+        WHERE score_version = 1
+        GROUP BY participant_id
+      ), ranked_players AS (
+        SELECT p.id, (p.first_name || ' ' || p.last_name) AS name,
+               LOWER(SUBSTR(COALESCE(p.gender, ''), 1, 1)) AS gender,
+               COALESCE(pt.official_total, 0) AS official_total,
+               COALESCE(pt.games_played, 0) AS games_played,
+               COALESCE(pt.score_range, 0) AS score_range,
+               EXISTS (
+                 SELECT 1 FROM warmup_slots ws
+                 WHERE ws.tournament_id = p.tournament_id AND ws.participant_id = p.id AND ws.session IN ('UT', 'NT')
+               ) AS is_warmup,
+               COALESCE(pt.official_total, 0)
+                 + CASE WHEN ? = 1 THEN COALESCE(extra.additional_score, 0) ELSE 0 END
+                 + CASE WHEN ? = 1 THEN COALESCE(bonus.bonus, 0) ELSE 0 END AS grand_total
+        FROM participants p
+        LEFT JOIN participant_totals pt ON pt.participant_id = p.id
+        LEFT JOIN standings_additional_scores extra
+          ON extra.tournament_id = p.tournament_id AND extra.target_kind = 'participant' AND extra.target_id = p.id
+        LEFT JOIN standings_bonus bonus
+          ON bonus.tournament_id = p.tournament_id AND bonus.target_kind = 'participant' AND bonus.target_id = p.id
+        WHERE p.tournament_id = ?
+      ), effective_players AS (
+        SELECT *, CASE WHEN ? = 1 OR ? = 1 THEN grand_total ELSE official_total END AS total
+        FROM ranked_players
+      )
+      SELECT id, name, gender, total, games_played AS games, is_warmup,
+             ROUND(CASE WHEN games_played > 0 THEN official_total * 1.0 / games_played ELSE 0 END, 1) AS avg,
+             score_range
+      FROM effective_players
+      ORDER BY total DESC, score_range ASC, avg DESC, id ASC
+    `).all(id, officialGameCount, hasAdditionalScores ? 1 : 0, hasBonus ? 1 : 0, id, hasAdditionalScores ? 1 : 0, hasBonus ? 1 : 0) as Array<{ id: number; name: string; gender: string; total: number; games: number; avg: number; is_warmup: number }>;
     const teams = db.prepare(`
-      SELECT t.id, t.name, COUNT(s.id) AS games, COALESCE(SUM(s.score), 0) AS total,
-             CASE WHEN COUNT(DISTINCT s.game_number) > 0 THEN 1.0 * SUM(s.score) / COUNT(DISTINCT s.game_number) ELSE 0 END AS avg
-      FROM teams t
-      JOIN participants p ON p.team_id = t.id
-      JOIN scores s ON s.participant_id = p.id
-      WHERE t.tournament_id = ?
-      GROUP BY t.id
-      ORDER BY total DESC, t.id ASC
-      LIMIT 100
-    `).all(id) as any[];
-    const memberStmt = db.prepare(`
-      SELECT (first_name || ' ' || last_name) AS name, LOWER(SUBSTR(COALESCE(gender, ''), 1, 1)) AS gender FROM participants
-      WHERE team_id = ? ORDER BY COALESCE(team_order, 999), id
-    `);
+      WITH ranked_scores AS (
+        SELECT participant_id, game_number, score,
+               ROW_NUMBER() OVER (PARTITION BY participant_id, game_number ORDER BY id DESC) AS score_version
+        FROM scores
+        WHERE tournament_id = ? AND game_number <= ?
+      ), team_game_totals AS (
+        SELECT p.team_id, s.game_number, SUM(s.score) AS game_total
+        FROM participants p
+        JOIN ranked_scores s ON s.participant_id = p.id AND s.score_version = 1
+        WHERE p.tournament_id = ? AND p.team_id IS NOT NULL
+        GROUP BY p.team_id, s.game_number
+      ), team_totals AS (
+        SELECT team_id, SUM(game_total) AS official_total, COUNT(*) AS games_played,
+               COALESCE(MAX(game_total) - MIN(game_total), 0) AS score_range
+        FROM team_game_totals
+        GROUP BY team_id
+      ), ranked_teams AS (
+        SELECT t.id, t.name, COALESCE(tt.official_total, 0) AS official_total,
+               COALESCE(tt.games_played, 0) AS games_played,
+               COALESCE(tt.score_range, 0) AS score_range,
+               COALESCE(tt.official_total, 0)
+                 + CASE WHEN ? = 1 THEN COALESCE(extra.additional_score, 0) ELSE 0 END
+                 + CASE WHEN ? = 1 THEN COALESCE(bonus.bonus, 0) ELSE 0 END AS grand_total
+        FROM teams t
+        LEFT JOIN team_totals tt ON tt.team_id = t.id
+        LEFT JOIN standings_additional_scores extra
+          ON extra.tournament_id = t.tournament_id AND extra.target_kind = 'team' AND extra.target_id = t.id
+        LEFT JOIN standings_bonus bonus
+          ON bonus.tournament_id = t.tournament_id AND bonus.target_kind = 'team' AND bonus.target_id = t.id
+        WHERE t.tournament_id = ?
+      ), effective_teams AS (
+        SELECT *, CASE WHEN ? = 1 OR ? = 1 THEN grand_total ELSE official_total END AS total
+        FROM ranked_teams
+      )
+      SELECT id, name, total, games_played AS games,
+             ROUND(CASE WHEN games_played > 0 THEN official_total * 1.0 / games_played ELSE 0 END, 1) AS avg,
+             score_range
+      FROM effective_teams
+      ORDER BY total DESC, score_range ASC, name ASC
+    `).all(id, officialGameCount, id, hasAdditionalScores ? 1 : 0, hasBonus ? 1 : 0, id, hasAdditionalScores ? 1 : 0, hasBonus ? 1 : 0) as any[];
+    const teamMembers = db.prepare(`
+      SELECT id, team_id, (first_name || ' ' || last_name) AS name, LOWER(SUBSTR(COALESCE(gender, ''), 1, 1)) AS gender
+      FROM participants
+      WHERE tournament_id = ? AND team_id IS NOT NULL
+      ORDER BY team_id, COALESCE(team_order, 999), id
+    `).all(id) as Array<{ id: number; team_id: number; name: string; gender: string }>;
+    const playersById = new Map(players.map((player) => [player.id, player]));
+    const membersByTeam = new Map<number, typeof teamMembers>();
+    for (const member of teamMembers) {
+      const members = membersByTeam.get(member.team_id) || [];
+      members.push(member);
+      membersByTeam.set(member.team_id, members);
+    }
     for (const team of teams) {
-      const members = memberStmt.all(team.id) as any[];
+      const members = membersByTeam.get(team.id) || [];
       team.members = members.map((m) => m.name);
+      team.member_details = members.map((member) => {
+        const player = playersById.get(member.id);
+        return {
+          name: member.name,
+          total: player && (player.games > 0 || player.total > 0) ? player.total : null,
+          avg: player && player.games > 0 ? player.avg : null,
+        };
+      });
       const genders = new Set(members.map((m) => m.gender));
       // 'f' / 'm' when every member shares a gender, otherwise 'x' (mixed or unknown)
       team.gender = genders.size === 1 && (genders.has('f') || genders.has('m')) ? [...genders][0] : 'x';
@@ -5580,6 +5663,10 @@ async function startServer() {
       SELECT s.score, s.game_number, (p.first_name || ' ' || p.last_name) AS name
       FROM scores s JOIN participants p ON p.id = s.participant_id
       WHERE s.tournament_id = ? AND LOWER(SUBSTR(COALESCE(p.gender, ''), 1, 1)) = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM warmup_slots ws
+          WHERE ws.tournament_id = p.tournament_id AND ws.participant_id = p.id AND ws.session IN ('UT', 'NT')
+        )
       ORDER BY s.score DESC, s.game_number ASC LIMIT 1
     `).get(id, letter) || null;
     const counts = db.prepare(`
@@ -5588,14 +5675,21 @@ async function startServer() {
              (SELECT COALESCE(MAX(game_number), 0) FROM scores WHERE tournament_id = ?) AS rounds
     `).get(id, id, id);
     const final_winners = db.prepare(`
-      SELECT division, place, display_name
+      SELECT division, place, display_name, target_kind, target_id
       FROM manual_winners
       WHERE tournament_id = ? AND TRIM(COALESCE(display_name, '')) != ''
       ORDER BY CASE division WHEN 'all' THEN 0 WHEN 'male' THEN 1 ELSE 2 END,
                CASE place WHEN 'first' THEN 0 WHEN 'second' THEN 1 ELSE 2 END,
                id ASC
     `).all(id);
-    res.json({ tournament, players, teams, highest_men: highest('m'), highest_women: highest('f'), counts, final_winners });
+    res.json({
+      tournament,
+      players: players.filter((player) => !player.is_warmup && player.total > 0).slice(0, 100),
+      teams: teams.filter((team) => team.total > 0).slice(0, 100),
+      podium_players: final_winners.length > 0 ? players : [],
+      podium_teams: final_winners.length > 0 ? teams : [],
+      highest_men: highest('m'), highest_women: highest('f'), counts, final_winners,
+    });
   });
 
   app.get("/api/tournaments/:id/standings", (req, res) => {
