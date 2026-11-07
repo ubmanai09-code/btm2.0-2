@@ -301,7 +301,21 @@ export default function DashboardPage(props: DashboardPageProps) {
                                   <td className={`pl-4 pr-2 w-12 ${activeRanking.isFinalPlacement ? 'py-1.5 align-top' : 'py-2'}`}><span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${medalClass(row.rank ?? index + 1)}`}>{row.rank ?? index + 1}</span></td>
                                   <td className={`px-2 font-semibold text-black ${activeRanking.isFinalPlacement ? 'w-full py-1.5' : 'py-2'}`}>
                                     {activeRanking.isFinalPlacement ? <FinalPlacementDetails details={row.details || []} t={t} /> : row.name}
-                                    {!activeRanking.isFinalPlacement && row.members.length > 0 && <div className="mt-0.5 text-[11px] font-normal text-gray-500 leading-snug">{row.members.join(' · ')}</div>}
+                                    {!activeRanking.isFinalPlacement && row.memberDetails && row.memberDetails.length > 0 ? (
+                                      <ul className="mt-1 grid gap-x-4 gap-y-1 text-[11px] font-normal leading-snug text-gray-500 tabular-nums sm:grid-cols-2">
+                                        {row.memberDetails.map((member, memberIndex) => (
+                                          <li key={`${member.name}-${memberIndex}`} className="min-w-0">
+                                            <div className="break-words">{member.name}</div>
+                                            <div>
+                                              {t('dashboard.total', 'Total')}: <span className="font-semibold">{member.total ?? '—'}</span>
+                                              {' · '}{t('dashboard.avg', 'Avg')}: <span className="font-semibold">{member.avg != null ? member.avg.toFixed(1) : '—'}</span>
+                                            </div>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    ) : !activeRanking.isFinalPlacement && row.members.length > 0 ? (
+                                      <div className="mt-0.5 text-[11px] font-normal text-gray-500 leading-snug">{row.members.join(' · ')}</div>
+                                    ) : null}
                                   </td>
                                   {!activeRanking.isFinalPlacement && (
                                     <>

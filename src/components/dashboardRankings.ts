@@ -5,11 +5,20 @@ export type RankingMember = { name: string; total: number | null; avg: number | 
 export type RankingTeam = { id: number; name: string; gender?: string; games: number; total: number; avg: number; members?: string[]; member_details?: RankingMember[] };
 export type RankingFinalWinner = { division: string; place: string; display_name: string; target_kind?: 'participant' | 'team' | 'manual'; target_id?: number | null };
 export type PlacementDetail = { name: string; total: number | null; avg: number | null; isTeam: boolean; members: RankingMember[] };
-export type RankingRow = { id: number; name: string; avg: number; total: number; members: string[]; rank?: number; isFinalPlacement?: boolean; details?: PlacementDetail[] };
+export type RankingRow = { id: number; name: string; avg: number; total: number; members: string[]; memberDetails?: RankingMember[]; rank?: number; isFinalPlacement?: boolean; details?: PlacementDetail[] };
 export type RankingCategory = { key: string; label: string; rows: RankingRow[]; isFinalPlacement?: boolean };
 
-const toRows = (list: Array<{ id: number; name: string; avg: number; total: number; members?: string[] }>): RankingRow[] =>
-  list.map((r) => ({ id: r.id, name: r.name, avg: Number(r.avg) || 0, total: r.total, members: r.members || [] }));
+const toRows = (
+  list: Array<{ id: number; name: string; avg: number; total: number; members?: string[]; member_details?: RankingMember[] }>,
+  includeMemberDetails = false,
+): RankingRow[] => list.map((r) => ({
+  id: r.id,
+  name: r.name,
+  avg: Number(r.avg) || 0,
+  total: r.total,
+  members: r.members || [],
+  ...(includeMemberDetails && r.member_details ? { memberDetails: r.member_details } : {}),
+}));
 
 type Labels = { women: string; men: string; players: string; teams: string; womenTeams: string; menTeams: string; mixedTeams: string };
 
@@ -92,7 +101,7 @@ export function buildRankingCategories(
 
   const list: RankingCategory[] = [];
   if (isTeamTournament) {
-    if (teams.length > 0) list.push({ key: 't', label: labels.teams, rows: toRows(teams) });
+    if (teams.length > 0) list.push({ key: 't', label: labels.teams, rows: toRows(teams, true) });
     if (men.length > 0) list.push({ key: 'm', label: labels.men, rows: toRows(men) });
     if (women.length > 0) list.push({ key: 'f', label: labels.women, rows: toRows(women) });
     return list;

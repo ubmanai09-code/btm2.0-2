@@ -404,11 +404,23 @@ export default function DashboardPage(props: DashboardPageProps) {
                                     </td>
                                     <td className={`px-2 py-1.5 font-semibold text-[#1E2233] dark:text-slate-100 ${activeRanking.isFinalPlacement ? 'w-full' : 'max-w-[130px] sm:max-w-[160px]'}`} title={row.name}>
                                       {activeRanking.isFinalPlacement ? <FinalPlacementDetails details={row.details || []} t={t} /> : <div className="truncate">{row.name}</div>}
-                                      {!activeRanking.isFinalPlacement && row.members.length > 0 && (
+                                      {!activeRanking.isFinalPlacement && row.memberDetails && row.memberDetails.length > 0 ? (
+                                        <ul className="mt-1 grid gap-x-4 gap-y-1 text-[10px] font-normal leading-snug text-gray-500 dark:text-slate-400 tabular-nums sm:grid-cols-2">
+                                          {row.memberDetails.map((member, memberIndex) => (
+                                            <li key={`${member.name}-${memberIndex}`} className="min-w-0">
+                                              <div className="break-words">{member.name}</div>
+                                              <div>
+                                                {t('dashboard.total', 'Total')}: <span className="font-semibold">{member.total ?? '—'}</span>
+                                                {' · '}{t('dashboard.avg', 'Avg')}: <span className="font-semibold">{member.avg != null ? member.avg.toFixed(1) : '—'}</span>
+                                              </div>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      ) : !activeRanking.isFinalPlacement && row.members.length > 0 ? (
                                         <div className="text-[10px] font-normal leading-snug text-gray-500 dark:text-slate-400 whitespace-normal">
                                           {row.members.join(' · ')}
                                         </div>
-                                      )}
+                                      ) : null}
                                     </td>
                                     {!activeRanking.isFinalPlacement && (
                                       <>

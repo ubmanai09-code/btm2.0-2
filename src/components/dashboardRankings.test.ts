@@ -20,7 +20,13 @@ test('score categories remain available until a podium winner is saved', () => {
   assert.deepEqual(categories.map((category) => category.key), ['t', 'm', 'f']);
   assert.equal(categories[1].rows[0].name, 'Score leader');
   assert.equal(categories[1].isFinalPlacement, undefined);
+  assert.deepEqual(categories[0].rows[0].memberDetails, teams[0].member_details);
   assert.deepEqual(buildRankingCategories(players, teams, labels, true, [winner('all', 'first', '[]')]), categories);
+});
+
+test('individual-event team rankings do not include member scores', () => {
+  const categories = buildRankingCategories(players, teams, labels);
+  assert.equal(categories.find((category) => category.key === 't')?.rows[0].memberDetails, undefined);
 });
 
 test('saved winners replace all score categories and preserve missing places and ties', () => {
