@@ -34,6 +34,8 @@ The Standings tab shows Teams, Singles, Doubles and Triples. Each team has one d
 
 Doubles and triples averages are the average combined team score per completed game; games missing a selected player's score are excluded.
 
+Mixed Singles standings show the player's club instead of their team. Doubles and Triples show the clubs recorded on the team's player roster (or a dash when none is recorded); results remain grouped by registered team.
+
 The Winners Podium has separate manually editable places for Team, women's Singles, men's Singles, Doubles and Triples. Doubles and triples winner choices use the registered lineups; standings do not automatically award medals or resolve ties. The dashboard displays saved doubles and triples placements without five-player team scores.
 
 Mixed tournament participant CSV exports include the three event flags. Imports without these columns leave existing selections unchanged; when present, use 1 or 0.

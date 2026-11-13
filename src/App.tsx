@@ -15672,7 +15672,7 @@ export function MixedGroupStandings({ event, data, gameCount, tx, showWarnings }
               >
                 <span className="w-6 shrink-0 text-xs font-bold text-black/40 text-center">{row.rank ?? '—'}</span>
                 <span className="flex-1 min-w-0 leading-tight">
-                  <span className="block text-xs font-bold text-black truncate">{row.team.name}</span>
+                  <span className="block text-xs font-bold text-black truncate">{row.club}</span>
                   <span className="block mt-0.5 text-[10px] lowercase text-black/60">
                     {row.members.length > 0 ? row.members.map((p) => `${p.first_name} ${p.last_name}`.trim()).join(', ') : tx('No members')}
                   </span>
@@ -15692,7 +15692,7 @@ export function MixedGroupStandings({ event, data, gameCount, tx, showWarnings }
               </button>
               {isExpanded && (
                 <div className="px-3 pb-2.5 pt-1.5 bg-emerald-50">
-                  <p className="text-xs font-bold leading-tight text-black">{row.team.name}</p>
+                  <p className="text-xs font-bold leading-tight text-black">{row.club}</p>
                   <p className="mt-1 text-[11px] leading-snug text-black/75">
                     <span className="font-semibold text-emerald-700">{tx('Total')}:</span> {total}
                     {' | '}
@@ -15711,7 +15711,7 @@ export function MixedGroupStandings({ event, data, gameCount, tx, showWarnings }
           <thead>
             <tr>
               <th className="p-2">{tx('Rank')}</th>
-              <th className="p-2">{tx('Team')}</th>
+              <th className="p-2">{tx('Club')}</th>
               <th className="p-2">{tx('Players')}</th>
               {Array.from({ length: gameCount }, (_, i) => <th key={i} className="p-2 text-right">G{i + 1}</th>)}
               <th className="p-2 text-right">{tx('Total')}</th>
@@ -15723,7 +15723,7 @@ export function MixedGroupStandings({ event, data, gameCount, tx, showWarnings }
               <tr key={row.team.id} className="border-t border-black/10">
                 <td className="p-2">{row.rank ?? '—'}</td>
                 <td className="p-2 font-semibold">
-                  {row.team.name}
+                  {row.club}
                   {showWarnings && (!row.valid
                     ? <div className="text-xs font-normal text-amber-700">{tx('Players selected:')} {row.members.length}/{size}</div>
                     : !row.complete && <div className="text-xs font-normal text-amber-700">{tx('Incomplete scores')}</div>)}
@@ -16475,7 +16475,8 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
     return normalized.length > 0 && normalized !== '-';
   };
 
-  const hasClubData = standingsRowsForDisplay.some((row) => hasMeaningfulClub(row.club));
+  const hasClubData = hasMixedTeamSingles || standingsRowsForDisplay.some((row) => hasMeaningfulClub(row.club));
+  const showPlayerTeamColumn = isTeamTournament && !hasMixedTeamSingles;
 
   const formatTeamMemberCompact = (participant: Participant) => {
     const firstName = (participant.first_name || '').trim().toLowerCase() || 'unknown';
@@ -16868,7 +16869,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
           'participant',
           'gender',
           ...(hasClubData ? ['club'] : []),
-          'team',
+          ...(!hasMixedTeamSingles ? ['team'] : []),
           ...(hasDivisions ? ['zone'] : []),
           ...gameHeaders,
           'total',
@@ -16890,7 +16891,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
           s.participant_name,
           participantGenderMap.get(s.participant_id) || '',
           ...(hasClubData ? [s.club] : []),
-          s.team_name,
+          ...(!hasMixedTeamSingles ? [s.team_name] : []),
           ...(hasDivisions ? [s.division || ''] : []),
           ...s.games,
           s.total,
@@ -17110,7 +17111,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
               {hasDivisions && <th className={`${headerBaseClass} text-center w-11`}>{tx('Zone')}</th>}
             </>
           )}
-          {standingsMode === 'players' && isTeamTournament && (
+          {standingsMode === 'players' && showPlayerTeamColumn && (
             <th className={headerBaseClass}>{tx('Team')}</th>
           )}
           {gameNumbers.map((gameNumber) => (
@@ -17148,7 +17149,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
           {hasDivisions && <col style={{ width: '44px' }} />}
         </>
       )}
-      {standingsMode === 'players' && isTeamTournament && <col style={{ width: '120px' }} />}
+      {standingsMode === 'players' && showPlayerTeamColumn && <col style={{ width: '120px' }} />}
       {gameNumbers.map((gameNumber) => (
         <col key={`game-col-${gameNumber}`} style={{ width: '56px' }} />
       ))}
@@ -17874,6 +17875,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
                     <span className="w-6 shrink-0 text-xs font-bold text-black/40 text-center">{hasMixedTeamSingles ? (mixedSinglesRanks.get(s.participant_id) ?? '—') : idx + 1}</span>
                     <span className="flex-1 text-xs font-bold leading-tight truncate">
                       {isFemale ? <span style={{ textDecorationLine: 'underline', textDecorationStyle: 'dotted' }}>{s.participant_name}</span> : s.participant_name}
+                      {hasMixedTeamSingles && <span className="block mt-0.5 text-[10px] font-normal text-black/60">{s.club}</span>}
                     </span>
                     <span className="shrink-0 flex flex-col items-end">
                       <span className="text-[9px] font-semibold uppercase tracking-wider text-emerald-600 leading-none">{totalColumnLabel}</span>
@@ -18012,8 +18014,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
                       {s.division || '—'}
                     </td>
                   )}
-                  {/* Only show team column if team tournament and standingsMode is players */}
-                  {standingsMode === 'players' && isTeamTournament && (
+                  {standingsMode === 'players' && showPlayerTeamColumn && (
                     <td className="px-2.5 py-1.5 text-xs font-semibold text-black/80">{s.team_name}</td>
                   )}
                   {gameNumbers.map((gameNumber, gameIndex) => {
@@ -18143,7 +18144,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
                   {(() => {
                     // players: Rank + Name + [optional Club] + (Team if team tournament) + games + Total + [optional extras] + GrandTotal + Avg
                     const colSpan = standingsMode === 'players'
-                      ? ((hasClubData ? 3 : 2) + (isTeamTournament ? 1 : 0) + gameNumbers.length + 1 + (hasAdditionalScores ? 1 : 0) + (hasBonus ? 1 : 0) + 1)
+                      ? (2 + (showPlayerStyle ? 1 : 0) + (hasClubData ? 1 : 0) + (hasDivisions ? 1 : 0) + (showPlayerTeamColumn ? 1 : 0) + gameNumbers.length + 1 + (hasAdditionalScores ? 1 : 0) + (hasBonus ? 1 : 0) + 1)
                       : (2 + gameNumbers.length + 2 + (hasAdditionalScores ? 1 : 0) + (hasBonus ? 1 : 0));
                     return (
                       <td colSpan={colSpan} className="px-6 py-12 text-center text-black/40 italic">

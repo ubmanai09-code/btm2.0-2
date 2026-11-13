@@ -40,6 +40,12 @@ export function calculateMixedGroupStandings(
   }
   const rows = teams.map((team) => {
     const members = selected.filter((p) => p.team_id === team.id);
+    const clubs = new Map<string, string>();
+    for (const participant of participants) {
+      if (participant.team_id !== team.id) continue;
+      const club = (participant.club || '').trim();
+      if (club && !clubs.has(club.toLocaleLowerCase())) clubs.set(club.toLocaleLowerCase(), club);
+    }
     const games = Array.from({ length: gameCount }, (_, index) => {
       const values = members.map((p) => scoreMap.get(`${p.id}:${index + 1}`));
       const count = values.filter((value) => value !== undefined).length;
@@ -48,6 +54,7 @@ export function calculateMixedGroupStandings(
     const completedGames = members.length === size ? games.filter((game) => game.count === size) : [];
     return {
       team,
+      club: [...clubs.values()].join(', ') || '—',
       members,
       games,
       total: games.reduce((sum, game) => sum + game.total, 0),
