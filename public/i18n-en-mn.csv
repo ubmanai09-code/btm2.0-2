@@ -476,6 +476,20 @@ dashboard.updated,Updated,Шинэчилсэн
 dashboard.view_event,View event,Тэмцээнийг харах
 public.tournament.singles,Singles,Ганцаарчилсан төрөл
 public.tournament.type.both,Team + Singles,Баг + ганцаарчилсан төрөл
+mixed.events.triples,Triples,Гурвалсан
+mixed.events.entered,Also entered in:,Мөн дараах төрөлд оролцоно:
+mixed.events.unassigned_hint,Players without a team are automatically entered in Singles. Doubles and Triples require a team.,Багт хуваарилагдаагүй тамирчин ганцаарчилсан төрөлд автоматаар орно. Хос болон гурвалсан төрөлд багт хуваарилах шаардлагатай.
+mixed.events.standings,Event standings,Төрлийн чансаа
+mixed.events.load_error,Unable to load event standings. Please retry.,Төрлийн чансааг ачаалж чадсангүй. Дахин оролдоно уу.
+mixed.events.explanation,Qualifying totals use the recorded game scores only. Rankings are provisional until all lineups and scores are complete. Ties require an organizer decision.,Урьдчилсан шатны дүнд зөвхөн тоглолтын оноо орно. Бүрэлдэхүүн болон оноо бүрэн болтол чансаа урьдчилсан байна. Тэнцсэн тохиолдолд зохион байгуулагч шийдвэрлэнэ.
+mixed.events.average,Average is the team total per completed game; partial games are excluded.,Дундаж нь бүрэн тоглосон тоглолтуудын багийн нийлбэр онооны дундаж байна. Дутуу тоглолтыг тооцохгүй.
+mixed.events.unassigned,Selected players without a team:,Багт хуваарилагдаагүй сонгогдсон тамирчид:
+mixed.events.selected,Players selected:,Сонгогдсон тамирчин:
+mixed.events.incomplete,Incomplete scores,Оноо дутуу
+mixed.events.complete,Complete,Бүрэн
+mixed.events.no_teams,No teams registered yet.,Баг бүртгэгдээгүй байна.
+mixed.events.singles_hint,Singles rankings are provisional until scores are complete. Filter by gender for separate standings; ties require an organizer decision.,Оноо бүрэн орох хүртэл ганцаарчилсан чансаа урьдчилсан байна. Хүйсээр шүүж тус тусад нь харна уу. Тэнцсэн тохиолдолд зохион байгуулагч шийдвэрлэнэ.
+mixed.events.scores_incomplete,Incomplete qualifying scores,Урьдчилсан шатны оноо дутуу
 sponsors.manage_ad_block,Manage Ad Block,Зар сурталчилгааны блок удирдах
 sponsors.manage_sponsors,Manage Sponsors,Ивээн тэтгэгчдийг удирдах
 status.auto,Automatic (by date),Автомат (огноогоор)

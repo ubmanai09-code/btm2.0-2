@@ -5,6 +5,9 @@ export type ParticipantImportRow = Pick<Participant, 'first_name' | 'last_name' 
   player_database_id?: number;
   team_name?: string;
   division?: string;
+  singles_entrant?: number;
+  doubles_entrant?: number;
+  triples_entrant?: number;
   history?: PlayerEventHistory[];
 };
 
@@ -104,6 +107,11 @@ export const parseParticipantCsv = (text: string): ParticipantImportRow[] => {
   const emailColumn = findColumn(['contact details', 'contact', 'email', 'e mail'], 5);
   const teamNameColumn = findColumn(['team name', 'registered team', 'teams'], -1);
   const divisionColumn = findColumn(['division'], -1);
+  const eventColumns = {
+    singles_entrant: findColumn(['singles entrant'], -1),
+    doubles_entrant: findColumn(['doubles entrant'], -1),
+    triples_entrant: findColumn(['triples entrant'], -1),
+  };
   const historyColumn = findColumn(['event history'], -1);
   const dataRows = hasHeader ? rows.slice(1) : rows;
   const cell = (values: string[], column: number) => column >= 0 ? (values[column] || '').trim() : '';
@@ -136,6 +144,15 @@ export const parseParticipantCsv = (text: string): ParticipantImportRow[] => {
     const rawAverage = cell(values, averageColumn);
     const parsedAverage = Number.parseInt(rawAverage, 10);
     const handsValue = cell(values, handsColumn).toLowerCase();
+    const eventFlags: Partial<Pick<ParticipantImportRow, 'singles_entrant' | 'doubles_entrant' | 'triples_entrant'>> = {};
+    for (const [key, column] of Object.entries(eventColumns) as [keyof typeof eventColumns, number][]) {
+      if (column < 0) continue;
+      const value = cell(values, column).toLowerCase();
+      if (!['0', '1', 'true', 'false', 'yes', 'no'].includes(value)) {
+        throw new Error(`Invalid ${key} on CSV row ${index + (hasHeader ? 2 : 1)}. Use 1 or 0.`);
+      }
+      eventFlags[key] = ['1', 'true', 'yes'].includes(value) ? 1 : 0;
+    }
     return [{
       ...(parsedId ? { id: parsedId } : {}),
       ...(parsedPlayerDatabaseId ? { player_database_id: parsedPlayerDatabaseId } : {}),
@@ -146,6 +163,7 @@ export const parseParticipantCsv = (text: string): ParticipantImportRow[] => {
       club: cell(values, clubColumn),
       average: Number.isFinite(parsedAverage) ? parsedAverage : 0,
       email: cell(values, emailColumn),
+      ...eventFlags,
       ...(teamNameColumn >= 0 && cell(values, teamNameColumn) ? { team_name: cell(values, teamNameColumn) } : {}),
       ...(divisionColumn >= 0 && cell(values, divisionColumn) ? { division: cell(values, divisionColumn) } : {}),
       ...(historyColumn >= 0 && parseEventHistory(cell(values, historyColumn)) ? { history: parseEventHistory(cell(values, historyColumn)) } : {}),

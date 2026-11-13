@@ -24,6 +24,20 @@ Admins can open **Account → Player database** from the top navigation. The dir
 - On a tournament's Players tab, moderators and admins can add attendees from the database. Suggestions prioritize players with attendance at that tournament's center or series. Only admins can create or update shared player records; moderators can use existing records to build a tournament roster without changing the global database.
 - Existing participant CSV imports and exports preserve the Player Database ID when available, so rosters can keep linking to the same player record.
 
+## Mixed event standings
+
+For a tournament with Type **Mixed**, set the team size and qualifying games, create the club teams, and assign players to them. In each player's setup, independently select Singles, Doubles and/or Triples. Unassigned players are automatically eligible for Singles, as in other Mixed tournaments; doubles and triples players must belong to a team. Enter each player's qualifying scores once.
+
+Division/Zone assignment and filtering are hidden for Mixed tournaments; previously saved values are retained if the tournament format is changed later.
+
+The Standings tab shows Teams, Singles, Doubles and Triples. Each team has one doubles lineup and one triples lineup, comprising its marked members; the same player may be in both. Doubles and triples standings use the sum of the selected players' official game scores, excluding pre/post-tournament players. Lineups with the wrong number of players are unranked, and incomplete scores and tied totals require organizer review. Rankings are provisional until all lineups and scores are complete; bonuses and additional scores are not included in doubles or triples. Singles standings can be filtered by gender. Team and singles playoff results must be handled separately.
+
+Doubles and triples averages are the average combined team score per completed game; games missing a selected player's score are excluded.
+
+The Winners Podium has separate manually editable places for Team, women's Singles, men's Singles, Doubles and Triples. Doubles and triples winner choices use the registered lineups; standings do not automatically award medals or resolve ties. The dashboard displays saved doubles and triples placements without five-player team scores.
+
+Mixed tournament participant CSV exports include the three event flags. Imports without these columns leave existing selections unchanged; when present, use 1 or 0.
+
 ## Dashboard results
 
 The dashboard shows score rankings during an event. Once any winner is saved in the Standings tab's Winners Podium, it shows only the saved podium placements and divisions instead of score rankings. Empty podium places are omitted; update or clear the podium entries in Standings to change the dashboard.

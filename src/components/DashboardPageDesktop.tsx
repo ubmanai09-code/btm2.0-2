@@ -165,6 +165,8 @@ export default function DashboardPage(props: DashboardPageProps) {
     womenTeams: t('dashboard.women_teams', 'Women teams'),
     menTeams: t('dashboard.men_teams', 'Men teams'),
     mixedTeams: t('dashboard.mixed_teams', 'Mixed teams'),
+    doubles: t('tournament.entry_type.doubles', 'Doubles'),
+    triples: t('mixed.events.triples', 'Triples'),
   }, isTeam, highlights?.final_winners || [], Boolean(featured?.enable_singles_division), {
     players: highlights?.podium_players ?? highlights?.players ?? [],
     teams: highlights?.podium_teams ?? highlights?.teams ?? [],

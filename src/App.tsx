@@ -75,6 +75,7 @@ import {
   type TournamentParticipantNode,
   type TournamentRoundConfig,
 } from './utils/tournamentEngine';
+import { calculateMixedGroupStandings, rankMixedSingles, type MixedGroupEvent } from './utils/mixedEventStandings';
 import DashboardPage from './components/DashboardPage';
 import DashboardPageDesktop from './components/DashboardPageDesktop';
 import { parseWinnerNames } from './components/winnerNames';
@@ -281,7 +282,7 @@ const escapePrintHtml = (value: unknown) => String(value ?? '')
   .replace(/'/g, '&#39;');
 
 type TournamentEntryType = 'singles' | 'doubles' | 'trios' | 'teams' | 'mixed';
-type ManualWinnerDivision = 'all' | 'team' | 'female' | 'male';
+type ManualWinnerDivision = ManualWinnerEntry['division'] | 'team';
 type ManualWinnerPlace = 'first' | 'second' | 'third';
 
 const getTournamentEntryType = (tournament: Tournament): TournamentEntryType => {
@@ -1151,7 +1152,7 @@ export default function App() {
       has_additional_scores: formData.get('has_additional_scores') ? 1 : 0,
       has_bonus: formData.get('has_bonus') ? 1 : 0,
       show_player_style: formData.get('show_player_style') ? 1 : 0,
-      divisions: Array.from(new Set([
+      divisions: formType === 'mixed' ? (view === 'edit' ? editingTournament?.divisions ?? null : null) : Array.from(new Set([
         ...formData.getAll('division_options').map((value) => String(value).trim()),
         ...String(formData.get('custom_divisions') || '').split(',').map((value) => value.trim()),
       ].filter(Boolean))).join(', ') || null,
@@ -2395,7 +2396,7 @@ export default function App() {
                     </div>
                   )}
 
-                    <div className="grid grid-cols-1 gap-4">
+                    <div className="grid grid-cols-1 gap-4" style={formType === 'mixed' ? { display: 'none' } : undefined}>
                     <div>
                       {(() => {
                         const standardDivisions = ['Open', 'Men', 'Women', 'Teams', 'Mixed', 'Senior', 'Junior'];
@@ -4705,8 +4706,12 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
         ? editingPlayer.team_id
         : (formData.get('team_id') ? parseInt(formData.get('team_id') as string) : null),
       team_order: editingPlayer?.team_order,
-      division: (formData.get('division') as string || '').trim() || null,
+      division: tournament.type === 'team' && Boolean(tournament.enable_singles_division)
+        ? editingPlayer?.division ?? null
+        : (formData.get('division') as string || '').trim() || null,
       singles_entrant: formData.get('singles_entrant') === 'on' ? 1 : 0,
+      doubles_entrant: tournament.type === 'team' && Boolean(tournament.enable_singles_division) ? (formData.get('doubles_entrant') === 'on' ? 1 : 0) : editingPlayer?.doubles_entrant,
+      triples_entrant: tournament.type === 'team' && Boolean(tournament.enable_singles_division) ? (formData.get('triples_entrant') === 'on' ? 1 : 0) : editingPlayer?.triples_entrant,
     };
     
     console.log('Submitting player data:', data);
@@ -4749,7 +4754,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
   const handleExportCSV = () => {
     const hasDivisionData = participants.some(p => p.division && p.division.trim());
     const hasTeamData = participants.some(p => p.team_name && p.team_name.trim());
-    const headers = ['Participant ID', 'Player Database ID', 'First Name', 'Last Name', 'Gender', 'Hands', 'Club', 'Average', 'Contact Details', ...(hasDivisionData ? ['Division'] : []), ...(hasTeamData ? ['Team Name'] : [])];
+    const hasMixedEvents = tournament.type === 'team' && Boolean(tournament.enable_singles_division);
+    const headers = ['Participant ID', 'Player Database ID', 'First Name', 'Last Name', 'Gender', 'Hands', 'Club', 'Average', 'Contact Details', ...(hasDivisionData ? ['Division'] : []), ...(hasTeamData ? ['Team Name'] : []), ...(hasMixedEvents ? ['Singles Entrant', 'Doubles Entrant', 'Triples Entrant'] : [])];
     const rows = participants.map(p => [
       p.id,
       p.player_database_id || '',
@@ -4762,6 +4768,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
       p.email,
       ...(hasDivisionData ? [p.division || ''] : []),
       ...(hasTeamData ? [p.team_name || ''] : []),
+      ...(hasMixedEvents ? [Number(Boolean(p.singles_entrant)), Number(Boolean(p.doubles_entrant)), Number(Boolean(p.triples_entrant))] : []),
     ]);
     
     const escapeCsvValue = (value: unknown) => {
@@ -6285,6 +6292,11 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                               S
                             </span>
                           )}
+                          {tournament.type === 'team' && Boolean(tournament.enable_singles_division) && (['doubles', 'triples'] as const).map((event) => Boolean(p[`${event}_entrant`]) && (
+                            <span key={event} className="inline-flex items-center justify-center h-3.5 w-3.5 rounded-full bg-indigo-100 text-indigo-700 text-[8px] font-black border border-indigo-200" title={tx(event === 'doubles' ? 'Doubles' : 'Triples')}>
+                              {event === 'doubles' ? 'D' : 'T'}
+                            </span>
+                          ))}
                           {participantIssues.has(p.id) && (
                             <div className="relative inline-block">
                               <button
@@ -6806,7 +6818,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
           ...(viewingPlayer.gender ? [{ label: 'Gender', value: isFemale ? 'F' : 'M' }] : []),
           ...(viewingPlayer.average > 0 ? [{ label: 'Avg', value: String(viewingPlayer.average) }] : []),
           ...(viewingPlayer.hands && showPlayerStyle ? [{ label: 'Style', value: normalizeHandsStyle(viewingPlayer.hands) }] : []),
-          ...(viewingPlayer.division ? [{ label: 'Division', value: viewingPlayer.division }] : []),
+          ...(viewingPlayer.division && getTournamentEntryType(tournament) !== 'mixed' ? [{ label: 'Division', value: viewingPlayer.division }] : []),
         ];
         return (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={() => setViewingPlayer(null)}>
@@ -6994,7 +7006,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
 
                   {(() => {
                     const divisionList = (tournament.divisions || '').split(',').map((s: string) => s.trim()).filter(Boolean);
-                    if (divisionList.length === 0) return null;
+                    if (divisionList.length === 0 || getTournamentEntryType(tournament) === 'mixed') return null;
                     return (
                       <Select
                         label="Division"
@@ -7009,18 +7021,24 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
                   })()}
 
                   {tournament.type === 'team' && Boolean(tournament.enable_singles_division) && (
-                    editingPlayer && editingPlayer.team_id === null ? (
-                      <p className="text-xs text-black/50 px-1">{tx('Not on a team \u2014 automatically counted in the Singles division.')}</p>
-                    ) : (
-                      <label className="flex items-center gap-2 text-xs font-semibold text-black/70 px-1">
+                    <fieldset className="space-y-2 px-1">
+                      <legend className="text-xs font-semibold text-black/70">{tx('Also entered in:')}</legend>
+                      <label className="flex items-center gap-2 text-xs font-semibold text-black/70">
                         <input
                           type="checkbox"
                           name="singles_entrant"
                           defaultChecked={Boolean(editingPlayer?.singles_entrant)}
                         />
-                        {tx('Also entered in Singles division (team members only \u2014 ranks by their team-game scores)')}
+                        {tx('Singles')}
                       </label>
-                    )
+                      {(['doubles', 'triples'] as const).map((event) => (
+                        <label key={event} className="flex items-center gap-2 text-xs font-semibold text-black/70">
+                          <input type="checkbox" name={`${event}_entrant`} defaultChecked={Boolean(editingPlayer?.[`${event}_entrant`])} />
+                          {tx(event === 'doubles' ? 'Doubles' : 'Triples')}
+                        </label>
+                      ))}
+                      <p className="text-xs text-black/50">{tx('Players without a team are automatically entered in Singles. Doubles and Triples require a team.')}</p>
+                    </fieldset>
                   )}
                   
                   <div className="pt-4 flex gap-3 border-t border-emerald-100/80">
@@ -15613,10 +15631,123 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   );
 }
 
-function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScreen, standingsScreenMode }: { tournament: Tournament; role: UserRole; sponsorsConfig?: SponsorsConfig; onPresentStandingsScreen?: (options?: { mode?: 'players' | 'teams'; gender?: 'all' | 'male' | 'female' }) => void; standingsScreenMode?: boolean }) {
+export function MixedGroupStandings({ event, data, gameCount, tx, showWarnings }: {
+  event: MixedGroupEvent;
+  data: { participants: Participant[]; teams: Team[]; scores: Score[]; warmups: WarmupSlot[] } | null;
+  gameCount: number;
+  tx: (text: string) => string;
+  showWarnings: boolean;
+}) {
+  const [expandedTeamId, setExpandedTeamId] = useState<number | null>(null);
+  if (!data) {
+    return <p role="alert" className="p-4 text-sm text-red-700">{tx('Unable to load event standings. Please retry.')}</p>;
+  }
+  const excludedIds = new Set(data.warmups.flatMap((slot) => slot.participant_id ? [slot.participant_id] : []));
+  const { rows, unassigned } = calculateMixedGroupStandings(event, data.teams, data.participants, data.scores, gameCount, excludedIds);
+  const size = event === 'doubles' ? 2 : 3;
+  return (
+    <div className="sm:p-4 sm:space-y-3">
+      {showWarnings && <p className="text-xs text-black/60">{tx('Qualifying totals use the recorded game scores only. Rankings are provisional until all lineups and scores are complete. Ties require an organizer decision.')}</p>}
+      <p className="text-xs text-black/60">{tx('Average is the team total per completed game; partial games are excluded.')}</p>
+      {showWarnings && unassigned.length > 0 && (
+        <p role="alert" className="text-xs text-amber-700">{tx('Selected players without a team:')} {unassigned.map((p) => `${p.first_name} ${p.last_name}`.trim()).join(', ')}</p>
+      )}
+      <div className="sm:hidden px-3 py-2 flex items-center gap-1.5 bg-emerald-50 border-b border-gray-400">
+        <span className="text-[10px] text-black/40 leading-snug">
+          {tx('Tap a name for compact details')} &bull; {tx('Rotate phone for full table')}
+        </span>
+      </div>
+      <div className="sm:hidden divide-y divide-black/5">
+        {rows.map((row) => {
+          const isExpanded = expandedTeamId === row.team.id;
+          const total = row.games.some((game) => game.count > 0) ? row.total : '—';
+          const average = row.average === null ? '—' : row.average.toFixed(1);
+          return (
+            <div key={row.team.id}>
+              <button
+                type="button"
+                aria-expanded={isExpanded}
+                onClick={() => setExpandedTeamId(isExpanded ? null : row.team.id)}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-emerald-50 active:bg-emerald-50 transition-colors"
+              >
+                <span className="w-6 shrink-0 text-xs font-bold text-black/40 text-center">{row.rank ?? '—'}</span>
+                <span className="flex-1 min-w-0 leading-tight">
+                  <span className="block text-xs font-bold text-black truncate">{row.team.name}</span>
+                  <span className="block mt-0.5 text-[10px] lowercase text-black/60">
+                    {row.members.length > 0 ? row.members.map((p) => `${p.first_name} ${p.last_name}`.trim()).join(', ') : tx('No members')}
+                  </span>
+                  {showWarnings && (!row.valid
+                    ? <span className="block text-xs font-normal text-amber-700">{tx('Players selected:')} {row.members.length}/{size}</span>
+                    : !row.complete && <span className="block text-xs font-normal text-amber-700">{tx('Incomplete scores')}</span>)}
+                </span>
+                <span className="shrink-0 flex flex-col items-end">
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-emerald-600 leading-none">{tx('Total')}</span>
+                  <span className="text-sm font-extrabold tabular-nums leading-tight text-emerald-700">{total}</span>
+                </span>
+                <span className="shrink-0 flex flex-col items-end">
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-sky-600 leading-none">{tx('Avg')}</span>
+                  <span className="text-xs font-bold tabular-nums text-sky-700 leading-tight">{average}</span>
+                </span>
+                <span className="shrink-0 text-black/30" aria-hidden="true">{isExpanded ? '▲' : '▼'}</span>
+              </button>
+              {isExpanded && (
+                <div className="px-3 pb-2.5 pt-1.5 bg-emerald-50">
+                  <p className="text-xs font-bold leading-tight text-black">{row.team.name}</p>
+                  <p className="mt-1 text-[11px] leading-snug text-black/75">
+                    <span className="font-semibold text-emerald-700">{tx('Total')}:</span> {total}
+                    {' | '}
+                    <span className="font-semibold text-sky-700">{tx('Avg')}:</span> {average}
+                    {row.games.map((game, index) => ` | G${index + 1}: ${game.count > 0 ? game.total : '—'}`).join('')}
+                  </p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {rows.length === 0 && <p className="px-4 py-8 text-center text-black/40 italic text-xs">{tx('No teams registered yet.')}</p>}
+      </div>
+      <div className="hidden sm:block overflow-x-auto">
+        <table className="ui-table-minimal w-full text-left text-sm">
+          <thead>
+            <tr>
+              <th className="p-2">{tx('Rank')}</th>
+              <th className="p-2">{tx('Team')}</th>
+              <th className="p-2">{tx('Players')}</th>
+              {Array.from({ length: gameCount }, (_, i) => <th key={i} className="p-2 text-right">G{i + 1}</th>)}
+              <th className="p-2 text-right">{tx('Total')}</th>
+              <th className="p-2 text-right">{tx('Avg')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.team.id} className="border-t border-black/10">
+                <td className="p-2">{row.rank ?? '—'}</td>
+                <td className="p-2 font-semibold">
+                  {row.team.name}
+                  {showWarnings && (!row.valid
+                    ? <div className="text-xs font-normal text-amber-700">{tx('Players selected:')} {row.members.length}/{size}</div>
+                    : !row.complete && <div className="text-xs font-normal text-amber-700">{tx('Incomplete scores')}</div>)}
+                </td>
+                <td className="p-2">{row.members.map((p) => `${p.first_name} ${p.last_name}`.trim()).join(', ') || '—'}</td>
+                {row.games.map((game, i) => <td key={i} className="p-2 text-right">{game.count > 0 ? game.total : '—'}</td>)}
+                <td className="p-2 text-right font-bold text-emerald-700">{row.games.some((game) => game.count > 0) ? row.total : '—'}</td>
+                <td className="p-2 text-right font-semibold text-sky-700">{row.average === null ? '—' : row.average.toFixed(1)}</td>
+              </tr>
+            ))}
+            {rows.length === 0 && <tr><td colSpan={gameCount + 5} className="p-4 text-center text-black/50">{tx('No teams registered yet.')}</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+export function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScreen, standingsScreenMode }: { tournament: Tournament; role: UserRole; sponsorsConfig?: SponsorsConfig; onPresentStandingsScreen?: (options?: { mode?: 'players' | 'teams'; gender?: 'all' | 'male' | 'female' }) => void; standingsScreenMode?: boolean }) {
   const isPublicView = role === 'public';
   const isStandingsScreenMode = Boolean(standingsScreenMode);
+  const showStandingsWarnings = !isPublicView && !isStandingsScreenMode;
   const isTeamTournament = tournament.type === 'team';
+  const hasMixedTeamSingles = isTeamTournament && Boolean(tournament.enable_singles_division);
   const screenStandingsParams = React.useMemo(() => {
     if (typeof window === 'undefined') {
       return {
@@ -15636,7 +15767,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const [genderFilter, setGenderFilter] = useState<'all' | 'male' | 'female'>('all');
   const [divisionFilter, setDivisionFilter] = useState<string>('all');
   const tournamentDivisions = (tournament.divisions || '').split(',').map((s: string) => s.trim()).filter(Boolean);
-  const hasDivisions = tournamentDivisions.length > 0;
+  const hasDivisions = !hasMixedTeamSingles && tournamentDivisions.length > 0;
   const canManageStandings = role === 'admin' || role === 'moderator';
   const tx = React.useContext(UiTranslationContext);
   const [hasAdditionalScores, setHasAdditionalScores] = useState(Boolean(tournament.has_additional_scores));
@@ -15667,6 +15798,8 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   const [showMobileStandingsActions, setShowMobileStandingsActions] = useState(false);
   const [showStandingsFilterMenu, setShowStandingsFilterMenu] = useState(false);
   const [standingsMode, setStandingsMode] = useState<'players' | 'teams'>(tournament.type === 'team' ? 'teams' : 'players');
+  const [mixedGroupEvent, setMixedGroupEvent] = useState<MixedGroupEvent | null>(null);
+  const [mixedEventData, setMixedEventData] = useState<{ participants: Participant[]; teams: Team[]; scores: Score[]; warmups: WarmupSlot[] } | null>(null);
   const [autoScrollSpeed, setAutoScrollSpeed] = useState<'slow' | 'medium' | 'fast'>('slow');
   const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -15839,6 +15972,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
   useEffect(() => {
     setStandingsMode(tournament.type === 'team' ? 'teams' : 'players');
+    setMixedGroupEvent(null);
   }, [tournament.id, tournament.type]);
 
   useEffect(() => {
@@ -15902,7 +16036,14 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       const teamsData = teamsResult.status === 'fulfilled' ? (toArray(teamsResult.value) as Team[]) : [];
       const warmupData = warmupResult.status === 'fulfilled' ? (warmupResult.value as WarmupSlot[]) : [];
       setStandingsWarmupSlots(warmupData);
-      const manualWinnersData: ManualWinnerEntry[] = [];
+      setMixedEventData(
+        participantsResult.status === 'fulfilled' && Array.isArray(participantsResult.value)
+        && scoresResult.status === 'fulfilled' && Array.isArray(scoresResult.value)
+        && teamsResult.status === 'fulfilled' && Array.isArray(teamsResult.value)
+        && warmupResult.status === 'fulfilled' && Array.isArray(warmupResult.value)
+          ? { participants: participantsData, teams: teamsData, scores: scoresData, warmups: warmupResult.value }
+          : null,
+      );
 
       if (standingsResult.status === 'fulfilled' && !Array.isArray(standingsResult.value)) {
         console.warn('Unexpected standings payload (expected array):', standingsResult.value);
@@ -16011,18 +16152,8 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       }
       setStandings(standingsData);
       setParticipants(fallbackParticipants);
-      setScores(fallbackScoresFromStandings);
+      setScores(hasMixedTeamSingles && scoresResult.status === 'fulfilled' && Array.isArray(scoresResult.value) ? scoresData : fallbackScoresFromStandings);
       setTeams(fallbackTeamsFromStandings);
-      const winnerMap: Record<string, ManualWinnerEntry> = {};
-      for (const entry of manualWinnersData || []) {
-        if (!entry) continue;
-        const division = entry.division === 'female' || entry.division === 'male' ? entry.division : 'all';
-        const place = entry.place === 'first' || entry.place === 'second' || entry.place === 'third' ? entry.place : null;
-        if (!place) continue;
-        winnerMap[toManualWinnerKey(division, place)] = entry;
-      }
-      setManualWinnersByKey(winnerMap);
-
       // Non-critical requests are loaded separately so they can't block standings.
       withTimeout(api.getBrackets(tournament.id), 'brackets')
         .then((value) => {
@@ -16041,7 +16172,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
           const nextMap: Record<string, ManualWinnerEntry> = {};
           for (const entry of rows) {
             if (!entry) continue;
-            const division = entry.division === 'female' || entry.division === 'male' ? entry.division : 'all';
+            const division = entry.division;
             const place = entry.place === 'first' || entry.place === 'second' || entry.place === 'third' ? entry.place : null;
             if (!place) continue;
             nextMap[toManualWinnerKey(division, place)] = entry;
@@ -16103,6 +16234,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       setAdditionalDrafts({});
     } catch (err) {
       console.error(err);
+      setMixedEventData(null);
     } finally {
       if (!options?.silent) {
         setLoading(false);
@@ -16277,8 +16409,14 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
   // Filter by gender if selected — always exclude UT/NT from official standings
   let filteredPlayerStandingsRows = playerStandingsRows.filter(r => !allWarmupParticipantIds.has(r.participant_id));
+  if (hasMixedTeamSingles) {
+    filteredPlayerStandingsRows = filteredPlayerStandingsRows.filter((row) => {
+      const participant = participantInfoMap.get(row.participant_id);
+      return participant && (Boolean(participant.singles_entrant) || participant.team_id === null);
+    });
+  }
   if (standingsMode === 'players' && typeof genderFilter !== 'undefined' && genderFilter !== 'all') {
-    filteredPlayerStandingsRows = playerStandingsRows.filter(row => (participantGenderMap.get(row.participant_id) || '').toLowerCase() === genderFilter);
+    filteredPlayerStandingsRows = filteredPlayerStandingsRows.filter(row => (participantGenderMap.get(row.participant_id) || '').toLowerCase() === genderFilter);
   }
   // Filter by division if selected
   if (standingsMode === 'players' && hasDivisions && divisionFilter !== 'all') {
@@ -16310,9 +16448,10 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     })
     .sort((a, b) => (b.total - a.total) || (a.score_range - b.score_range) || (b.average - a.average) || a.participant_name.localeCompare(b.participant_name));
 
-  const standingsRowsForDisplay = filteredPlayerStandingsRows.length > 0
+  const standingsRowsForDisplay = hasMixedTeamSingles || filteredPlayerStandingsRows.length > 0
     ? filteredPlayerStandingsRows
     : directPlayerStandingsFallbackRows;
+  const mixedSinglesRanks = hasMixedTeamSingles ? rankMixedSingles(standingsRowsForDisplay, scoreByParticipantGame, officialGameCount) : new Map<number, number>();
 
   // Compute per-participant standings issues (e.g. impossible scores)
   const standingsIssues = new Map<number, string[]>();
@@ -16324,6 +16463,9 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     }
     if (s.total === 0 && s.grand_total === 0) {
       issues.push('No scores recorded');
+    }
+    if (hasMixedTeamSingles && officialGameNumbers.some((game) => !scoreByParticipantGame.has(`${s.participant_id}-${game}`))) {
+      issues.push('Incomplete qualifying scores');
     }
     if (issues.length) standingsIssues.set(s.participant_id, issues);
   });
@@ -16479,7 +16621,6 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
   const tournamentFormat = String(tournament.format || '').trim();
   const usesBracketWinnersGrid = tournamentFormat === 'Pre-Qualification & Bracket';
-  const hasMixedTeamSingles = isTeamTournament && Boolean(tournament.enable_singles_division);
 
   const bracketMatchesByDivision = {
     all: bracketMatches.filter((m: any) => String(m.division || 'all') === 'all'),
@@ -16488,7 +16629,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
   };
   const hasGenderManualWinnersGrid = hasMixedTeamSingles || !isTeamTournament || (usesBracketWinnersGrid && (bracketMatchesByDivision.female.length > 0 || bracketMatchesByDivision.male.length > 0));
   const winnerDivisions: ManualWinnerDivision[] = hasMixedTeamSingles
-    ? ['team', 'female', 'male']
+    ? ['team', 'female', 'male', 'doubles', 'triples']
     : hasGenderManualWinnersGrid ? ['female', 'male'] : ['all'];
   const winnerPlaces: ManualWinnerPlace[] = ['first', 'second', 'third'];
 
@@ -16518,6 +16659,19 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     .filter(Boolean)
     .join(' · ');
 
+  const getMixedWinnerMemberNames = (division: 'doubles' | 'triples', winnerNames: string) => {
+    if (!mixedEventData) return '';
+    const excludedIds = new Set(mixedEventData.warmups.flatMap((slot) => slot.participant_id ? [slot.participant_id] : []));
+    const { rows } = calculateMixedGroupStandings(division, mixedEventData.teams, mixedEventData.participants, mixedEventData.scores, officialGameCount, excludedIds);
+    return parseWinnerNames(winnerNames)
+      .map((name) => {
+        const matches = rows.filter((row) => row.valid && row.team.name.trim().toLowerCase() === name.trim().toLowerCase());
+        return matches.length === 1 ? matches[0].members.map((p) => `${p.first_name} ${p.last_name}`.trim()).join(', ') : '';
+      })
+      .filter(Boolean)
+      .join(' · ');
+  };
+
   const participantWinnerOptions = participants
     .map((participant) => {
       const label = `${String(participant.first_name || '').trim()} ${String(participant.last_name || '').trim()}`.trim() || `Participant #${participant.id}`;
@@ -16544,6 +16698,15 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
     .sort((a, b) => a.label.localeCompare(b.label));
 
   const getWinnerOptionsForDivision = (division: ManualWinnerDivision) => {
+    if (hasMixedTeamSingles && (division === 'doubles' || division === 'triples')) {
+      if (!mixedEventData) return [];
+      const excludedIds = new Set(mixedEventData.warmups.flatMap((slot) => slot.participant_id ? [slot.participant_id] : []));
+      const { rows } = calculateMixedGroupStandings(division, mixedEventData.teams, mixedEventData.participants, mixedEventData.scores, officialGameCount, excludedIds);
+      return rows.filter((row) => row.valid).map((row) => ({
+        value: `team:${row.team.id}`,
+        label: row.team.name,
+      })).sort((a, b) => a.label.localeCompare(b.label));
+    }
     if (hasMixedTeamSingles && division === 'team') {
       const combinedOptions = [...teamWinnerOptions, ...participantTeamWinnerOptions];
       return combinedOptions.filter((option, index) => (
@@ -17103,8 +17266,8 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
       <div className="space-y-6">
         {!isStandingsScreenMode && (
           <>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-sm:gap-2">
-              <Card className="max-md:!border-0 max-md:!shadow-none max-md:!bg-transparent">
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-6 max-sm:gap-2">
+              <Card className="min-w-0 max-md:!border-0 max-md:!shadow-none max-md:!bg-transparent">
                 <div className="p-6 max-sm:p-2 border-b border-black/5 max-md:border-b-0">
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
@@ -17115,12 +17278,16 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     </div>
                   </div>
                   <div className="overflow-x-auto mt-2">
-                    <div className="grid border border-black/10 rounded-xl overflow-hidden" style={{ gridTemplateColumns: hasGenderManualWinnersGrid ? `repeat(${winnerDivisions.length + 1}, minmax(0, 1fr))` : '30% 70%' }}>
+                    <div className="grid border border-black/10 rounded-xl overflow-hidden" style={{ minWidth: hasMixedTeamSingles ? '640px' : undefined, gridTemplateColumns: hasMixedTeamSingles ? `56px repeat(${winnerDivisions.length}, minmax(0, 1fr))` : hasGenderManualWinnersGrid ? `repeat(${winnerDivisions.length + 1}, minmax(0, 1fr))` : '30% 70%' }}>
                       <div className="bg-black/5 px-2.5 py-1.5 font-bold text-[10px] uppercase tracking-widest border-b border-black/10 text-left">{tx('Place')}</div>
                       {winnerDivisions.map((division) => (
                         <div key={`winner-head-${division}`} className="bg-black/5 px-2.5 py-1.5 font-bold text-[10px] uppercase tracking-widest border-b border-black/10 text-left">
                           {division === 'team'
                             ? tx('Team Event')
+                            : division === 'doubles'
+                              ? tx('Doubles')
+                              : division === 'triples'
+                                ? tx('Triples')
                             : division === 'female'
                               ? (hasMixedTeamSingles ? tx("Women's Singles") : 'F')
                               : division === 'male'
@@ -17157,9 +17324,9 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                               const cellDisabled = savingManualWinnerKey === key || !canManageStandings;
                               const displayName = getManualWinnerDisplay(division, place);
                               const isEmpty = displayName === 'TBD';
-                              const teamMemberNames = isTeamTournament && !hasMixedTeamSingles
-                                ? getTeamWinnerMemberNames(displayName)
-                                : '';
+                              const teamMemberNames = division === 'doubles' || division === 'triples'
+                                ? getMixedWinnerMemberNames(division, getManualWinnerEntry(division, place)?.display_name || '')
+                                : isTeamTournament && !hasMixedTeamSingles ? getTeamWinnerMemberNames(displayName) : '';
 
                               return (
                                 <button
@@ -17170,9 +17337,9 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                                   className={`px-2.5 py-2 border-b border-black/10 ${rowBg} text-left min-h-[56px] ${!isPublicView ? 'hover:bg-white/50 transition-colors' : ''} disabled:cursor-default`}
                                   title={isPublicView ? displayName : tx('Click to edit or replace')}
                                 >
-                                  <div className={`text-sm font-semibold leading-tight ${isEmpty ? 'text-black/35 italic' : 'text-black/80'}`}>
+                                  <div className={`text-sm font-semibold leading-tight break-words ${isEmpty ? 'text-black/35 italic' : 'text-black/80'}`}>
                                     {displayName}
-                                    {teamMemberNames && <span className="hidden sm:inline text-xs font-normal text-black/55"> ({teamMemberNames})</span>}
+                                    {teamMemberNames && <span className="block text-xs font-normal text-black/55"> ({teamMemberNames})</span>}
                                   </div>
                                 </button>
                               );
@@ -17185,7 +17352,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 </div>
               </Card>
 
-              <Card className="p-2.5 md:p-3 max-md:!border-0 max-md:!shadow-none max-md:!bg-transparent max-sm:!px-2">
+              <Card className="min-w-0 p-2.5 md:p-3 max-md:!border-0 max-md:!shadow-none max-md:!bg-transparent max-sm:!px-2">
                 {/* Header row — always visible; on small screens acts as toggle */}
                 <button
                   type="button"
@@ -17229,7 +17396,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 {/* Body — hidden on small screens unless expanded; always visible on md+ */}
                 <div className={`mt-1.5 md:mt-2 ${highlightsExpanded ? 'block' : 'hidden'} md:block`}>
 
-                <div className="grid grid-cols-3 gap-1.5 md:grid-cols-5 md:gap-2 mb-1.5 md:mb-2">
+                <div className="grid grid-cols-3 gap-1.5 md:grid-cols-5 lg:grid-cols-3 2xl:grid-cols-5 md:gap-2 mb-1.5 md:mb-2">
                   <div className="rounded-md border border-black/10 p-1.5 md:p-2 bg-black/[0.02] text-center">
                     <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Players')}</p>
                     <p className="text-xs md:text-sm font-bold mt-0.5">{totalPlayers}</p>
@@ -17297,7 +17464,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                   <p className="text-[11px] text-black/45 mt-0.5">
                     {winnerEditorTarget.place === 'first' ? tx('1st') : winnerEditorTarget.place === 'second' ? tx('2nd') : tx('3rd')} {tx('place')}
                     {' · '}
-                    {winnerEditorTarget.division === 'female' ? tx('Female') : winnerEditorTarget.division === 'male' ? tx('Male') : tx('Open')} {tx('division')}
+                    {winnerEditorTarget.division === 'female' ? tx(hasMixedTeamSingles ? "Women's Singles" : 'Female') : winnerEditorTarget.division === 'male' ? tx(hasMixedTeamSingles ? "Men's Singles" : 'Male') : winnerEditorTarget.division === 'team' ? tx('Team Event') : winnerEditorTarget.division === 'doubles' ? tx('Doubles') : winnerEditorTarget.division === 'triples' ? tx('Triples') : tx('Open')}
                   </p>
                 </div>
                 <button
@@ -17312,7 +17479,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
 
               <div className="space-y-4 px-4 py-4">
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-widest text-black/45 mb-1">{tx('Add Registered')} {isTeamTournament ? tx('Team') : tx('Participant')}</label>
+                  <label className="block text-[11px] font-bold uppercase tracking-widest text-black/45 mb-1">{tx('Add Registered')} {isTeamTournament && !(hasMixedTeamSingles && (winnerEditorTarget.division === 'male' || winnerEditorTarget.division === 'female')) ? tx('Team') : tx('Participant')}</label>
                   <div className="flex items-center gap-2">
                     <select
                       value={winnerEditorSelectValue}
@@ -17322,7 +17489,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       }}
                       className="flex-1 h-10 rounded-lg border border-black/15 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
                     >
-                      <option value="">{tx('Choose')} {isTeamTournament ? tx('team') : tx('participant')}...</option>
+                      <option value="">{tx('Choose')} {isTeamTournament && !(hasMixedTeamSingles && (winnerEditorTarget.division === 'male' || winnerEditorTarget.division === 'female')) ? tx('team') : tx('participant')}...</option>
                       {winnerEditorOptions.map((option) => (
                         <option key={`winner-editor-${option.value}`} value={option.value}>{option.label}</option>
                       ))}
@@ -17478,9 +17645,42 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
         )}
 
         <Card className="overflow-visible relative max-md:!border-0 max-md:!shadow-none">
+          {hasMixedTeamSingles && !isStandingsScreenMode && (
+            <div className="flex flex-wrap gap-1 border-b border-black/10 p-2" aria-label={tx('Event standings')}>
+              {([
+                { key: 'teams', label: 'Teams' },
+                { key: 'players', label: 'Singles' },
+                { key: 'doubles', label: 'Doubles' },
+                { key: 'triples', label: 'Triples' },
+              ] as const).map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    if (key === 'doubles' || key === 'triples') setMixedGroupEvent(key);
+                    else { setMixedGroupEvent(null); setStandingsMode(key); }
+                  }}
+                  className={getSegmentedTabButtonClass(mixedGroupEvent ? mixedGroupEvent === key : standingsMode === key, 'compact')}
+                >
+                  {tx(label)}
+                </button>
+              ))}
+            </div>
+          )}
+          {mixedGroupEvent && loading && !mixedEventData ? (
+            <p className="p-4 text-sm text-black/60">{tx('Loading...')}</p>
+          ) : mixedGroupEvent ? (
+            <MixedGroupStandings key={mixedGroupEvent} event={mixedGroupEvent} data={mixedEventData} gameCount={officialGameCount} tx={tx} showWarnings={showStandingsWarnings} />
+          ) : hasMixedTeamSingles && standingsMode === 'players' && !mixedEventData && !loading ? (
+            <p role="alert" className="p-4 text-sm text-red-700">{tx('Unable to load event standings. Please retry.')}</p>
+          ) : (
+          <>
+          {showStandingsWarnings && hasMixedTeamSingles && standingsMode === 'players' && (
+            <p className="px-4 pt-3 text-xs text-black/60">{tx('Singles rankings are provisional until scores are complete. Filter by gender for separate standings; ties require an organizer decision.')}</p>
+          )}
           {!isStandingsScreenMode && (
           <div className="border-b border-black/5 bg-white/95 max-md:border-b-0 max-sm:sticky max-sm:top-16 max-sm:z-40 max-md:!bg-[var(--bg)]">
-            {standingsMode === 'teams' && isTeamTournament && !teamsCountValid && (
+            {showStandingsWarnings && standingsMode === 'teams' && isTeamTournament && !teamsCountValid && (
               <p className="text-xs text-amber-700 px-2 pt-1 sm:hidden">{tx('Team mismatch - review Participants page.')}</p>
             )}
             {/* Main toolbar row */}
@@ -17489,7 +17689,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
               <div className="flex items-center gap-2 shrink-0">
                 <div className="hidden sm:block shrink-0">
                   <h4 className="font-bold text-sm">{tx('Ranking')}</h4>
-                  {standingsMode === 'teams' && isTeamTournament && !teamsCountValid && (
+                  {showStandingsWarnings && standingsMode === 'teams' && isTeamTournament && !teamsCountValid && (
                     <p className="text-xs mt-1 text-amber-700">{tx('Team mismatch - review Participants page.')}</p>
                   )}
                   {!bonusApiAvailable && (
@@ -17505,6 +17705,8 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 </div>
                 {/* Mode toggle: icons with Teams-first for team tournaments */}
                 <div className="flex items-center gap-0.5">
+                  {!hasMixedTeamSingles && (
+                  <>
                   <div className="md:hidden inline-flex items-center">
                     {isTeamTournament && (
                       <button type="button" onClick={() => setStandingsMode('teams')} className={getSegmentedTabButtonClass(standingsMode === 'teams', 'compact')}>
@@ -17540,6 +17742,8 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                       <User size={14} />
                     </button>
                   </div>
+                  </>
+                  )}
                   {/* Gender filter — shown inline when players mode active */}
                   {standingsMode === 'players' && (
                     <select
@@ -17667,7 +17871,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                     onClick={() => setMobileExpandedRow(isExpanded ? null : rowKey)}
                     className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-emerald-50 active:bg-emerald-50 transition-colors"
                   >
-                    <span className="w-6 shrink-0 text-xs font-bold text-black/40 text-center">{idx + 1}</span>
+                    <span className="w-6 shrink-0 text-xs font-bold text-black/40 text-center">{hasMixedTeamSingles ? (mixedSinglesRanks.get(s.participant_id) ?? '—') : idx + 1}</span>
                     <span className="flex-1 text-xs font-bold leading-tight truncate">
                       {isFemale ? <span style={{ textDecorationLine: 'underline', textDecorationStyle: 'dotted' }}>{s.participant_name}</span> : s.participant_name}
                     </span>
@@ -17767,14 +17971,14 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
             <tbody>
               {standingsMode === 'players' && standingsRowsForDisplay.map((s, idx) => (
                 <tr key={s.participant_id} className="hover:bg-emerald-50 transition-colors">
-                  <td className="standings-sticky-col px-2 py-1.5 text-xs font-bold text-black/60 sticky left-0 z-[2]">{idx + 1}</td>
+                  <td className="standings-sticky-col px-2 py-1.5 text-xs font-bold text-black/60 sticky left-0 z-[2]">{hasMixedTeamSingles ? (mixedSinglesRanks.get(s.participant_id) ?? '—') : idx + 1}</td>
                   <td className="standings-sticky-col px-2 py-1.5 text-xs font-bold leading-tight sticky left-12 z-[2]">
                     <span className="inline-flex items-center gap-1.5">
                       {renderFemaleInitialUnderline(
                         s.participant_name,
                         (participantGenderMap.get(s.participant_id) || '').startsWith('f')
                       )}
-                      {standingsIssues.has(s.participant_id) && (
+                      {showStandingsWarnings && standingsIssues.has(s.participant_id) && (
                         <div className="relative inline-block">
                           <button
                             type="button"
@@ -17786,7 +17990,7 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                           </button>
                           {activeWarningId === `st-${s.participant_id}` && (
                             <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-red-200 rounded shadow-lg p-2 min-w-[200px] text-[11px] text-red-700 space-y-1 whitespace-normal">
-                              {(standingsIssues.get(s.participant_id) || []).map((issue, i) => <p key={i}>• {issue}</p>)}
+                              {(standingsIssues.get(s.participant_id) || []).map((issue, i) => <p key={i}>• {tx(issue)}</p>)}
                             </div>
                           )}
                         </div>
@@ -18062,6 +18266,8 @@ function StandingsView({ tournament, role, sponsorsConfig, onPresentStandingsScr
                 </div>
               </div>
             </>
+          )}
+          </>
           )}
         </Card>
       </div>

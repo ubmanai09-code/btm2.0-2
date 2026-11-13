@@ -5,6 +5,7 @@ import { buildRankingCategories, type RankingFinalWinner } from './dashboardRank
 const labels = {
   women: 'Women', men: 'Men', players: 'Players', teams: 'Teams',
   womenTeams: 'Women teams', menTeams: 'Men teams', mixedTeams: 'Mixed teams',
+  doubles: 'Doubles', triples: 'Triples',
 };
 const players = [
   { id: 1, name: 'Score leader', gender: 'm', games: 3, total: 700, avg: 233 },
@@ -83,7 +84,20 @@ test('unscored team members and winners have unavailable scores instead of fabri
     players: [],
     teams: [{ id: 10, name: 'No games', games: 0, total: 0, avg: 0, member_details: [{ name: 'Member', total: null, avg: null }] }],
   });
+
   assert.deepEqual(categories[0].rows[0].details?.[0], {
     name: 'No games', total: null, avg: null, isTeam: true, members: [{ name: 'Member', total: null, avg: null }],
   });
+});
+
+test('mixed doubles and triples winners have separate dashboard categories without five-player scores', () => {
+  const categories = buildRankingCategories(players, teams, labels, true, [
+    winner('doubles', 'first', 'Champions'),
+    winner('triples', 'second', 'Champions'),
+  ], true);
+  assert.deepEqual(categories.map((category) => category.key), ['d', 'tr']);
+  assert.deepEqual(categories.map((category) => category.rows[0].details?.[0]), [
+    { name: 'Champions', total: null, avg: null, isTeam: true, members: [] },
+    { name: 'Champions', total: null, avg: null, isTeam: true, members: [] },
+  ]);
 });

@@ -20,7 +20,7 @@ const toRows = (
   ...(includeMemberDetails && r.member_details ? { memberDetails: r.member_details } : {}),
 }));
 
-type Labels = { women: string; men: string; players: string; teams: string; womenTeams: string; menTeams: string; mixedTeams: string };
+type Labels = { women: string; men: string; players: string; teams: string; womenTeams: string; menTeams: string; mixedTeams: string; doubles: string; triples: string };
 
 /** Selector categories for the dashboard: team events rank teams first, then individual players by gender. */
 export function buildRankingCategories(
@@ -36,7 +36,7 @@ export function buildRankingCategories(
   const validWinners = finalWinners.flatMap((winner) => {
     const rank = places.indexOf(winner.place) + 1;
     const names = parseWinnerNames(winner.display_name);
-    return rank > 0 && names.length > 0 && ['all', 'male', 'female'].includes(winner.division)
+    return rank > 0 && names.length > 0 && (['all', 'male', 'female'].includes(winner.division) || (isTeamTournament && hasSinglesDivision && ['doubles', 'triples'].includes(winner.division)))
       ? [{ ...winner, rank, names }]
       : [];
   });
@@ -46,6 +46,10 @@ export function buildRankingCategories(
           { division: 'all', key: 't', label: labels.teams, team: true },
           { division: 'male', key: 'm', label: hasSinglesDivision ? labels.men : labels.menTeams, team: !hasSinglesDivision },
           { division: 'female', key: 'f', label: hasSinglesDivision ? labels.women : labels.womenTeams, team: !hasSinglesDivision },
+          ...(hasSinglesDivision ? [
+            { division: 'doubles', key: 'd', label: labels.doubles, team: true },
+            { division: 'triples', key: 'tr', label: labels.triples, team: true },
+          ] : []),
         ]
       : [
           { division: 'female', key: 'f', label: labels.women, team: false },
@@ -60,7 +64,7 @@ export function buildRankingCategories(
           const details = winner.names.map((name): PlacementDetail => {
             const matchingId = winner.names.length === 1 && winner.target_kind === (team ? 'team' : 'participant')
               ? winner.target_id : null;
-            const candidates = team ? podiumSources.teams : podiumSources.players.filter((player) =>
+            const candidates = division === 'doubles' || division === 'triples' ? [] : team ? podiumSources.teams : podiumSources.players.filter((player) =>
               matchingId || division === 'all' || player.gender === (division === 'female' ? 'f' : 'm'));
             const matches = matchingId
               ? candidates.filter((entry) => entry.id === matchingId)

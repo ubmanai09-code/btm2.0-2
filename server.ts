@@ -423,6 +423,8 @@ function initDb() {
       team_order INTEGER DEFAULT 0,
       division TEXT,
       singles_entrant INTEGER NOT NULL DEFAULT 0,
+      doubles_entrant INTEGER NOT NULL DEFAULT 0,
+      triples_entrant INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
       FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL
     );
@@ -492,7 +494,7 @@ function initDb() {
     CREATE TABLE IF NOT EXISTS manual_winners (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tournament_id INTEGER NOT NULL,
-      division TEXT CHECK(division IN ('all','female','male')) NOT NULL DEFAULT 'all',
+      division TEXT CHECK(division IN ('all','female','male','doubles','triples')) NOT NULL DEFAULT 'all',
       place TEXT CHECK(place IN ('first','second','third')) NOT NULL,
       target_kind TEXT CHECK(target_kind IN ('participant','team','manual')) NOT NULL DEFAULT 'manual',
       target_id INTEGER,
@@ -883,6 +885,29 @@ function initDb() {
     }
   });
 
+  const manualWinnersSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'manual_winners'").get() as { sql: string };
+  if (!manualWinnersSchema.sql.includes("'doubles'") || !manualWinnersSchema.sql.includes("'triples'")) {
+    db.transaction(() => {
+      db.exec(`
+        CREATE TABLE manual_winners_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          tournament_id INTEGER NOT NULL,
+          division TEXT CHECK(division IN ('all','female','male','doubles','triples')) NOT NULL DEFAULT 'all',
+          place TEXT CHECK(place IN ('first','second','third')) NOT NULL,
+          target_kind TEXT CHECK(target_kind IN ('participant','team','manual')) NOT NULL DEFAULT 'manual',
+          target_id INTEGER,
+          display_name TEXT NOT NULL DEFAULT '',
+          UNIQUE (tournament_id, division, place),
+          FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+        );
+        INSERT INTO manual_winners_new (id, tournament_id, division, place, target_kind, target_id, display_name)
+          SELECT id, tournament_id, division, place, target_kind, target_id, display_name FROM manual_winners;
+        DROP TABLE manual_winners;
+        ALTER TABLE manual_winners_new RENAME TO manual_winners;
+      `);
+    })();
+  }
+
   const pTableInfo = db.prepare("PRAGMA table_info(participants)").all();
   const pColumns = pTableInfo.map((c: any) => c.name);
 
@@ -964,6 +989,11 @@ function initDb() {
     });
   }
   const participantColumns = (db.prepare("PRAGMA table_info(participants)").all() as any[]).map((column) => column.name);
+  for (const column of ['doubles_entrant', 'triples_entrant']) {
+    if (!participantColumns.includes(column)) {
+      db.exec(`ALTER TABLE participants ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0`);
+    }
+  }
   if (!participantColumns.includes('player_database_id')) {
     db.exec('ALTER TABLE participants ADD COLUMN player_database_id INTEGER');
   }
@@ -1054,6 +1084,8 @@ const normalizeParticipant = (raw: any) => {
     team_order: Number.isFinite(parsedTeamOrder) && parsedTeamOrder > 0 ? parsedTeamOrder : null,
     division: (raw?.division ?? '').toString().trim() || null,
     singles_entrant: raw?.singles_entrant ? 1 : 0,
+    doubles_entrant: toBinaryFlag(raw?.doubles_entrant),
+    triples_entrant: toBinaryFlag(raw?.triples_entrant),
   };
 };
 
@@ -4283,7 +4315,7 @@ async function startServer() {
     try {
       const resolvedBody = inferParticipantFamilyName(req.params.id, req.body);
       const familyNameFilled = resolvedBody !== req.body;
-      const { first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant } = normalizeParticipant(resolvedBody);
+      const { first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant, doubles_entrant, triples_entrant } = normalizeParticipant(resolvedBody);
       const assignedTeamOrder = team_id ? (team_order || getNextTeamOrder(req.params.id, team_id)) : 0;
       const isAdmin = getRequestRole(req) === 'admin';
       console.log('Adding participant:', { first_name, last_name, gender, hands, club, average, email, team_id, team_order: assignedTeamOrder, division, singles_entrant });
@@ -4301,9 +4333,9 @@ async function startServer() {
           }, resolvedBody?.player_database_id)
           : getExistingPlayerDatabaseId(resolvedBody?.player_database_id, first_name, last_name);
         return db.prepare(`
-          INSERT INTO participants (tournament_id, player_database_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(req.params.id, playerDatabaseId, first_name, last_name, gender, hands, club, average || 0, email, team_id || null, assignedTeamOrder, division || null, singles_entrant);
+          INSERT INTO participants (tournament_id, player_database_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant, doubles_entrant, triples_entrant)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(req.params.id, playerDatabaseId, first_name, last_name, gender, hands, club, average || 0, email, team_id || null, assignedTeamOrder, division || null, singles_entrant, doubles_entrant, triples_entrant);
       })();
       if (team_id) resequenceTeamMembers(team_id);
       res.json({
@@ -4327,7 +4359,7 @@ async function startServer() {
     if (!existing) {
       return res.status(404).json({ error: 'Participant not found' });
     }
-    const { first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant } = normalizeParticipant({ ...existing, ...req.body });
+    const { first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant, doubles_entrant, triples_entrant } = normalizeParticipant({ ...existing, ...req.body });
     const assignedTeamOrder = team_id ? (team_order || getNextTeamOrder(existing.tournament_id.toString(), team_id)) : 0;
     const sameIdentity = normalizePlayerIdentityPart(existing.first_name) === normalizePlayerIdentityPart(first_name)
       && normalizePlayerIdentityPart(existing.last_name) === normalizePlayerIdentityPart(last_name);
@@ -4359,9 +4391,9 @@ async function startServer() {
         : linkedPlayerDatabaseId;
       db.prepare(`
         UPDATE participants SET
-          player_database_id = ?, first_name = ?, last_name = ?, gender = ?, hands = ?, club = ?, average = ?, email = ?, team_id = ?, team_order = ?, division = ?, singles_entrant = ?
+          player_database_id = ?, first_name = ?, last_name = ?, gender = ?, hands = ?, club = ?, average = ?, email = ?, team_id = ?, team_order = ?, division = ?, singles_entrant = ?, doubles_entrant = ?, triples_entrant = ?
         WHERE id = ?
-      `).run(playerDatabaseId, first_name, last_name, gender, hands, club, average || 0, email, team_id || null, assignedTeamOrder, division || null, singles_entrant, req.params.id);
+      `).run(playerDatabaseId, first_name, last_name, gender, hands, club, average || 0, email, team_id || null, assignedTeamOrder, division || null, singles_entrant, doubles_entrant, triples_entrant, req.params.id);
     })();
     if (existing?.team_id && existing.team_id !== team_id) {
       resequenceTeamMembers(existing.team_id);
@@ -4645,13 +4677,13 @@ async function startServer() {
         if (id !== null && !existingParticipantIds.has(id)) importedIds[index] = null;
       });
       const insert = db.prepare(`
-        INSERT INTO participants (tournament_id, player_database_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO participants (tournament_id, player_database_id, first_name, last_name, gender, hands, club, average, email, team_id, team_order, division, singles_entrant, doubles_entrant, triples_entrant)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const update = db.prepare(`
         UPDATE participants SET
           player_database_id = ?, first_name = ?, last_name = ?, gender = ?, hands = ?, club = ?, average = ?, email = ?,
-          team_id = ?, team_order = ?, division = ?, singles_entrant = ?
+          team_id = ?, team_order = ?, division = ?, singles_entrant = ?, doubles_entrant = ?, triples_entrant = ?
         WHERE id = ? AND tournament_id = ?
       `);
 
@@ -4702,6 +4734,8 @@ async function startServer() {
               assignedTeamOrder,
               normalized.division,
               normalized.singles_entrant,
+              normalized.doubles_entrant,
+              normalized.triples_entrant,
               importedId,
               tournamentId,
             );
@@ -4722,6 +4756,8 @@ async function startServer() {
               assignedTeamOrder,
               normalized.division,
               normalized.singles_entrant,
+              normalized.doubles_entrant,
+              normalized.triples_entrant,
             );
             importedIdsToKeep.add(Number(result.lastInsertRowid));
           }
@@ -5863,7 +5899,7 @@ async function startServer() {
 
   app.put("/api/tournaments/:id/manual-winners", requirePermission('scores:manage', (req) => req.params.id), (req, res) => {
     try {
-      const tournament = db.prepare("SELECT id FROM tournaments WHERE id = ?").get(req.params.id) as any;
+      const tournament = db.prepare("SELECT id, type, enable_singles_division FROM tournaments WHERE id = ?").get(req.params.id) as any;
       if (!tournament) return res.status(404).json({ error: "Tournament not found" });
 
       const divisionRaw = String(req.body?.division || '').trim().toLowerCase();
@@ -5875,7 +5911,13 @@ async function startServer() {
         ? null
         : Number.parseInt(String(targetIdRaw), 10);
 
-      const division: 'all' | 'female' | 'male' = divisionRaw === 'female' || divisionRaw === 'male' ? divisionRaw : 'all';
+      if (divisionRaw && !['all', 'female', 'male', 'doubles', 'triples'].includes(divisionRaw)) {
+        return res.status(400).json({ error: 'Invalid winner division' });
+      }
+      if ((divisionRaw === 'doubles' || divisionRaw === 'triples') && (tournament.type !== 'team' || !tournament.enable_singles_division)) {
+        return res.status(400).json({ error: 'Doubles and triples winners require a mixed tournament' });
+      }
+      const division = divisionRaw || 'all';
       if (placeRaw !== 'first' && placeRaw !== 'second' && placeRaw !== 'third') {
         return res.status(400).json({ error: 'Invalid winner place' });
       }

@@ -55,6 +55,8 @@ export interface Participant {
   // Marks a team-tournament participant who also competes in a Singles division,
   // so their team-game scores can seed a separate Male/Female singles bracket.
   singles_entrant?: number | boolean;
+  doubles_entrant?: number | boolean;
+  triples_entrant?: number | boolean;
 }
 
 export type PlayerImportChoice = 'existing' | 'incoming' | 'merge' | 'separate';
@@ -195,7 +197,7 @@ export interface StandingAdditionalScore {
 export interface ManualWinnerEntry {
   id: number;
   tournament_id: number;
-  division: 'all' | 'female' | 'male';
+  division: 'all' | 'female' | 'male' | 'doubles' | 'triples';
   place: 'first' | 'second' | 'third';
   target_kind: 'participant' | 'team' | 'manual';
   target_id: number | null;
@@ -985,7 +987,7 @@ const api = {
   async setManualWinner(
     tournamentId: number,
     payload: {
-      division: 'all' | 'female' | 'male';
+      division: ManualWinnerEntry['division'];
       place: 'first' | 'second' | 'third';
       target_kind: 'participant' | 'team' | 'manual';
       target_id?: number | null;
