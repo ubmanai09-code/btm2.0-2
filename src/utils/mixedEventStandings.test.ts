@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import type { Participant, Score, Team } from '../services/api';
 import { calculateMixedGroupStandings, rankMixedSingles } from './mixedEventStandings';
 import { parseParticipantCsv } from './participantCsv';
+import { standingsAverage } from './standingsAverage';
 
 const teams: Team[] = [
   { id: 1, tournament_id: 1, name: 'A' },
@@ -38,7 +39,7 @@ test('flags missing scores, invalid lineups and unassigned entrants, and preserv
   assert.deepEqual(result.rows.map((row) => row.rank), [1, 1]);
   assert.equal(result.rows[0].complete, false);
   assert.equal(result.rows[0].games[0].count, 2);
-  assert.equal(result.rows[0].average, 100);
+  assert.equal(result.rows[0].average, 50);
   assert.deepEqual(result.unassigned.map((p) => p.id), [5]);
   const excluded = calculateMixedGroupStandings('doubles', teams, players, scores, 2, new Set([2]));
   assert.equal(excluded.rows.find((row) => row.team.id === 1)?.rank, null);
@@ -49,13 +50,41 @@ test('flags missing scores, invalid lineups and unassigned entrants, and preserv
   assert.deepEqual(noScores.rows.map((row) => row.average), [null, null]);
 });
 
-test('averages only completed team games, including zero scores', () => {
+test('averages all recorded qualifying pins over the configured games, including partial and zero scores', () => {
   const players = [player(1, 1, 1, 0), player(2, 1, 1, 0)];
   const scores = [score(1, 1, 0), score(2, 1, 100), score(1, 2, 200)];
   const row = calculateMixedGroupStandings('doubles', teams, players, scores, 2, new Set()).rows[0];
   assert.equal(row.total, 300);
-  assert.equal(row.average, 100);
+  assert.equal(row.average, 150);
   assert.equal(row.complete, false);
+});
+
+test('doubles and triples break equal totals by smaller combined game range', () => {
+  const allTeams = [...teams, { id: 3, tournament_id: 1, name: 'C' }];
+  for (const event of ['doubles', 'triples'] as const) {
+    const size = event === 'doubles' ? 2 : 3;
+    const players = allTeams.flatMap((team) =>
+      Array.from({ length: size }, (_, i) => player(team.id * 10 + i, team.id, 1, 1)),
+    );
+    const scores = allTeams.flatMap((team) => {
+      const gameTotals = team.id === 1 ? [100, 300] : [190, 210];
+      return gameTotals.flatMap((total, game) => [
+        score(team.id * 10, game + 1, total),
+        ...Array.from({ length: size - 1 }, (_, i) => score(team.id * 10 + i + 1, game + 1, 0)),
+      ]);
+    });
+    const rows = calculateMixedGroupStandings(event, allTeams, players, [...scores, score(10, 3, 300)], 2, new Set()).rows;
+    assert.deepEqual(rows.map((row) => [row.team.name, row.total, row.scoreRange, row.rank]), [
+      ['B', 400, 20, 1],
+      ['C', 400, 20, 1],
+      ['A', 400, 200, 3],
+    ]);
+  }
+});
+
+test('standings average uses the tournament game count even with missing or zero scores', () => {
+  assert.equal(standingsAverage(500, 6), 500 / 6);
+  assert.equal(standingsAverage(0, 6), 0);
 });
 
 test('CSV event flags round-trip and missing columns do not overwrite selections', () => {
@@ -68,12 +97,14 @@ test('CSV event flags round-trip and missing columns do not overwrite selections
   assert.throws(() => parseParticipantCsv('First Name,Doubles Entrant\nA,maybe'), /Invalid doubles_entrant/);
 });
 
-test('singles ranks tied totals equally and excludes players without recorded games', () => {
+test('mixed singles ranks use score range and average and exclude unscored players', () => {
   const rows = [
-    { participant_id: 1, grand_total: 200 },
-    { participant_id: 2, grand_total: 200 },
-    { participant_id: 3, grand_total: 0 },
-    { participant_id: 4, grand_total: 0 },
+    { participant_id: 1, grand_total: 200, score_range: 20, average: 100 },
+    { participant_id: 2, grand_total: 200, score_range: 20, average: 100 },
+    { participant_id: 3, grand_total: 200, score_range: 20, average: 90 },
+    { participant_id: 4, grand_total: 200, score_range: 60, average: 100 },
+    { participant_id: 5, grand_total: 0, score_range: 0, average: 0 },
+    { participant_id: 6, grand_total: 0, score_range: 0, average: 0 },
   ];
-  assert.deepEqual([...rankMixedSingles(rows, new Map([['1-1', 200], ['2-1', 200], ['4-1', 0]]), 2)], [[1, 1], [2, 1], [4, 3]]);
+  assert.deepEqual([...rankMixedSingles(rows, new Map([['1-1', 200], ['2-1', 200], ['3-1', 180], ['4-1', 200], ['6-1', 0]]), 2)], [[1, 1], [2, 1], [3, 3], [4, 4], [6, 5]]);
 });

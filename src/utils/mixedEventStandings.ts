@@ -1,22 +1,27 @@
 import type { Participant, Score, Team } from '../services/api';
+import { standingsAverage, standingsScoreRange } from './standingsAverage';
 
 export type MixedGroupEvent = 'doubles' | 'triples';
 
 export function rankMixedSingles(
-  rows: { participant_id: number; grand_total: number }[],
+  rows: { participant_id: number; grand_total: number; score_range: number; average: number }[],
   scores: Map<string, number>,
   gameCount: number,
 ) {
   const ranks = new Map<number, number>();
   let previousTotal: number | undefined;
+  let previousRange: number | undefined;
+  let previousAverage: number | undefined;
   let rank = 0;
   let scoredCount = 0;
   for (const row of rows) {
     if (!Array.from({ length: gameCount }, (_, i) => i + 1).some((game) => scores.has(`${row.participant_id}-${game}`))) continue;
     scoredCount += 1;
-    if (row.grand_total !== previousTotal) rank = scoredCount;
+    if (row.grand_total !== previousTotal || row.score_range !== previousRange || row.average !== previousAverage) rank = scoredCount;
     ranks.set(row.participant_id, rank);
     previousTotal = row.grand_total;
+    previousRange = row.score_range;
+    previousAverage = row.average;
   }
   return ranks;
 }
@@ -51,28 +56,32 @@ export function calculateMixedGroupStandings(
       const count = values.filter((value) => value !== undefined).length;
       return { total: values.reduce<number>((sum, value) => sum + (value ?? 0), 0), count };
     });
-    const completedGames = members.length === size ? games.filter((game) => game.count === size) : [];
+    const total = games.reduce((sum, game) => sum + game.total, 0);
+    const scoreRange = standingsScoreRange(games.filter((game) => game.count > 0).map((game) => game.total));
     return {
       team,
       club: [...clubs.values()].join(', ') || '—',
       members,
       games,
-      total: games.reduce((sum, game) => sum + game.total, 0),
-      average: completedGames.length > 0
-        ? completedGames.reduce((sum, game) => sum + game.total, 0) / completedGames.length
+      total,
+      scoreRange,
+      average: members.length === size && gameCount > 0 && games.some((game) => game.count > 0)
+        ? standingsAverage(total, gameCount)
         : null,
       valid: members.length === size,
       complete: members.length === size && games.every((game) => game.count === size),
     };
   });
   const hasScores = (row: typeof rows[number]) => row.games.some((game) => game.count > 0);
-  rows.sort((a, b) => Number(b.valid) - Number(a.valid) || Number(hasScores(b)) - Number(hasScores(a)) || b.total - a.total || a.team.name.localeCompare(b.team.name));
+  rows.sort((a, b) => Number(b.valid) - Number(a.valid) || Number(hasScores(b)) - Number(hasScores(a)) || b.total - a.total || a.scoreRange - b.scoreRange || a.team.name.localeCompare(b.team.name));
   let priorTotal: number | undefined;
+  let priorRange: number | undefined;
   let rank = 0;
   const ranked = rows.map((row, index) => {
     if (!row.valid || !hasScores(row)) return { ...row, rank: null };
-    if (priorTotal !== row.total) rank = index + 1;
+    if (priorTotal !== row.total || priorRange !== row.scoreRange) rank = index + 1;
     priorTotal = row.total;
+    priorRange = row.scoreRange;
     return { ...row, rank };
   });
   const teamIds = new Set(teams.map((team) => team.id));

@@ -32,11 +32,13 @@ Division/Zone assignment and filtering are hidden for Mixed tournaments; previou
 
 The Standings tab shows Teams, Singles, Doubles and Triples. Each team has one doubles lineup and one triples lineup, comprising its marked members; the same player may be in both. Doubles and triples standings use the sum of the selected players' official game scores, excluding pre/post-tournament players. Lineups with the wrong number of players are unranked, and incomplete scores and tied totals require organizer review. Rankings are provisional until all lineups and scores are complete; bonuses and additional scores are not included in doubles or triples. Singles standings can be filtered by gender. Team and singles playoff results must be handled separately.
 
-Doubles and triples averages are the average combined team score per completed game; games missing a selected player's score are excluded.
+Standings averages use qualifying pins divided by the configured number of tournament games. Doubles and triples use their combined qualifying pins, including recorded scores from incomplete games; missing scores contribute no pins until entered. Additional scores and bonuses are excluded.
+
+For equal qualifying totals, Doubles and Triples use the same score-range tiebreak as Singles and Teams: the smaller difference between the highest and lowest recorded game totals ranks higher. Equal totals and ranges remain tied; incomplete results are provisional.
 
 Mixed Singles standings show the player's club instead of their team. Doubles and Triples show the clubs recorded on the team's player roster (or a dash when none is recorded); results remain grouped by registered team.
 
-The Winners Podium has separate manually editable places for Team, women's Singles, men's Singles, Doubles and Triples. Doubles and triples winner choices use the registered lineups; standings do not automatically award medals or resolve ties. The dashboard displays saved doubles and triples placements without five-player team scores.
+The Winners Podium has separate manually editable places for Team, women's Singles, men's Singles, Doubles and Triples. Doubles and triples winner choices use the registered lineups; standings do not automatically award medals or resolve remaining ties. The dashboard displays saved doubles and triples placements without five-player team scores.
 
 Mixed tournament participant CSV exports include the three event flags. Imports without these columns leave existing selections unchanged; when present, use 1 or 0.
 

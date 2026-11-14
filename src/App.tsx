@@ -76,6 +76,7 @@ import {
   type TournamentRoundConfig,
 } from './utils/tournamentEngine';
 import { calculateMixedGroupStandings, rankMixedSingles, type MixedGroupEvent } from './utils/mixedEventStandings';
+import { standingsAverage, standingsScoreRange } from './utils/standingsAverage';
 import DashboardPage from './components/DashboardPage';
 import DashboardPageDesktop from './components/DashboardPageDesktop';
 import { parseWinnerNames } from './components/winnerNames';
@@ -15650,8 +15651,8 @@ export function MixedGroupStandings({ event, data, gameCount, tx, showWarnings }
   const size = event === 'doubles' ? 2 : 3;
   return (
     <div className="sm:p-4 sm:space-y-3">
-      {showWarnings && <p className="text-xs text-black/60">{tx('Qualifying totals use the recorded game scores only. Rankings are provisional until all lineups and scores are complete. Ties require an organizer decision.')}</p>}
-      <p className="text-xs text-black/60">{tx('Average is the team total per completed game; partial games are excluded.')}</p>
+      {showWarnings && <p className="text-xs text-black/60">{tx('Qualifying totals use the recorded game scores only. Rankings are provisional until all lineups and scores are complete. Ties after the score-range tiebreak require an organizer decision.')}</p>}
+      <p className="text-xs text-black/60">{tx('Average is total qualifying pins divided by the number of tournament games.')}</p>
       {showWarnings && unassigned.length > 0 && (
         <p role="alert" className="text-xs text-amber-700">{tx('Selected players without a team:')} {unassigned.map((p) => `${p.first_name} ${p.last_name}`.trim()).join(', ')}</p>
       )}
@@ -16367,9 +16368,8 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
       const visibleAdditional = hasAdditionalScores ? additional : 0;
       // Grand total includes additional for seeding, but ranking is by total (first N games)
       const grandTotal = total + visibleAdditional + bonus;
-      const gamesPlayed = officialGames.filter((value) => value > 0).length;
-      const average = gamesPlayed > 0 ? Number((total / gamesPlayed).toFixed(1)) : 0;
-      const scoreRange = playedScores.length > 1 ? Math.max(...playedScores) - Math.min(...playedScores) : 0;
+      const average = Number(standingsAverage(total, officialGameCount).toFixed(1));
+      const scoreRange = standingsScoreRange(playedScores);
       return {
         participant_id: p.id,
         participant_name: formatStandingsName(p.id, `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Unknown'),
@@ -16433,7 +16433,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
   const directPlayerStandingsFallbackRows = standings
     .map((row) => {
       const total = Number(row.total_score) || 0;
-      const average = Number(row.average_score) || 0;
+      const average = Number(standingsAverage(total, officialGameCount).toFixed(1));
       return {
         participant_id: Number(row.participant_id) || 0,
         participant_name: formatStandingsName(Number(row.participant_id) || 0, String(row.participant_name || 'Unknown')),
@@ -16536,7 +16536,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
       const playedGameTotals = row.games
         .slice(0, officialGameNumbers.length)
         .filter((_, index) => row.gameScoreCounts[index] > 0);
-      const scoreRange = playedGameTotals.length > 1 ? Math.max(...playedGameTotals) - Math.min(...playedGameTotals) : 0;
+      const scoreRange = standingsScoreRange(playedGameTotals);
       return {
         ...row,
         additional,
@@ -17680,7 +17680,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
           ) : (
           <>
           {showStandingsWarnings && hasMixedTeamSingles && standingsMode === 'players' && (
-            <p className="px-4 pt-3 text-xs text-black/60">{tx('Singles rankings are provisional until scores are complete. Filter by gender for separate standings; ties require an organizer decision.')}</p>
+            <p className="px-4 pt-3 text-xs text-black/60">{tx('Singles rankings are provisional until scores are complete. Filter by gender for separate standings; ties after the score-range tiebreak require an organizer decision.')}</p>
           )}
           {!isStandingsScreenMode && (
           <div className="border-b border-black/5 bg-white/95 max-md:border-b-0 max-sm:sticky max-sm:top-16 max-sm:z-40 max-md:!bg-[var(--bg)]">
