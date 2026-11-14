@@ -86,6 +86,15 @@ import AdminPlayersPage from './components/AdminPlayersPage';
 
 type UserRole = 'admin' | 'moderator' | 'public';
 
+export function formatBracketSeedName(fullName: string, isTeam: boolean): string {
+  if (isTeam) return fullName;
+  const parts = String(fullName || '').trim().split(/\s+/);
+  if (parts.length < 2) return fullName;
+  const lastPart = parts[parts.length - 1];
+  if (/^\d/.test(lastPart)) return fullName;
+  return `${parts[0]} ${lastPart[0].toUpperCase()}.`;
+}
+
 const parseRole = (value: unknown): UserRole | null => {
   if (value === 'admin' || value === 'moderator' || value === 'public') return value;
   return null;
@@ -11433,34 +11442,27 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   }, [seedImportMode, standings, manualPickedIds, additionalScoresByKey, bonusScoresByKey, tournament.type, division]);
 
   // ── Participant nodes ─────────────────────────────────────────────────────
-  const shortenParticipantName = React.useCallback((fullName: string): string => {
-    const parts = String(fullName || '').trim().split(/\s+/);
-    if (parts.length < 2) return fullName;
-    const lastPart = parts[parts.length - 1];
-    // Don't abbreviate if last part starts with a digit (e.g. team numbers like "Mixed 28")
-    if (/^\d/.test(lastPart)) return fullName;
-    return `${parts[0]} ${lastPart[0].toUpperCase()}.`;
-  }, []);
+  const isTeamSeeds = (tournament.type === 'team' && division === 'all') || division === 'team';
 
   const participantNodes = React.useMemo((): TournamentParticipantNode[] => {
     if (seedImportMode === 'create-list') {
-      return customSeedList.map((name, i) => ({ id: `custom-${i + 1}`, name: shortenParticipantName(name), seed: i + 1 }));
+      return customSeedList.map((name, i) => ({ id: `custom-${i + 1}`, name: formatBracketSeedName(name, isTeamSeeds), seed: i + 1 }));
     }
     if (seedImportMode === 'manual') {
       if (pickedStandingsEntries.length > 0) {
-        return pickedStandingsEntries.map(e => ({ id: e.id, name: shortenParticipantName(e.name), seed: e.seed }));
+        return pickedStandingsEntries.map(e => ({ id: e.id, name: formatBracketSeedName(e.name, isTeamSeeds), seed: e.seed }));
       }
       return [];
     }
     if (importedTopSeedEntries.length > 0) {
       return importedTopSeedEntries.map((entry) => ({
         id: entry.id,
-        name: shortenParticipantName(entry.name),
+        name: formatBracketSeedName(entry.name, isTeamSeeds),
         seed: entry.seed,
       }));
     }
     return [];
-  }, [seedImportMode, customSeedList, pickedStandingsEntries, importedTopSeedEntries, shortenParticipantName]);
+  }, [seedImportMode, customSeedList, pickedStandingsEntries, importedTopSeedEntries, isTeamSeeds]);
 
   const formatCompactTeamMemberName = React.useCallback((firstName?: string | null, lastName?: string | null) => {
     const first = String(firstName || '').trim();
@@ -13099,6 +13101,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     return specialMatchNameById.has(match.id) ? '' : match.label;
   }, [specialMatchNameById]);
   const getCompactSlotLabel = React.useCallback((label: string) => {
+    if (isTeamSeeds) return label;
     return String(label || '')
       .replace(/^Winner of\s+/i, 'W: ')
       .replace(/^Loser of\s+/i, 'L: ')
@@ -13107,7 +13110,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       .replace(/Qualifying\s*Round/gi, 'Qual')
       .replace(/Placement\s*Round/gi, '3rd')
       .replace(/Final\s*Round/gi, 'Final');
-  }, []);
+  }, [isTeamSeeds]);
   const getSpecialMatchTone = React.useCallback((match: any): 'final' | 'bronze' | null => {
     const specialName = specialMatchNameById.get(match.id);
     if (specialName === 'Final') return 'final';
@@ -13645,7 +13648,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   {previewNodes.map(node => (
                     <div key={node.id} className="flex items-center gap-2 px-3 py-2 text-sm">
                       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-orange-600 text-[10px] font-bold text-white">{node.seed}</span>
-                      <span className="truncate text-black/80">{node.name}</span>
+                      <span className="min-w-0 truncate text-black/80" title={node.name}>{node.name}</span>
                     </div>
                   ))}
                 </div>
@@ -14834,7 +14837,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                       onClick={() => handleV2SeedClick({ seed: seedNo })}
                       onDoubleClick={() => handleV2SeedDoubleClick({ seed: seedNo, name: team.teamName })}
                       className={`min-w-0 rounded-md px-1.5 py-1 text-xs border transition-colors cursor-pointer ${isSelected ? 'bg-emerald-50 border-gray-400' : 'bg-gray-50 border-transparent hover:border-gray-400'}`}
-                      title={`${canManageBracketV2 ? 'Single-click to select, double-click to replace team' : 'Single-click to select'}${memberSummary ? `\n${memberSummary}` : ''}`}
+                      title={`${team.teamName}\n${canManageBracketV2 ? 'Single-click to select, double-click to replace team' : 'Single-click to select'}${memberSummary ? `\n${memberSummary}` : ''}`}
                     >
                       <div className="flex items-start gap-1">
                         <span className="w-6 shrink-0 pt-0.5 text-right text-[9px] text-black/35">#{seedNo}</span>
@@ -14886,7 +14889,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                       onClick={() => handleV2SeedClick(p)}
                       onDoubleClick={() => handleV2SeedDoubleClick(p)}
                       className={`flex items-center gap-1.5 px-1.5 py-1 rounded-md text-xs min-w-0 border transition-colors ${selectedSeedNumber === Number(p.seed) ? 'bg-emerald-50 border-gray-400' : 'bg-gray-50 border-transparent'}`}
-                      title={canManageBracketV2 ? 'Single-click to select, double-click to rename seed' : 'Single-click to select seed'}
+                      title={`${p.name}\n${canManageBracketV2 ? 'Single-click to select, double-click to rename seed' : 'Single-click to select seed'}`}
                     >
                       <span className="text-black/35 w-4 text-right shrink-0 text-[9px]">{p.seed}.</span>
                       {editingSeedNumberV2 === Number(p.seed) ? (
@@ -14905,7 +14908,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                           <button type="button" onClick={cancelV2SeedEdit} className="text-[10px] text-black/45">Cancel</button>
                         </div>
                       ) : (
-                        <span className={`flex-1 text-black/70 leading-tight ${useCompactRightPanelSeeds ? 'text-[10px]' : 'text-[11px]'} ${useCompactRightPanelSeeds ? '' : 'truncate'}`} style={useCompactRightPanelSeeds ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : undefined}>{p.name}</span>
+                        <span className={`min-w-0 flex-1 text-black/70 leading-tight ${useCompactRightPanelSeeds ? 'text-[10px]' : 'text-[11px]'} ${useCompactRightPanelSeeds ? '' : 'truncate'}`} style={useCompactRightPanelSeeds ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : undefined}>{p.name}</span>
                       )}
                       {p.totalScore != null && <span className="shrink-0 text-emerald-700 font-medium tabular-nums text-[9px]">{p.totalScore}</span>}
                     </div>
@@ -15287,10 +15290,10 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                                     </select>
                                   ) : (
                                     <span
-                                      className={`flex-1 min-w-0 h-9 px-2 flex items-center text-[12px] leading-none truncate ${canSwapList ? 'cursor-pointer hover:underline' : ''} ${label === 'TBD' ? 'text-black/25 italic' : isWinner ? 'font-medium text-[#111]' : 'text-[#222]'}`}
+                                      className={`flex-1 min-w-0 h-9 px-2 flex items-center text-[12px] leading-none ${canSwapList ? 'cursor-pointer hover:underline' : ''} ${label === 'TBD' ? 'text-black/25 italic' : isWinner ? 'font-medium text-[#111]' : 'text-[#222]'}`}
                                       onClick={canSwapList ? (e) => { e.stopPropagation(); setEditingSlotKey(key); } : undefined}
-                                      title={canSwapList ? 'Click to swap participant' : label}
-                                    >{label}{role !== 'public' && slotOverrides[key] != null && <span className="ml-1 text-[10px] text-violet-500">✎</span>}</span>
+                                      title={canSwapList ? `${label}\nClick to swap participant` : label}
+                                    ><span className="min-w-0 truncate">{label}</span>{role !== 'public' && slotOverrides[key] != null && <span className="ml-1 text-[10px] text-violet-500">✎</span>}</span>
                                   )}
                                   {canManageBracketV2 ? (
                                     <input type="number" value={score ?? ''} placeholder="—"
@@ -15426,10 +15429,10 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                                 </select>
                               ) : (
                                 <span
-                                  className={`flex-1 h-7 px-2 flex items-center text-[12px] leading-none truncate ${canSwap ? 'cursor-pointer hover:underline' : ''} ${isTbd ? 'text-black/25 italic' : isWinner ? 'font-medium text-[#111]' : 'text-[#222]'}`}
+                                  className={`flex-1 min-w-0 h-7 px-2 flex items-center text-[12px] leading-none ${canSwap ? 'cursor-pointer hover:underline' : ''} ${isTbd ? 'text-black/25 italic' : isWinner ? 'font-medium text-[#111]' : 'text-[#222]'}`}
                                   onClick={canSwap ? (e) => { e.stopPropagation(); setEditingSlotKey(key); } : undefined}
-                                  title={canSwap ? 'Click to swap participant' : undefined}
-                                >{compactLabel}{role !== 'public' && slotOverrides[key] != null && <span className="ml-1 text-[10px] text-violet-500">✎</span>}</span>
+                                  title={canSwap ? `${label}\nClick to swap participant` : label}
+                                ><span className="min-w-0 truncate">{compactLabel}</span>{role !== 'public' && slotOverrides[key] != null && <span className="ml-1 text-[10px] text-violet-500">✎</span>}</span>
                               )}
                                   {canManageBracketV2 && (
                                 <input type="number" value={score ?? ''} placeholder="—"
@@ -15602,8 +15605,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                                   {slotSeed}
                                 </span>
                               )}
-                              <span style={{ flex: 1, height: 28, padding: '0 8px', display: 'flex', alignItems: 'center', fontSize: 12, lineHeight: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: label === 'TBD' ? '#9ca3af' : '#222', fontWeight: isWinner ? 500 : 400 }}>
-                                {compactLabel}
+                              <span style={{ flex: 1, minWidth: 0, height: 28, padding: '0 8px', display: 'flex', alignItems: 'center', fontSize: 12, lineHeight: 1, color: label === 'TBD' ? '#9ca3af' : '#222', fontWeight: isWinner ? 500 : 400 }}>
+                                <span style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{compactLabel}</span>
                               </span>
                               <span style={{ width: 44, height: 28, padding: '0 6px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', fontSize: 12, ...scoreCellStyle }}>
                                 {score ?? ''}
