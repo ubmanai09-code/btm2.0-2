@@ -57,7 +57,8 @@ export function calculateMixedGroupStandings(
       return { total: values.reduce<number>((sum, value) => sum + (value ?? 0), 0), count };
     });
     const total = games.reduce((sum, game) => sum + game.total, 0);
-    const scoreRange = standingsScoreRange(games.filter((game) => game.count > 0).map((game) => game.total));
+    const recordedGames = games.filter((game) => game.count > 0).map((game) => game.total);
+    const scoreRange = standingsScoreRange(recordedGames);
     return {
       team,
       club: [...clubs.values()].join(', ') || '—',
@@ -65,8 +66,8 @@ export function calculateMixedGroupStandings(
       games,
       total,
       scoreRange,
-      average: members.length === size && gameCount > 0 && games.some((game) => game.count > 0)
-        ? standingsAverage(total, gameCount)
+      average: members.length === size && recordedGames.length > 0
+        ? standingsAverage(recordedGames)
         : null,
       valid: members.length === size,
       complete: members.length === size && games.every((game) => game.count === size),

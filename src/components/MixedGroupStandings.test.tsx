@@ -54,22 +54,22 @@ test('doubles and triples provide compact mobile rows and a full desktop table',
   }
 });
 
-test('displays qualifying pins divided by tournament games even for incomplete scores', () => {
+test('displays average of recorded games, including partial games', () => {
   const data = {
     teams,
     participants: [player(1, 1), player(2, 1)],
     scores: [
       { ...scores[0], score: 200 },
       { ...scores[0], id: 2, participant_id: 2, game_number: 2, score: 100 },
-      { ...scores[0], id: 3, game_number: 3, score: 300 },
+      { ...scores[0], id: 3, game_number: 7, score: 300 },
     ],
     warmups: [],
   };
   const html = renderToStaticMarkup(
-    <MixedGroupStandings event="doubles" data={data} gameCount={2} tx={(text) => text} showWarnings={false} />,
+    <MixedGroupStandings event="doubles" data={data} gameCount={6} tx={(text) => text} showWarnings={false} />,
   );
   assert.match(html, /150\.0/);
-  assert.ok(html.includes('Average is total qualifying pins divided by the number of tournament games.'));
+  assert.ok(html.includes('Average is qualifying pins divided by games with recorded scores, including partial games.'));
 });
 
 test('group club names come from the roster and missing or differing clubs are not replaced with the team name', () => {

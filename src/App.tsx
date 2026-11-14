@@ -15652,7 +15652,7 @@ export function MixedGroupStandings({ event, data, gameCount, tx, showWarnings }
   return (
     <div className="sm:p-4 sm:space-y-3">
       {showWarnings && <p className="text-xs text-black/60">{tx('Qualifying totals use the recorded game scores only. Rankings are provisional until all lineups and scores are complete. Ties after the score-range tiebreak require an organizer decision.')}</p>}
-      <p className="text-xs text-black/60">{tx('Average is total qualifying pins divided by the number of tournament games.')}</p>
+      <p className="text-xs text-black/60">{tx('Average is qualifying pins divided by games with recorded scores, including partial games.')}</p>
       {showWarnings && unassigned.length > 0 && (
         <p role="alert" className="text-xs text-amber-700">{tx('Selected players without a team:')} {unassigned.map((p) => `${p.first_name} ${p.last_name}`.trim()).join(', ')}</p>
       )}
@@ -16351,8 +16351,10 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
   const officialGameNumbers = Array.from({ length: officialGameCount }, (_, i) => i + 1);
 
   const scoreByParticipantGame = new Map<string, number>();
+  const participantsWithFallbackScores = new Set<number>();
   for (const s of scores) {
     scoreByParticipantGame.set(`${s.participant_id}-${s.game_number}`, Number(s.score) || 0);
+    if (s.id < 0) participantsWithFallbackScores.add(s.participant_id);
   }
 
   const playerStandingsRows = participants
@@ -16368,7 +16370,8 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
       const visibleAdditional = hasAdditionalScores ? additional : 0;
       // Grand total includes additional for seeding, but ranking is by total (first N games)
       const grandTotal = total + visibleAdditional + bonus;
-      const average = Number(standingsAverage(total, officialGameCount).toFixed(1));
+      const averageAvailable = !participantsWithFallbackScores.has(p.id);
+      const average = averageAvailable ? Number(standingsAverage(playedScores).toFixed(1)) : 0;
       const scoreRange = standingsScoreRange(playedScores);
       return {
         participant_id: p.id,
@@ -16383,6 +16386,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
         total, // only first N games
         grand_total: grandTotal,
         average,
+        averageAvailable,
         score_range: scoreRange,
       };
     })
@@ -16433,7 +16437,6 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
   const directPlayerStandingsFallbackRows = standings
     .map((row) => {
       const total = Number(row.total_score) || 0;
-      const average = Number(standingsAverage(total, officialGameCount).toFixed(1));
       return {
         participant_id: Number(row.participant_id) || 0,
         participant_name: formatStandingsName(Number(row.participant_id) || 0, String(row.participant_name || 'Unknown')),
@@ -16445,7 +16448,8 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
         bonus: 0,
         total,
         grand_total: total,
-        average,
+        average: 0,
+        averageAvailable: false,
         score_range: Number(row.score_range) || 0,
       };
     })
@@ -16595,7 +16599,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
       if (allWarmupParticipantIds.has(row.participant_id)) return false; // exclude UT/NT
       const gender = (participantGenderMap.get(row.participant_id) || '').toLowerCase();
       if (!gender.startsWith(genderPrefix)) return false;
-      return metric === 'grand_total' ? row.grand_total > 0 : row.average > 0;
+      return metric === 'grand_total' ? row.grand_total > 0 : row.averageAvailable && row.average > 0;
     });
     if (candidates.length === 0) return new Set<number>();
     const maxValue = Math.max(...candidates.map((row) => row[metric]));
@@ -16901,7 +16905,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
           ...(hasAdditionalScores ? [s.additional] : []),
           ...(hasBonus ? [s.bonus] : []),
           s.grand_total,
-          s.average.toFixed(1),
+          s.averageAvailable ? s.average.toFixed(1) : '',
         ]);
     const escapeCell = (v: unknown) => { const t = String(v ?? ''); return /[",\r\n;]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
     const csvContent = [headers, ...rows].map(r => r.map(escapeCell).join(',')).join('\r\n');
@@ -17679,6 +17683,9 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
             <p role="alert" className="p-4 text-sm text-red-700">{tx('Unable to load event standings. Please retry.')}</p>
           ) : (
           <>
+          {standingsMode === 'players' && standingsRowsForDisplay.some((row) => !row.averageAvailable) && (
+            <p role="alert" className="px-4 pt-3 text-xs text-red-700">{tx('Averages are unavailable because individual game scores could not be loaded. Please retry.')}</p>
+          )}
           {showStandingsWarnings && hasMixedTeamSingles && standingsMode === 'players' && (
             <p className="px-4 pt-3 text-xs text-black/60">{tx('Singles rankings are provisional until scores are complete. Filter by gender for separate standings; ties after the score-range tiebreak require an organizer decision.')}</p>
           )}
@@ -17886,7 +17893,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
                     </span>
                     <span className="shrink-0 flex flex-col items-end">
                       <span className="text-[9px] font-semibold uppercase tracking-wider text-sky-600 leading-none">{tx('Avg')}</span>
-                      <span className="text-xs font-bold tabular-nums text-sky-700 leading-tight">{s.average.toFixed(1)}</span>
+                      <span className="text-xs font-bold tabular-nums text-sky-700 leading-tight">{s.averageAvailable ? s.average.toFixed(1) : '—'}</span>
                     </span>
                     <span className="shrink-0 text-black/30">{isExpanded ? '▲' : '▼'}</span>
                   </button>
@@ -17898,7 +17905,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
                       <p className="mt-1 text-[11px] leading-snug text-black/75">
                         <span className="font-semibold text-emerald-700">{totalColumnLabel}:</span> {s.grand_total}
                         {' | '}
-                        <span className="font-semibold text-sky-700">{tx('Avg')}:</span> {s.average.toFixed(1)}
+                        <span className="font-semibold text-sky-700">{tx('Avg')}:</span> {s.averageAvailable ? s.average.toFixed(1) : '—'}
                         {gameNumbers.map((gn, gi) => {
                           const score = s.games[gi];
                           const display = score === null || score === undefined || score === '' ? '-' : score;
@@ -18084,7 +18091,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
                           : 'text-sky-700 font-semibold'
                     }`}
                   >
-                    {s.average.toFixed(1)}
+                    {s.averageAvailable ? s.average.toFixed(1) : '—'}
                   </td>
                 </tr>
               ))}
@@ -18200,7 +18207,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
                           {hasAdditionalScores && <td />}
                           {hasBonus && <td />}
                           <td className="px-2.5 py-1.5 text-right font-bold text-sm text-emerald-700">{row.grand_total}</td>
-                          <td className="px-2.5 py-1.5 text-center text-sm text-sky-700">{row.average}</td>
+                          <td className="px-2.5 py-1.5 text-center text-sm text-sky-700">{row.averageAvailable ? row.average : '—'}</td>
                         </tr>
                       ))}
                     </>

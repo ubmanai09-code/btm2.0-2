@@ -39,7 +39,7 @@ test('flags missing scores, invalid lineups and unassigned entrants, and preserv
   assert.deepEqual(result.rows.map((row) => row.rank), [1, 1]);
   assert.equal(result.rows[0].complete, false);
   assert.equal(result.rows[0].games[0].count, 2);
-  assert.equal(result.rows[0].average, 50);
+  assert.equal(result.rows[0].average, 100);
   assert.deepEqual(result.unassigned.map((p) => p.id), [5]);
   const excluded = calculateMixedGroupStandings('doubles', teams, players, scores, 2, new Set([2]));
   assert.equal(excluded.rows.find((row) => row.team.id === 1)?.rank, null);
@@ -50,13 +50,15 @@ test('flags missing scores, invalid lineups and unassigned entrants, and preserv
   assert.deepEqual(noScores.rows.map((row) => row.average), [null, null]);
 });
 
-test('averages all recorded qualifying pins over the configured games, including partial and zero scores', () => {
+test('averages recorded group games including partial games and zero scores', () => {
   const players = [player(1, 1, 1, 0), player(2, 1, 1, 0)];
   const scores = [score(1, 1, 0), score(2, 1, 100), score(1, 2, 200)];
-  const row = calculateMixedGroupStandings('doubles', teams, players, scores, 2, new Set()).rows[0];
+  const row = calculateMixedGroupStandings('doubles', teams, players, scores, 6, new Set()).rows[0];
   assert.equal(row.total, 300);
   assert.equal(row.average, 150);
   assert.equal(row.complete, false);
+  const zeroGame = calculateMixedGroupStandings('doubles', teams, players, [...scores, score(1, 3, 0)], 6, new Set()).rows[0];
+  assert.equal(zeroGame.average, 100);
 });
 
 test('doubles and triples break equal totals by smaller combined game range', () => {
@@ -82,9 +84,9 @@ test('doubles and triples break equal totals by smaller combined game range', ()
   }
 });
 
-test('standings average uses the tournament game count even with missing or zero scores', () => {
-  assert.equal(standingsAverage(500, 6), 500 / 6);
-  assert.equal(standingsAverage(0, 6), 0);
+test('player average uses recorded scores including zero and handles no games', () => {
+  assert.equal(standingsAverage([200, 0, 100]), 100);
+  assert.equal(standingsAverage([]), 0);
 });
 
 test('CSV event flags round-trip and missing columns do not overwrite selections', () => {
