@@ -572,8 +572,8 @@ ui.text.standings_left_ad,Standings left ad,Чансааны зүүн талын
 ui.text.standings_right_ad,Standings right ad,Чансааны баруун талын зар
 ui.text.tap_name_details,Tap a name for compact details,Дэлгэрэнгүйг товч харахын тулд нэр дээр товшино уу
 ui.text.team_mismatch,Team mismatch - review Participants page.,Багийн мэдээлэл зөрүүтэй байна — Оролцогчид хуудсыг шалгана уу.
-ui.text.top_score_female,Top Score Female (Top 3),Эмэгтэйчүүдийн шилдэг оноо (эхний 3)
-ui.text.top_score_male,Top Score Male (Top 3),Эрэгтэйчүүдийн шилдэг оноо (эхний 3)
+ui.text.top_score_female,Top Score Female (Top 3),Эмэгтэйчүүдийн өндөр оноо (эхний 3)
+ui.text.top_score_male,Top Score Male (Top 3),Эрэгтэйчүүдийн өндөр оноо (эхний 3)
 ui.text.tournament_bracket,Tournament Bracket,Тэмцээний бракет
 ui.text.standings_saved,Tournament standings refreshed and saved.,Тэмцээний чансааг шинэчилж хадгаллаа.
 ui.text.type_three_letters,Type at least 3 letters to search,Хайхын тулд дор хаяж 3 үсэг бичнэ үү
@@ -790,8 +790,8 @@ ui.womens_singles,Women's Singles,Эмэгтэй ганцаарчилсан
 ui.mens_singles,Men's Singles,Эрэгтэй ганцаарчилсан
 ui.show_more_highlights,Show more highlights,Нэмэлт үзүүлэлт харах
 ui.top,Top,Шилдэг
-ui.top_score_male,Top Score Male,Эрэгтэй шилдэг оноо
-ui.top_score_female,Top Score Female,Эмэгтэй шилдэг оноо
+ui.top_score_male,Top Score Male,Эрэгтэй өндөр оноо
+ui.top_score_female,Top Score Female,Эмэгтэй өндөр оноо
 ui.standings_actions,Standings actions,Чансааны үйлдлүүд
 ui.average_unavailable,Averages are unavailable because individual game scores could not be loaded. Please retry.,Тоглолтын оноог ачаалж чадсангүй тул дундажийг харуулах боломжгүй. Дахин оролдоно уу.
 ui.singles_warning,Singles rankings are provisional until scores are complete. Filter by gender for separate standings; ties after the score-range tiebreak require an organizer decision.,Оноо бүрэн болох хүртэл ганцаарчилсан чансаа түр хугацааны байна. Хүйсээр шүүж тусдаа чансааг харна уу; онооны зөрүүгээр тэнцээг тайлсны дараа дахин тэнцвэл зохион байгуулагч шийдвэрлэнэ.
