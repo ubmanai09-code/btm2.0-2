@@ -699,3 +699,121 @@ Pre/Post,Pre/Post,УТ/НТ
 all registered players,all registered players,бүх бүртгэлтэй тамирчид
 penalty applied · not eligible for prizes,penalty applied · not eligible for prizes,торгууль тооцогдсон · шагналд хамаарахгүй
 For players who bowl on a different day — scores count toward rankings with a penalty deduction but do not affect official winners,For players who bowl on a different day — scores count toward rankings with a penalty deduction but do not affect official winners,Өөр өдөр тоглосон тамирчдад зориулсан — оноо зэрэглэлд тооцогдох боловч албан ёсны ялагчийг тодорхойлоход нөлөөлөхгүй
+tab.players,Players,Тамирчид
+tab.masters,Masters,Мастерс
+status.draft_hidden,Draft (hidden from public),Ноорог (нийтэд харагдахгүй)
+public.tab.players,Players,Тамирчид
+public.tab.masters,Masters,Мастерс
+public.tournament.show_summary,Show tournament summary,Тэмцээний хураангуйг харуулах
+public.tournament.hide_summary,Hide tournament summary,Тэмцээний хураангуйг нуух
+ui.manage_teams,Manage Teams,Багуудыг удирдах
+ui.manage_players,Manage Players,Тамирчдыг удирдах
+ui.team_roster_import,Team roster and import/export,Багийн бүрэлдэхүүн болон импорт/экспорт
+ui.player_roster_import,Roster and player import/export,Бүрэлдэхүүн болон тамирчдын импорт/экспорт
+ui.search_players,Search Players,Тамирчин хайх
+ui.club_team,Club / Team,Клуб / Баг
+ui.close_search,Close Search,Хайлтыг хаах
+ui.team_actions,Team actions,Багийн үйлдлүүд
+ui.player_actions,Player actions,Тамирчны үйлдлүүд
+ui.lanes_auto_assign,"Auto-assign by rules, or assign manually from the queue.","Дүрмийн дагуу автоматаар эсвэл дарааллаас гараар хуваарилна."
+ui.lanes_already_assigned,Some lanes already have assignments,Зарим замд хуваарилалт хийгдсэн байна
+ui.lanes_remaining,already placed. How should the remaining players be assigned?,хуваарилагдсан байна. Үлдсэн тамирчдыг хэрхэн хуваарилах вэ?
+ui.lanes_skip,Skip assigned lanes,Хуваарилсан замуудыг алгасах
+ui.lanes_fill,Keep current placements and fill only the open spots.,Одоогийн хуваарилалтыг хадгалж зөвхөн сул байрыг дүүргэх.
+ui.lanes_reassign,Assign everyone anew,Бүгдийг дахин хуваарилах
+ui.lanes_shuffle,Clear current placements (frozen lanes stay) and shuffle all again.,Одоогийн хуваарилалтыг арилгаж (түгжсэн замууд үлдэнэ) бүгдийг дахин холино.
+ui.lanes_assign_who,Who do you want to assign?,Хэнийг хуваарилах вэ?
+ui.lane_actions,Lane actions,Замын үйлдлүүд
+ui.assign,Assign,Хуваарилах
+ui.score_actions,Score actions,Онооны үйлдлүүд
+ui.round_of,Round of,Шатанд
+ui.match,Match,Тоглолт
+ui.winners_round_1,Winners Bracket Round 1,Ялагчдын хүснэгтийн 1-р шат
+ui.losers_round_1,Losers Bracket Round 1,Хожигдогчдын хүснэгтийн 1-р шат
+ui.winners_round,Winners Bracket Round,Ялагчдын хүснэгтийн шат
+ui.losers_round,Losers Bracket Round,Хожигдогчдын хүснэгтийн шат
+ui.losers_final,Losers Bracket Final,Хожигдогчдын хүснэгтийн финал
+ui.grand_final,Grand Final,Их финал
+ui.reset_final,Reset Final (only if needed),Давтан финал (шаардлагатай бол)
+ui.selection_round,Selection Round,Сонголтын шат
+ui.match_play_final,Match Play Final,Тулалтын финал
+ui.match_play,Match Play,Тулалт
+ui.vs_seed,vs Seed,эрэмбийн эсрэг
+ui.done,Done,Дууссан
+ui.bracket_name,Bracket Name,Бракетын нэр
+ui.male_singles,Male Singles,Эрэгтэй ганцаарчилсан
+ui.female_singles,Female Singles,Эмэгтэй ганцаарчилсан
+ui.all_participants,All Participants,Бүх оролцогчид
+ui.finals,Finals,Шигшээ
+ui.suggested_name,Leave empty to use the suggested name.,Санал болгосон нэрийг ашиглах бол хоосон үлдээнэ үү.
+ui.tournament,Tournament,Тэмцээн
+ui.delete_bracket,Delete bracket,Бракет устгах
+ui.seed_pool,Seed Pool,Эрэмбэлэгдсэн оролцогчид
+ui.select_source,Select Source,Эх сурвалж сонгох
+ui.number_of_seeds,Number of Seeds,Эрэмбэлэх оролцогчдын тоо
+ui.imports_up_to_top,Imports up to top,Шилдэг оролцогчдоос импортлоно
+ui.current_standings,from current tournament standings.,одоогийн тэмцээний чансаанаас.
+ui.available,available,боломжтой
+ui.selected,selected,сонгосон
+ui.preview,Preview,Урьдчилан харах
+ui.show_less,Show less,Хураах
+ui.view_all,View All,Бүгдийг харах
+ui.no_seeds,No seeds yet.,Эрэмбэлэгдсэн оролцогч одоогоор алга.
+ui.more_formats,More formats,Бусад формат
+ui.saved_presets,Saved presets,Хадгалсан загварууд
+ui.seeds,seeds,эрэмбэлэгдсэн оролцогч
+ui.configure_bracket,Configure and generate your bracket in a few easy steps.,Бракетыг хэдхэн алхмаар тохируулж үүсгэнэ үү.
+ui.name_bracket,Name your bracket,Бракетад нэр өгөх
+ui.participants,participants,оролцогч
+ui.choose_participants,Choose participants,Оролцогчдыг сонгох
+ui.third_place_match,3rd place match,3-р байрын тоглолт
+ui.on,On,Асаалттай
+ui.off,Off,Унтраалттай
+ui.preview_settings,Preview settings,Тохиргоог урьдчилан харах
+ui.ready_to_generate,Ready to generate,Үүсгэхэд бэлэн
+ui.almost_there,Almost there,Бараг бэлэн боллоо
+ui.settings_complete,All required settings are complete.,Шаардлагатай бүх тохиргоо бүрэн хийгдсэн.
+ui.switch_bracket,Switch bracket,Бракет солих
+ui.new_bracket,New bracket,Шинэ бракет
+ui.unsaved,unsaved,хадгалаагүй
+ui.classic_setup,Classic setup,Уламжлалт тохиргоо
+ui.guided_setup,Switch to guided setup,Алхамчилсан тохиргоо руу шилжих
+ui.tournament_settings,Tournament settings,Тэмцээний тохиргоо
+ui.replace_bracket,Replace this bracket structure and seeds with the current tournament settings? The bracket name and saved bracket will be kept.,Энэ бракетын бүтэц болон эрэмбийг одоогийн тэмцээний тохиргоогоор солих уу? Бракетын нэр болон хадгалсан бракет хэвээр үлдэнэ.
+ui.apply_tournament_settings,Apply Tournament Settings,Тэмцээний тохиргоог хэрэглэх
+ui.qualifying_warning,Qualifying totals use the recorded game scores only. Rankings are provisional until all lineups and scores are complete. Ties after the score-range tiebreak require an organizer decision.,Урьдчилсан шатны нийлбэрт зөвхөн бүртгэгдсэн оноог ашиглана. Бүрэлдэхүүн болон оноо бүрэн болох хүртэл чансаа түр хугацааны байна. Онооны зөрүүгээр тэнцээг тайлсны дараа дахин тэнцвэл зохион байгуулагч шийдвэрлэнэ.
+ui.qualifying_average,"Average is qualifying pins divided by games with recorded scores, including partial games.","Дундаж нь урьдчилсан шатны нийт оноог оноо бүртгэгдсэн тоглолтын тоонд хуваасан дүн бөгөөд дутуу тоглолтуудыг мөн тооцно."
+ui.standings,Standings,Чансаа
+ui.winners_podium,Winners Podium,Шагналт байр
+ui.team_event,Team Event,Багийн төрөл
+ui.womens_singles,Women's Singles,Эмэгтэй ганцаарчилсан
+ui.mens_singles,Men's Singles,Эрэгтэй ганцаарчилсан
+ui.show_more_highlights,Show more highlights,Нэмэлт үзүүлэлт харах
+ui.top,Top,Шилдэг
+ui.top_score_male,Top Score Male,Эрэгтэй шилдэг оноо
+ui.top_score_female,Top Score Female,Эмэгтэй шилдэг оноо
+ui.standings_actions,Standings actions,Чансааны үйлдлүүд
+ui.average_unavailable,Averages are unavailable because individual game scores could not be loaded. Please retry.,Тоглолтын оноог ачаалж чадсангүй тул дундажийг харуулах боломжгүй. Дахин оролдоно уу.
+ui.singles_warning,Singles rankings are provisional until scores are complete. Filter by gender for separate standings; ties after the score-range tiebreak require an organizer decision.,Оноо бүрэн болох хүртэл ганцаарчилсан чансаа түр хугацааны байна. Хүйсээр шүүж тусдаа чансааг харна уу; онооны зөрүүгээр тэнцээг тайлсны дараа дахин тэнцвэл зохион байгуулагч шийдвэрлэнэ.
+ui.filter,Filter,Шүүх
+ui.more_actions,More actions,Бусад үйлдэл
+ui.basic_information,1. Basic Information,1. Үндсэн мэдээлэл
+ui.logo_url,Logo URL (optional),Логоны URL (заавал биш)
+ui.upload,Upload,Байршуулах
+ui.recent,Recent,Сүүлд ашигласан
+ui.tournament_format,2. Tournament Format,2. Тэмцээний формат
+ui.shootout,Shootout,Шууд онооны тэмцээн
+ui.qualifying_final,Qualifying + Final,Урьдчилсан шат + шигшээ
+ui.shootout_hint,Highest pinfall wins. No finals or brackets.,Хамгийн өндөр оноо авсан нь ялна. Шигшээ болон бракет байхгүй.
+ui.lane_assignment,3. Lane Assignment,3. Замын хуваарилалт
+ui.games_scoring,4. Games & Scoring,4. Тоглолт ба оноо
+ui.scratch,Scratch,Нэмэгдэлгүй
+ui.handicap,Handicap,Гандикап
+ui.track_style,Track style (1H/2H),Тоглолтын хэв маягийг бүртгэх (1H/2H)
+ui.offday_penalty,Pre/Post-Tournament Score Penalty,Урьдчилсан / нөхөн тоглолтын онооны торгууль
+ui.offday_penalty_hint,Points deducted from the grand total of Pre/Post-Tournament (УТ/НТ) players in standings. Default: 25.,Чансаанд урьдчилсан болон нөхөн тоглолтын (УТ/НТ) тамирчдын нийт онооноос хасах оноо. Үндсэн утга: 25.
+ui.sponsors_step,5. Sponsors,5. Ивээн тэтгэгчид
+ui.tournament_sponsors_setup,Tournament Sponsors Setup,Тэмцээний ивээн тэтгэгчдийн тохиргоо
+ui.custom_sponsors_enabled,Custom sponsors enabled,Тусгай ивээн тэтгэгчид идэвхтэй
+ui.using_global_sponsors,Using global sponsors,Ерөнхий ивээн тэтгэгчдийг ашиглаж байна
+ui.configure,Configure,Тохируулах

@@ -2323,7 +2323,7 @@ export default function App() {
                 <h2 className="text-2xl font-bold mb-6">{view === 'edit' ? t('tournament.edit', 'Edit Tournament') : t('tournament.create', 'Create New Tournament')}</h2>
                 <form key={editingTournament?.id ?? 'new'} onSubmit={handleCreateTournament} className="space-y-6">
                   <div className="space-y-4 pt-2">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-800 border-b border-gray-400 pb-1">1. Basic Information</h3>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-800 border-b border-gray-400 pb-1">{translateUiText('1. Basic Information')}</h3>
                     <Input label={t('tournament.name', 'Tournament Name')} name="name" placeholder={t('tournament.name_placeholder', 'e.g. Summer Open 2026')} defaultValue={editingTournament?.name} required />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
@@ -2345,15 +2345,15 @@ export default function App() {
                         <div className="h-14 w-14 shrink-0 rounded-md border border-gray-400 bg-white flex items-center justify-center overflow-hidden">
                           {formLogo ? <img src={logoSrc(formLogo)} alt="Logo" className="max-h-full max-w-full object-contain" /> : <Building2 size={16} className="text-gray-500" />}
                         </div>
-                        <input name="logo" value={formLogo} onChange={(e) => { setFormLogo(e.target.value); setFormLogoTouched(true); }} placeholder="Logo URL (optional)" className="ui-input flex-1 min-w-0 px-3 py-2 rounded-md text-sm" />
+                        <input name="logo" value={formLogo} onChange={(e) => { setFormLogo(e.target.value); setFormLogoTouched(true); }} placeholder={translateUiText('Logo URL (optional)')} className="ui-input flex-1 min-w-0 px-3 py-2 rounded-md text-sm" />
                         <label className="shrink-0 inline-flex items-center gap-2 h-9 px-3 rounded-md border border-gray-400 bg-white text-xs font-semibold uppercase tracking-wide text-gray-500 hover:text-emerald-800 cursor-pointer">
-                          <Upload size={14} />{logoUploading ? '...' : 'Upload'}
+                          <Upload size={14} />{logoUploading ? '...' : translateUiText('Upload')}
                           <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(e) => { void handleLogoUpload(e.target.files?.[0]); e.target.value = ''; }} />
                         </label>
                       </div>
                       {recentLogos.length > 0 && (
                         <div className="flex flex-wrap items-center gap-2 px-1">
-                          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Recent</span>
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">{translateUiText('Recent')}</span>
                           {recentLogos.map((url) => (
                             <button key={url} type="button" onClick={() => { setFormLogo(url); setFormLogoTouched(true); }} className={`h-10 w-10 rounded-md border bg-white p-1 flex items-center justify-center ${formLogo === url ? 'border-orange-600 ring-1 ring-orange-600' : 'border-gray-400'}`} title={url}>
                               <img src={url} alt="" className="max-h-full max-w-full object-contain" onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none'; }} />
@@ -2364,7 +2364,7 @@ export default function App() {
                     </div>
                   </div>
                   <div className="space-y-4 pt-2">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-800 border-b border-gray-400 pb-1">2. Tournament Format</h3>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-800 border-b border-gray-400 pb-1">{translateUiText('2. Tournament Format')}</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Select 
                         label={t('tournament.type', 'Type')}
@@ -2384,11 +2384,11 @@ export default function App() {
                         name="competition_style"
                         value={formCompetitionStyle}
                         onChange={(e: any) => setFormCompetitionStyle(e.target.value)}
-                        options={['Shootout', 'Qualifying + Final', 'Masters'].map((value) => ({ value, label: value }))}
+                        options={['Shootout', 'Qualifying + Final', 'Masters'].map((value) => ({ value, label: translateUiText(value) }))}
                       />
                     </div>
                     {isShootoutCompetition(formCompetitionStyle) ? (
-                      <p className="text-xs text-black/60">Highest pinfall wins. No finals or brackets.</p>
+                      <p className="text-xs text-black/60">{translateUiText('Highest pinfall wins. No finals or brackets.')}</p>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <Select
@@ -2396,7 +2396,7 @@ export default function App() {
                           name="finals_format"
                           value={formFinalsFormat}
                           onChange={(e: any) => setFormFinalsFormat(e.target.value)}
-                          options={['Single Elimination', 'Double Elimination', 'Round Robin', 'Stepladder', 'Match Play'].map((value) => ({ value, label: value }))}
+                          options={['Single Elimination', 'Double Elimination', 'Round Robin', 'Stepladder', 'Match Play'].map((value) => ({ value, label: translateUiText(value) }))}
                         />
                       </div>
                     )}
@@ -2425,7 +2425,7 @@ export default function App() {
                                     defaultChecked={existingDivisions.includes(division)}
                                     className="h-4 w-4 rounded border-black/30 text-orange-600 focus:ring-orange-200"
                                   />
-                                  {division}
+                                  {translateUiText(division)}
                                 </label>
                               ))}
                             </div>
@@ -2438,7 +2438,7 @@ export default function App() {
                     </div>
                   </div>
                   <div className="space-y-4 pt-2">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-800 border-b border-gray-400 pb-1">3. Lane Assignment</h3>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-800 border-b border-gray-400 pb-1">{translateUiText('3. Lane Assignment')}</h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <Input label={t('tournament.oil_pattern_label', 'Oil Pattern')} name="oil_pattern" placeholder={t('tournament.oil_pattern_placeholder', 'e.g. House Shot')} defaultValue={editingTournament?.oil_pattern} />
                       <Input label={t('tournament.lane_length', 'Pattern Length')} name="lane_length" placeholder="e.g. 40 ft" defaultValue={editingTournament?.lane_length || ''} />
@@ -2475,14 +2475,14 @@ export default function App() {
                     </div>
                   </div>
                   <div className={`space-y-4 pt-2 ${isMastersCompetition(formCompetitionStyle) ? 'hidden' : ''}`}>
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-800 border-b border-gray-400 pb-1">4. Games & Scoring</h3>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-800 border-b border-gray-400 pb-1">{translateUiText('4. Games & Scoring')}</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Input label={t('tournament.qualifying_games', 'Number of Qualifying Games')} name="games_count" type="number" defaultValue={editingTournament?.games_count || "3"} min="1" />
                       <Select
                         label={t('tournament.scoring_type', 'Scoring')}
                         name="scoring_type"
                         defaultValue={editingTournament?.scoring_type || 'scratch'}
-                        options={[{ value: 'scratch', label: 'Scratch' }, { value: 'handicap', label: 'Handicap' }]}
+                        options={[{ value: 'scratch', label: translateUiText('Scratch') }, { value: 'handicap', label: translateUiText('Handicap') }]}
                       />
                     </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -2511,38 +2511,38 @@ export default function App() {
                         defaultChecked={editingTournament ? Boolean(editingTournament?.show_player_style ?? 1) : true}
                         className="h-4 w-4 rounded border-black/30 text-sky-600 focus:ring-sky-200"
                       />
-                      <span className="text-sm font-semibold text-black/80">Track style (1H/2H)</span>
+                      <span className="text-sm font-semibold text-black/80">{translateUiText('Track style (1H/2H)')}</span>
                     </label>
                   </div>
 
                     <div>
                       <Input
-                        label="Pre/Post-Tournament Score Penalty"
+                        label={translateUiText('Pre/Post-Tournament Score Penalty')}
                         name="offday_penalty"
                         type="number"
                         min="0"
                         defaultValue={String(editingTournament?.offday_penalty ?? 25)}
                       />
-                      <p className="mt-1 text-[11px] text-black/40 px-1">Points deducted from the grand total of Pre/Post-Tournament (УТ/НТ) players in standings. Default: 25.</p>
+                      <p className="mt-1 text-[11px] text-black/40 px-1">{translateUiText('Points deducted from the grand total of Pre/Post-Tournament (УТ/НТ) players in standings. Default: 25.')}</p>
                     </div>
                   </div>
                   <div className="space-y-4 pt-2">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-800 border-b border-gray-400 pb-1">5. Sponsors</h3>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-emerald-800 border-b border-gray-400 pb-1">{translateUiText('5. Sponsors')}</h3>
                   <div className="rounded-md border border-black/10 bg-white p-3">
                     <button
                       type="button"
                       onClick={() => setShowFormSponsorsModal(true)}
                       className="w-full flex items-center justify-between gap-3 text-left"
                     >                      <div>
-                        <h3 className="text-sm font-bold text-black/80">Tournament Sponsors Setup</h3>
+                        <h3 className="text-sm font-bold text-black/80">{translateUiText('Tournament Sponsors Setup')}</h3>
                         <p className="text-xs text-black/50">
                           {formUseCustomSponsors
-                            ? `Custom sponsors enabled (${formSponsors.length})`
-                            : 'Using global sponsors'}
+                            ? `${translateUiText('Custom sponsors enabled')} (${formSponsors.length})`
+                            : translateUiText('Using global sponsors')}
                         </p>
                       </div>
                       <span className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded border border-black/15 text-black/65">
-                        Configure
+                        {translateUiText('Configure')}
                       </span>
                     </button>
                   </div>
