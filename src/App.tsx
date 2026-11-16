@@ -16589,12 +16589,12 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
   const topMaleScores = (topMaleSourceScores.length > 0 ? topMaleSourceScores : fallbackTopSourceScores)
     .slice()
     .sort((a, b) => b.score - a.score)
-    .slice(0, 3);
+    .slice(0, 1);
 
   const topFemaleScores = (topFemaleSourceScores.length > 0 ? topFemaleSourceScores : fallbackTopSourceScores)
     .slice()
     .sort((a, b) => b.score - a.score)
-    .slice(0, 3);
+    .slice(0, 1);
 
   const maleLeaderCellKey = maleLeader ? `${maleLeader.participant_id}-${maleLeader.game_number}` : '';
   const femaleLeaderCellKey = femaleLeader ? `${femaleLeader.participant_id}-${femaleLeader.game_number}` : '';
@@ -17434,12 +17434,12 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 md:gap-2">
                   <div className="rounded-md border border-black/10 p-2 bg-black/[0.02]">
-                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Top Score Male (Top 3)')}</p>
+                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Top Score Male')}</p>
                     {topMaleScores.length > 0 ? (
                       <div className="mt-1 space-y-0.5 md:space-y-1">
-                        {topMaleScores.map((entry, index) => (
-                          <div key={`top-male-${entry.participant_id}-${entry.game_number}-${index}`} className="flex items-center justify-between gap-1.5">
-                            <p className="min-w-0 flex-1 truncate text-[11px] md:text-sm font-bold leading-tight">{index + 1}. {participantNameMap.get(entry.participant_id) || entry.participant_name || 'N/A'}</p>
+                        {topMaleScores.map((entry) => (
+                          <div key={`top-male-${entry.participant_id}-${entry.game_number}`} className="flex items-center justify-between gap-1.5">
+                            <p className="min-w-0 flex-1 truncate text-[11px] md:text-sm font-bold leading-tight">{participantNameMap.get(entry.participant_id) || entry.participant_name || 'N/A'}</p>
                             <span className="shrink-0 text-sm md:text-base leading-none font-extrabold text-emerald-700 tabular-nums">{entry.score}</span>
                           </div>
                         ))}
@@ -17449,12 +17449,12 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
                     )}
                   </div>
                   <div className="rounded-md border border-black/10 p-2 bg-black/[0.02]">
-                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Top Score Female (Top 3)')}</p>
+                    <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-black/40">{tx('Top Score Female')}</p>
                     {topFemaleScores.length > 0 ? (
                       <div className="mt-1 space-y-0.5 md:space-y-1">
-                        {topFemaleScores.map((entry, index) => (
-                          <div key={`top-female-${entry.participant_id}-${entry.game_number}-${index}`} className="flex items-center justify-between gap-1.5">
-                            <p className="min-w-0 flex-1 truncate text-[11px] md:text-sm font-bold leading-tight">{index + 1}. {participantNameMap.get(entry.participant_id) || entry.participant_name || 'N/A'}</p>
+                        {topFemaleScores.map((entry) => (
+                          <div key={`top-female-${entry.participant_id}-${entry.game_number}`} className="flex items-center justify-between gap-1.5">
+                            <p className="min-w-0 flex-1 truncate text-[11px] md:text-sm font-bold leading-tight">{participantNameMap.get(entry.participant_id) || entry.participant_name || 'N/A'}</p>
                             <span className="shrink-0 text-sm md:text-base leading-none font-extrabold text-rose-600 tabular-nums">{entry.score}</span>
                           </div>
                         ))}

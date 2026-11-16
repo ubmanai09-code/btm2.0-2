@@ -123,4 +123,7 @@ test('mixed tournament podium offers all five event categories', () => {
   for (const label of ['Team Event', "Women&#x27;s Singles", 'Men&#x27;s Singles', 'Doubles', 'Triples']) {
     assert.ok(podium.includes(label), `Missing podium category ${label}`);
   }
+  assert.ok(html.includes('Top Score Male'));
+  assert.ok(html.includes('Top Score Female'));
+  assert.ok(!html.includes('(Top 3)'));
 });
