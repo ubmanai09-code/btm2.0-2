@@ -36,7 +36,11 @@ test('only organizers see lineup and incomplete score warnings', () => {
 });
 
 test('doubles and triples provide compact mobile rows and a full desktop table', () => {
-  const participants = [player(1, 1), player(2, 1), player(3, 1)].map((p) => ({ ...p, triples_entrant: 1 }));
+  const participants = [
+    { ...player(1, 1), first_name: 'Alex', last_name: 'Anderson' },
+    { ...player(2, 1), first_name: 'Jordan', last_name: 'Baker' },
+    { ...player(3, 1), first_name: 'Taylor', last_name: 'Carter' },
+  ].map((p) => ({ ...p, triples_entrant: 1 }));
   const data = { teams, participants, scores, warmups: [] };
   for (const event of ['doubles', 'triples'] as const) {
     const html = renderToStaticMarkup(
@@ -48,10 +52,28 @@ test('doubles and triples provide compact mobile rows and a full desktop table',
     assert.ok(html.includes('Tap a name for compact details'));
     assert.ok(html.includes('Club B'));
     assert.ok(!html.includes('Team A'));
+    assert.ok(html.includes('Alex A.'));
+    assert.ok(html.includes('Jordan B.'));
+    assert.ok(!html.includes('Anderson'));
+    assert.ok(!html.includes('Baker'));
     assert.match(html, /<th[^>]*>Club<\/th>/);
     assert.doesNotMatch(html, /<th[^>]*>Team<\/th>/);
     assert.ok(html.includes('Avg'));
   }
+});
+
+test('unassigned mixed-event players use compact names', () => {
+  const data = {
+    teams,
+    participants: [{ ...player(1, null), first_name: 'Alex', last_name: 'Anderson' }],
+    scores,
+    warmups: [],
+  };
+  const html = renderToStaticMarkup(
+    <MixedGroupStandings event="doubles" data={data} gameCount={2} tx={(text) => text} showWarnings />,
+  );
+  assert.ok(html.includes('Alex A.'));
+  assert.ok(!html.includes('Anderson'));
 });
 
 test('displays average of recorded games, including partial games', () => {

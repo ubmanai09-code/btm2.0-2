@@ -15649,12 +15649,17 @@ export function MixedGroupStandings({ event, data, gameCount, tx, showWarnings }
   const excludedIds = new Set(data.warmups.flatMap((slot) => slot.participant_id ? [slot.participant_id] : []));
   const { rows, unassigned } = calculateMixedGroupStandings(event, data.teams, data.participants, data.scores, gameCount, excludedIds);
   const size = event === 'doubles' ? 2 : 3;
+  const formatPlayerName = (player: Participant) => {
+    const firstName = (player.first_name || '').trim();
+    const lastInitial = (player.last_name || '').trim().charAt(0).toUpperCase();
+    return firstName && lastInitial ? `${firstName} ${lastInitial}.` : firstName || lastInitial;
+  };
   return (
     <div className="sm:p-4 sm:space-y-3">
       {showWarnings && <p className="text-xs text-black/60">{tx('Qualifying totals use the recorded game scores only. Rankings are provisional until all lineups and scores are complete. Ties after the score-range tiebreak require an organizer decision.')}</p>}
       <p className="text-xs text-black/60">{tx('Average is qualifying pins divided by games with recorded scores, including partial games.')}</p>
       {showWarnings && unassigned.length > 0 && (
-        <p role="alert" className="text-xs text-amber-700">{tx('Selected players without a team:')} {unassigned.map((p) => `${p.first_name} ${p.last_name}`.trim()).join(', ')}</p>
+        <p role="alert" className="text-xs text-amber-700">{tx('Selected players without a team:')} {unassigned.map(formatPlayerName).join(', ')}</p>
       )}
       <div className="sm:hidden px-3 py-2 flex items-center gap-1.5 bg-emerald-50 border-b border-gray-400">
         <span className="text-[10px] text-black/40 leading-snug">
@@ -15678,7 +15683,7 @@ export function MixedGroupStandings({ event, data, gameCount, tx, showWarnings }
                 <span className="flex-1 min-w-0 leading-tight">
                   <span className="block text-xs font-bold text-black truncate">{row.club}</span>
                   <span className="block mt-0.5 text-[10px] lowercase text-black/60">
-                    {row.members.length > 0 ? row.members.map((p) => `${p.first_name} ${p.last_name}`.trim()).join(', ') : tx('No members')}
+                    {row.members.length > 0 ? row.members.map(formatPlayerName).join(', ') : tx('No members')}
                   </span>
                   {showWarnings && (!row.valid
                     ? <span className="block text-xs font-normal text-amber-700">{tx('Players selected:')} {row.members.length}/{size}</span>
@@ -15732,7 +15737,7 @@ export function MixedGroupStandings({ event, data, gameCount, tx, showWarnings }
                     ? <div className="text-xs font-normal text-amber-700">{tx('Players selected:')} {row.members.length}/{size}</div>
                     : !row.complete && <div className="text-xs font-normal text-amber-700">{tx('Incomplete scores')}</div>)}
                 </td>
-                <td className="p-2">{row.members.map((p) => `${p.first_name} ${p.last_name}`.trim()).join(', ') || '—'}</td>
+                <td className="p-2">{row.members.map(formatPlayerName).join(', ') || '—'}</td>
                 {row.games.map((game, i) => <td key={i} className="p-2 text-right">{game.count > 0 ? game.total : '—'}</td>)}
                 <td className="p-2 text-right font-bold text-emerald-700">{row.games.some((game) => game.count > 0) ? row.total : '—'}</td>
                 <td className="p-2 text-right font-semibold text-sky-700">{row.average === null ? '—' : row.average.toFixed(1)}</td>
