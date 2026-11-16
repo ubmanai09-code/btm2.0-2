@@ -42,6 +42,10 @@ The Winners Podium has separate manually editable places for Team, women's Singl
 
 Mixed tournament participant CSV exports include the three event flags. Imports without these columns leave existing selections unchanged; when present, use 1 or 0.
 
+## Cumulative result export
+
+In Tools → Cumulative result, select tournaments and calculate the standings. Moderators and admins can export an Excel workbook with the first N game columns in chronological tournament order. Each tournament has game columns, a subtotal and an average; the overall totals and averages use only the exported games. Missing scores are blank, and recorded zero scores count toward averages. The existing top-men and top-women limits select players using the full on-screen standings, not a new ranking based on N games. JSON and CSV exports remain available for the existing Masters, participant and score import workflows.
+
 ## Dashboard results
 
 The dashboard shows score rankings during an event. Once any winner is saved in the Standings tab's Winners Podium, it shows only the saved podium placements and divisions instead of score rankings. Empty podium places are omitted; update or clear the podium entries in Standings to change the dashboard.

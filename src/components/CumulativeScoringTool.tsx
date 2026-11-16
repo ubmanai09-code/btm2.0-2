@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp, Download } from 'lucide-react';
 import api, { type Tournament } from '../services/api';
 import { accumulate, toCsv, type CumulativeExport, type SourceTournament } from '../utils/cumulativeScoring';
 
-const download = (filename: string, content: string, type: string) => {
+const download = (filename: string, content: BlobPart, type: string) => {
   const url = URL.createObjectURL(new Blob([content], { type }));
   const link = document.createElement('a');
   link.href = url;
@@ -23,6 +23,8 @@ export default function CumulativeScoringTool({ mn, canExport = false }: { mn: b
   const [pickerOpen, setPickerOpen] = useState(true);
   const [division, setDivision] = useState<'men' | 'women'>('men');
   const [groups, setGroups] = useState<{ name: string; count: number }[]>([]);
+  const [exportGames, setExportGames] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   const cutoffTie = (rows: CumulativeExport['men'], top: string) => {
     const n = Math.floor(Number(top));
@@ -88,6 +90,7 @@ export default function CumulativeScoringTool({ mn, canExport = false }: { mn: b
       setDivision('men');
       setPickerOpen(false);
       setGroups(sources.map((s) => ({ name: s.name, count: s.gameCount })).filter((g) => g.count > 0));
+      setExportGames(String(slots.length));
       setResult({
         kind: 'btm-cumulative-scores',
         version: 3,
@@ -180,6 +183,27 @@ export default function CumulativeScoringTool({ mn, canExport = false }: { mn: b
     women: result.women.slice(0, Math.max(0, Math.floor(Number(topWomen)) || 0)),
   };
 
+  const exportExcel = async () => {
+    const data = exportData();
+    if (!data) return;
+    const count = Number(exportGames);
+    if (!Number.isInteger(count) || count < 1 || count > data.slots.length) {
+      setError(mn ? `1-ээс ${data.slots.length} хүртэлх бүхэл тоо оруулна уу.` : `Enter a whole number of games between 1 and ${data.slots.length}.`);
+      return;
+    }
+    setError('');
+    setExporting(true);
+    try {
+      const { createCumulativeExcel } = await import('../utils/cumulativeExcel');
+      const buffer = await createCumulativeExcel(data, groups, count);
+      download('cumulative-result.xlsx', buffer, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : (mn ? 'Excel файл үүсгэж чадсангүй.' : 'Failed to create Excel file.'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <p className="text-xs text-gray-500">
@@ -227,6 +251,16 @@ export default function CumulativeScoringTool({ mn, canExport = false }: { mn: b
           </>
         )}
       </div>
+      {result && canExport && (
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="text-xs font-semibold text-black">
+            {mn ? 'Excel файлд оруулах тоглолтын тоо' : 'Games in Excel export'}
+            <input type="number" min={1} max={result.slots.length} step={1} value={exportGames} onChange={(e) => setExportGames(e.target.value)} className="ui-input mt-1 h-10 w-24 px-3 rounded-md text-sm block" />
+          </label>
+          <button type="button" disabled={exporting} onClick={() => { void exportExcel(); }} className="h-10 px-4 rounded-md border border-emerald-800 text-emerald-800 text-sm font-semibold flex items-center gap-2 disabled:opacity-50"><Download size={14} />Excel (.xlsx)</button>
+          <p className="text-xs text-gray-500">{mn ? 'Эхний тоглолтуудыг хуучнаас нь эхлэн оруулна.' : 'Includes the first games, oldest tournament first.'}</p>
+        </div>
+      )}
       {error && <div className="text-xs text-red-600">{error}</div>}
       {result && (
         <div className="space-y-4">
