@@ -2509,7 +2509,7 @@ export default function App() {
                       <input
                         type="checkbox"
                         name="show_player_style"
-                        defaultChecked={editingTournament ? Boolean(editingTournament?.show_player_style ?? 1) : true}
+                        defaultChecked={editingTournament ? Boolean(editingTournament?.show_player_style ?? 0) : false}
                         className="h-4 w-4 rounded border-black/30 text-sky-600 focus:ring-sky-200"
                       />
                       <span className="text-sm font-semibold text-black/80">{translateUiText('Track style (1H/2H)')}</span>
@@ -4649,8 +4649,8 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     return normalized.startsWith('2') ? '2H' : '1H';
   };
 
-  // show_player_style defaults to 1 (true) for existing tournaments that don't have the field yet
-  const showPlayerStyle = tournament.show_player_style === undefined ? true : Boolean(tournament.show_player_style);
+  // Track style is optional and must be explicitly enabled for the tournament.
+  const showPlayerStyle = tournament.show_player_style === undefined ? false : Boolean(tournament.show_player_style);
 
   useEffect(() => {
     loadData();
@@ -4766,14 +4766,14 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
     const hasDivisionData = participants.some(p => p.division && p.division.trim());
     const hasTeamData = participants.some(p => p.team_name && p.team_name.trim());
     const hasMixedEvents = tournament.type === 'team' && Boolean(tournament.enable_singles_division);
-    const headers = ['Participant ID', 'Player Database ID', 'First Name', 'Last Name', 'Gender', 'Hands', 'Club', 'Average', 'Contact Details', ...(hasDivisionData ? ['Division'] : []), ...(hasTeamData ? ['Team Name'] : []), ...(hasMixedEvents ? ['Singles Entrant', 'Doubles Entrant', 'Triples Entrant'] : [])];
+    const headers = ['Participant ID', 'Player Database ID', 'First Name', 'Last Name', 'Gender', ...(showPlayerStyle ? ['Hands'] : []), 'Club', 'Average', 'Contact Details', ...(hasDivisionData ? ['Division'] : []), ...(hasTeamData ? ['Team Name'] : []), ...(hasMixedEvents ? ['Singles Entrant', 'Doubles Entrant', 'Triples Entrant'] : [])];
     const rows = participants.map(p => [
       p.id,
       p.player_database_id || '',
       p.first_name,
       p.last_name,
       p.gender,
-      normalizeHandsStyle(p.hands),
+      ...(showPlayerStyle ? [normalizeHandsStyle(p.hands)] : []),
       p.club,
       p.average,
       p.email,
@@ -4967,7 +4967,7 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
           <td>${escapePrintHtml(participant.first_name || '-')}</td>
           <td>${escapePrintHtml(participant.last_name || '-')}</td>
           <td>${escapePrintHtml(gender)}</td>
-          <td>${escapePrintHtml(hands)}</td>
+          ${showPlayerStyle ? `<td>${escapePrintHtml(hands)}</td>` : ''}
           <td>${escapePrintHtml(participant.club || '-')}</td>
           <td>${escapePrintHtml(participant.average && participant.average > 0 ? participant.average : '')}</td>
         </tr>
@@ -4983,13 +4983,13 @@ function ParticipantView({ tournament, role }: { tournament: Tournament; role: U
             <th>First Name</th>
             <th>Family Name</th>
             <th>Gender</th>
-            <th>Hands</th>
+            ${showPlayerStyle ? '<th>Hands</th>' : ''}
             <th>Club</th>
             <th>Average</th>
           </tr>
         </thead>
         <tbody>
-          ${playerRowsHtml || '<tr><td colspan="7" style="text-align:center;color:#777;">No participants registered yet.</td></tr>'}
+          ${playerRowsHtml || `<tr><td colspan="${showPlayerStyle ? 7 : 6}" style="text-align:center;color:#777;">No participants registered yet.</td></tr>`}
         </tbody>
       </table>
     `;
@@ -15924,7 +15924,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
   const tx = React.useContext(UiTranslationContext);
   const [hasAdditionalScores, setHasAdditionalScores] = useState(Boolean(tournament.has_additional_scores));
   const [hasBonus, setHasBonus] = useState(Boolean(tournament.has_bonus));
-  const showPlayerStyle = tournament.show_player_style === undefined ? true : Boolean(tournament.show_player_style);
+  const showPlayerStyle = tournament.show_player_style === undefined ? false : Boolean(tournament.show_player_style);
   const [standings, setStandings] = useState<Standing[]>([]);
   const [bracketMatches, setBracketMatches] = useState<any[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);

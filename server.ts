@@ -343,7 +343,7 @@ function initDb() {
       status TEXT DEFAULT 'draft',
       has_additional_scores INTEGER NOT NULL DEFAULT 0,
       has_bonus INTEGER NOT NULL DEFAULT 0,
-      show_player_style INTEGER NOT NULL DEFAULT 1,
+      show_player_style INTEGER NOT NULL DEFAULT 0,
       divisions TEXT,
       offday_penalty INTEGER NOT NULL DEFAULT 25,
       enable_singles_division INTEGER NOT NULL DEFAULT 0,
@@ -644,7 +644,7 @@ function initDb() {
     { name: 'oil_pattern', type: 'TEXT' },
     { name: 'has_additional_scores', type: 'INTEGER NOT NULL DEFAULT 0' },
     { name: 'has_bonus', type: 'INTEGER NOT NULL DEFAULT 0' },
-    { name: 'show_player_style', type: 'INTEGER NOT NULL DEFAULT 1' },
+    { name: 'show_player_style', type: 'INTEGER NOT NULL DEFAULT 0' },
     { name: 'divisions', type: 'TEXT' },
     { name: 'end_date', type: 'TEXT' },
     { name: 'competition_style', type: 'TEXT' },
@@ -3633,7 +3633,7 @@ async function startServer() {
     } = req.body;
     const hasAdditional = toBinaryFlag(has_additional_scores, 0);
     const hasBonus = toBinaryFlag(has_bonus, 0);
-    const showPlayerStyle = show_player_style === undefined ? 1 : toBinaryFlag(show_player_style, 1);
+    const showPlayerStyle = show_player_style === undefined ? 0 : toBinaryFlag(show_player_style, 0);
     const defaultStatus = 'draft';
     
     const info = db.prepare(`
@@ -3683,8 +3683,8 @@ async function startServer() {
         ? Number(existing.has_bonus) || 0
         : toBinaryFlag(has_bonus, Number(existing.has_bonus) || 0);
       const showPlayerStyle = show_player_style === undefined
-        ? (existing.show_player_style === undefined ? 1 : Number(existing.show_player_style))
-        : toBinaryFlag(show_player_style, 1);
+        ? (existing.show_player_style === undefined ? 0 : Number(existing.show_player_style))
+        : toBinaryFlag(show_player_style, 0);
       
       const result = db.prepare(`
         UPDATE tournaments SET 
