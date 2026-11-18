@@ -3922,6 +3922,10 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                         Final: {tournament.finals_format || 'Stepladder'}
                       </span>
                     )}
+                    {(isShootoutCompetition(tournament.competition_style) || isMastersCompetition(tournament.competition_style)) && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full" aria-hidden="true">
+                      </span>
+                    )}
                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
                       <GitBranch size={12} />
                       Style: {tournament.competition_style || 'Qualifying + Final'}
@@ -3935,21 +3939,19 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                       {tournament.type === 'team' && Boolean(tournament.enable_singles_division)
                         ? `${tournament.players_per_lane} ${tPublic('public.tournament.teams', 'Teams')} + ${tournament.singles_per_lane || 2} ${tPublic('public.tournament.singles', 'Singles')} / ${tPublic('lanes.lane', 'Lane')}`
                         : `${tournament.players_per_lane} ${tournament.type === 'team' ? tPublic('public.tournament.teams', 'Teams') : tPublic('public.tournament.players', 'Players')} / ${tPublic('lanes.lane', 'Lane')}`}
-                      {(tournament.oil_pattern?.trim() || tournament.lane_length?.trim()) && (
-                        <span className="truncate opacity-70">
-                          · {[
-                            tournament.oil_pattern?.trim(),
-                            tournament.lane_length?.trim(),
-                          ].filter(Boolean).join(' · ')}
-                        </span>
-                      )}
                     </span>
-                    {tournament.location && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 col-span-3 h-full">
-                        <MapPin size={12} />
-                        {tournament.location}
-                      </span>
-                    )}
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
+                      <ClipboardList size={12} />
+                      <span className="truncate">{tPublic('tournament.oil_pattern_label', 'Pattern')}: {tournament.oil_pattern?.trim() || '—'}</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
+                      <Columns4 size={12} />
+                      <span className="truncate">{tPublic('tournament.lane_length', 'Length')}: {tournament.lane_length?.trim() || '—'}</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
+                      <MapPin size={12} />
+                      <span className="truncate">{tournament.location?.trim() || '—'}</span>
+                    </span>
                   </div>
                 )}
               </div>
