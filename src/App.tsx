@@ -16482,8 +16482,9 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
     const participant = participantInfoMap.get(participantId);
     if (!participant) return fallbackName.toUpperCase();
     const firstName = (participant.first_name || '').trim();
+    const lastInitial = (participant.last_name || '').trim().charAt(0).toUpperCase();
     if (!firstName) return fallbackName.toUpperCase();
-    return firstName.toUpperCase();
+    return (lastInitial ? `${firstName} ${lastInitial}.` : firstName).toUpperCase();
   };
 
   const participantNameMap = new Map<number, string>();
@@ -16633,7 +16634,9 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
   const showPlayerTeamColumn = isTeamTournament && !hasMixedTeamSingles;
 
   const formatTeamMemberCompact = (participant: Participant) => {
-    return (participant.first_name || '').trim().toLowerCase() || 'unknown';
+    const firstName = (participant.first_name || '').trim().toLowerCase() || 'unknown';
+    const lastInitial = (participant.last_name || '').trim().charAt(0).toUpperCase();
+    return lastInitial ? `${firstName} ${lastInitial}.` : firstName;
   };
 
   const teamSizeForCheck = Math.max(1, Number(tournament.players_per_team) || 3);

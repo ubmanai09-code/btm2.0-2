@@ -5668,11 +5668,11 @@ async function startServer() {
       ORDER BY total DESC, score_range ASC, name ASC
     `).all(id, officialGameCount, id, hasAdditionalScores ? 1 : 0, hasBonus ? 1 : 0, id, hasAdditionalScores ? 1 : 0, hasBonus ? 1 : 0) as any[];
     const teamMembers = db.prepare(`
-      SELECT id, team_id, first_name AS name, LOWER(SUBSTR(COALESCE(gender, ''), 1, 1)) AS gender
+      SELECT id, team_id, first_name, last_name, LOWER(SUBSTR(COALESCE(gender, ''), 1, 1)) AS gender
       FROM participants
       WHERE tournament_id = ? AND team_id IS NOT NULL
       ORDER BY team_id, COALESCE(team_order, 999), id
-    `).all(id) as Array<{ id: number; team_id: number; name: string; gender: string }>;
+    `).all(id) as Array<{ id: number; team_id: number; first_name: string; last_name: string; gender: string }>;
     const playersById = new Map(players.map((player) => [player.id, player]));
     const membersByTeam = new Map<number, typeof teamMembers>();
     for (const member of teamMembers) {
@@ -5682,11 +5682,17 @@ async function startServer() {
     }
     for (const team of teams) {
       const members = membersByTeam.get(team.id) || [];
-      team.members = members.map((m) => m.name);
+      team.members = members.map((member) => {
+        const firstName = String(member.first_name || '').trim();
+        const lastInitial = String(member.last_name || '').trim().charAt(0).toUpperCase();
+        return lastInitial ? `${firstName} ${lastInitial}.` : firstName;
+      });
       team.member_details = members.map((member) => {
         const player = playersById.get(member.id);
+        const firstName = String(member.first_name || '').trim();
+        const lastInitial = String(member.last_name || '').trim().charAt(0).toUpperCase();
         return {
-          name: member.name,
+          name: lastInitial ? `${firstName} ${lastInitial}.` : firstName,
           total: player && (player.games > 0 || player.total > 0) ? player.total : null,
           avg: player && player.games > 0 ? player.avg : null,
         };
