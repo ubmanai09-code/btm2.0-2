@@ -3936,6 +3936,18 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                         ? `${tournament.players_per_lane} ${tPublic('public.tournament.teams', 'Teams')} + ${tournament.singles_per_lane || 2} ${tPublic('public.tournament.singles', 'Singles')} / ${tPublic('lanes.lane', 'Lane')}`
                         : `${tournament.players_per_lane} ${tournament.type === 'team' ? tPublic('public.tournament.teams', 'Teams') : tPublic('public.tournament.players', 'Players')} / ${tPublic('lanes.lane', 'Lane')}`}
                     </span>
+                    {tournament.oil_pattern?.trim() && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
+                        <ClipboardList size={12} />
+                        {tPublic('tournament.oil_pattern_label', 'Lane Pattern')}: {tournament.oil_pattern.trim()}
+                      </span>
+                    )}
+                    {tournament.lane_length?.trim() && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
+                        <Columns4 size={12} />
+                        {tPublic('tournament.lane_length', 'Lane Length')}: {tournament.lane_length.trim()}
+                      </span>
+                    )}
                     {tournament.location && (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 col-span-3 h-full">
                         <MapPin size={12} />
