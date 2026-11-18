@@ -75,6 +75,7 @@ import {
   type TournamentParticipantNode,
   type TournamentRoundConfig,
 } from './utils/tournamentEngine';
+import { buildTeamSelectionPairings, getTeamSelectionDraftError, getTeamSelectionPickOptions, type TeamSelectionDraft } from './utils/teamSelection';
 import { calculateMixedGroupStandings, rankMixedSingles, type MixedGroupEvent } from './utils/mixedEventStandings';
 import { standingsAverage, standingsScoreRange } from './utils/standingsAverage';
 import DashboardPage from './components/DashboardPage';
@@ -10282,7 +10283,16 @@ type SavedBracketConfig = {
   rounds?: TournamentRoundConfig[];
   scoreDrafts?: Record<string, Record<number, string>>;
   slotOverrides?: Record<string, string | number>;
+  teamSelectionDraft?: TeamSelectionDraft;
   seedImportMode?: V2SeedImportMode;
+  topSeedsCount?: number;
+  manualPickedIds?: number[];
+  customSeedList?: string[];
+  matchOverrides?: Record<string, Partial<{ name: string; scoringType: EngineScoringType; advancementCount: number; notes: string }>>;
+  selectedBracketPreset?: V2BracketCategory;
+  selectedPresetId?: string;
+  bracketTypeMode?: 'available' | 'custom';
+  include3rdPlace?: boolean;
   // Which pool this bracket is seeded/stored under: 'all' (Team, for team tournaments,
   // or the whole field for individual ones) or a Singles gender split.
   division?: 'all' | 'male' | 'female' | 'team';
@@ -10792,6 +10802,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   const [seedImportMode, setSeedImportMode] = React.useState<V2SeedImportMode>('top-seeds');
   const [topSeedsCount, setTopSeedsCount] = React.useState(16);
   const [manualPickedIds, setManualPickedIds] = React.useState<number[]>([]);
+  const [teamSelectionDraft, setTeamSelectionDraft] = React.useState<TeamSelectionDraft>({});
   const [standingsFilter, setStandingsFilter] = React.useState('');
   const [customSeedList, setCustomSeedList] = React.useState<string[]>([]);
   const [customSeedInput, setCustomSeedInput] = React.useState('');
@@ -10975,6 +10986,29 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     }
 
     if (type === 'match-play') {
+      if (tournament.type === 'team') {
+        const selectionRound: TournamentRoundConfig = {
+          ...v2CreateRound(0),
+          id: 'mp-selection',
+          name: tx('Selection Round'),
+          matchType: 'head-to-head',
+          playersPerMatch: 2,
+          advancementCount: 1,
+          scoringType: 'points',
+          manualMatchCount: 4,
+          customPairings: [],
+        };
+        const playoffRounds = buildStandardPresetRounds('single-elim', includeThird, 4).map((round) => ({
+          ...round,
+          id: `mp-${round.id}`,
+          name: round.name === tx('Final') ? tx('Match Play Final') : `${tx('Match Play')} ${round.name}`,
+          scoringType: 'points' as const,
+        }));
+        return [
+          selectionRound,
+          ...playoffRounds,
+        ];
+      }
       return buildStandardPresetRounds('single-elim', includeThird, entrantCount).map((round) => ({
         ...round,
         id: `mp-${round.id}`,
@@ -11187,6 +11221,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       if (s.seedImportMode) setSeedImportMode(s.seedImportMode);
       if (s.topSeedsCount != null) setTopSeedsCount(s.topSeedsCount);
       if (Array.isArray(s.manualPickedIds)) setManualPickedIds(s.manualPickedIds);
+      if (s.teamSelectionDraft && typeof s.teamSelectionDraft === 'object') setTeamSelectionDraft(s.teamSelectionDraft);
       if (Array.isArray(s.customSeedList)) setCustomSeedList(s.customSeedList);
       if (s.autoGenerate != null) setAutoGenerate(s.autoGenerate);
       if (typeof s.activeBracketName === 'string' && s.activeBracketName) setActiveBracketName(s.activeBracketName);
@@ -11212,6 +11247,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         seedImportMode,
         topSeedsCount,
         manualPickedIds,
+        teamSelectionDraft,
         customSeedList,
         autoGenerate,
         scoreDrafts,
@@ -11226,7 +11262,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         division,
       }));
     } catch { /* quota */ }
-  }, [storageKey, rounds, seedImportMode, topSeedsCount, manualPickedIds, customSeedList, autoGenerate, scoreDrafts, matchOverrides, slotOverrides, activeBracketName, activeBracketId, selectedBracketPreset, selectedPresetId, bracketTypeMode, include3rdPlace, division]);
+  }, [storageKey, rounds, seedImportMode, topSeedsCount, manualPickedIds, teamSelectionDraft, customSeedList, autoGenerate, scoreDrafts, matchOverrides, slotOverrides, activeBracketName, activeBracketId, selectedBracketPreset, selectedPresetId, bracketTypeMode, include3rdPlace, division]);
 
   // ── Load data ─────────────────────────────────────────────────────────────
   React.useEffect(() => {
@@ -11465,6 +11501,45 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     return [];
   }, [seedImportMode, customSeedList, pickedStandingsEntries, importedTopSeedEntries, isTeamSeeds]);
 
+  const teamSelectionDraftError = React.useMemo(() => {
+    if (selectedBracketPreset !== 'match-play' || tournament.type !== 'team') return null;
+    if (division !== 'all' && division !== 'team') {
+      return 'Team Match Play is only available for team standings.';
+    }
+    return getTeamSelectionDraftError(participantNodes.length, teamSelectionDraft);
+  }, [selectedBracketPreset, tournament.type, division, participantNodes.length, teamSelectionDraft]);
+
+  const teamSelectionPicks = React.useMemo(
+    () => getTeamSelectionPickOptions(participantNodes.length, teamSelectionDraft),
+    [participantNodes.length, teamSelectionDraft],
+  );
+
+  const handleTeamSelectionOpponentChange = React.useCallback((pickNumber: number, opponentSeed: number) => {
+    setTeamSelectionDraft((previous) => {
+      const next = Object.fromEntries(
+        Object.entries(previous).filter(([currentPick]) => Number(currentPick) < pickNumber),
+      ) as TeamSelectionDraft;
+      if (opponentSeed > 0) next[pickNumber] = opponentSeed;
+      return next;
+    });
+    setEditingSlotKey(null);
+  }, []);
+
+  const roundsForEngine = React.useMemo(() => {
+    if (selectedBracketPreset !== 'match-play' || tournament.type !== 'team' || rounds.length === 0) return rounds;
+    const pairings = buildTeamSelectionPairings(participantNodes.length, teamSelectionDraft);
+    return rounds.map((round, index) => index === 0 ? { ...round, customPairings: pairings } : round);
+  }, [selectedBracketPreset, tournament.type, rounds, participantNodes.length, teamSelectionDraft]);
+
+  const renderTeamSelectionHint = () => {
+    if (selectedBracketPreset !== 'match-play' || tournament.type !== 'team') return null;
+    return (
+      <div className={`rounded-lg border px-3 py-2 text-xs ${teamSelectionDraftError ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-orange-200 bg-orange-50/60 text-black/65'}`}>
+        {teamSelectionDraftError || 'Click the opponent slot in each first-round match to choose a team from those remaining.'}
+      </div>
+    );
+  };
+
   const formatCompactTeamMemberName = React.useCallback((firstName?: string | null, lastName?: string | null) => {
     const first = String(firstName || '').trim();
     const last = String(lastName || '').trim();
@@ -11644,6 +11719,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       next[seedNo - 1] = nextName;
       setCustomSeedList(next);
       setSeedImportMode('create-list');
+      setTeamSelectionDraft({});
     }
 
     cancelV2SeedEdit();
@@ -11682,8 +11758,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   // ── Engine ────────────────────────────────────────────────────────────────
   const generate = React.useCallback(() => {
     if (participantNodes.length === 0) { setEngineResult(null); return; }
-    setEngineResult(buildTournamentEngine({ participants: participantNodes, rounds }));
-  }, [participantNodes, rounds]);
+    setEngineResult(buildTournamentEngine({ participants: participantNodes, rounds: roundsForEngine }));
+  }, [participantNodes, roundsForEngine]);
 
   React.useEffect(() => {
     if (autoGenerate) generate();
@@ -11902,6 +11978,8 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         ? 'Stepladder'
         : tournament.match_play_type === 'playoff'
           ? 'Play-Off'
+          : tournament.match_play_type === 'team_selection_playoff'
+            ? 'Team Selection Playoff'
           : 'Single Elimination';
     return String(tournament.finals_format || '').trim() || matchPlayDefault;
   };
@@ -11926,7 +12004,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
         : normalizedFinalFormat === 'matchplay'
           ? 'match-play'
           : null;
-    let nextPreset: V2BracketCategory = isV2BracketCategory(configuredPreset?.bracketCategory)
+    let nextPreset: V2BracketCategory = tournament.match_play_type === 'team_selection_playoff'
+      ? 'match-play'
+      : isV2BracketCategory(configuredPreset?.bracketCategory)
       ? configuredPreset!.bracketCategory
       : configuredTemplateType
         ? configuredTemplateType
@@ -11984,6 +12064,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     setSeedImportMode('top-seeds');
     setTopSeedsCount(seedCount);
     setManualPickedIds([]);
+    setTeamSelectionDraft({});
     setCustomSeedList([]);
     setMatchOverrides({});
     setSlotOverrides({});
@@ -12012,6 +12093,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
       seedImportMode,
       topSeedsCount,
       manualPickedIds,
+      teamSelectionDraft,
       customSeedList,
       matchOverrides,
       selectedBracketPreset,
@@ -12088,6 +12170,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     if (bkt.seedImportMode) setSeedImportMode(bkt.seedImportMode);
     if (bkt.topSeedsCount != null) setTopSeedsCount(bkt.topSeedsCount);
     if (Array.isArray(bkt.manualPickedIds)) setManualPickedIds(bkt.manualPickedIds);
+    setTeamSelectionDraft(
+      bkt.teamSelectionDraft && typeof bkt.teamSelectionDraft === 'object' ? bkt.teamSelectionDraft : {},
+    );
     if (Array.isArray(bkt.customSeedList)) setCustomSeedList(bkt.customSeedList);
     if (isV2BracketCategory(bkt.selectedBracketPreset)) {
       setSelectedBracketPreset(bkt.selectedBracketPreset);
@@ -12873,8 +12958,9 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
     if (!activeBracketName) blockers.push('Create or load a bracket first.');
     if (participantNodes.length < 2) blockers.push('Need at least 2 seeded participants.');
     if (rounds.length < 1) blockers.push('Add at least 1 round before generating.');
+    if (teamSelectionDraftError) blockers.push(teamSelectionDraftError);
     return blockers;
-  }, [activeBracketName, participantNodes.length, rounds.length]);
+  }, [activeBracketName, participantNodes.length, rounds.length, teamSelectionDraftError]);
   const canGeneratePreview = generationBlockers.length === 0;
   const showThirdPlaceToggle = React.useMemo(() => {
     return true;
@@ -12904,6 +12990,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   // ── Standard bracket presets ──────────────────────────────────────────────
   const applyStandardPreset = React.useCallback((type: Exclude<V2BracketCategory, 'custom'>) => {
     setRounds(buildStandardPresetRounds(type, include3rdPlace, participantNodes.length || topSeedsCount));
+    setTeamSelectionDraft({});
     setScoreDrafts({});
     setSelectedMatchId(null);
     setSelectedBracketPreset(type);
@@ -13353,7 +13440,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
   const mobileInfoDone = Boolean(activeBracketName);
   const mobileSeedsDone = participantNodes.length >= 2;
   const mobileTypeDone = rounds.length >= 1;
-  const mobileReady = mobileInfoDone && mobileSeedsDone && mobileTypeDone;
+  const mobileReady = mobileInfoDone && mobileSeedsDone && mobileTypeDone && generationBlockers.length === 0;
   const mobileHasPreview = Boolean(engineResult && engineResult.matches.length > 0 && errors.length === 0);
 
   const mobileStepCard = (
@@ -13439,7 +13526,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               <label className="mb-1 block text-xs font-semibold text-black/60">{tx('Division')}</label>
               <select
                 value={division}
-                onChange={e => setDivision(parseDivisionValue(e.target.value))}
+                onChange={e => { setDivision(parseDivisionValue(e.target.value)); setTeamSelectionDraft({}); }}
                 className="h-11 w-full rounded-lg border border-black/15 bg-white px-3 text-sm focus:border-orange-600 focus:outline-none"
               >
                 {divisionChoices.map(opt => <option key={opt.value} value={opt.value}>{tx(opt.label)}</option>)}
@@ -13507,6 +13594,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                         setDivision(opt.value);
                         setManualPickedIds([]);
                         setCustomSeedList([]);
+                        setTeamSelectionDraft({});
                       }}
                       className={`flex flex-col items-center gap-0.5 rounded-xl border px-2 py-2.5 text-center transition-colors ${active ? 'border-orange-600 bg-orange-50' : 'border-black/10 bg-white'}`}
                     >
@@ -13531,7 +13619,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   <button
                     key={opt.value}
                     type="button"
-                    onClick={() => setSeedImportMode(opt.value)}
+                    onClick={() => { setSeedImportMode(opt.value); setTeamSelectionDraft({}); }}
                     className={`flex flex-col items-center gap-1 rounded-xl border px-2 py-3 text-center transition-colors ${active ? 'border-orange-600 bg-orange-50' : 'border-black/10 bg-white'}`}
                   >
                     <opt.Icon size={20} className={active ? 'text-orange-600' : 'text-black/40'} />
@@ -13548,7 +13636,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
               <label className="mb-1 block text-xs font-semibold text-black/60">{tx('Number of Seeds')}</label>
               <select
                 value={normalizedTopSeedsCount}
-                onChange={e => setTopSeedsCount(Math.max(1, parseInt(e.target.value) || 1))}
+                onChange={e => { setTopSeedsCount(Math.max(1, parseInt(e.target.value) || 1)); setTeamSelectionDraft({}); }}
                 className="h-11 w-full rounded-lg border border-black/15 bg-white px-3 text-sm focus:border-orange-600 focus:outline-none"
               >
                 {seedOptions.map(n => <option key={n} value={n}>{n}</option>)}
@@ -13574,7 +13662,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                       className="h-10 flex-1 rounded-lg border border-black/15 bg-white px-3 text-sm focus:border-orange-600 focus:outline-none"
                     />
                     {manualPickedIds.length > 0 && (
-                      <button type="button" onClick={() => setManualPickedIds([])} className="shrink-0 text-xs font-semibold text-red-500">{tx('Clear')} ({manualPickedIds.length})</button>
+                      <button type="button" onClick={() => { setManualPickedIds([]); setTeamSelectionDraft({}); }} className="shrink-0 text-xs font-semibold text-red-500">{tx('Clear')} ({manualPickedIds.length})</button>
                     )}
                   </div>
                   <div className="max-h-56 divide-y divide-black/5 overflow-y-auto rounded-lg border border-black/10">
@@ -13587,7 +13675,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                           <button
                             key={s.participant_id}
                             type="button"
-                            onClick={() => setManualPickedIds(prev => picked ? prev.filter(id => id !== s.participant_id) : [...prev, s.participant_id])}
+                            onClick={() => { setManualPickedIds(prev => picked ? prev.filter(id => id !== s.participant_id) : [...prev, s.participant_id]); setTeamSelectionDraft({}); }}
                             className={`flex w-full items-center gap-2 px-3 py-2.5 text-left ${picked ? 'bg-orange-50' : 'bg-white'}`}
                           >
                             <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${picked ? 'border-orange-600 bg-orange-600 text-white' : 'border-black/20'}`}>{picked && <Check size={12} strokeWidth={3} />}</span>
@@ -13608,13 +13696,13 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                 <input
                   value={customSeedInput}
                   onChange={e => setCustomSeedInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && customSeedInput.trim()) { setCustomSeedList(p => [...p, customSeedInput.trim()]); setCustomSeedInput(''); } }}
+                  onKeyDown={e => { if (e.key === 'Enter' && customSeedInput.trim()) { setCustomSeedList(p => [...p, customSeedInput.trim()]); setTeamSelectionDraft({}); setCustomSeedInput(''); } }}
                   placeholder={tx('Name, press Enter to add')}
                   className="h-10 flex-1 rounded-lg border border-black/15 bg-white px-3 text-sm focus:border-orange-600 focus:outline-none"
                 />
                 <button
                   type="button"
-                  onClick={() => { if (customSeedInput.trim()) { setCustomSeedList(p => [...p, customSeedInput.trim()]); setCustomSeedInput(''); } }}
+                  onClick={() => { if (customSeedInput.trim()) { setCustomSeedList(p => [...p, customSeedInput.trim()]); setTeamSelectionDraft({}); setCustomSeedInput(''); } }}
                   className="flex h-10 w-10 items-center justify-center rounded-lg border border-black/15 bg-white"
                   aria-label={tx('Add')}
                 ><Plus size={16} /></button>
@@ -13625,13 +13713,15 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                     <div key={i} className="flex items-center gap-2 px-3 py-2 text-sm">
                       <span className="w-5 text-right text-xs text-black/35">{i + 1}</span>
                       <span className="flex-1 truncate text-black/75">{name}</span>
-                      <button type="button" onClick={() => setCustomSeedList(p => p.filter((_, idx) => idx !== i))} className="text-black/30" aria-label={tx('Remove')}><X size={14} /></button>
+                      <button type="button" onClick={() => { setCustomSeedList(p => p.filter((_, idx) => idx !== i)); setTeamSelectionDraft({}); }} className="text-black/30" aria-label={tx('Remove')}><X size={14} /></button>
                     </div>
                   ))}
                 </div>
               )}
             </div>
           )}
+
+          {renderTeamSelectionHint()}
 
           <div>
             <div className="mb-1.5 flex items-center justify-between">
@@ -13921,7 +14011,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                     <label className="block text-[9px] font-bold uppercase tracking-widest text-black/35 mb-0.5">{tx('Division')}</label>
                     <select
                       value={division}
-                      onChange={(e) => setDivision(parseDivisionValue(e.target.value))}
+                      onChange={(e) => { setDivision(parseDivisionValue(e.target.value)); setTeamSelectionDraft({}); }}
                       className="w-full h-8 px-2 rounded-md border border-black/15 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-gray-400"
                     >
                       {divisionChoices.map(opt => <option key={opt.value} value={opt.value}>{tx(opt.label)}</option>)}
@@ -14060,7 +14150,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   { value: 'create-list', label: tx('Create List'), desc: tx('Type participant names') },
                 ] as Array<{ value: V2SeedImportMode; label: string; desc: string }>).map(opt => (
                   <button key={opt.value}
-                    onClick={() => setSeedImportMode(opt.value)}
+                    onClick={() => { setSeedImportMode(opt.value); setTeamSelectionDraft({}); }}
                     className={`text-left px-2.5 py-1.5 rounded-md border transition-colors ${seedImportMode === opt.value
                       ? 'bg-emerald-800 border-emerald-800 text-white'
                       : 'bg-white border-black/10 text-black/60 hover:border-gray-400 hover:text-emerald-700'}`}>
@@ -14077,7 +14167,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                     type="number"
                     min={1}
                     value={topSeedsCount}
-                    onChange={e => setTopSeedsCount(Math.max(1, parseInt(e.target.value) || 1))}
+                    onChange={e => { setTopSeedsCount(Math.max(1, parseInt(e.target.value) || 1)); setTeamSelectionDraft({}); }}
                     className="w-full h-8 px-2 rounded-md border border-black/15 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-gray-400 bg-white mb-2"
                   />
                   <p className="text-[10px] text-black/35 mt-1">
@@ -14109,7 +14199,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                             className="flex-1 h-6 px-2 rounded-md border border-black/15 text-[11px] focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-gray-400 bg-white"
                           />
                           {manualPickedIds.length > 0 && (
-                            <button onClick={() => setManualPickedIds([])} className="text-[10px] text-red-400 hover:text-red-600 shrink-0 whitespace-nowrap">{tx('Clear')} ({manualPickedIds.length})</button>
+                            <button onClick={() => { setManualPickedIds([]); setTeamSelectionDraft({}); }} className="text-[10px] text-red-400 hover:text-red-600 shrink-0 whitespace-nowrap">{tx('Clear')} ({manualPickedIds.length})</button>
                           )}
                         </div>
                         <div className="flex flex-col gap-0 max-h-48 overflow-y-auto border border-black/[0.06] rounded-md divide-y divide-black/[0.05]">
@@ -14121,7 +14211,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                               return (
                                 <button
                                   key={s.participant_id}
-                                  onClick={() => setManualPickedIds(prev => isPicked ? prev.filter(id => id !== s.participant_id) : [...prev, s.participant_id])}
+                                  onClick={() => { setManualPickedIds(prev => isPicked ? prev.filter(id => id !== s.participant_id) : [...prev, s.participant_id]); setTeamSelectionDraft({}); }}
                                   className={`flex items-center gap-1.5 px-2 py-1 text-left transition-colors ${isPicked ? 'bg-emerald-50 border-l-2 border-emerald-500' : 'hover:bg-gray-50 border-l-2 border-transparent'}`}>
                                   <span className={`text-[9px] w-3 shrink-0 ${isPicked ? 'text-emerald-600' : 'text-black/20'}`}>{isPicked ? '✓' : '○'}</span>
                                   <span className="flex-1 text-[11px] truncate text-black/70 leading-tight">{s.participant_name}</span>
@@ -14145,10 +14235,10 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                 <div className="flex flex-col gap-2">
                   <div className="flex gap-1.5">
                     <input value={customSeedInput} onChange={e => setCustomSeedInput(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter' && customSeedInput.trim()) { setCustomSeedList(p => [...p, customSeedInput.trim()]); setCustomSeedInput(''); } }}
+                      onKeyDown={e => { if (e.key === 'Enter' && customSeedInput.trim()) { setCustomSeedList(p => [...p, customSeedInput.trim()]); setTeamSelectionDraft({}); setCustomSeedInput(''); } }}
                       placeholder={tx('Name, press Enter to add')}
                       className="flex-1 h-7 px-2 rounded-md border border-black/15 text-[11px] focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-gray-400 bg-white" />
-                    <button onClick={() => { if (customSeedInput.trim()) { setCustomSeedList(p => [...p, customSeedInput.trim()]); setCustomSeedInput(''); } }}
+                    <button onClick={() => { if (customSeedInput.trim()) { setCustomSeedList(p => [...p, customSeedInput.trim()]); setTeamSelectionDraft({}); setCustomSeedInput(''); } }}
                       className="h-7 w-7 flex items-center justify-center rounded-md border border-black/10 hover:bg-emerald-50 hover:border-gray-400 bg-white">
                       <Plus size={13} />
                     </button>
@@ -14158,15 +14248,17 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                       <div key={i} className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 text-[11px]">
                         <span className="text-black/35 w-4 text-right shrink-0 text-[9px]">{i + 1}.</span>
                         <span className="flex-1 truncate text-black/70 leading-tight">{name}</span>
-                        <button onClick={() => setCustomSeedList(p => p.filter((_, idx) => idx !== i))} className="text-black/25 hover:text-red-500"><X size={10} /></button>
+                        <button onClick={() => { setCustomSeedList(p => p.filter((_, idx) => idx !== i)); setTeamSelectionDraft({}); }} className="text-black/25 hover:text-red-500"><X size={10} /></button>
                       </div>
                     ))}
                   </div>
                   {customSeedList.length > 0 && (
-                    <button onClick={() => setCustomSeedList([])} className="text-[10px] text-red-400 hover:text-red-600 self-start">{tx('Clear all')}</button>
+                    <button onClick={() => { setCustomSeedList([]); setTeamSelectionDraft({}); }} className="text-[10px] text-red-400 hover:text-red-600 self-start">{tx('Clear all')}</button>
                   )}
                 </div>
               )}
+
+              {renderTeamSelectionHint()}
 
               </div>}
             </Card>
@@ -14504,6 +14596,7 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                               const nextCount = Math.max(2, Number.parseInt(e.target.value || '2', 10) || 2);
                               const nextList = Array.from({ length: nextCount }, (_, i) => `Seed ${i + 1}`);
                               setCustomSeedList(nextList);
+                              setTeamSelectionDraft({});
                               setSeedImportMode('create-list');
                             }}
                             className="h-10 w-full rounded-lg border border-gray-400 bg-white px-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-300"
@@ -15245,6 +15338,10 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                       const override = matchOverrides[match.id] || {};
                       const isSelected = selectedMatchId === match.id;
                       const specialTone = getSpecialMatchTone(match);
+                      const isTeamSelectionRound = selectedBracketPreset === 'match-play'
+                        && tournament.type === 'team'
+                        && match.roundId === 'mp-selection';
+                      const teamSelectionPick = isTeamSelectionRound ? teamSelectionPicks[match.matchIndex] : null;
                       return (
                         <div key={match.id}
                           onClick={() => canManageBracketV2 && setSelectedMatchId(isSelected ? null : match.id)}
@@ -15268,7 +15365,10 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                               const slotSeed = simulation.resolvedSeeds.get(key) ?? getSlotSeed(slot, key);
                               const isWinner = (simulation.advancingSlots[match.id] || []).includes(slot.slotIndex);
                               const score = scoreDrafts[match.id]?.[slot.slotIndex];
-                              const canSwapList = canManageBracketV2 && slot.sourceType !== 'advance';
+                              const isTeamSelectionOpponentSlot = isTeamSelectionRound && slot.slotIndex === 1;
+                              const canSwapList = canManageBracketV2 && (isTeamSelectionRound
+                                ? Boolean(teamSelectionPick && isTeamSelectionOpponentSlot && teamSelectionPick.enabled && (division === 'all' || division === 'team'))
+                                : slot.sourceType !== 'advance');
                               const isEditingSwapList = editingSlotKey === key;
                               const scoreCellClass = isWinner ? 'bg-orange-600 text-white font-semibold' : 'bg-[#ececec] text-[#222]';
                               return (
@@ -15276,24 +15376,42 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                                   {slotSeed != null && <span className="w-8 h-9 shrink-0 flex items-center justify-center text-[12px] font-semibold text-[#2d2d2d] bg-[#d9dde2] border-r border-[#cfd4d9]">{slotSeed}</span>}
                                   {isEditingSwapList ? (
                                     <select autoFocus
-                                      value={slotOverrides[key] != null ? String(slotOverrides[key]) : (slot.participantId != null ? String(slot.participantId) : '')}
+                                      value={isTeamSelectionOpponentSlot
+                                        ? String(teamSelectionDraft[teamSelectionPick!.pickNumber] || '')
+                                        : slotOverrides[key] != null ? String(slotOverrides[key]) : (slot.participantId != null ? String(slot.participantId) : '')}
                                       onClick={e => e.stopPropagation()}
                                       onChange={e => {
                                         const val = e.target.value;
-                                        if (val === '') setSlotOverrides(prev => { const n = { ...prev }; delete n[key]; return n; });
-                                        else setSlotOverrides(prev => ({ ...prev, [key]: val }));
-                                        setEditingSlotKey(null);
+                                        if (isTeamSelectionOpponentSlot) {
+                                          handleTeamSelectionOpponentChange(teamSelectionPick!.pickNumber, Number(val));
+                                        } else {
+                                          if (val === '') setSlotOverrides(prev => { const n = { ...prev }; delete n[key]; return n; });
+                                          else setSlotOverrides(prev => ({ ...prev, [key]: val }));
+                                          setEditingSlotKey(null);
+                                        }
                                       }}
                                       onBlur={() => setEditingSlotKey(null)}
                                       className="flex-1 min-w-0 h-9 border-0 bg-[#f2f2f2] px-2 text-[12px] text-[#222] focus:outline-none">
-                                      <option value="">— Auto —</option>
-                                      {participantNodes.map(p => <option key={p.id} value={String(p.id)}>S{p.seed} {p.name}</option>)}
+                                      {isTeamSelectionOpponentSlot ? (
+                                        <>
+                                          <option value="">Select opponent</option>
+                                          {teamSelectionPick!.opponentSeeds.map(seed => {
+                                            const participant = participantNodes.find(entry => entry.seed === seed);
+                                            return participant ? <option key={seed} value={String(seed)}>S{seed} {participant.name}</option> : null;
+                                          })}
+                                        </>
+                                      ) : (
+                                        <>
+                                          <option value="">— Auto —</option>
+                                          {participantNodes.map(p => <option key={p.id} value={String(p.id)}>S{p.seed} {p.name}</option>)}
+                                        </>
+                                      )}
                                     </select>
                                   ) : (
                                     <span
                                       className={`flex-1 min-w-0 h-9 px-2 flex items-center text-[12px] leading-none ${canSwapList ? 'cursor-pointer hover:underline' : ''} ${label === 'TBD' ? 'text-black/25 italic' : isWinner ? 'font-medium text-[#111]' : 'text-[#222]'}`}
                                       onClick={canSwapList ? (e) => { e.stopPropagation(); setEditingSlotKey(key); } : undefined}
-                                      title={canSwapList ? `${label}\nClick to swap participant` : label}
+                                      title={canSwapList ? `${label}\n${isTeamSelectionOpponentSlot ? 'Click to choose an available opponent' : 'Click to swap participant'}` : label}
                                     ><span className="min-w-0 truncate">{label}</span>{role !== 'public' && slotOverrides[key] != null && <span className="ml-1 text-[10px] text-violet-500">✎</span>}</span>
                                   )}
                                   {canManageBracketV2 ? (
@@ -15383,6 +15501,10 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                   const isSelected = selectedMatchId === match.id;
                   const specialTone = getSpecialMatchTone(match);
                   const winnerSlot = simulation.winners[match.id] ?? null;
+                  const isTeamSelectionRound = selectedBracketPreset === 'match-play'
+                    && tournament.type === 'team'
+                    && match.roundId === 'mp-selection';
+                  const teamSelectionPick = isTeamSelectionRound ? teamSelectionPicks[match.matchIndex] : null;
                   return (
                     <React.Fragment key={match.id}>
                       <div
@@ -15407,7 +15529,10 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                           const isWinner = (simulation.advancingSlots[match.id] || []).includes(slot.slotIndex);
                           const score = scoreDrafts[match.id]?.[slot.slotIndex];
                           const isTbd = label === 'TBD' || label === '';
-                          const canSwap = canManageBracketV2 && slot.sourceType !== 'advance';
+                          const isTeamSelectionOpponentSlot = isTeamSelectionRound && slot.slotIndex === 1;
+                          const canSwap = canManageBracketV2 && (isTeamSelectionRound
+                            ? Boolean(teamSelectionPick && isTeamSelectionOpponentSlot && teamSelectionPick.enabled && (division === 'all' || division === 'team'))
+                            : slot.sourceType !== 'advance');
                           const isEditingSwap = editingSlotKey === key;
                           const scoreCellClass = isWinner ? 'bg-orange-600 text-white font-semibold' : 'bg-[#ececec] text-[#222]';
                           return (
@@ -15415,24 +15540,42 @@ function BracketsViewV2({ tournament, role, onTournamentUpdated }: { tournament:
                               {slotSeed != null && <span className="w-7 h-7 shrink-0 flex items-center justify-center text-[12px] font-semibold text-[#2d2d2d] bg-[#d9dde2] border-r border-[#cfd4d9]">{slotSeed}</span>}
                               {isEditingSwap ? (
                                 <select autoFocus
-                                  value={slotOverrides[key] != null ? String(slotOverrides[key]) : (slot.participantId != null ? String(slot.participantId) : '')}
+                                  value={isTeamSelectionOpponentSlot
+                                    ? String(teamSelectionDraft[teamSelectionPick!.pickNumber] || '')
+                                    : slotOverrides[key] != null ? String(slotOverrides[key]) : (slot.participantId != null ? String(slot.participantId) : '')}
                                   onClick={e => e.stopPropagation()}
                                   onChange={e => {
                                     const val = e.target.value;
-                                    if (val === '') setSlotOverrides(prev => { const n = { ...prev }; delete n[key]; return n; });
-                                    else setSlotOverrides(prev => ({ ...prev, [key]: val }));
-                                    setEditingSlotKey(null);
+                                    if (isTeamSelectionOpponentSlot) {
+                                      handleTeamSelectionOpponentChange(teamSelectionPick!.pickNumber, Number(val));
+                                    } else {
+                                      if (val === '') setSlotOverrides(prev => { const n = { ...prev }; delete n[key]; return n; });
+                                      else setSlotOverrides(prev => ({ ...prev, [key]: val }));
+                                      setEditingSlotKey(null);
+                                    }
                                   }}
                                   onBlur={() => setEditingSlotKey(null)}
                                   className="flex-1 h-7 border-0 bg-[#f2f2f2] px-2 text-[12px] text-[#222] focus:outline-none">
-                                  <option value="">— Auto —</option>
-                                  {participantNodes.map(p => <option key={p.id} value={String(p.id)}>S{p.seed} {p.name}</option>)}
+                                  {isTeamSelectionOpponentSlot ? (
+                                    <>
+                                      <option value="">Select opponent</option>
+                                      {teamSelectionPick!.opponentSeeds.map(seed => {
+                                        const participant = participantNodes.find(entry => entry.seed === seed);
+                                        return participant ? <option key={seed} value={String(seed)}>S{seed} {participant.name}</option> : null;
+                                      })}
+                                    </>
+                                  ) : (
+                                    <>
+                                      <option value="">— Auto —</option>
+                                      {participantNodes.map(p => <option key={p.id} value={String(p.id)}>S{p.seed} {p.name}</option>)}
+                                    </>
+                                  )}
                                 </select>
                               ) : (
                                 <span
                                   className={`flex-1 min-w-0 h-7 px-2 flex items-center text-[12px] leading-none ${canSwap ? 'cursor-pointer hover:underline' : ''} ${isTbd ? 'text-black/25 italic' : isWinner ? 'font-medium text-[#111]' : 'text-[#222]'}`}
                                   onClick={canSwap ? (e) => { e.stopPropagation(); setEditingSlotKey(key); } : undefined}
-                                  title={canSwap ? `${label}\nClick to swap participant` : label}
+                                  title={canSwap ? `${label}\n${isTeamSelectionOpponentSlot ? 'Click to choose an available opponent' : 'Click to swap participant'}` : label}
                                 ><span className="min-w-0 truncate">{compactLabel}</span>{role !== 'public' && slotOverrides[key] != null && <span className="ml-1 text-[10px] text-violet-500">✎</span>}</span>
                               )}
                                   {canManageBracketV2 && (
@@ -16339,9 +16482,8 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
     const participant = participantInfoMap.get(participantId);
     if (!participant) return fallbackName.toUpperCase();
     const firstName = (participant.first_name || '').trim();
-    const lastInitial = (participant.last_name || '').trim().charAt(0).toUpperCase();
     if (!firstName) return fallbackName.toUpperCase();
-    return (lastInitial ? `${firstName} ${lastInitial}.` : firstName).toUpperCase();
+    return firstName.toUpperCase();
   };
 
   const participantNameMap = new Map<number, string>();
@@ -16491,9 +16633,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
   const showPlayerTeamColumn = isTeamTournament && !hasMixedTeamSingles;
 
   const formatTeamMemberCompact = (participant: Participant) => {
-    const firstName = (participant.first_name || '').trim().toLowerCase() || 'unknown';
-    const lastInitial = (participant.last_name || '').trim().charAt(0).toLowerCase();
-    return lastInitial ? `${firstName} ${lastInitial}.` : firstName;
+    return (participant.first_name || '').trim().toLowerCase() || 'unknown';
   };
 
   const teamSizeForCheck = Math.max(1, Number(tournament.players_per_team) || 3);

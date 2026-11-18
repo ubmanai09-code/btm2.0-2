@@ -5668,7 +5668,7 @@ async function startServer() {
       ORDER BY total DESC, score_range ASC, name ASC
     `).all(id, officialGameCount, id, hasAdditionalScores ? 1 : 0, hasBonus ? 1 : 0, id, hasAdditionalScores ? 1 : 0, hasBonus ? 1 : 0) as any[];
     const teamMembers = db.prepare(`
-      SELECT id, team_id, (first_name || ' ' || last_name) AS name, LOWER(SUBSTR(COALESCE(gender, ''), 1, 1)) AS gender
+      SELECT id, team_id, first_name AS name, LOWER(SUBSTR(COALESCE(gender, ''), 1, 1)) AS gender
       FROM participants
       WHERE tournament_id = ? AND team_id IS NOT NULL
       ORDER BY team_id, COALESCE(team_order, 999), id
