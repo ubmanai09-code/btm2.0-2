@@ -5668,11 +5668,12 @@ async function startServer() {
       ORDER BY total DESC, score_range ASC, name ASC
     `).all(id, officialGameCount, id, hasAdditionalScores ? 1 : 0, hasBonus ? 1 : 0, id, hasAdditionalScores ? 1 : 0, hasBonus ? 1 : 0) as any[];
     const teamMembers = db.prepare(`
-      SELECT id, team_id, first_name, last_name, LOWER(SUBSTR(COALESCE(gender, ''), 1, 1)) AS gender
+      SELECT id, team_id, first_name, last_name, doubles_entrant, triples_entrant,
+             LOWER(SUBSTR(COALESCE(gender, ''), 1, 1)) AS gender
       FROM participants
       WHERE tournament_id = ? AND team_id IS NOT NULL
       ORDER BY team_id, COALESCE(team_order, 999), id
-    `).all(id) as Array<{ id: number; team_id: number; first_name: string; last_name: string; gender: string }>;
+    `).all(id) as Array<{ id: number; team_id: number; first_name: string; last_name: string; doubles_entrant: number; triples_entrant: number; gender: string }>;
     const playersById = new Map(players.map((player) => [player.id, player]));
     const membersByTeam = new Map<number, typeof teamMembers>();
     for (const member of teamMembers) {
@@ -5697,6 +5698,34 @@ async function startServer() {
           avg: player && player.games > 0 ? player.avg : null,
         };
       });
+      team.doubles_member_details = members.filter((member) => member.doubles_entrant === 1).map((member) => {
+        const player = playersById.get(member.id);
+        const firstName = String(member.first_name || '').trim();
+        const lastInitial = String(member.last_name || '').trim().charAt(0).toUpperCase();
+        return {
+          name: lastInitial ? `${firstName} ${lastInitial}.` : firstName,
+          total: player && (player.games > 0 || player.total > 0) ? player.total : null,
+          avg: player && player.games > 0 ? player.avg : null,
+        };
+      });
+      team.doubles_total = team.doubles_member_details.reduce(
+        (sum: number, member: { total: number | null }) => sum + (member.total ?? 0),
+        0,
+      ) || null;
+      team.triples_member_details = members.filter((member) => member.triples_entrant === 1).map((member) => {
+        const player = playersById.get(member.id);
+        const firstName = String(member.first_name || '').trim();
+        const lastInitial = String(member.last_name || '').trim().charAt(0).toUpperCase();
+        return {
+          name: lastInitial ? `${firstName} ${lastInitial}.` : firstName,
+          total: player && (player.games > 0 || player.total > 0) ? player.total : null,
+          avg: player && player.games > 0 ? player.avg : null,
+        };
+      });
+      team.triples_total = team.triples_member_details.reduce(
+        (sum: number, member: { total: number | null }) => sum + (member.total ?? 0),
+        0,
+      ) || null;
       const genders = new Set(members.map((m) => m.gender));
       // 'f' / 'm' when every member shares a gender, otherwise 'x' (mixed or unknown)
       team.gender = genders.size === 1 && (genders.has('f') || genders.has('m')) ? [...genders][0] : 'x';

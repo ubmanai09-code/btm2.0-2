@@ -12,7 +12,13 @@ export default function FinalPlacementDetails({ details, t }: {
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3">
             <div className="font-semibold break-words">{detail.name}</div>
             <div className="text-xs font-normal text-gray-500 dark:text-slate-400 tabular-nums">
-              {detail.isTeam ? t('dashboard.team_total', 'Team total') : t('dashboard.total', 'Total')}: <span className="font-bold text-emerald-800 dark:text-emerald-400">{detail.total ?? '—'}</span>
+              {detail.eventLabel === 'Doubles'
+                ? t('dashboard.doubles_total', 'Doubles total')
+                : detail.eventLabel === 'Triples'
+                  ? t('dashboard.triples_total', 'Triples total')
+                  : detail.isTeam
+                    ? t('dashboard.team_total', 'Team total')
+                    : t('dashboard.total', 'Total')}: <span className="font-bold text-emerald-800 dark:text-emerald-400">{detail.total ?? '—'}</span>
               {!detail.isTeam && <> · {t('dashboard.avg', 'Avg')}: {detail.avg !== null ? detail.avg.toFixed(1) : '—'}</>}
             </div>
           </div>

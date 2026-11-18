@@ -97,7 +97,7 @@ test('mixed doubles and triples winners have separate dashboard categories witho
   ], true);
   assert.deepEqual(categories.map((category) => category.key), ['d', 'tr']);
   assert.deepEqual(categories.map((category) => category.rows[0].details?.[0]), [
-    { name: 'Champions', total: null, avg: null, isTeam: true, members: [] },
-    { name: 'Champions', total: null, avg: null, isTeam: true, members: [] },
+    { name: 'Champions', total: null, avg: null, isTeam: true, members: [{ name: 'Team member', total: 250, avg: 125 }], eventLabel: 'Doubles' },
+    { name: 'Champions', total: null, avg: null, isTeam: true, members: [{ name: 'Team member', total: 250, avg: 125 }], eventLabel: 'Triples' },
   ]);
 });

@@ -16822,7 +16822,17 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
     return parseWinnerNames(winnerNames)
       .map((name) => {
         const matches = rows.filter((row) => row.valid && row.team.name.trim().toLowerCase() === name.trim().toLowerCase());
-        return matches.length === 1 ? matches[0].members.map((p) => `${p.first_name} ${p.last_name}`.trim()).join(', ') : '';
+        return matches.length === 1 ? matches[0].members.map((participant) => {
+          const firstName = String(participant.first_name || '').trim();
+          const lastInitial = String(participant.last_name || '').trim().charAt(0).toUpperCase();
+          const shortName = lastInitial ? `${firstName} ${lastInitial}.` : firstName;
+          const gameScores = mixedEventData.scores
+            .filter((score) => score.participant_id === participant.id && score.game_number >= 1 && score.game_number <= officialGameCount)
+            .map((score) => Number(score.score));
+          const total = gameScores.reduce((sum, score) => sum + score, 0);
+          const average = gameScores.length > 0 ? standingsAverage(gameScores).toFixed(1) : '—';
+          return `${shortName} ${gameScores.length > 0 ? total : '—'} | ${average}`;
+        }).join(' · ') : '';
       })
       .filter(Boolean)
       .join(' · ');
@@ -17495,7 +17505,7 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
                                 >
                                   <div className={`text-sm font-semibold leading-tight break-words ${isEmpty ? 'text-black/35 italic' : 'text-black/80'}`}>
                                     {displayName}
-                                    {teamMemberNames && <span className="block text-xs font-normal text-black/55"> ({teamMemberNames})</span>}
+                                    {teamMemberNames && <span className="block text-xs font-normal text-black/55">{teamMemberNames}</span>}
                                   </div>
                                 </button>
                               );

@@ -2,9 +2,22 @@ import { parseWinnerNames } from './winnerNames';
 
 export type RankingPlayer = { id: number; name: string; gender: string; games: number; total: number; avg: number };
 export type RankingMember = { name: string; total: number | null; avg: number | null };
-export type RankingTeam = { id: number; name: string; gender?: string; games: number; total: number; avg: number; members?: string[]; member_details?: RankingMember[] };
+export type RankingTeam = {
+  id: number;
+  name: string;
+  gender?: string;
+  games: number;
+  total: number;
+  avg: number;
+  members?: string[];
+  member_details?: RankingMember[];
+  doubles_member_details?: RankingMember[];
+  triples_member_details?: RankingMember[];
+  doubles_total?: number | null;
+  triples_total?: number | null;
+};
 export type RankingFinalWinner = { division: string; place: string; display_name: string; target_kind?: 'participant' | 'team' | 'manual'; target_id?: number | null };
-export type PlacementDetail = { name: string; total: number | null; avg: number | null; isTeam: boolean; members: RankingMember[] };
+export type PlacementDetail = { name: string; total: number | null; avg: number | null; isTeam: boolean; members: RankingMember[]; eventLabel?: 'Doubles' | 'Triples' };
 export type RankingRow = { id: number; name: string; avg: number; total: number; members: string[]; memberDetails?: RankingMember[]; rank?: number; isFinalPlacement?: boolean; details?: PlacementDetail[] };
 export type RankingCategory = { key: string; label: string; rows: RankingRow[]; isFinalPlacement?: boolean };
 
@@ -64,7 +77,7 @@ export function buildRankingCategories(
           const details = winner.names.map((name): PlacementDetail => {
             const matchingId = winner.names.length === 1 && winner.target_kind === (team ? 'team' : 'participant')
               ? winner.target_id : null;
-            const candidates = division === 'doubles' || division === 'triples' ? [] : team ? podiumSources.teams : podiumSources.players.filter((player) =>
+            const candidates = team ? podiumSources.teams : podiumSources.players.filter((player) =>
               matchingId || division === 'all' || player.gender === (division === 'female' ? 'f' : 'm'));
             const matches = matchingId
               ? candidates.filter((entry) => entry.id === matchingId)
@@ -72,12 +85,29 @@ export function buildRankingCategories(
             const match = matches.length === 1 ? matches[0] : undefined;
             const scoreAvailable = match && (match.games > 0 || match.total > 0);
             const teamMatch = team && match ? podiumSources.teams.find((entry) => entry.id === match.id) : undefined;
+            const mixedMemberDetails = division === 'doubles'
+              ? teamMatch?.doubles_member_details
+              : division === 'triples'
+                ? teamMatch?.triples_member_details
+                : undefined;
+            const mixedEventTotal = division === 'doubles'
+              ? teamMatch?.doubles_total
+              : division === 'triples'
+                ? teamMatch?.triples_total
+                : undefined;
             return {
               name,
-              total: scoreAvailable ? match.total : null,
+              total: division === 'doubles' || division === 'triples'
+                ? (mixedEventTotal ?? null)
+                : (scoreAvailable ? match.total : null),
               avg: !team && match && match.games > 0 ? match.avg : null,
               isTeam: team,
-              members: teamMatch?.member_details ?? teamMatch?.members?.map((member) => ({ name: member, total: null, avg: null })) ?? [],
+              ...(division === 'doubles' ? { eventLabel: 'Doubles' as const } : {}),
+              ...(division === 'triples' ? { eventLabel: 'Triples' as const } : {}),
+              members: mixedMemberDetails
+                ?? teamMatch?.member_details
+                ?? teamMatch?.members?.map((member) => ({ name: member, total: null, avg: null }))
+                ?? [],
             };
           });
           return {
