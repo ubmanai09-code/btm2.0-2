@@ -44,7 +44,14 @@ export function calculateMixedGroupStandings(
     }
   }
   const rows = teams.map((team) => {
-    const members = selected.filter((p) => p.team_id === team.id);
+    const flaggedMembers = selected.filter((p) => p.team_id === team.id);
+    const rosterMembers = participants
+      .filter((p) => p.team_id === team.id && !excludedIds.has(p.id))
+      .sort((a, b) => (Number(a.team_order) || 999) - (Number(b.team_order) || 999) || a.id - b.id)
+      .slice(0, size);
+    const members = flaggedMembers.length === size
+      ? flaggedMembers
+      : rosterMembers;
     const clubs = new Map<string, string>();
     for (const participant of participants) {
       if (participant.team_id !== team.id) continue;

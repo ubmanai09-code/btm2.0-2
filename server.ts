@@ -5698,7 +5698,9 @@ async function startServer() {
           avg: player && player.games > 0 ? player.avg : null,
         };
       });
-      team.doubles_member_details = members.filter((member) => member.doubles_entrant === 1).map((member) => {
+      const doublesMembers = members.filter((member) => member.doubles_entrant === 1);
+      const doublesFallbackMembers = doublesMembers.length === 2 ? doublesMembers : members.slice(0, 2);
+      team.doubles_member_details = doublesFallbackMembers.map((member) => {
         const player = playersById.get(member.id);
         const firstName = String(member.first_name || '').trim();
         const lastInitial = String(member.last_name || '').trim().charAt(0).toUpperCase();
@@ -5712,7 +5714,9 @@ async function startServer() {
         (sum: number, member: { total: number | null }) => sum + (member.total ?? 0),
         0,
       ) || null;
-      team.triples_member_details = members.filter((member) => member.triples_entrant === 1).map((member) => {
+      const triplesMembers = members.filter((member) => member.triples_entrant === 1);
+      const triplesFallbackMembers = triplesMembers.length === 3 ? triplesMembers : members.slice(0, 3);
+      team.triples_member_details = triplesFallbackMembers.map((member) => {
         const player = playersById.get(member.id);
         const firstName = String(member.first_name || '').trim();
         const lastInitial = String(member.last_name || '').trim().charAt(0).toUpperCase();

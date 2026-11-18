@@ -17,6 +17,21 @@ const score = (participant_id: number, game_number: number, pins: number): Score
   id: participant_id * 10 + game_number, tournament_id: 1, participant_id, game_number, score: pins,
 });
 
+test('missing event flags fall back to the first doubles or triples roster members', () => {
+  const players = [
+    { ...player(1, 1, 0, 0), first_name: 'Alex', last_name: 'Anderson', team_order: 1 },
+    { ...player(2, 1, 0, 0), first_name: 'Jordan', last_name: 'Baker', team_order: 2 },
+    { ...player(3, 1, 0, 0), first_name: 'Taylor', last_name: 'Carter', team_order: 3 },
+    { ...player(4, 1, 0, 0), first_name: 'Morgan', last_name: 'Diaz', team_order: 4 },
+  ];
+  const doubles = calculateMixedGroupStandings('doubles', teams, players, [], 2, new Set());
+  const triples = calculateMixedGroupStandings('triples', teams, players, [], 2, new Set());
+  assert.deepEqual(doubles.rows[0].members.map((p) => p.id), [1, 2]);
+  assert.deepEqual(triples.rows[0].members.map((p) => p.id), [1, 2, 3]);
+  assert.equal(doubles.rows[0].valid, true);
+  assert.equal(triples.rows[0].valid, true);
+});
+
 test('calculates independent overlapping doubles and triples from official games', () => {
   const players = [player(1, 1, 1, 1), player(2, 1, 1, 0), player(3, 1, 0, 1), player(4, 1, 0, 1)];
   const scores = [score(1, 1, 100), score(1, 2, 110), score(1, 3, 300), score(2, 1, 120), score(2, 2, 130), score(3, 1, 140), score(3, 2, 150), score(4, 1, 160), score(4, 2, 170)];
