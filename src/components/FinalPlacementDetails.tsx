@@ -24,11 +24,11 @@ export default function FinalPlacementDetails({ details, t }: {
             >
               {detail.members.map((member, memberIndex) => (
                 <li key={`${member.name}-${memberIndex}`} className="min-w-0">
-                  <div className="break-words">{member.name}</div>
-                  <div>
-                    {t('dashboard.total', 'Total')}: <span className="font-semibold">{member.total ?? '—'}</span>
-                    {' · '}{t('dashboard.avg', 'Avg')}: <span className="font-semibold">{member.avg != null ? member.avg.toFixed(1) : '—'}</span>
-                  </div>
+                  <span className="break-words">{member.name}</span>
+                  {' '}
+                  <span className="font-semibold">{member.total ?? '—'}</span>
+                  {' | '}
+                  <span className="font-semibold">{member.avg != null ? member.avg.toFixed(1) : '—'}</span>
                 </li>
               ))}
             </ul>
