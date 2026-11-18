@@ -3942,11 +3942,23 @@ function TournamentDetail({ tournament, onBack, onEdit, onTournamentUpdated, act
                     </span>
                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
                       <ClipboardList size={12} />
-                      <span className="truncate">{tPublic('tournament.oil_pattern_label', 'Pattern')}: {tournament.oil_pattern?.trim() || '—'}</span>
+                      <span className="truncate">
+                        <span className="hidden sm:inline">{tPublic('tournament.oil_pattern_label', 'Pattern')}: </span>
+                        {tournament.oil_pattern?.trim() || '—'}
+                      </span>
                     </span>
                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
                       <Columns4 size={12} />
-                      <span className="truncate">{tPublic('tournament.lane_length', 'Length')}: {tournament.lane_length?.trim() || '—'}</span>
+                      <span className="truncate">
+                        <span className="hidden sm:inline">{tPublic('tournament.lane_length', 'Length')}: </span>
+                        <span className="sm:hidden">
+                          {(() => {
+                            const feet = String(tournament.lane_length || '').trim().match(/\d+(?:\.\d+)?/)?.[0];
+                            return feet ? `${feet}ft` : '—';
+                          })()}
+                        </span>
+                        <span className="hidden sm:inline">{tournament.lane_length?.trim() || '—'}</span>
+                      </span>
                     </span>
                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-[color:var(--border)] bg-[color:var(--card)]/80 text-[color:var(--text)] min-w-0 h-full">
                       <MapPin size={12} />
