@@ -16825,17 +16825,33 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
         return matches.length === 1 ? matches[0].members.map((participant) => {
           const firstName = String(participant.first_name || '').trim();
           const lastInitial = String(participant.last_name || '').trim().charAt(0).toUpperCase();
-          const shortName = lastInitial ? `${firstName} ${lastInitial}.` : firstName;
-          const gameScores = mixedEventData.scores
-            .filter((score) => score.participant_id === participant.id && score.game_number >= 1 && score.game_number <= officialGameCount)
-            .map((score) => Number(score.score));
-          const total = gameScores.reduce((sum, score) => sum + score, 0);
-          const average = gameScores.length > 0 ? standingsAverage(gameScores).toFixed(1) : '—';
-          return `${shortName} ${gameScores.length > 0 ? total : '—'} | ${average}`;
+          return lastInitial ? `${firstName} ${lastInitial}.` : firstName;
         }).join(' · ') : '';
       })
       .filter(Boolean)
       .join(' · ');
+  };
+
+  const getWinnerPlayerDetail = (division: ManualWinnerDivision, place: ManualWinnerPlace, winnerNames: string) => {
+    const winnerEntry = getManualWinnerEntry(division, place);
+    const firstWinnerName = parseWinnerNames(winnerNames)[0] || '';
+    const participant = winnerEntry?.target_kind === 'participant' && winnerEntry.target_id
+      ? participants.find((item) => item.id === winnerEntry.target_id)
+      : participants.find((item) => {
+          const fullName = `${item.first_name || ''} ${item.last_name || ''}`.trim();
+          const firstName = String(item.first_name || '').trim();
+          const lastInitial = String(item.last_name || '').trim().charAt(0).toUpperCase();
+          const shortName = lastInitial ? `${firstName} ${lastInitial}.` : firstName;
+          return [fullName, shortName].some((name) => name.toLowerCase() === firstWinnerName.toLowerCase());
+        });
+    if (!participant) return null;
+    const firstName = String(participant.first_name || '').trim();
+    const lastInitial = String(participant.last_name || '').trim().charAt(0).toUpperCase();
+    return {
+      name: lastInitial ? `${firstName} ${lastInitial}.` : firstName,
+      club: String(participant.club || '').trim(),
+      teamName: String(participant.team_name || '').trim(),
+    };
   };
 
   const participantWinnerOptions = participants
@@ -17490,9 +17506,17 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
                               const cellDisabled = savingManualWinnerKey === key || !canManageStandings;
                               const displayName = getManualWinnerDisplay(division, place);
                               const isEmpty = displayName === 'TBD';
-                              const teamMemberNames = division === 'doubles' || division === 'triples'
+                              const teamEvent = division === 'team' || (isTeamTournament && !hasMixedTeamSingles);
+                              const mixedEvent = division === 'doubles' || division === 'triples';
+                              const memberNames = mixedEvent
                                 ? getMixedWinnerMemberNames(division, getManualWinnerEntry(division, place)?.display_name || '')
-                                : isTeamTournament && !hasMixedTeamSingles ? getTeamWinnerMemberNames(displayName) : '';
+                                : teamEvent ? getTeamWinnerMemberNames(displayName) : '';
+                              const playerDetail = !teamEvent && !mixedEvent
+                                ? getWinnerPlayerDetail(division, place, displayName)
+                                : null;
+                              const supportingName = teamEvent || mixedEvent
+                                ? memberNames
+                                : playerDetail?.club || playerDetail?.teamName || '';
 
                               return (
                                 <button
@@ -17503,9 +17527,9 @@ export function StandingsView({ tournament, role, sponsorsConfig, onPresentStand
                                   className={`px-2.5 py-2 border-b border-black/10 ${rowBg} text-left min-h-[56px] ${!isPublicView ? 'hover:bg-white/50 transition-colors' : ''} disabled:cursor-default`}
                                   title={isPublicView ? displayName : tx('Click to edit or replace')}
                                 >
-                                  <div className={`text-sm font-semibold leading-tight break-words ${isEmpty ? 'text-black/35 italic' : 'text-black/80'}`}>
-                                    {displayName}
-                                    {teamMemberNames && <span className="block text-xs font-normal text-black/55">{teamMemberNames}</span>}
+                                  <div className={`text-sm leading-tight break-words ${isEmpty ? 'text-black/35 italic' : 'text-black/80'}`}>
+                                    <span className="font-bold">{teamEvent || mixedEvent ? displayName : playerDetail?.name || displayName}</span>
+                                    {supportingName && <span className="block mt-0.5 text-xs font-normal text-black/55">{supportingName}</span>}
                                   </div>
                                 </button>
                               );
